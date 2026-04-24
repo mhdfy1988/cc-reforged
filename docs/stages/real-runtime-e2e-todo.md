@@ -2,7 +2,7 @@
 
 ## 当前任务列表（实时）
 
-- [ ] P1 干净环境复现（从 GitHub clone、安装、构建、typecheck、CLI smoke）
+- [x] P1 干净环境复现（从 GitHub clone、安装、构建、typecheck、CLI smoke）
 - [ ] P2 真实模型单轮调用验证（auth / API client / model / stream / headless prompt）
 - [ ] P3 核心工具端到端验证（文件读写、搜索、PowerShell、权限询问、tool_result 回写）
 - [ ] P4 权限安全专项验证（deny rules、复合命令、PowerShell/Bash parser、fail-closed）
@@ -11,9 +11,9 @@
 
 ## 当前指针
 
-- 进行中：P1 干净环境复现
-- 当前正在做：从远端仓库重新 clone 一份干净副本，并验证安装、构建、类型检查和 CLI 基础入口
-- 完成后下一项：P2 真实模型单轮调用验证
+- 进行中：P2 真实模型单轮调用验证
+- 当前正在做：验证真实 headless prompt 的 auth 来源、API client、模型选择、流式输出和错误处理表现
+- 完成后下一项：P3 核心工具端到端验证
 
 ## 执行边界
 
@@ -34,3 +34,11 @@
 ## 后续记录（追加）
 
 - 初始化：typecheck 清零、runtime smoke 完成、首次代码已推送 GitHub 后，本阶段接管为新的权威 todo。推进顺序从静态修复转向真实运行端到端验证，先干净环境复现，再进入真实模型和真实工具链。
+- 第 1 轮：P1 干净环境复现完成。第一次干净 `npm.cmd install` 失败，原因是恢复期依赖清单中保留了只用于无效类型导入的 `@anthropic-ai/claude-agent-sdk@0.2.94`，它要求 peer `zod@^4.0.0`，与根项目 `zod@^3.25.76` 冲突；已删除 `src/cli/print.ts` 中未使用的外部 `PermissionMode` 类型导入，并从 `package.json` / `package-lock.json` 移除该依赖。第二次干净安装又被 `prepare` 发布保护误伤；已将发布保护移动到 `prepublishOnly`，只拦发布不拦普通安装。最终从 GitHub 浅克隆 `24a1f1d` 到 `D:\agent_project\_clean_smoke\cc-reforged-e2e`，`npm.cmd install`、`npm.cmd run build -- --pretty false`、`npm.cmd run typecheck -- --pretty false`、`node .\cli.js --version`、`node .\cli.js --help` 全部通过。当前切到 P2 真实模型单轮调用验证。
+- 第 2 轮：P2 真实模型单轮调用验证已推进到认证边界。环境检查确认 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN`、`CLAUDE_CODE_OAUTH_TOKEN`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`、`CLAUDE_CODE_USE_BEDROCK`、`CLAUDE_CODE_USE_VERTEX` 均未设置。随后在干净副本执行 `node .\cli.js -p "Reply exactly: OK" --model sonnet --output-format json --max-budget-usd 0.01 --no-session-persistence`，命令成功进入 headless JSON result 链路，但返回 `Not logged in · Please run /login`，`duration_api_ms=0`、`total_cost_usd=0`、`usage.input_tokens=0`。结论：P2 当前不是代码执行 blocker，而是需要先确定认证方式。
+
+## 备注
+
+- 当前状态：decision-needed
+- 决策点：P2 真实模型调用需要一个可用认证来源。可选路径是设置 `ANTHROPIC_API_KEY`，运行 CLI 登录以写入本机认证态，或配置兼容的 `ANTHROPIC_BASE_URL` / 第三方 provider。
+- 下一步需要：选定认证方式后，重新执行 P2 的最小 headless prompt，再继续 P3 核心工具端到端验证。
