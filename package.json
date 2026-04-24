@@ -28,7 +28,11 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "typecheck:config": "tsc -p tsconfig.typecheck.json --showConfig",
-    "build:config": "tsc -p tsconfig.build.json --showConfig"
+    "build:config": "tsc -p tsconfig.build.json --showConfig",
+    "smoke:runtime": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-runtime.mjs",
+    "smoke:permissions": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-permissions.mjs",
+    "smoke:deps": "node ./scripts/smoke-deps.mjs",
+    "ci:smoke": "node ./scripts/ci-smoke.mjs"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
