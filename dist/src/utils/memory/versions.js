@@ -1,0 +1,8 @@
+import { findGitRoot } from '../git.js';
+// Note: This is used to check git repo status synchronously
+// Uses findGitRoot which walks the filesystem (no subprocess)
+// Prefer `dirIsInGitRepo()` for async checks
+export function projectIsInGitRepo(cwd) {
+    return findGitRoot(cwd) !== null;
+}
+//# sourceMappingURL=versions.js.map

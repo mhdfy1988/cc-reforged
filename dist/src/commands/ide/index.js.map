@@ -1,0 +1,1 @@
+{"version":3,"file":"index.js","sourceRoot":"","sources":["../../../../src/commands/ide/index.ts"],"names":[],"mappings":"AAEA,MAAM,GAAG,GAAG;IACV,IAAI,EAAE,WAAW;IACjB,IAAI,EAAE,KAAK;IACX,WAAW,EAAE,yCAAyC;IACtD,YAAY,EAAE,QAAQ;IACtB,IAAI,EAAE,GAAG,EAAE,CAAC,MAAM,CAAC,UAAU,CAAC;CACb,CAAA;AAEnB,eAAe,GAAG,CAAA"}

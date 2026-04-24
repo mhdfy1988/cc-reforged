@@ -1,0 +1,12 @@
+# 本地依赖与临时产物
+node_modules/
+tmp/
+*.tgz
+
+# typecheck 修复阶段的临时输出
+.codex-typecheck*.txt
+_typecheck.log
+_tmp_typecheck_current.txt
+typecheck-*.txt
+typecheck-*.log
+tmp-repl-errors.txt

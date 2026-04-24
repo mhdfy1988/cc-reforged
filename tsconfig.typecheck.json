@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.typecheck.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/types/**/*.d.ts",
+    "vendor/**/*.ts",
+    "vendor/**/*.tsx",
+    "sdk-tools.d.ts"
+  ],
+  "exclude": ["dist", "node_modules"]
+}

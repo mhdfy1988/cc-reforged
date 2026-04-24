@@ -1,0 +1,1 @@
+{"version":3,"file":"alias.js","sourceRoot":"","sources":["../../../../../src/utils/bash/specs/alias.ts"],"names":[],"mappings":"AAEA,MAAM,KAAK,GAAgB;IACzB,IAAI,EAAE,OAAO;IACb,WAAW,EAAE,gCAAgC;IAC7C,IAAI,EAAE;QACJ,IAAI,EAAE,YAAY;QAClB,WAAW,EAAE,yCAAyC;QACtD,UAAU,EAAE,IAAI;QAChB,UAAU,EAAE,IAAI;KACjB;CACF,CAAA;AAED,eAAe,KAAK,CAAA"}

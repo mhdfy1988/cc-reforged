@@ -1,0 +1,52 @@
+function isFiniteNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value);
+}
+function isLabeledHookSummary(msg) {
+    return (msg.type === 'system' &&
+        msg.subtype === 'stop_hook_summary' &&
+        msg.hookLabel !== undefined);
+}
+/**
+ * Collapses consecutive hook summary messages with the same hookLabel
+ * (e.g. PostToolUse) into a single summary. This happens when parallel
+ * tool calls each emit their own hook summary.
+ */
+export function collapseHookSummaries(messages) {
+    const result = [];
+    let i = 0;
+    while (i < messages.length) {
+        const msg = messages[i];
+        if (isLabeledHookSummary(msg)) {
+            const label = msg.hookLabel;
+            const group = [];
+            while (i < messages.length) {
+                const next = messages[i];
+                if (!isLabeledHookSummary(next) || next.hookLabel !== label)
+                    break;
+                group.push(next);
+                i++;
+            }
+            if (group.length === 1) {
+                result.push(msg);
+            }
+            else {
+                result.push({
+                    ...msg,
+                    hookCount: group.reduce((sum, m) => sum + (isFiniteNumber(m.hookCount) ? m.hookCount : 0), 0),
+                    hookInfos: group.flatMap(m => m.hookInfos),
+                    hookErrors: group.flatMap(m => m.hookErrors),
+                    preventedContinuation: group.some(m => m.preventedContinuation),
+                    hasOutput: group.some(m => m.hasOutput),
+                    // Parallel tool calls' hooks overlap; max is closest to wall-clock.
+                    totalDurationMs: Math.max(...group.map(m => isFiniteNumber(m.totalDurationMs) ? m.totalDurationMs : 0)),
+                });
+            }
+        }
+        else {
+            result.push(msg);
+            i++;
+        }
+    }
+    return result;
+}
+//# sourceMappingURL=collapseHookSummaries.js.map

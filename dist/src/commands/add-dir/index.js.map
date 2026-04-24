@@ -1,0 +1,1 @@
+{"version":3,"file":"index.js","sourceRoot":"","sources":["../../../../src/commands/add-dir/index.ts"],"names":[],"mappings":"AAEA,MAAM,MAAM,GAAG;IACb,IAAI,EAAE,WAAW;IACjB,IAAI,EAAE,SAAS;IACf,WAAW,EAAE,6BAA6B;IAC1C,YAAY,EAAE,QAAQ;IACtB,IAAI,EAAE,GAAG,EAAE,CAAC,MAAM,CAAC,cAAc,CAAC;CACjB,CAAA;AAEnB,eAAe,MAAM,CAAA"}

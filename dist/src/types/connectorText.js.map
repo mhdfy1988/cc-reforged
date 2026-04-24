@@ -1,0 +1,1 @@
+{"version":3,"file":"connectorText.js","sourceRoot":"","sources":["../../../src/types/connectorText.ts"],"names":[],"mappings":"AAWA,MAAM,UAAU,oBAAoB,CAAC,KAAc;IACjD,IAAI,OAAO,KAAK,KAAK,QAAQ,IAAI,KAAK,KAAK,IAAI;QAAE,OAAO,KAAK,CAAA;IAC7D,MAAM,MAAM,GAAG,KAAgC,CAAA;IAC/C,OAAO,OAAO,MAAM,CAAC,cAAc,KAAK,QAAQ,CAAA;AAClD,CAAC"}

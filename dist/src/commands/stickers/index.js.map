@@ -1,0 +1,1 @@
+{"version":3,"file":"index.js","sourceRoot":"","sources":["../../../../src/commands/stickers/index.ts"],"names":[],"mappings":"AAEA,MAAM,QAAQ,GAAG;IACf,IAAI,EAAE,OAAO;IACb,IAAI,EAAE,UAAU;IAChB,WAAW,EAAE,4BAA4B;IACzC,sBAAsB,EAAE,KAAK;IAC7B,IAAI,EAAE,GAAG,EAAE,CAAC,MAAM,CAAC,eAAe,CAAC;CAClB,CAAA;AAEnB,eAAe,QAAQ,CAAA"}

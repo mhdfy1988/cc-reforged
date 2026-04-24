@@ -1,0 +1,1 @@
+{"version":3,"file":"serverLog.js","sourceRoot":"","sources":["../../../src/server/serverLog.ts"],"names":[],"mappings":"AAQA,MAAM,UAAU,kBAAkB;IAChC,MAAM,IAAI,GAAG,CAAC,GAAG,KAAgB,EAAQ,EAAE,GAAE,CAAC,CAAA;IAC9C,OAAO;QACL,KAAK,EAAE,IAAI;QACX,IAAI,EAAE,IAAI;QACV,IAAI,EAAE,IAAI;QACV,KAAK,EAAE,IAAI;QACX,WAAW,EAAE,IAAI;KAClB,CAAA;AACH,CAAC"}

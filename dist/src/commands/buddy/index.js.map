@@ -1,0 +1,1 @@
+{"version":3,"file":"index.js","sourceRoot":"","sources":["../../../../src/commands/buddy/index.ts"],"names":[],"mappings":"AAEA,MAAM,KAAK,GAAG;IACZ,IAAI,EAAE,WAAW;IACjB,IAAI,EAAE,OAAO;IACb,WAAW,EAAE,qCAAqC;IAClD,SAAS,EAAE,GAAG,EAAE,CAAC,KAAK;IACtB,IAAI,EAAE,KAAK,IAAI,EAAE,CAAC,CAAC;QACjB,IAAI,EAAE,KAAK,IAAI,EAAE,CAAC,IAAI;KACvB,CAAC;CACe,CAAA;AAEnB,eAAe,KAAK,CAAA"}

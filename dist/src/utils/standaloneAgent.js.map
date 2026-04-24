@@ -1,0 +1,1 @@
+{"version":3,"file":"standaloneAgent.js","sourceRoot":"","sources":["../../../src/utils/standaloneAgent.ts"],"names":[],"mappings":"AAAA;;;;;;;GAOG;AAGH,OAAO,EAAE,WAAW,EAAE,MAAM,eAAe,CAAA;AAE3C;;;GAGG;AACH,MAAM,UAAU,sBAAsB,CAAC,QAAkB;IACvD,qDAAqD;IACrD,IAAI,WAAW,EAAE,EAAE,CAAC;QAClB,OAAO,SAAS,CAAA;IAClB,CAAC;IACD,OAAO,QAAQ,CAAC,sBAAsB,EAAE,IAAI,CAAA;AAC9C,CAAC"}

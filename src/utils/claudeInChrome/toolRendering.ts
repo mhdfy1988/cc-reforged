@@ -1,0 +1,1 @@
+export const CLAUDE_IN_CHROME_TOOL_RENDERING_READY = false

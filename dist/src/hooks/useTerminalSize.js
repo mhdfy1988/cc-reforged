@@ -1,0 +1,10 @@
+import { useContext } from 'react';
+import { TerminalSizeContext, } from 'src/ink/components/TerminalSizeContext.js';
+export function useTerminalSize() {
+    const size = useContext(TerminalSizeContext);
+    if (!size) {
+        throw new Error('useTerminalSize must be used within an Ink App component');
+    }
+    return size;
+}
+//# sourceMappingURL=useTerminalSize.js.map

@@ -1,0 +1,1 @@
+{"version":3,"file":"desktop.js","sourceRoot":"","sources":["../../../../src/commands/desktop/desktop.tsx"],"names":[],"mappings":";AAAA,OAAO,KAAK,MAAM,OAAO,CAAC;AAE1B,OAAO,EAAE,cAAc,EAAE,MAAM,oCAAoC,CAAC;AACpE,MAAM,CAAC,KAAK,UAAU,IAAI,CAAC,MAEjB;IACR,OAAO,KAAC,cAAc,IAAC,MAAM,EAAE,MAAM,GAAI,CAAC;AAC5C,CAAC"}

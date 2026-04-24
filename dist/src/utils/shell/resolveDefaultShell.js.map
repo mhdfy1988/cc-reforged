@@ -1,0 +1,1 @@
+{"version":3,"file":"resolveDefaultShell.js","sourceRoot":"","sources":["../../../../src/utils/shell/resolveDefaultShell.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,kBAAkB,EAAE,MAAM,yBAAyB,CAAA;AAE5D;;;;;;;;GAQG;AACH,MAAM,UAAU,mBAAmB;IACjC,OAAO,kBAAkB,EAAE,CAAC,YAAY,IAAI,MAAM,CAAA;AACpD,CAAC"}

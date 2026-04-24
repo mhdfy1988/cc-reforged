@@ -1,0 +1,1 @@
+{"version":3,"file":"sleep.js","sourceRoot":"","sources":["../../../../../src/utils/bash/specs/sleep.ts"],"names":[],"mappings":"AAEA,MAAM,KAAK,GAAgB;IACzB,IAAI,EAAE,OAAO;IACb,WAAW,EAAE,sCAAsC;IACnD,IAAI,EAAE;QACJ,IAAI,EAAE,UAAU;QAChB,WAAW,EAAE,4DAA4D;QACzE,UAAU,EAAE,KAAK;KAClB;CACF,CAAA;AAED,eAAe,KAAK,CAAA"}
