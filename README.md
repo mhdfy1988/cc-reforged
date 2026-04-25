@@ -1,5 +1,7 @@
 > **Disclaimer:** This repository contains source code recovered from the source map (`cli.js.map`) bundled in the [`@anthropic-ai/claude-code@2.1.88`](https://www.npmjs.com/package/@anthropic-ai/claude-code/v/2.1.88) npm package. It is not an official source release by Anthropic. All rights belong to their respective owners.
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 # CCR v0.1
 
 ![](https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=flat-square)
