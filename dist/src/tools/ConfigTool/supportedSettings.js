@@ -140,7 +140,7 @@ export const SUPPORTED_SETTINGS = {
             taskCompleteNotifEnabled: {
                 source: 'global',
                 type: 'boolean',
-                description: 'Push to your mobile device when idle after Claude finishes (requires Remote Control)',
+                description: 'Push to your mobile device when idle after CCR finishes (requires Remote Control)',
             },
             inputNeededNotifEnabled: {
                 source: 'global',

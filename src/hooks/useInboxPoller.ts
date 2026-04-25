@@ -808,7 +808,7 @@ export function useInboxPoller({
     }
 
     // Format messages with XML wrapper for Claude (include color if available)
-    // Transform plan approval requests to include instructions for Claude
+        // Transform plan approval requests to include instructions for CCR
     const formatted = regularMessages
       .map(m => {
         const colorAttr = m.color ? ` color="${m.color}"` : ''

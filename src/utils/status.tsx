@@ -16,6 +16,10 @@ import { getMTLSConfig } from './mtls.js';
 import { checkInstall } from './nativeInstaller/index.js';
 import { getProxyUrl } from './proxy.js';
 import { SandboxManager } from './sandbox/sandbox-adapter.js';
+import {
+  getLlmRuntimeAuthStatusSync,
+  getLlmRuntimeDisplayStatus,
+} from '../services/llm/runtimeStatus.js';
 import { getSettingsWithAllErrors } from './settings/allErrors.js';
 import { getEnabledSettingSources, getSettingSourceDisplayNameCapitalized } from './settings/constants.js';
 import { getManagedFileSettingsPresence, getPolicySettingsOrigin, getSettingsForSource } from './settings/settings.js';
@@ -237,6 +241,30 @@ export function buildAccountProperties(): Property[] {
   }
   return properties;
 }
+export function buildLlmRuntimeProperties(): Property[] {
+  const displayStatus = getLlmRuntimeDisplayStatus();
+  const authStatus = getLlmRuntimeAuthStatusSync();
+  const properties: Property[] = [{
+    label: 'LLM provider',
+    value: `${displayStatus.providerDisplayName} (${displayStatus.providerId})`
+  }, {
+    label: 'LLM API mode',
+    value: displayStatus.apiMode
+  }, {
+    label: 'LLM auth',
+    value: authStatus.source ? `${authStatus.message} (${authStatus.source})` : authStatus.message
+  }, {
+    label: 'LLM model profile',
+    value: `${displayStatus.modelCatalogEntry.displayName} · ${formatNumber(displayStatus.modelCatalogEntry.contextWindow)} ctx · ${formatNumber(displayStatus.modelCatalogEntry.maxOutputTokens)} out`
+  }];
+  if (displayStatus.baseUrl) {
+    properties.push({
+      label: 'LLM base URL',
+      value: displayStatus.baseUrl
+    });
+  }
+  return properties;
+}
 export function buildAPIProviderProperties(): Property[] {
   const apiProvider = getAPIProvider();
   const properties: Property[] = [];
@@ -352,6 +380,10 @@ export function buildAPIProviderProperties(): Property[] {
   return properties;
 }
 export function getModelDisplayLabel(mainLoopModel: string | null): string {
+  const llmStatus = getLlmRuntimeDisplayStatus();
+  if (llmStatus.providerId !== 'anthropic') {
+    return llmStatus.model;
+  }
   let modelLabel = modelDisplayString(mainLoopModel);
   if (mainLoopModel === null && isClaudeAISubscriber()) {
     const description = getClaudeAiUserDefaultModelDescription();

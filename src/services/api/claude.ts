@@ -227,10 +227,15 @@ import {
   markToolsSentToAPIState,
   pinCacheEdits,
 } from '../compact/microCompact.js'
+import {
+  queryWithLlmRuntime,
+  shouldUseBuiltinLlmRuntime,
+} from '../llm/claudeApiAdapter.js'
+import { getDefaultAnthropicProvider } from '../llm/providers/defaultAnthropicProvider.js'
 import { getInitializationStatus } from '../lsp/manager.js'
 import { isToolFromMcpServer } from '../mcp/utils.js'
 import { withStreamingVCR, withVCR } from '../vcr.js'
-import { CLIENT_REQUEST_ID_HEADER, getAnthropicClient } from './client.js'
+import { CLIENT_REQUEST_ID_HEADER } from './client.js'
 import {
   API_ERROR_MESSAGE_PREFIX,
   CUSTOM_OFF_SWITCH_MESSAGE,
@@ -863,10 +868,11 @@ export async function verifyApiKey(
     // WARNING: if you change this to use a non-Haiku model, this request will fail in 1P unless it uses getCLISyspromptPrefix.
     const model = getSmallFastModel()
     const betas = getModelBetas(model)
+    const anthropicProvider = getDefaultAnthropicProvider()
     return await returnValue(
       withRetry(
         () =>
-          getAnthropicClient({
+          anthropicProvider.getClient({
             apiKey,
             maxRetries: 3,
             model,
@@ -1163,9 +1169,10 @@ export async function* executeNonStreamingRequest(
   originatingRequestId?: string | null,
 ): AsyncGenerator<SystemAPIErrorMessage, BetaMessage> {
   const fallbackTimeoutMs = getNonstreamingFallbackTimeoutMs()
+  const anthropicProvider = getDefaultAnthropicProvider()
   const generator = withRetry(
     () =>
-      getAnthropicClient({
+      anthropicProvider.getClient({
         maxRetries: 0,
         model: clientOptions.model,
         fetchOverride: clientOptions.fetchOverride,
@@ -1732,6 +1739,22 @@ async function* queryModel(
   }
   const allTools = [...toolSchemas, ...extraToolSchemas]
 
+  if (shouldUseBuiltinLlmRuntime()) {
+    yield* queryWithLlmRuntime({
+      messages: messagesForAPI,
+      systemPrompt,
+      toolSchemas: allTools,
+      signal,
+      model: options.model,
+      maxOutputTokens:
+        options.maxOutputTokensOverride ||
+        getMaxOutputTokensForModel(options.model),
+      temperature: options.temperatureOverride,
+      reasoningEffort: resolveAppliedEffort(options.model, options.effortValue),
+    })
+    return
+  }
+
   const isFastMode =
     isFastModeEnabled() &&
     isFastModeAvailable() &&
@@ -2120,9 +2143,10 @@ async function* queryModel(
 
   try {
     queryCheckpoint('query_client_creation_start')
+    const anthropicProvider = getDefaultAnthropicProvider()
     const generator = withRetry(
       () =>
-        getAnthropicClient({
+        anthropicProvider.getClient({
           maxRetries: 0, // Disabled auto-retry in favor of manual implementation
           model: options.model,
           fetchOverride: options.fetchOverride,

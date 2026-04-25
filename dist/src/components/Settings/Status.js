@@ -9,7 +9,7 @@ import { Box, Text, useTheme } from '../../ink.js';
 import { useAppState } from '../../state/AppState.js';
 import { getCwd } from '../../utils/cwd.js';
 import { getCurrentSessionTitle } from '../../utils/sessionStorage.js';
-import { buildAccountProperties, buildAPIProviderProperties, buildIDEProperties, buildInstallationDiagnostics, buildInstallationHealthDiagnostics, buildMcpProperties, buildMemoryDiagnostics, buildSandboxProperties, buildSettingSourcesProperties, getModelDisplayLabel } from '../../utils/status.js';
+import { buildAccountProperties, buildAPIProviderProperties, buildIDEProperties, buildInstallationDiagnostics, buildInstallationHealthDiagnostics, buildLlmRuntimeProperties, buildMcpProperties, buildMemoryDiagnostics, buildSandboxProperties, buildSettingSourcesProperties, getModelDisplayLabel } from '../../utils/status.js';
 import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
 function buildPrimarySection() {
     const sessionId = getSessionId();
@@ -27,7 +27,7 @@ function buildPrimarySection() {
         }, {
             label: 'cwd',
             value: getCwd()
-        }, ...buildAccountProperties(), ...buildAPIProviderProperties()];
+        }, ...buildLlmRuntimeProperties(), ...buildAccountProperties(), ...buildAPIProviderProperties()];
 }
 function buildSecondarySection({ mainLoopModel, mcp, theme, context }) {
     const modelLabel = getModelDisplayLabel(mainLoopModel);

@@ -205,7 +205,7 @@ function ClaudeInChromeMenu(t0) {
     }
     let t6;
     if ($[20] === Symbol.for("react.memo_cache_sentinel")) {
-        t6 = _jsx(Text, { children: "Claude in Chrome works with the Chrome extension to let you control your browser directly from Claude Code. Navigate websites, fill forms, capture screenshots, record GIFs, and debug with console logs and network requests." });
+        t6 = _jsx(Text, { children: "CCR in Chrome works with the Chrome extension to let you control your browser directly from CCR. Navigate websites, fill forms, capture screenshots, record GIFs, and debug with console logs and network requests." });
         $[20] = t6;
     }
     else {
@@ -213,7 +213,7 @@ function ClaudeInChromeMenu(t0) {
     }
     let t7;
     if ($[21] !== isWSL) {
-        t7 = isWSL && _jsx(Text, { color: "error", children: "Claude in Chrome is not supported in WSL at this time." });
+        t7 = isWSL && _jsx(Text, { color: "error", children: "CCR in Chrome is not supported in WSL at this time." });
         $[21] = isWSL;
         $[22] = t7;
     }
@@ -231,7 +231,7 @@ function ClaudeInChromeMenu(t0) {
     }
     let t9;
     if ($[25] !== handleAction || $[26] !== isConnected || $[27] !== isDisabled || $[28] !== isExtensionInstalled || $[29] !== options || $[30] !== selectKey || $[31] !== showInstallHint) {
-        t9 = !isDisabled && _jsxs(_Fragment, { children: [!isHomespace && _jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { children: ["Status:", " ", isConnected ? _jsx(Text, { color: "success", children: "Enabled" }) : _jsx(Text, { color: "inactive", children: "Disabled" })] }), _jsxs(Text, { children: ["Extension:", " ", isExtensionInstalled ? _jsx(Text, { color: "success", children: "Installed" }) : _jsx(Text, { color: "warning", children: "Not detected" })] })] }), _jsx(Select, { options: options, onChange: handleAction, hideIndexes: true }, selectKey), showInstallHint && _jsxs(Text, { color: "warning", children: ["Once installed, select ", "\"Reconnect extension\"", " to connect."] }), _jsxs(Text, { children: [_jsx(Text, { dimColor: true, children: "Usage: " }), _jsx(Text, { children: "claude --chrome" }), _jsx(Text, { dimColor: true, children: " or " }), _jsx(Text, { children: "claude --no-chrome" })] }), _jsx(Text, { dimColor: true, children: "Site-level permissions are inherited from the Chrome extension. Manage permissions in the Chrome extension settings to control which sites Claude can browse, click, and type on." })] });
+        t9 = !isDisabled && _jsxs(_Fragment, { children: [!isHomespace && _jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { children: ["Status:", " ", isConnected ? _jsx(Text, { color: "success", children: "Enabled" }) : _jsx(Text, { color: "inactive", children: "Disabled" })] }), _jsxs(Text, { children: ["Extension:", " ", isExtensionInstalled ? _jsx(Text, { color: "success", children: "Installed" }) : _jsx(Text, { color: "warning", children: "Not detected" })] })] }), _jsx(Select, { options: options, onChange: handleAction, hideIndexes: true }, selectKey), showInstallHint && _jsxs(Text, { color: "warning", children: ["Once installed, select ", "\"Reconnect extension\"", " to connect."] }), _jsxs(Text, { children: [_jsx(Text, { dimColor: true, children: "Usage: " }), _jsx(Text, { children: "ccr --chrome" }), _jsx(Text, { dimColor: true, children: " or " }), _jsx(Text, { children: "ccr --no-chrome" })] }), _jsx(Text, { dimColor: true, children: "Site-level permissions are inherited from the Chrome extension. Manage permissions in the Chrome extension settings to control which sites CCR can browse, click, and type on." })] });
         $[25] = handleAction;
         $[26] = isConnected;
         $[27] = isDisabled;
@@ -265,7 +265,7 @@ function ClaudeInChromeMenu(t0) {
     }
     let t12;
     if ($[38] !== t11 || $[39] !== t5) {
-        t12 = _jsx(Dialog, { title: "Claude in Chrome (Beta)", onCancel: t5, color: "chromeYellow", children: t11 });
+        t12 = _jsx(Dialog, { title: "CCR in Chrome (Beta)", onCancel: t5, color: "chromeYellow", children: t11 });
         $[38] = t11;
         $[39] = t5;
         $[40] = t12;

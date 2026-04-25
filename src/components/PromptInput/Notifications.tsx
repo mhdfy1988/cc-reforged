@@ -14,6 +14,7 @@ import { useVoiceEnabled } from '../../hooks/useVoiceEnabled.js';
 import { Box, Text } from '../../ink.js';
 import { useClaudeAiLimits } from '../../services/claudeAiLimitsHook.js';
 import { calculateTokenWarningState } from '../../services/compact/autoCompact.js';
+import { getLlmRuntimeAuthStatusSync } from '../../services/llm/runtimeStatus.js';
 import type { MCPServerConnection } from '../../services/mcp/types.js';
 import type { Message } from '../../types/message.js';
 import { getApiKeyHelperElapsedMs, getConfiguredApiKeyHelper, getSubscriptionType } from '../../utils/auth.js';
@@ -288,6 +289,8 @@ function NotificationContent({
   const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ?
   // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
   useAppState(s_1 => s_1.isBriefOnly) : false;
+  const llmAuthStatus = getLlmRuntimeAuthStatusSync();
+  const shouldShowAuthError = !llmAuthStatus.available && (apiKeyStatus === 'invalid' || apiKeyStatus === 'missing');
 
   // When voice is actively recording or processing, replace all
   // notifications with just the voice indicator.
@@ -314,9 +317,9 @@ function NotificationContent({
             ({apiKeyHelperSlow})
           </Text>
         </Box>}
-      {(apiKeyStatus === 'invalid' || apiKeyStatus === 'missing') && <Box>
+      {shouldShowAuthError && <Box>
           <Text color="error" wrap="truncate">
-            {isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ? 'Authentication error · Try again' : 'Not logged in · Run /login'}
+            {isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ? 'Authentication error · Try again' : `${llmAuthStatus.message} · Run /login`}
           </Text>
         </Box>}
       {debug && <Box>

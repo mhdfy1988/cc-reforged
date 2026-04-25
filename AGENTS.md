@@ -70,7 +70,19 @@
    - [docs/current-repair-backlog.md](D:/agent_project/claude-code-reforged/docs/current-repair-backlog.md)
    - 必要时同步 [docs/recovery-repair-plan.md](D:/agent_project/claude-code-reforged/docs/recovery-repair-plan.md)
 
-## 8. 详细规则入口
+## 8. Provider / OAuth / SDK 接入护栏
+
+1. 本节不是替代全局“查询优先、试错其次”规则，而是对本仓库 LLM provider / OAuth / SDK 接入场景的强制细化。
+2. 凡是涉及 LLM provider、OAuth、外部 SDK、外部协议、成熟第三方库或陌生运行时行为，无论是新增、改造、修复、排查还是验证，都必须先做资料对照，不得直接凭印象手写；至少对照：
+   - 官方文档或官方源码/README
+   - 本机已有成熟实现或参考仓库
+   - 第三方依赖的源码、类型声明和示例
+3. 如果本机已有跑通过的成熟实现，优先复用其调用路径和参数口径；只有在项目边界确实不同的情况下，才允许改走更底层 API，并必须写清楚差异原因。
+4. 如果从高层 helper 切到低层 `stream/complete` 等 API，必须逐字段对照入参名称、默认值、传输方式和错误降级行为，并补 smoke 断言防止口径漂移。
+5. 真实登录凭据、token、refresh token 和 credential JSON 绝不打印、不贴回复、不写入文档；验证只输出脱敏状态和路径。
+6. 这类接入验证失败时，先回到资料对照和实际 payload/transport 差异排查，不得优先猜测网络、代理或环境问题。
+
+## 9. 详细规则入口
 
 按需读取，不要一次性加载全部分册：
 

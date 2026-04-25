@@ -136,7 +136,7 @@ export function HelpV2(t0) {
     const t5 = insideModal ? undefined : maxHeight;
     let t6;
     if ($[31] !== tabs) {
-        t6 = _jsx(Tabs, { title: false ? "/help" : `Claude Code v${MACRO.VERSION}`, color: "professionalBlue", defaultTab: "general", children: tabs });
+        t6 = _jsx(Tabs, { title: false ? "/help" : `CCR v${MACRO.VERSION}`, color: "professionalBlue", defaultTab: "general", children: tabs });
         $[31] = tabs;
         $[32] = t6;
     }
@@ -145,7 +145,7 @@ export function HelpV2(t0) {
     }
     let t7;
     if ($[33] === Symbol.for("react.memo_cache_sentinel")) {
-        t7 = _jsx(Box, { marginTop: 1, children: _jsxs(Text, { children: ["For more help:", " ", _jsx(Link, { url: "https://code.claude.com/docs/en/overview" })] }) });
+        t7 = _jsx(Box, { marginTop: 1, children: _jsxs(Text, { children: ["For more help:", " ", _jsx(Link, { url: "https://github.com/mhdfy1988/cc-reforged" })] }) });
         $[33] = t7;
     }
     else {

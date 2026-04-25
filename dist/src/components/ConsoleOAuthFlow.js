@@ -202,7 +202,7 @@ export function ConsoleOAuthFlow({ onDone, startingMessage, mode = 'login', forc
                     state: 'success'
                 });
                 void sendNotification({
-                    message: 'Claude Code login successful',
+                    message: 'CCR login successful',
                     notificationType: 'auth_success'
                 }, terminal);
             }
@@ -261,7 +261,7 @@ function OAuthStatusMessage(t0) {
     switch (oauthStatus.state) {
         case "idle":
             {
-                const t1 = startingMessage ? startingMessage : "Claude Code can be used with your Claude subscription or billed based on API usage through your Console account.";
+                const t1 = startingMessage ? startingMessage : "CCR can be used with your Claude subscription or billed based on API usage through your Console account.";
                 let t2;
                 if ($[0] !== t1) {
                     t2 = _jsx(Text, { bold: true, children: t1 });
@@ -367,7 +367,7 @@ function OAuthStatusMessage(t0) {
                 let t2;
                 let t3;
                 if ($[13] === Symbol.for("react.memo_cache_sentinel")) {
-                    t2 = _jsx(Text, { children: "Claude Code supports Amazon Bedrock, Microsoft Foundry, and Vertex AI. Set the required environment variables, then restart Claude Code." });
+                    t2 = _jsx(Text, { children: "CCR supports Amazon Bedrock, Microsoft Foundry, and Vertex AI. Set the required environment variables, then restart CCR." });
                     t3 = _jsx(Text, { children: "If you are part of an enterprise organization, contact your administrator for setup instructions." });
                     $[13] = t2;
                     $[14] = t3;
@@ -471,7 +471,7 @@ function OAuthStatusMessage(t0) {
             {
                 let t1;
                 if ($[37] === Symbol.for("react.memo_cache_sentinel")) {
-                    t1 = _jsx(Box, { flexDirection: "column", gap: 1, children: _jsxs(Box, { children: [_jsx(Spinner, {}), _jsx(Text, { children: "Creating API key for Claude Code\u2026" })] }) });
+                    t1 = _jsx(Box, { flexDirection: "column", gap: 1, children: _jsxs(Box, { children: [_jsx(Spinner, {}), _jsx(Text, { children: "Creating API key for CCR\u2026" })] }) });
                     $[37] = t1;
                 }
                 else {

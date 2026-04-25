@@ -1,45 +1,31 @@
 > **Disclaimer:** This repository contains source code recovered from the source map (`cli.js.map`) bundled in the [`@anthropic-ai/claude-code@2.1.88`](https://www.npmjs.com/package/@anthropic-ai/claude-code/v/2.1.88) npm package. It is not an official source release by Anthropic. All rights belong to their respective owners.
 
-# Claude Code
+# CCR
 
-![](https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=flat-square) [![npm]](https://www.npmjs.com/package/@anthropic-ai/claude-code)
+![](https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=flat-square)
 
-[npm]: https://img.shields.io/npm/v/@anthropic-ai/claude-code.svg?style=flat-square
+CCR is the local command identity for this recovery build. It keeps the terminal-first coding workflow while we continue replacing the upstream Anthropic-only runtime with the in-repo built-in LLM runtime.
 
-Claude Code is an agentic coding tool that lives in your terminal, understands your codebase, and helps you code faster by executing routine tasks, explaining complex code, and handling git workflows -- all through natural language commands. Use it in your terminal, IDE, or tag @claude on Github.
-
-**Learn more at [Claude Code Homepage](https://claude.com/product/claude-code)** | [Documentation](https://code.claude.com/docs/en/overview)
+Upstream product and protocol references that still appear in the codebase or docs are kept only where they describe source provenance or external compatibility boundaries.
 
 <img src="https://github.com/anthropics/claude-code/blob/main/demo.gif?raw=1" />
 
 ## Get started
 
-1. Install Claude Code:
+1. Install CCR:
 
 ```sh
-npm install -g @anthropic-ai/claude-code
+npm install -g ccr-cli
 ```
 
-2. Navigate to your project directory and run `claude`.
+2. Navigate to your project directory and run `ccr`.
 
 ## Reporting Bugs
 
-We welcome your feedback. Use the `/bug` command to report issues directly within Claude Code, or file a [GitHub issue](https://github.com/anthropics/claude-code/issues).
+Use the `/bug` command inside CCR, or file a [GitHub issue](https://github.com/mhdfy1988/cc-reforged/issues).
 
-## Connect on Discord
+## Upstream References
 
-Join the [Claude Developers Discord](https://anthropic.com/discord) to connect with other developers using Claude Code. Get help, share feedback, and discuss your projects with the community.
-
-## Data collection, usage, and retention
-
-When you use Claude Code, we collect feedback, which includes usage data (such as code acceptance or rejections), associated conversation data, and user feedback submitted via the `/bug` command.
-
-### How we use your data
-
-See our [data usage policies](https://code.claude.com/docs/en/data-usage).
-
-### Privacy safeguards
-
-We have implemented several safeguards to protect your data, including limited retention periods for sensitive information and restricted access to user session data.
-
-For full details, please review our [Commercial Terms of Service](https://www.anthropic.com/legal/commercial-terms) and [Privacy Policy](https://www.anthropic.com/legal/privacy).
+- Upstream source provenance: [`@anthropic-ai/claude-code@2.1.88`](https://www.npmjs.com/package/@anthropic-ai/claude-code/v/2.1.88)
+- Upstream product overview: [Claude Code](https://claude.com/product/claude-code)
+- Upstream documentation reference: [code.claude.com/docs](https://code.claude.com/docs/en/overview)

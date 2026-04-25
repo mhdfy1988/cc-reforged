@@ -1,5 +1,6 @@
 import { useEffect, useReducer } from 'react'
 import { onGrowthBookRefresh } from '../services/analytics/growthbook.js'
+import { loadLlmConfig } from '../services/llm/llmConfig.js'
 import { useAppState } from '../state/AppState.js'
 import type { AppState } from '../state/AppStateStore.js'
 import {
@@ -34,10 +35,16 @@ export function useMainLoopModel(): ModelName {
   const [, forceRerender] = useReducer(x => x + 1, 0)
   useEffect(() => onGrowthBookRefresh(forceRerender), [])
 
-  const model = parseUserSpecifiedModel(
-    mainLoopModelForSession ??
-      mainLoopModel ??
-      getDefaultMainLoopModelSetting(),
-  )
+  const llmConfig = loadLlmConfig()
+  if (llmConfig.provider !== 'anthropic') {
+    return llmConfig.model
+  }
+
+  const configuredModel = mainLoopModelForSession ?? mainLoopModel
+  if (configuredModel) {
+    return parseUserSpecifiedModel(configuredModel)
+  }
+
+  const model = parseUserSpecifiedModel(getDefaultMainLoopModelSetting())
   return model
 }

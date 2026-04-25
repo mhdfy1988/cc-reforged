@@ -19,7 +19,7 @@ import { Spinner } from '../Spinner.js';
  * <LoadingState
  *   message="Loading sessions"
  *   bold
- *   subtitle="Fetching your Claude Code sessions..."
+ *   subtitle="Fetching your CCR sessions..."
  * />
  */
 export function LoadingState(t0) {

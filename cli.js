@@ -11,7 +11,7 @@ const loaderUrl = pathToFileURL(loader).href
 
 if (!existsSync(entrypoint)) {
   console.error(
-    'Claude Code Reforged has not been built yet. Run `npm.cmd run build` first.',
+    'CCR has not been built yet. Run `npm.cmd run build` first.',
   )
   process.exitCode = 1
 } else {

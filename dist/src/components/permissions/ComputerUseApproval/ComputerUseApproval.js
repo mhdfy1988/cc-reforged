@@ -154,7 +154,7 @@ function ComputerUseTccPanel(t0) {
     }
     let t7;
     if ($[15] === Symbol.for("react.memo_cache_sentinel")) {
-        t7 = _jsx(Text, { dimColor: true, children: "Grant the missing permissions in System Settings, then select \"Try again\". macOS may require you to restart Claude Code after granting Screen Recording." });
+        t7 = _jsx(Text, { dimColor: true, children: "Grant the missing permissions in System Settings, then select \"Try again\". macOS may require you to restart CCR after granting Screen Recording." });
         $[15] = t7;
     }
     else {

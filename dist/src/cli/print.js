@@ -3900,7 +3900,7 @@ async function loadInitialMessages(setAppState, options) {
             // In print mode - we require a valid session ID, JSONL file or URL
             const parsedSessionId = parseSessionIdentifier(typeof options.resume === 'string' ? options.resume : '');
             if (!parsedSessionId) {
-                let errorMessage = 'Error: --resume requires a valid session ID when used with --print. Usage: claude -p --resume <session-id>';
+                let errorMessage = 'Error: --resume requires a valid session ID when used with --print. Usage: ccr -p --resume <session-id>';
                 if (typeof options.resume === 'string') {
                     errorMessage += `. Session IDs must be in UUID format (e.g., 550e8400-e29b-41d4-a716-446655440000). Provided value "${options.resume}" is not a valid UUID`;
                 }

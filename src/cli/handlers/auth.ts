@@ -11,6 +11,18 @@ import {
 import { getSSLErrorHint } from '../../services/api/errorUtils.js'
 import { fetchAndStoreClaudeCodeFirstTokenDate } from '../../services/api/firstTokenDate.js'
 import {
+  getLlmRuntimeAuthStatus,
+  getLlmRuntimeDisplayStatus,
+} from '../../services/llm/runtimeStatus.js'
+import {
+  getLlmProviderConfig,
+  loadLlmConfig,
+} from '../../services/llm/llmConfig.js'
+import {
+  createDefaultCodexOAuthSession,
+  resetDefaultCodexOAuthSession,
+} from '../../services/llm/sessions/defaultCodexOAuthSession.js'
+import {
   createAndStoreApiKey,
   fetchAndStoreUserRoles,
   refreshOAuthToken,
@@ -41,7 +53,9 @@ import { jsonStringify } from '../../utils/slowOperations.js'
 import {
   buildAccountProperties,
   buildAPIProviderProperties,
+  buildLlmRuntimeProperties,
 } from '../../utils/status.js'
+import { gracefulShutdown } from '../../utils/gracefulShutdown.js'
 
 function parseString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
@@ -58,6 +72,12 @@ function isOrgValidationFailure(
   result: Awaited<ReturnType<typeof validateForceLoginOrg>>,
 ): result is { valid: false; message: string } {
   return result.valid === false && typeof result.message === 'string'
+}
+
+async function completeAuthLogin(exitCode: number): Promise<void> {
+  // 对齐仓库现有非交互 CLI 子命令的收尾方式：先做统一清理，再显式退出。
+  // 直接 process.exit() 太早，单纯自然返回又会让命令挂住。
+  await gracefulShutdown(exitCode)
 }
 
 /**
@@ -166,21 +186,75 @@ export async function installOAuthTokens(tokens: OAuthTokens): Promise<void> {
 }
 
 export async function authLogin({
+  provider,
   email,
   sso,
   console: useConsole,
   claudeai,
 }: {
+  provider?: 'anthropic' | 'codex-oauth'
   email?: string
   sso?: boolean
   console?: boolean
   claudeai?: boolean
 }): Promise<void> {
+  const authProvider = provider ?? 'anthropic'
+
+  if (authProvider === 'codex-oauth') {
+    if (email || sso || useConsole || claudeai) {
+      process.stderr.write(
+        'Error: --email, --sso, --console, and --claudeai are only supported with --provider anthropic.\n',
+      )
+      await completeAuthLogin(1)
+      return
+    }
+
+    try {
+      logEvent('tengu_codex_oauth_login_start', {})
+      const session = createDefaultCodexOAuthSession()
+      process.stdout.write('Starting Codex OAuth browser login...\n')
+      process.stdout.write(
+        `A browser window will open. If it does not, use the printed URL manually.\n`,
+      )
+      const credential = await session.loginWithBrowser()
+      resetDefaultCodexOAuthSession()
+      const llmConfig = loadLlmConfig()
+      const codexProviderConfig = getLlmProviderConfig('codex-oauth', llmConfig)
+
+      logEvent('tengu_codex_oauth_login_success', {})
+      process.stdout.write('Codex OAuth login successful.\n')
+      process.stdout.write(
+        `Credential file: ${session.credentialFilePath}\n`,
+      )
+      if (credential.accountId) {
+        process.stdout.write(`Account ID: ${credential.accountId}\n`)
+      }
+      if (typeof credential.expires === 'number') {
+        process.stdout.write(
+          `Expires at: ${new Date(credential.expires).toISOString()}\n`,
+        )
+      }
+      if (llmConfig.provider !== 'codex-oauth') {
+        process.stdout.write(
+          `Current active LLM provider is ${llmConfig.provider}. To start using Codex OAuth for model calls, switch provider to codex-oauth in ${llmConfig.path}${codexProviderConfig?.defaultModel ? ` (recommended model: ${codexProviderConfig.defaultModel})` : ''}.\n`,
+        )
+      }
+      await completeAuthLogin(0)
+      return
+    } catch (err) {
+      logError(err)
+      process.stderr.write(`Codex OAuth login failed: ${errorMessage(err)}\n`)
+      await completeAuthLogin(1)
+      return
+    }
+  }
+
   if (useConsole && claudeai) {
     process.stderr.write(
       'Error: --console and --claudeai cannot be used together.\n',
     )
-    process.exit(1)
+    await completeAuthLogin(1)
+    return
   }
 
   const settings = getInitialSettings()
@@ -193,16 +267,17 @@ export async function authLogin({
 
   // Fast path: if a refresh token is provided via env var, skip the browser
   // OAuth flow and exchange it directly for tokens.
-  const envRefreshToken = process.env.CLAUDE_CODE_OAUTH_REFRESH_TOKEN
+  const envRefreshToken = process.env.CCR_OAUTH_REFRESH_TOKEN
   if (envRefreshToken) {
-    const envScopes = process.env.CLAUDE_CODE_OAUTH_SCOPES
+    const envScopes = process.env.CCR_OAUTH_SCOPES
     if (!envScopes) {
       process.stderr.write(
-        'CLAUDE_CODE_OAUTH_SCOPES is required when using CLAUDE_CODE_OAUTH_REFRESH_TOKEN.\n' +
+        'CCR_OAUTH_SCOPES is required when using CCR_OAUTH_REFRESH_TOKEN.\n' +
           'Set it to the space-separated scopes the refresh token was issued with\n' +
           '(e.g. "user:inference" or "user:profile user:inference user:sessions:claude_code user:mcp_servers").\n',
       )
-      process.exit(1)
+      await completeAuthLogin(1)
+      return
     }
 
     const scopes = envScopes.split(/\s+/).filter(Boolean)
@@ -216,7 +291,8 @@ export async function authLogin({
       const orgResult = await validateForceLoginOrg()
       if (isOrgValidationFailure(orgResult)) {
         process.stderr.write(orgResult.message + '\n')
-        process.exit(1)
+        await completeAuthLogin(1)
+        return
       }
 
       // Mark onboarding complete — interactive paths handle this via
@@ -230,14 +306,16 @@ export async function authLogin({
         loginWithClaudeAi: shouldUseClaudeAIAuth(tokens.scopes),
       })
       process.stdout.write('Login successful.\n')
-      process.exit(0)
+      await completeAuthLogin(0)
+      return
     } catch (err) {
       logError(err)
       const sslHint = getSSLErrorHint(err)
       process.stderr.write(
         `Login failed: ${errorMessage(err)}\n${sslHint ? sslHint + '\n' : ''}`,
       )
-      process.exit(1)
+      await completeAuthLogin(1)
+      return
     }
   }
 
@@ -266,20 +344,23 @@ export async function authLogin({
     const orgResult = await validateForceLoginOrg()
     if (isOrgValidationFailure(orgResult)) {
       process.stderr.write(orgResult.message + '\n')
-      process.exit(1)
+      await completeAuthLogin(1)
+      return
     }
 
     logEvent('tengu_oauth_success', { loginWithClaudeAi })
 
     process.stdout.write('Login successful.\n')
-    process.exit(0)
+    await completeAuthLogin(0)
+    return
   } catch (err) {
     logError(err)
     const sslHint = getSSLErrorHint(err)
     process.stderr.write(
       `Login failed: ${errorMessage(err)}\n${sslHint ? sslHint + '\n' : ''}`,
     )
-    process.exit(1)
+    await completeAuthLogin(1)
+    return
   } finally {
     oauthService.cleanup()
   }
@@ -289,6 +370,8 @@ export async function authStatus(opts: {
   json?: boolean
   text?: boolean
 }): Promise<void> {
+  const llmStatus = getLlmRuntimeDisplayStatus()
+  const llmAuthStatus = await getLlmRuntimeAuthStatus()
   const { source: authTokenSource, hasToken } = getAuthTokenSource()
   const { source: apiKeySource } = getAnthropicApiKeyWithSource()
   const hasApiKeyEnvVar =
@@ -296,12 +379,19 @@ export async function authStatus(opts: {
   const oauthAccount = getOauthAccountInfo()
   const subscriptionType = getSubscriptionType()
   const using3P = isUsing3PServices()
-  const loggedIn =
+  const legacyLoggedIn =
     hasToken || apiKeySource !== 'none' || hasApiKeyEnvVar || using3P
+  const loggedIn =
+    llmStatus.providerId === 'codex-oauth'
+      ? llmAuthStatus.available
+      : legacyLoggedIn
 
   // Determine auth method
   let authMethod: string = 'none'
-  if (using3P) {
+  if (llmStatus.providerId === 'codex-oauth') {
+    authMethod =
+      llmAuthStatus.configured || llmAuthStatus.available ? 'codex_oauth' : 'none'
+  } else if (using3P) {
     authMethod = 'third_party'
   } else if (authTokenSource === 'claude.ai') {
     authMethod = 'claude.ai'
@@ -317,6 +407,7 @@ export async function authStatus(opts: {
 
   if (opts.text) {
     const properties = [
+      ...buildLlmRuntimeProperties(),
       ...buildAccountProperties(),
       ...buildAPIProviderProperties(),
     ]
@@ -343,7 +434,9 @@ export async function authStatus(opts: {
     }
     if (!loggedIn) {
       process.stdout.write(
-        'Not logged in. Run claude auth login to authenticate.\n',
+        llmStatus.providerId === 'codex-oauth'
+          ? 'Not logged in. Run the Codex OAuth login flow or configure CCR_CODEX_OAUTH_* credentials.\n'
+          : 'Not logged in. Run ccr auth login to authenticate.\n',
       )
     }
   } else {
@@ -358,6 +451,33 @@ export async function authStatus(opts: {
       loggedIn,
       authMethod,
       apiProvider,
+      llmProvider: llmStatus.providerId,
+      llmProviderDisplayName: llmStatus.providerDisplayName,
+      llmApiMode: llmStatus.apiMode,
+      llmAuthStrategy: llmStatus.authStrategy,
+      llmModel: llmStatus.model,
+      llmModelDisplayName: llmStatus.modelCatalogEntry.displayName,
+      llmModelContextWindow: String(llmStatus.modelCatalogEntry.contextWindow),
+      llmModelMaxOutputTokens: String(
+        llmStatus.modelCatalogEntry.maxOutputTokens,
+      ),
+      llmModelSupportsReasoning: llmStatus.modelCatalogEntry.supportsReasoning,
+      llmModelSupportsTools: llmStatus.modelCatalogEntry.supportsTools,
+      llmModelInputModalities: llmStatus.modelCatalogEntry.inputModalities.join(
+        ',',
+      ),
+      llmAuthState: llmAuthStatus.state,
+      llmAuthMessage: llmAuthStatus.message,
+      llmAuthSource: llmAuthStatus.source ?? null,
+      llmBaseUrl: llmAuthStatus.baseUrl ?? llmStatus.baseUrl ?? null,
+      llmConfigPath: llmStatus.configPath,
+      llmConfigSource: llmStatus.configSource,
+    }
+    if (llmAuthStatus.accountId) {
+      output.llmAccountId = llmAuthStatus.accountId
+    }
+    if (typeof llmAuthStatus.expiresAt === 'number') {
+      output.llmExpiresAt = String(llmAuthStatus.expiresAt)
     }
     if (resolvedApiKeySource) {
       output.apiKeySource = resolvedApiKeySource

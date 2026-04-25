@@ -124,7 +124,7 @@ export async function mcpRemoveHandler(name, options) {
             });
             process.stderr.write('\nTo remove from a specific scope, use:\n');
             scopes.forEach(scope => {
-                process.stderr.write(`  claude mcp remove "${name}" -s ${scope}\n`);
+                process.stderr.write(`  ccr mcp remove "${name}" -s ${scope}\n`);
             });
             cliError();
         }
@@ -139,7 +139,7 @@ export async function mcpListHandler() {
     const { servers: configs } = await getAllMcpConfigs();
     if (Object.keys(configs).length === 0) {
         // biome-ignore lint/suspicious/noConsole:: intentional console output
-        console.log('No MCP servers configured. Use `claude mcp add` to add a server.');
+        console.log('No MCP servers configured. Use `ccr mcp add` to add a server.');
     }
     else {
         // biome-ignore lint/suspicious/noConsole:: intentional console output
@@ -268,7 +268,7 @@ export async function mcpGetHandler(name) {
         }
     }
     // biome-ignore lint/suspicious/noConsole:: intentional console output
-    console.log(`\nTo remove this server, run: claude mcp remove "${name}" -s ${server.scope}`);
+    console.log(`\nTo remove this server, run: ccr mcp remove "${name}" -s ${server.scope}`);
     // Use gracefulShutdown to properly clean up MCP server connections
     // (process.exit bypasses cleanup handlers, leaving child processes orphaned)
     await gracefulShutdown(0);
@@ -334,6 +334,6 @@ export async function mcpResetChoicesHandler() {
         disabledMcpjsonServers: [],
         enableAllProjectMcpServers: false
     }));
-    cliOk('All project-scoped (.mcp.json) server approvals and rejections have been reset.\n' + 'You will be prompted for approval next time you start Claude Code.');
+    cliOk('All project-scoped (.mcp.json) server approvals and rejections have been reset.\n' + 'You will be prompted for approval next time you start CCR.');
 }
 //# sourceMappingURL=mcp.js.map

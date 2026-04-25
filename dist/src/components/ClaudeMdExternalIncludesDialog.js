@@ -71,7 +71,7 @@ export function ClaudeMdExternalIncludesDialog(t0) {
     }
     let t8;
     if ($[8] === Symbol.for("react.memo_cache_sentinel")) {
-        t8 = _jsxs(Text, { dimColor: true, children: ["Important: Only use Claude Code with files you trust. Accessing untrusted files may pose security risks", " ", _jsx(Link, { url: "https://code.claude.com/docs/en/security" }), " "] });
+        t8 = _jsxs(Text, { dimColor: true, children: ["Important: Only use CCR with files you trust. Accessing untrusted files may pose security risks", " ", _jsx(Link, { url: "https://github.com/mhdfy1988/cc-reforged" }), " "] });
         $[8] = t8;
     }
     else {

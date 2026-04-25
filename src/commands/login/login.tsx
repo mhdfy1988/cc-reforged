@@ -5,8 +5,8 @@ import { resetCostState } from '../../bootstrap/state.js';
 import { clearTrustedDeviceToken, enrollTrustedDevice } from '../../bridge/trustedDevice.js';
 import type { LocalJSXCommandContext } from '../../commands.js';
 import { ConfigurableShortcutHint } from '../../components/ConfigurableShortcutHint.js';
-import { ConsoleOAuthFlow } from '../../components/ConsoleOAuthFlow.js';
 import { Dialog } from '../../components/design-system/Dialog.js';
+import { LlmLoginFlow } from '../../components/LlmLoginFlow.js';
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
 import { Text } from '../../ink.js';
 import { refreshGrowthBookAfterAuthChange } from '../../services/analytics/growthbook.js';
@@ -79,13 +79,12 @@ export function Login(props) {
     t1 = $[5];
   }
   let t2;
-  if ($[6] !== props.startingMessage || $[7] !== t1) {
-    t2 = <ConsoleOAuthFlow onDone={t1} startingMessage={props.startingMessage} />;
-    $[6] = props.startingMessage;
-    $[7] = t1;
-    $[8] = t2;
+  if ($[6] !== t1) {
+    t2 = <LlmLoginFlow onDone={t1} />;
+    $[6] = t1;
+    $[7] = t2;
   } else {
-    t2 = $[8];
+    t2 = $[7];
   }
   let t3;
   if ($[9] !== t0 || $[10] !== t2) {

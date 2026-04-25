@@ -10,7 +10,7 @@ export function WelcomeV2() {
     if (env.terminal === "Apple_Terminal") {
         let t0;
         if ($[0] !== theme) {
-            t0 = _jsx(AppleTerminalWelcomeV2, { theme: theme, welcomeMessage: "Welcome to Claude Code" });
+            t0 = _jsx(AppleTerminalWelcomeV2, { theme: theme, welcomeMessage: "Welcome to CCR" });
             $[0] = theme;
             $[1] = t0;
         }
@@ -30,7 +30,7 @@ export function WelcomeV2() {
         let t7;
         let t8;
         if ($[2] === Symbol.for("react.memo_cache_sentinel")) {
-            t0 = _jsxs(Text, { children: [_jsxs(Text, { color: "claude", children: ["Welcome to Claude Code", " "] }), _jsxs(Text, { dimColor: true, children: ["v", MACRO.VERSION, " "] })] });
+            t0 = _jsxs(Text, { children: [_jsxs(Text, { color: "claude", children: ["Welcome to CCR", " "] }), _jsxs(Text, { dimColor: true, children: ["v", MACRO.VERSION, " "] })] });
             t1 = _jsx(Text, { children: "\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026" });
             t2 = _jsx(Text, { children: "                                                          " });
             t3 = _jsx(Text, { children: "                                                          " });
@@ -122,7 +122,7 @@ export function WelcomeV2() {
     let t5;
     let t6;
     if ($[18] === Symbol.for("react.memo_cache_sentinel")) {
-        t0 = _jsxs(Text, { children: [_jsxs(Text, { color: "claude", children: ["Welcome to Claude Code", " "] }), _jsxs(Text, { dimColor: true, children: ["v", MACRO.VERSION, " "] })] });
+        t0 = _jsxs(Text, { children: [_jsxs(Text, { color: "claude", children: ["Welcome to CCR", " "] }), _jsxs(Text, { dimColor: true, children: ["v", MACRO.VERSION, " "] })] });
         t1 = _jsx(Text, { children: "\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026" });
         t2 = _jsx(Text, { children: "                                                          " });
         t3 = _jsx(Text, { children: "     *                                       \u2588\u2588\u2588\u2588\u2588\u2593\u2593\u2591     " });

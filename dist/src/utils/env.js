@@ -13,8 +13,8 @@ export const getGlobalClaudeFile = memoize(() => {
     if (getFsImplementation().existsSync(join(getClaudeConfigHomeDir(), '.config.json'))) {
         return join(getClaudeConfigHomeDir(), '.config.json');
     }
-    const filename = `.claude${fileSuffixForOauthConfig()}.json`;
-    return join(process.env.CLAUDE_CONFIG_DIR || homedir(), filename);
+    const filename = `.ccr${fileSuffixForOauthConfig()}.json`;
+    return join(process.env.CCR_CONFIG_DIR || homedir(), filename);
 });
 const hasInternetAccess = memoize(async () => {
     try {

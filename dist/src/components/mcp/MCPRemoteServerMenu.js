@@ -84,10 +84,10 @@ export function MCPRemoteServerMenu({ server, serverToolsCount, onViewTools, onC
                 onComplete?.(`Authentication successful. Connected to ${server.name}.`);
             }
             else if (result.client.type === 'needs-auth') {
-                onComplete?.('Authentication successful, but server still requires authentication. You may need to manually restart Claude Code.');
+                onComplete?.('Authentication successful, but server still requires authentication. You may need to manually restart CCR.');
             }
             else {
-                onComplete?.('Authentication successful, but server reconnection failed. You may need to manually restart Claude Code for the changes to take effect.');
+                onComplete?.('Authentication successful, but server reconnection failed. You may need to manually restart CCR for the changes to take effect.');
             }
         }
         catch (err) {
@@ -267,12 +267,12 @@ export function MCPRemoteServerMenu({ server, serverToolsCount, onViewTools, onC
                     onComplete?.(message);
                 }
                 else if (result_0.client.type === 'needs-auth') {
-                    onComplete?.('Authentication successful, but server still requires authentication. You may need to manually restart Claude Code.');
+                    onComplete?.('Authentication successful, but server still requires authentication. You may need to manually restart CCR.');
                 }
                 else {
                     // result.client.type === 'failed'
                     logMCPDebug(server.name, `Reconnection failed after authentication`);
-                    onComplete?.('Authentication successful, but server reconnection failed. You may need to manually restart Claude Code for the changes to take effect.');
+                    onComplete?.('Authentication successful, but server reconnection failed. You may need to manually restart CCR for the changes to take effect.');
                 }
             }
         }

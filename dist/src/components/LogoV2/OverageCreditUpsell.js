@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Text } from '../../ink.js';
 import { logEvent } from '../../services/analytics/index.js';
 import { formatGrantAmount, getCachedOverageCreditGrant, refreshOverageCreditGrantCache } from '../../services/api/overageCreditGrant.js';
+import { getLlmRuntimeDisplayStatus } from '../../services/llm/runtimeStatus.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import { truncate } from '../../utils/format.js';
 const MAX_IMPRESSIONS = 3;
@@ -24,6 +25,8 @@ const MAX_IMPRESSIONS = 3;
  *   (welcome feed, tips).
  */
 export function isEligibleForOverageCreditGrant() {
+    if (getLlmRuntimeDisplayStatus().providerId !== 'anthropic')
+        return false;
     const info = getCachedOverageCreditGrant();
     if (!info || !info.available || info.granted)
         return false;

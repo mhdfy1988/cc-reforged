@@ -715,7 +715,7 @@ function PromptInput({ debug, ideSelection, toolPermissionContext, setToolPermis
         if (feature('ULTRAPLAN') && ultraplanTriggers.length) {
             addNotification({
                 key: 'ultraplan-active',
-                text: 'This prompt will launch an ultraplan session in Claude Code on the web',
+                text: 'This prompt will launch an ultraplan session in CCR on the web',
                 priority: 'immediate',
                 timeoutMs: 5000
             });
@@ -728,7 +728,7 @@ function PromptInput({ debug, ideSelection, toolPermissionContext, setToolPermis
         if (isUltrareviewEnabled() && ultrareviewTriggers.length) {
             addNotification({
                 key: 'ultrareview-active',
-                text: 'Run /ultrareview after Claude finishes to review these changes in the cloud',
+                text: 'Run /ultrareview after CCR finishes to review these changes in the cloud',
                 priority: 'immediate',
                 timeoutMs: 5000
             });
@@ -1825,7 +1825,7 @@ function PromptInput({ debug, ideSelection, toolPermissionContext, setToolPermis
     // Show effort notification on startup and when effort changes.
     // Suppressed in brief/assistant mode — the value reflects the local
     // client's effort, not the connected agent's.
-    const effortNotificationText = briefOwnsGap ? undefined : getEffortNotificationText(effortValue, mainLoopModel_);
+    const effortNotificationText = briefOwnsGap ? undefined : getEffortNotificationText(effortValue, mainLoopModel);
     useEffect(() => {
         if (!effortNotificationText) {
             removeNotification('effort-level');

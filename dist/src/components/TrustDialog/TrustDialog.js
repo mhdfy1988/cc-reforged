@@ -212,7 +212,7 @@ export function TrustDialog(t0) {
     if ($[20] === Symbol.for("react.memo_cache_sentinel")) {
         t16 = _jsx(Text, { bold: true, children: getFsImplementation().cwd() });
         t17 = _jsxs(Text, { children: ["Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not, take a moment to review what", "'", "s in this folder first."] });
-        t18 = _jsxs(Text, { children: ["Claude Code", "'", "ll be able to read, edit, and execute files here."] });
+        t18 = _jsxs(Text, { children: ["CCR", "'", "ll be able to read, edit, and execute files here."] });
         $[20] = t16;
         $[21] = t17;
         $[22] = t18;
@@ -224,7 +224,7 @@ export function TrustDialog(t0) {
     }
     let t19;
     if ($[23] === Symbol.for("react.memo_cache_sentinel")) {
-        t19 = _jsx(Text, { dimColor: true, children: _jsx(Link, { url: "https://code.claude.com/docs/en/security", children: "Security guide" }) });
+        t19 = _jsx(Text, { dimColor: true, children: _jsx(Link, { url: "https://github.com/mhdfy1988/cc-reforged", children: "Security guide" }) });
         $[23] = t19;
     }
     else {

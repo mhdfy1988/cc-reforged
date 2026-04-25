@@ -13,7 +13,7 @@ import { env } from '../utils/env.js';
 import { isRunningOnHomespace } from '../utils/envUtils.js';
 import { PreflightStep } from '../utils/preflightChecks.js';
 import { ApproveApiKey } from './ApproveApiKey.js';
-import { ConsoleOAuthFlow } from './ConsoleOAuthFlow.js';
+import { LlmLoginFlow } from './LlmLoginFlow.js';
 import { Select } from './CustomSelect/select.js';
 import { WelcomeV2 } from './LogoV2/WelcomeV2.js';
 import { PressEnterToContinue } from './PressEnterToContinue.js';
@@ -49,7 +49,7 @@ export function Onboarding({ onDone }) {
     const exitState = useExitOnCtrlCDWithKeybindings();
     // Define all onboarding steps
     const themeStep = _jsx(Box, { marginX: 1, children: _jsx(ThemePicker, { onThemeSelect: handleThemeSelection, showIntroText: true, helpText: "To change this later, run /theme", hideEscToCancel: true, skipExitHandling: true }) });
-    const securityStep = _jsxs(Box, { flexDirection: "column", gap: 1, paddingLeft: 1, children: [_jsx(Text, { bold: true, children: "Security notes:" }), _jsx(Box, { flexDirection: "column", width: 70, children: _jsxs(OrderedList, { children: [_jsxs(OrderedList.Item, { children: [_jsx(Text, { children: "Claude can make mistakes" }), _jsxs(Text, { dimColor: true, wrap: "wrap", children: ["You should always review Claude's responses, especially when", _jsx(Newline, {}), "running code.", _jsx(Newline, {})] })] }), _jsxs(OrderedList.Item, { children: [_jsx(Text, { children: "Due to prompt injection risks, only use it with code you trust" }), _jsxs(Text, { dimColor: true, wrap: "wrap", children: ["For more details see:", _jsx(Newline, {}), _jsx(Link, { url: "https://code.claude.com/docs/en/security" })] })] })] }) }), _jsx(PressEnterToContinue, {})] });
+    const securityStep = _jsxs(Box, { flexDirection: "column", gap: 1, paddingLeft: 1, children: [_jsx(Text, { bold: true, children: "Security notes:" }), _jsx(Box, { flexDirection: "column", width: 70, children: _jsxs(OrderedList, { children: [_jsxs(OrderedList.Item, { children: [_jsx(Text, { children: "CCR can make mistakes" }), _jsxs(Text, { dimColor: true, wrap: "wrap", children: ["You should always review CCR's responses, especially when", _jsx(Newline, {}), "running code.", _jsx(Newline, {})] })] }), _jsxs(OrderedList.Item, { children: [_jsx(Text, { children: "Due to prompt injection risks, only use it with code you trust" }), _jsxs(Text, { dimColor: true, wrap: "wrap", children: ["For more details see:", _jsx(Newline, {}), _jsx(Link, { url: "https://github.com/mhdfy1988/cc-reforged" })] })] })] }) }), _jsx(PressEnterToContinue, {})] });
     const preflightStep = _jsx(PreflightStep, { onSuccess: goToNextStep });
     // Create the steps array - determine which steps to include based on reAuth and oauthEnabled
     const apiKeyNeedingApproval = useMemo(() => {
@@ -90,7 +90,7 @@ export function Onboarding({ onDone }) {
     if (oauthEnabled) {
         steps.push({
             id: 'oauth',
-            component: _jsx(SkippableStep, { skip: skipOAuth, onSkip: goToNextStep, children: _jsx(ConsoleOAuthFlow, { onDone: goToNextStep }) })
+            component: _jsx(SkippableStep, { skip: skipOAuth, onSkip: goToNextStep, children: _jsx(LlmLoginFlow, { onDone: goToNextStep }) })
         });
     }
     steps.push({
@@ -100,7 +100,7 @@ export function Onboarding({ onDone }) {
     if (shouldOfferTerminalSetup()) {
         steps.push({
             id: 'terminal-setup',
-            component: _jsxs(Box, { flexDirection: "column", gap: 1, paddingLeft: 1, children: [_jsx(Text, { bold: true, children: "Use Claude Code's terminal setup?" }), _jsxs(Box, { flexDirection: "column", width: 70, gap: 1, children: [_jsxs(Text, { children: ["For the optimal coding experience, enable the recommended settings", _jsx(Newline, {}), "for your terminal:", ' ', env.terminal === 'Apple_Terminal' ? 'Option+Enter for newlines and visual bell' : 'Shift+Enter for newlines'] }), _jsx(Select, { options: [{
+            component: _jsxs(Box, { flexDirection: "column", gap: 1, paddingLeft: 1, children: [_jsx(Text, { bold: true, children: "Use CCR's terminal setup?" }), _jsxs(Box, { flexDirection: "column", width: 70, gap: 1, children: [_jsxs(Text, { children: ["For the optimal coding experience, enable the recommended settings", _jsx(Newline, {}), "for your terminal:", ' ', env.terminal === 'Apple_Terminal' ? 'Option+Enter for newlines and visual bell' : 'Shift+Enter for newlines'] }), _jsx(Select, { options: [{
                                         label: 'Yes, use recommended settings',
                                         value: 'install'
                                     }, {

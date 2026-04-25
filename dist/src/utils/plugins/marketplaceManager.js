@@ -1584,7 +1584,7 @@ export const getMarketplace = memoize(async (name) => {
         !isAbsolute(entry.source.path)) {
         throw new Error(`Marketplace "${name}" has a relative source path (${entry.source.path}) ` +
             `in known_marketplaces.json — this is stale state from an older ` +
-            `Claude Code version. Run 'claude marketplace remove ${name}' and ` +
+            `CCR version. Run 'ccr marketplace remove ${name}' and ` +
             `re-add it from the original project directory.`);
     }
     // Try to read from disk cache

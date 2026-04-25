@@ -167,7 +167,7 @@ export const SUPPORTED_SETTINGS: Record<string, SettingConfig> = {
           source: 'global' as const,
           type: 'boolean' as const,
           description:
-            'Push to your mobile device when idle after Claude finishes (requires Remote Control)',
+            'Push to your mobile device when idle after CCR finishes (requires Remote Control)',
         },
         inputNeededNotifEnabled: {
           source: 'global' as const,

@@ -1117,7 +1117,7 @@ export async function runBridgeLoop(config, environmentId, environmentSecret, ap
         config.spawnMode === 'single-session' &&
         initialSessionId &&
         !fatalExit) {
-        logger.logStatus(`Resume this session by running \`claude remote-control --continue\``);
+        logger.logStatus(`Resume this session by running \`ccr remote-control --continue\``);
         logForDebugging(`[bridge:shutdown] Skipping archive+deregister to allow resume of session ${initialSessionId}`);
         return;
     }
@@ -1350,7 +1350,7 @@ export function parseArgs(args) {
             createSessionInDir = false;
         }
         else {
-            return makeError(`Unknown argument: ${arg}\nRun 'claude remote-control --help' for usage.`);
+            return makeError(`Unknown argument: ${arg}\nRun 'ccr remote-control --help' for usage.`);
         }
     }
     // Note: gate check for --spawn/--capacity/--create-session-in-dir is in bridgeMain
@@ -1438,7 +1438,7 @@ async function printHelp() {
 Remote Control - Connect your local environment to claude.ai/code
 
 USAGE
-  claude remote-control [options]
+  ccr remote-control [options]
 OPTIONS
   --name <name>                    Name for the session (shown in claude.ai/code)
 ${feature('KAIROS')
@@ -1459,7 +1459,7 @@ DESCRIPTION
 ${serverDescription}
 NOTES
   - You must be logged in with a Claude account that has a subscription
-  - Run \`claude\` first in the directory to accept the workspace trust dialog
+  - Run \`ccr\` first in the directory to accept the workspace trust dialog
 ${serverNote}`;
     // biome-ignore lint/suspicious/noConsole: intentional help output
     console.log(help);
@@ -1564,7 +1564,7 @@ export async function bridgeMain(args) {
     // so we must verify trust was previously established by a normal `claude` session.
     if (!checkHasTrustDialogAccepted()) {
         // biome-ignore lint/suspicious/noConsole:: intentional console output
-        console.error(`Error: Workspace not trusted. Please run \`claude\` in ${dir} first to review and accept the workspace trust dialog.`);
+        console.error(`Error: Workspace not trusted. Please run \`ccr\` in ${dir} first to review and accept the workspace trust dialog.`);
         // eslint-disable-next-line custom-rules/no-process-exit
         process.exit(1);
     }
@@ -1615,7 +1615,7 @@ export async function bridgeMain(args) {
         const found = await readBridgePointerAcrossWorktrees(dir);
         if (!found) {
             // biome-ignore lint/suspicious/noConsole: intentional error output
-            console.error(`Error: No recent session found in this directory or its worktrees. Run \`claude remote-control\` to start a new one.`);
+            console.error(`Error: No recent session found in this directory or its worktrees. Run \`ccr remote-control\` to start a new one.`);
             // eslint-disable-next-line custom-rules/no-process-exit
             process.exit(1);
         }
@@ -1692,7 +1692,7 @@ export async function bridgeMain(args) {
             output: process.stdout,
         });
         // biome-ignore lint/suspicious/noConsole: intentional dialog output
-        console.log(`\nClaude Remote Control is launching in spawn mode which lets you create new sessions in this project from Claude Code on Web or your Mobile app. Learn more here: https://code.claude.com/docs/en/remote-control\n\n` +
+        console.log(`\nCCR Remote Control is launching in spawn mode which lets you create new sessions in this project from CCR on Web or your mobile app. Learn more here: https://code.claude.com/docs/en/remote-control\n\n` +
             `Spawn mode for this project:\n` +
             `  [1] same-dir \u2014 sessions share the current directory (default)\n` +
             `  [2] worktree \u2014 each session gets an isolated git worktree\n\n` +
@@ -1812,7 +1812,7 @@ export async function bridgeMain(args) {
                 await clearBridgePointer(resumePointerDir);
             }
             // biome-ignore lint/suspicious/noConsole: intentional error output
-            console.error(`Error: Session ${resumeSessionId} not found. It may have been archived or expired, or your login may have lapsed (run \`claude /login\`).`);
+            console.error(`Error: Session ${resumeSessionId} not found. It may have been archived or expired, or your login may have lapsed (run \`ccr /login\`).`);
             // eslint-disable-next-line custom-rules/no-process-exit
             process.exit(1);
         }
