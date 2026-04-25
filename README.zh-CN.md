@@ -16,10 +16,21 @@ CCR 是一个终端编码 Agent 的恢复构建版本。当前 v0.1 里程碑保
 
 - 产品命令：`ccr`
 - 产品版本：`CCR v0.1`
+- npm 包名：`cc-reforged`
 - 默认配置目录：`~/.ccr`
 - 默认 LLM 配置文件：`~/.ccr/data/llm.config.local.json`
 - 默认 Codex OAuth 凭据文件：`~/.ccr/data/codex-oauth.json`
 - 当前运行时方向：优先使用内置 provider runtime；仍保留必要的 Anthropic 兼容边界
+
+## 从 npm 安装
+
+首个 npm 版本发布后，可以这样安装：
+
+```powershell
+npm.cmd install -g cc-reforged
+ccr --version
+ccr
+```
 
 ## 从源码运行
 

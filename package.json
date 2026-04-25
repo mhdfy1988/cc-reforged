@@ -1,15 +1,16 @@
 {
-  "name": "ccr-cli",
+  "name": "cc-reforged",
   "version": "0.1.0",
   "bin": {
     "ccr": "cli.js"
   },
   "files": [
     "README.md",
+    "README.zh-CN.md",
     "LICENSE.md",
     "cli.js",
     "bun-bundle-loader.mjs",
-    "dist/",
+    "dist/**/*.js",
     "vendor/claude-for-chrome-mcp-stub.mjs"
   ],
   "engines": {
@@ -17,11 +18,25 @@
   },
   "type": "module",
   "author": "CCR maintainers",
-  "license": "SEE LICENSE IN README.md",
+  "license": "SEE LICENSE IN LICENSE.md",
   "description": "CCR is a terminal coding agent recovery build with a built-in pluggable LLM runtime.",
+  "keywords": [
+    "ccr",
+    "coding-agent",
+    "llm",
+    "codex-oauth",
+    "terminal"
+  ],
   "homepage": "https://github.com/mhdfy1988/cc-reforged",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mhdfy1988/cc-reforged.git"
+  },
   "bugs": {
     "url": "https://github.com/mhdfy1988/cc-reforged/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "prepublishOnly": "node -e \"if (!process.env.AUTHORIZED) { console.error('ERROR: Direct publishing is not allowed.\\nPlease see the release workflow documentation to publish this package.'); process.exit(1); }\"",

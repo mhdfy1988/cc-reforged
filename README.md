@@ -16,10 +16,21 @@ Upstream product and protocol references that still appear in the codebase or do
 
 - Product command: `ccr`
 - Product version: `CCR v0.1`
+- npm package name: `cc-reforged`
 - Default config directory: `~/.ccr`
 - Default LLM config file: `~/.ccr/data/llm.config.local.json`
 - Default Codex OAuth credential file: `~/.ccr/data/codex-oauth.json`
 - Current runtime direction: built-in provider runtime first, Anthropic compatibility retained where still needed
+
+## Install From npm
+
+After the first npm release is published:
+
+```powershell
+npm.cmd install -g cc-reforged
+ccr --version
+ccr
+```
 
 ## Run From Source
 
