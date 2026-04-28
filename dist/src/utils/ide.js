@@ -3,6 +3,7 @@ import { execa } from 'execa';
 import capitalize from 'lodash-es/capitalize.js';
 import memoize from 'lodash-es/memoize.js';
 import { createConnection } from 'net';
+import { createRequire } from 'node:module';
 import * as os from 'os';
 import { basename, join, sep as pathSeparator, resolve } from 'path';
 import { logEvent } from 'src/services/analytics/index.js';
@@ -18,9 +19,10 @@ import { isJetBrainsPluginInstalledCached } from './jetbrains.js';
 import { logError } from './log.js';
 import { getPlatform } from './platform.js';
 import { lt } from './semver.js';
+const require = createRequire(import.meta.url);
 // Lazy: IdeOnboardingDialog.tsx pulls React/ink; only needed in interactive onboarding path
 /* eslint-disable @typescript-eslint/no-require-imports */
-const ideOnboardingDialog = () => require('src/components/IdeOnboardingDialog.js');
+const ideOnboardingDialog = () => require('../components/IdeOnboardingDialog.js');
 import { createAbortController } from './abortController.js';
 import { logForDebugging } from './debug.js';
 import { envDynamic } from './envDynamic.js';

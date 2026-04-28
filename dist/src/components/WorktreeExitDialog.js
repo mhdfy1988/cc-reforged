@@ -1,4 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { createRequire } from 'node:module';
 import React, { useEffect, useState } from 'react';
 import { logEvent } from 'src/services/analytics/index.js';
 import { logForDebugging } from 'src/utils/debug.js';
@@ -10,6 +11,7 @@ import { cleanupWorktree, getCurrentWorktreeSession, keepWorktree, killTmuxSessi
 import { Select } from './CustomSelect/select.js';
 import { Dialog } from './design-system/Dialog.js';
 import { Spinner } from './Spinner.js';
+const require = createRequire(import.meta.url);
 // Inline require breaks the cycle this file would otherwise close:
 // sessionStorage → commands → exit → ExitFlow → here. All call sites
 // are inside callbacks, so the lazy require never sees an undefined import.

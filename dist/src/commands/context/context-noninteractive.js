@@ -1,17 +1,17 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { microcompactMessages } from '../../services/compact/microCompact.js';
 import { analyzeContextUsage, } from '../../utils/analyzeContext.js';
 import { formatTokens } from '../../utils/format.js';
 import { getMessagesAfterCompactBoundary } from '../../utils/messages.js';
 import { getSourceDisplayName } from '../../utils/settings/constants.js';
 import { plural } from '../../utils/stringUtils.js';
+const require = createRequire(import.meta.url);
 export async function collectContextData(context) {
     const { messages, getAppState, options: { mainLoopModel, tools, agentDefinitions, customSystemPrompt, appendSystemPrompt, }, } = context;
     let apiView = getMessagesAfterCompactBoundary(messages);
     if (feature('CONTEXT_COLLAPSE')) {
-        /* eslint-disable @typescript-eslint/no-require-imports */
-        const { projectView } = require('../../services/contextCollapse/operations.js');
-        /* eslint-enable @typescript-eslint/no-require-imports */
+        const { projectView } = await import('../../services/contextCollapse/operations.js');
         apiView = projectView(apiView);
     }
     const { messages: compactedMessages } = await microcompactMessages(apiView);

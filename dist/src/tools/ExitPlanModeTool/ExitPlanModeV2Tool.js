@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle';
 import { writeFile } from 'fs/promises';
+import { createRequire } from 'node:module';
 import { z } from 'zod/v4';
 import { getAllowedChannels, hasExitedPlanModeInSession, setHasExitedPlanMode, setNeedsAutoModeExitAttachment, setNeedsPlanModeExitAttachment, } from '../../bootstrap/state.js';
 import { logEvent } from '../../services/analytics/index.js';
@@ -19,6 +20,7 @@ import { TEAM_CREATE_TOOL_NAME } from '../TeamCreateTool/constants.js';
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from './constants.js';
 import { EXIT_PLAN_MODE_V2_TOOL_PROMPT } from './prompt.js';
 import { renderToolResultMessage, renderToolUseMessage, renderToolUseRejectedMessage, } from './UI.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
     ? require('../../utils/permissions/autoModeState.js')

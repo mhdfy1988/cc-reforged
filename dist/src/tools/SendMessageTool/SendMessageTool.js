@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { z } from 'zod/v4';
 import { isReplBridgeActive } from '../../bootstrap/state.js';
 import { getReplBridgeHandle } from '../../bridge/replBridgeHandle.js';
@@ -25,6 +26,7 @@ import { resumeAgentBackground } from '../AgentTool/resumeAgent.js';
 import { SEND_MESSAGE_TOOL_NAME } from './constants.js';
 import { DESCRIPTION, getPrompt } from './prompt.js';
 import { renderToolResultMessage, renderToolUseMessage } from './UI.js';
+const require = createRequire(import.meta.url);
 const StructuredMessage = lazySchema(() => z.discriminatedUnion('type', [
     z.object({
         type: z.literal('shutdown_request'),

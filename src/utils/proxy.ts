@@ -2,6 +2,7 @@
 // dynamically in getAWSClientProxyConfig() to defer ~929KB of AWS SDK.
 // undici is lazy-required inside getProxyAgent/configureGlobalAgents to defer
 // ~1.5MB when no HTTPS_PROXY/mTLS env vars are set (the common case).
+import { createRequire } from 'node:module'
 import axios, { type AxiosInstance } from 'axios'
 import type { LookupOptions } from 'dns'
 import type { Agent } from 'http'
@@ -17,6 +18,8 @@ import {
   getTLSFetchOptions,
   type TLSConfig,
 } from './mtls.js'
+
+const require = createRequire(import.meta.url)
 
 // Disable fetch keep-alive after a stale-pool ECONNRESET so retries open a
 // fresh TCP connection instead of reusing the dead pooled socket. Sticky for

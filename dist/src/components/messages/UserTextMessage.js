@@ -1,5 +1,6 @@
 import { jsx as _jsx } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import * as React from 'react';
 import { NO_CONTENT_MESSAGE } from '../../constants/messages.js';
@@ -18,6 +19,7 @@ import { UserPlanMessage } from './UserPlanMessage.js';
 import { UserPromptMessage } from './UserPromptMessage.js';
 import { UserResourceUpdateMessage } from './UserResourceUpdateMessage.js';
 import { UserTeammateMessage } from './UserTeammateMessage.js';
+const require = createRequire(import.meta.url);
 export function UserTextMessage(t0) {
     const $ = _c(49);
     const { addMargin, param, verbose, planContent, isTranscriptMode, timestamp } = t0;

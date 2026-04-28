@@ -1,4 +1,6 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 /**
  * Check if a file write/edit to a team memory path contains secrets.
  * Returns an error message if secrets are detected, or null if safe.

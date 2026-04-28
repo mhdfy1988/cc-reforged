@@ -1,6 +1,9 @@
 import memoize from 'lodash-es/memoize.js'
+import { createRequire } from 'node:module'
 import { homedir } from 'os'
 import { join } from 'path'
+
+const require = createRequire(import.meta.url)
 
 // Memoized: 150+ callers, many on hot paths. Keyed off CCR_CONFIG_DIR so
 // tests that change the env var get a fresh value without explicit cache.clear.

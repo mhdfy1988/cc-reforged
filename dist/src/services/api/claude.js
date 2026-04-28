@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { createRequire } from 'node:module';
 import { getAPIProvider, isFirstPartyAnthropicBaseUrl, } from 'src/utils/model/providers.js';
 import { getAttributionHeader, getCLISyspromptPrefix, } from '../../constants/system.js';
 import { getEmptyToolPermissionContext, toolMatchesName, } from '../../Tool.js';
@@ -20,6 +21,7 @@ import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js';
 import { getDynamicConfig_BLOCKS_ON_INIT } from '../analytics/growthbook.js';
 import { currentLimits, extractQuotaStatusFromError, extractQuotaStatusFromHeaders, } from '../claudeAiLimits.js';
 import { getAPIContextManagement } from '../compact/apiMicrocompact.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
     ? require('../../utils/permissions/autoModeState.js')

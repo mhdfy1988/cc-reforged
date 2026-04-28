@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module'
 import { feature } from 'bun:bundle'
 import { logForDebugging } from '../utils/debug.js'
 import { errorMessage } from '../utils/errors.js'
@@ -9,6 +10,8 @@ import {
   type MemoryHeader,
   scanMemoryFiles,
 } from './memoryScan.js'
+
+const require = createRequire(import.meta.url)
 
 export type RelevantMemory = {
   path: string

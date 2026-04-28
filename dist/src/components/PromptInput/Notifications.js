@@ -1,5 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -29,6 +30,7 @@ import { MemoryUsageIndicator } from '../MemoryUsageIndicator.js';
 import { SentryErrorBoundary } from '../SentryErrorBoundary.js';
 import { TokenWarning } from '../TokenWarning.js';
 import { SandboxPromptFooterHint } from './SandboxPromptFooterHint.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const VoiceIndicator = feature('VOICE_MODE') ? require('./VoiceIndicator.js').VoiceIndicator : () => null;
 /* eslint-enable @typescript-eslint/no-require-imports */

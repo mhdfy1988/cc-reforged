@@ -1,6 +1,7 @@
 import { feature } from 'bun:bundle';
 import { randomBytes } from 'crypto';
 import { unwatchFile, watchFile } from 'fs';
+import { createRequire } from 'node:module';
 import memoize from 'lodash-es/memoize.js';
 import pickBy from 'lodash-es/pickBy.js';
 import { basename, dirname, join, resolve } from 'path';
@@ -24,6 +25,7 @@ import { logError } from './log.js';
 import { normalizePathForConfigKey } from './path.js';
 import { getEssentialTrafficOnlyReason } from './privacyLevel.js';
 import { getManagedFilePath } from './settings/managedPath.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')
     ? require('../memdir/teamMemPaths.js')

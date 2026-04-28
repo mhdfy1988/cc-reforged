@@ -17,7 +17,9 @@
  *   getSyntaxTheme always returns the default for the given Claude theme.
  */
 import { diffArrays } from 'diff';
+import { createRequire } from 'node:module';
 import { basename, extname } from 'path';
+const require = createRequire(import.meta.url);
 function isHljsApi(value) {
     return typeof value?.getLanguage === 'function';
 }

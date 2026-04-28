@@ -1,9 +1,11 @@
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import { normalize, posix, win32 } from 'path';
 import { getAutoMemPath, getMemoryBaseDir, isAutoMemoryEnabled, isAutoMemPath, } from '../memdir/paths.js';
 import { isAgentMemoryPath } from '../tools/AgentTool/agentMemory.js';
 import { getClaudeConfigHomeDir } from './envUtils.js';
 import { posixPathToWindowsPath, windowsPathToPosixPath, } from './windowsPaths.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')
     ? require('../memdir/teamMemPaths.js')

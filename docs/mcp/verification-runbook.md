@@ -1,0 +1,274 @@
+# MCP 验证与排查手册
+
+本文档记录 CCR MCP 的通用验证步骤。后续每接一个 MCP，都按这里的顺序先验证连接，再验证工具调用，最后才进入 TUI/模型主链路。
+
+## 1. 静态校验
+
+先确认示例配置是合法 JSON：
+
+```powershell
+node -e "const fs=require('fs'); for (const p of ['docs/examples/mcp/playwright.json','docs/examples/mcp/playwright-headless.json']) { JSON.parse(fs.readFileSync(p,'utf8')); console.log(p + ' ok'); }"
+```
+
+预期输出：
+
+```text
+docs/examples/mcp/playwright.json ok
+docs/examples/mcp/playwright-headless.json ok
+```
+
+## 2. Server 级连接 smoke
+
+当模型调用不可用或不想消耗模型额度时，先直接用 MCP SDK 验证 server 能启动和列工具。
+
+```powershell
+@'
+import { readFile } from 'node:fs/promises';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+
+const config = JSON.parse(await readFile('docs/examples/mcp/playwright.json', 'utf8'));
+const server = config.mcpServers.playwright;
+const transport = new StdioClientTransport({
+  command: server.command,
+  args: server.args,
+  env: { ...process.env },
+});
+const client = new Client({ name: 'ccr-playwright-smoke', version: '0.1.0' });
+try {
+  await client.connect(transport);
+  const tools = await client.listTools();
+  const names = tools.tools.map(tool => tool.name).sort();
+  console.log(JSON.stringify({
+    ok: true,
+    toolCount: names.length,
+    hasNavigate: names.includes('browser_navigate'),
+    hasSnapshot: names.includes('browser_snapshot'),
+    firstTools: names.slice(0, 20)
+  }, null, 2));
+} finally {
+  await client.close();
+}
+'@ | node --input-type=module
+```
+
+当前 Playwright MCP 预期至少包含：
+
+```text
+browser_navigate
+browser_snapshot
+browser_click
+browser_type
+browser_take_screenshot
+```
+
+## 3. 只读工具 smoke
+
+只读 smoke 用公开页面，避免外部状态变更：
+
+```powershell
+@'
+import { readFile } from 'node:fs/promises';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+
+const config = JSON.parse(await readFile('docs/examples/mcp/playwright.json', 'utf8'));
+const server = config.mcpServers.playwright;
+const transport = new StdioClientTransport({
+  command: server.command,
+  args: server.args,
+  env: { ...process.env },
+});
+const client = new Client({ name: 'ccr-playwright-readonly-smoke', version: '0.1.0' });
+try {
+  await client.connect(transport);
+  await client.callTool({ name: 'browser_navigate', arguments: { url: 'https://example.com' } });
+  const snapshot = await client.callTool({ name: 'browser_snapshot', arguments: {} });
+  const text = snapshot.content?.map(item => item.text ?? '').join('\n') ?? '';
+  await client.callTool({ name: 'browser_close', arguments: {} }).catch(() => undefined);
+  console.log(JSON.stringify({
+    ok: true,
+    snapshotHasExampleDomain: text.includes('Example Domain'),
+    snapshotPreview: text.slice(0, 800)
+  }, null, 2));
+} finally {
+  await client.close();
+}
+'@ | node --input-type=module
+```
+
+预期结果：
+
+- `ok: true`
+- `snapshotHasExampleDomain: true`
+- 快照里包含 `Page Title: Example Domain`
+
+## 4. CCR 项目级连接 smoke
+
+`--mcp-config` 是主会话入口参数，不适合直接和 `mcp list` 组合。要验证 `ccr mcp list/get`，用临时目录放 `.mcp.json`：
+
+```powershell
+$smokeDir = 'D:\agent_project\claude-code-reforged\tmp\playwright-mcp-smoke'
+New-Item -ItemType Directory -Force -Path $smokeDir | Out-Null
+Copy-Item -LiteralPath D:\agent_project\claude-code-reforged\docs\examples\mcp\playwright.json -Destination "$smokeDir\.mcp.json" -Force
+```
+
+然后在临时目录运行：
+
+```powershell
+node --no-warnings --experimental-loader file:///D:/agent_project/claude-code-reforged/bun-bundle-loader.mjs D:\agent_project\claude-code-reforged\cli.js mcp list
+```
+
+预期输出：
+
+```text
+Checking MCP server health...
+
+playwright: cmd /c npx.cmd -y @playwright/mcp@latest - ✓ Connected
+```
+
+查看详情：
+
+```powershell
+node --no-warnings --experimental-loader file:///D:/agent_project/claude-code-reforged/bun-bundle-loader.mjs D:\agent_project\claude-code-reforged\cli.js mcp get playwright
+```
+
+预期输出包含：
+
+```text
+Scope: Project config (shared via .mcp.json)
+Status: ✓ Connected
+Type: stdio
+Command: cmd
+Args: /c npx.cmd -y @playwright/mcp@latest
+```
+
+## 5. CCR 用户级连接 smoke
+
+用户级配置的生产入口是 `~/.ccr/mcp.json`。为了验证时不污染真实用户目录，可以临时指定 `CCR_CONFIG_DIR`：
+
+```powershell
+$env:CCR_CONFIG_DIR = 'D:\agent_project\claude-code-reforged\tmp\ccr-home-mcp-smoke'
+New-Item -ItemType Directory -Force -Path $env:CCR_CONFIG_DIR | Out-Null
+```
+
+写入 Playwright MCP：
+
+```powershell
+node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js mcp add-playwright
+```
+
+预期生成：
+
+```text
+D:\agent_project\claude-code-reforged\tmp\ccr-home-mcp-smoke\mcp.json
+```
+
+然后验证列表读取的是用户级配置：
+
+```powershell
+node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js mcp get playwright
+```
+
+预期输出包含：
+
+```text
+Scope: User config (available in all your projects)
+Status: ✓ Connected
+Command: cmd
+Args: /c npx.cmd -y @playwright/mcp@latest
+```
+
+验证结束后清理当前 PowerShell 会话里的临时目录变量：
+
+```powershell
+Remove-Item Env:\CCR_CONFIG_DIR
+```
+
+### 5.1 CCR 用户级 `.ccr` 管理式安装 smoke
+
+管理式安装会下载 `@playwright/mcp` 到 CCR 用户目录，并把 `~/.ccr/mcp.json` 指向本地入口。验证时仍然使用临时 `CCR_CONFIG_DIR`，避免污染真实用户目录：
+
+```powershell
+$env:CCR_CONFIG_DIR = 'D:\agent_project\claude-code-reforged\tmp\ccr-home-mcp-managed-smoke'
+New-Item -ItemType Directory -Force -Path $env:CCR_CONFIG_DIR | Out-Null
+node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js mcp add-playwright --mode managed --version 0.0.71
+```
+
+预期生成：
+
+```text
+D:\agent_project\claude-code-reforged\tmp\ccr-home-mcp-managed-smoke\mcp.json
+D:\agent_project\claude-code-reforged\tmp\ccr-home-mcp-managed-smoke\mcp\servers\playwright\manifest.json
+```
+
+检查配置是否指向本地托管入口：
+
+```powershell
+Get-Content -Encoding utf8 "$env:CCR_CONFIG_DIR\mcp.json"
+Get-Content -Encoding utf8 "$env:CCR_CONFIG_DIR\mcp\servers\playwright\manifest.json"
+```
+
+预期 `mcp.json` 包含：
+
+```text
+"command": "<当前 Node 可执行文件>"
+"args": ["<临时 CCR_CONFIG_DIR>/mcp/servers/playwright/node_modules/@playwright/mcp/cli.js"]
+```
+
+然后验证 CCR MCP 能连接：
+
+```powershell
+node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js mcp get playwright
+node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js mcp list
+```
+
+验证结束后清理当前 PowerShell 会话里的临时目录变量：
+
+```powershell
+Remove-Item Env:\CCR_CONFIG_DIR
+```
+
+## 6. CCR 主链路 smoke
+
+TUI 启动：
+
+```powershell
+cd D:\agent_project\claude-code-reforged
+node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js
+```
+
+进入后：
+
+1. 运行 `/mcp`。
+2. 确认 `playwright` 是 connected。
+3. 让模型执行只读任务：
+
+```text
+打开 https://example.com，读取页面快照，并告诉我页面标题。
+```
+
+如果 `-p` 非交互模式出现 `[Builtin LLM Runtime] fetch failed`，先不要把它判断成 MCP 问题。需要先用本文档第 2、3、4、5 步确认 MCP server、工具调用和 CCR MCP 配置链路是否正常。
+
+## 7. 常见问题
+
+| 现象 | 可能原因 | 处理 |
+| --- | --- | --- |
+| `mcp list` 把 `mcp` / `list` 当成配置文件 | `--mcp-config` 是可变参数，位置不适合 | 用临时 `.mcp.json` 验证 |
+| Windows 找不到 `npx` 或被执行策略拦截 | 命中了 PowerShell 脚本入口 | 示例里使用 `cmd /c npx.cmd` |
+| Node loader 报 `ERR_UNSUPPORTED_ESM_URL_SCHEME` | 在非仓库目录传了 Windows 绝对路径 loader | 使用 `file:///D:/.../bun-bundle-loader.mjs` |
+| Playwright 首次启动很慢 | `npx` 首次下载包或浏览器依赖 | 等待完成，后续考虑 pin 版本或预安装 |
+| 模型 fetch failed | LLM provider/auth/network 问题 | 先用 MCP SDK 和 `mcp list/get` 排除 MCP 问题 |
+| `ccr mcp add-playwright` 重复添加失败 | 同名 `playwright` 已在该 scope 存在 | 使用 `ccr mcp add-playwright --force` 覆盖 |
+
+## 8. 回归命令
+
+MCP 配置或运行时改动后至少执行：
+
+```powershell
+npm.cmd run typecheck -- --pretty false
+npm.cmd run build -- --pretty false
+npm.cmd run ci:smoke
+```
+
+如果只改文档或示例配置，至少执行 JSON 静态校验和相关 smoke。

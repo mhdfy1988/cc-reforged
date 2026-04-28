@@ -1,54 +1,9 @@
-import { jsx as _jsx } from "react/jsx-runtime";
-import * as React from 'react';
-import { Text } from '../ink.js';
-import { isClaudeAISubscriber } from '../utils/auth.js';
-import { isChromeExtensionInstalled, shouldEnableClaudeInChrome } from '../utils/claudeInChrome/setup.js';
-import { isRunningOnHomespace } from '../utils/envUtils.js';
 import { useStartupNotification } from './notifs/useStartupNotification.js';
-function getChromeFlag() {
-    if (process.argv.includes('--chrome')) {
-        return true;
-    }
-    if (process.argv.includes('--no-chrome')) {
-        return false;
-    }
-    return undefined;
+async function noChromeExtensionNotification() {
+    return null;
 }
 export function useChromeExtensionNotification() {
-    useStartupNotification(_temp);
-}
-async function _temp() {
-    const chromeFlag = getChromeFlag();
-    if (!shouldEnableClaudeInChrome(chromeFlag)) {
-        return null;
-    }
-    if (true && !isClaudeAISubscriber()) {
-        const notification = {
-            key: "chrome-requires-subscription",
-            jsx: _jsx(Text, { color: "error", children: "Claude in Chrome requires a claude.ai subscription" }),
-            priority: "immediate",
-            timeoutMs: 5000
-        };
-        return notification;
-    }
-    const installed = await isChromeExtensionInstalled();
-    if (!installed && !isRunningOnHomespace()) {
-        const notification = {
-            key: "chrome-extension-not-detected",
-            jsx: _jsx(Text, { color: "warning", children: "Chrome extension not detected \u00B7 https://claude.ai/chrome to install" }),
-            priority: "immediate",
-            timeoutMs: 3000
-        };
-        return notification;
-    }
-    if (chromeFlag === undefined) {
-        const notification = {
-            key: "claude-in-chrome-default-enabled",
-            text: "Claude in Chrome enabled \xB7 /chrome",
-            priority: "low"
-        };
-        return notification;
-    }
-    return null;
+    // CCR 已退休旧 Claude in Chrome 提示；浏览器能力后续由通用 MCP 提供。
+    useStartupNotification(noChromeExtensionNotification);
 }
 //# sourceMappingURL=useChromeExtensionNotification.js.map

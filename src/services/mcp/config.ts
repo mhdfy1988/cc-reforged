@@ -1,7 +1,8 @@
 import { feature } from 'bun:bundle'
-import { chmod, open, rename, stat, unlink } from 'fs/promises'
+import { chmod, mkdir, open, rename, stat, unlink } from 'fs/promises'
 import mapValues from 'lodash-es/mapValues.js'
 import memoize from 'lodash-es/memoize.js'
+import { createRequire } from 'node:module'
 import { dirname, join, parse } from 'path'
 import { getPlatform } from 'src/utils/platform.js'
 import type { PluginError } from '../../types/plugin.js'
@@ -15,6 +16,7 @@ import {
 } from '../../utils/config.js'
 import { getCwd } from '../../utils/cwd.js'
 import { logForDebugging } from '../../utils/debug.js'
+import { getClaudeConfigHomeDir } from '../../utils/envUtils.js'
 import { getErrnoCode } from '../../utils/errors.js'
 import { getFsImplementation } from '../../utils/fsOperations.js'
 import { safeParseJSON } from '../../utils/json.js'
@@ -56,11 +58,20 @@ import {
 } from './types.js'
 import { getProjectMcpServerStatus } from './utils.js'
 
+const require = createRequire(import.meta.url)
+
 /**
  * Get the path to the managed MCP configuration file
  */
 export function getEnterpriseMcpFilePath(): string {
   return join(getManagedFilePath(), 'managed-mcp.json')
+}
+
+/**
+ * Get the path to CCR user-level MCP configuration.
+ */
+export function getUserMcpFilePath(): string {
+  return join(getClaudeConfigHomeDir(), 'mcp.json')
 }
 
 /**
@@ -80,6 +91,21 @@ function addScopeToServers(
   return scopedServers
 }
 
+function removeScopeFromServers(
+  servers: Record<string, ScopedMcpServerConfig>,
+): Record<string, McpServerConfig> {
+  const unscopedServers: Record<string, McpServerConfig> = {}
+  for (const [name, serverConfig] of Object.entries(servers)) {
+    const {
+      scope: _scope,
+      pluginSource: _pluginSource,
+      ...configWithoutScope
+    } = serverConfig
+    unscopedServers[name] = configWithoutScope as McpServerConfig
+  }
+  return unscopedServers
+}
+
 function isStdioServerConfig(
   config: McpServerConfig,
 ): config is McpStdioServerConfig {
@@ -91,9 +117,11 @@ function isStdioServerConfig(
  * Preserves file permissions and flushes to disk before rename.
  * Uses the original path for rename (does not follow symlinks).
  */
-async function writeMcpjsonFile(config: McpJsonConfig): Promise<void> {
-  const mcpJsonPath = join(getCwd(), '.mcp.json')
-
+async function writeMcpjsonFileAtPath(
+  mcpJsonPath: string,
+  config: McpJsonConfig,
+): Promise<void> {
+  await mkdir(dirname(mcpJsonPath), { recursive: true })
   // Read existing file permissions to preserve them
   let existingMode: number | undefined
   try {
@@ -134,6 +162,39 @@ async function writeMcpjsonFile(config: McpJsonConfig): Promise<void> {
     }
     throw e
   }
+}
+
+async function writeProjectMcpjsonFile(config: McpJsonConfig): Promise<void> {
+  await writeMcpjsonFileAtPath(join(getCwd(), '.mcp.json'), config)
+}
+
+async function writeUserMcpjsonFile(config: McpJsonConfig): Promise<void> {
+  await writeMcpjsonFileAtPath(getUserMcpFilePath(), config)
+}
+
+function getMcpJsonFileForWrite(
+  filePath: string,
+  scope: ConfigScope,
+): McpJsonConfig {
+  const { config, errors } = parseMcpConfigFromFilePath({
+    filePath,
+    expandVars: false,
+    scope,
+  })
+  if (config) {
+    return config
+  }
+
+  const nonMissingErrors = errors.filter(
+    e => !e.message.startsWith('MCP config file not found'),
+  )
+  if (nonMissingErrors.length > 0) {
+    throw new Error(
+      `Failed to read MCP config ${filePath}: ${nonMissingErrors.map(e => e.message).join(', ')}`,
+    )
+  }
+
+  return { mcpServers: {} }
 }
 
 /**
@@ -694,8 +755,15 @@ export async function addMcpConfig(
       break
     }
     case 'user': {
-      const globalConfig = getGlobalConfig()
-      if (globalConfig.mcpServers?.[name]) {
+      const userMcpConfig = getMcpJsonFileForWrite(
+        getUserMcpFilePath(),
+        'user',
+      )
+      const legacyGlobalConfig = getGlobalConfig()
+      if (
+        userMcpConfig.mcpServers[name] ||
+        legacyGlobalConfig.mcpServers?.[name]
+      ) {
         throw new Error(`MCP server ${name} already exists in user config`)
       }
       break
@@ -720,19 +788,13 @@ export async function addMcpConfig(
     case 'project': {
       const { servers: existingServers } = getProjectMcpConfigsFromCwd()
 
-      const mcpServers: Record<string, McpServerConfig> = {}
-      for (const [serverName, serverConfig] of Object.entries(
-        existingServers,
-      )) {
-        const { scope: _, ...configWithoutScope } = serverConfig
-        mcpServers[serverName] = configWithoutScope
-      }
+      const mcpServers = removeScopeFromServers(existingServers)
       mcpServers[name] = validatedConfig
       const mcpConfig = { mcpServers }
 
       // Write back to .mcp.json
       try {
-        await writeMcpjsonFile(mcpConfig)
+        await writeProjectMcpjsonFile(mcpConfig)
       } catch (error) {
         throw new Error(`Failed to write to .mcp.json: ${error}`)
       }
@@ -740,13 +802,16 @@ export async function addMcpConfig(
     }
 
     case 'user': {
-      saveGlobalConfig(current => ({
-        ...current,
+      const userMcpConfig = getMcpJsonFileForWrite(
+        getUserMcpFilePath(),
+        'user',
+      )
+      await writeUserMcpjsonFile({
         mcpServers: {
-          ...current.mcpServers,
+          ...userMcpConfig.mcpServers,
           [name]: validatedConfig,
         },
-      }))
+      })
       break
     }
 
@@ -785,18 +850,18 @@ export async function removeMcpConfig(
       }
 
       // Strip scope information when writing back to .mcp.json
-      const mcpServers: Record<string, McpServerConfig> = {}
+      const keptServers: Record<string, ScopedMcpServerConfig> = {}
       for (const [serverName, serverConfig] of Object.entries(
         existingServers,
       )) {
         if (serverName !== name) {
-          const { scope: _, ...configWithoutScope } = serverConfig
-          mcpServers[serverName] = configWithoutScope
+          keptServers[serverName] = serverConfig
         }
       }
+      const mcpServers = removeScopeFromServers(keptServers)
       const mcpConfig = { mcpServers }
       try {
-        await writeMcpjsonFile(mcpConfig)
+        await writeProjectMcpjsonFile(mcpConfig)
       } catch (error) {
         throw new Error(`Failed to remove from .mcp.json: ${error}`)
       }
@@ -804,17 +869,32 @@ export async function removeMcpConfig(
     }
 
     case 'user': {
-      const config = getGlobalConfig()
-      if (!config.mcpServers?.[name]) {
+      const userMcpConfig = getMcpJsonFileForWrite(
+        getUserMcpFilePath(),
+        'user',
+      )
+      const legacyGlobalConfig = getGlobalConfig()
+      const existsInUserFile = Boolean(userMcpConfig.mcpServers[name])
+      const existsInLegacyGlobal = Boolean(legacyGlobalConfig.mcpServers?.[name])
+
+      if (!existsInUserFile && !existsInLegacyGlobal) {
         throw new Error(`No user-scoped MCP server found with name: ${name}`)
       }
-      saveGlobalConfig(current => {
-        const { [name]: _, ...restMcpServers } = current.mcpServers ?? {}
-        return {
-          ...current,
-          mcpServers: restMcpServers,
-        }
-      })
+
+      if (existsInUserFile) {
+        const { [name]: _, ...restMcpServers } = userMcpConfig.mcpServers
+        await writeUserMcpjsonFile({ mcpServers: restMcpServers })
+      }
+
+      if (existsInLegacyGlobal) {
+        saveGlobalConfig(current => {
+          const { [name]: _, ...restMcpServers } = current.mcpServers ?? {}
+          return {
+            ...current,
+            mcpServers: restMcpServers,
+          }
+        })
+      }
       break
     }
 
@@ -882,6 +962,40 @@ export function getProjectMcpConfigsFromCwd(): {
     servers: config.mcpServers
       ? addScopeToServers(config.mcpServers, 'project')
       : {},
+    errors: errors || [],
+  }
+}
+
+/**
+ * Get user-level MCP configs from ~/.ccr/mcp.json.
+ */
+export function getUserMcpConfigsFromFile(): {
+  servers: Record<string, ScopedMcpServerConfig>
+  errors: ValidationError[]
+} {
+  const userMcpPath = getUserMcpFilePath()
+  const { config, errors } = parseMcpConfigFromFilePath({
+    filePath: userMcpPath,
+    expandVars: true,
+    scope: 'user',
+  })
+
+  if (!config) {
+    const nonMissingErrors = errors.filter(
+      e => !e.message.startsWith('MCP config file not found'),
+    )
+    if (nonMissingErrors.length > 0) {
+      logForDebugging(
+        `MCP config errors for ${userMcpPath}: ${jsonStringify(nonMissingErrors.map(e => e.message))}`,
+        { level: 'error' },
+      )
+      return { servers: {}, errors: nonMissingErrors }
+    }
+    return { servers: {}, errors: [] }
+  }
+
+  return {
+    servers: addScopeToServers(config.mcpServers, 'user'),
     errors: errors || [],
   }
 }
@@ -966,20 +1080,29 @@ export function getMcpConfigsByScope(
       }
     }
     case 'user': {
-      const mcpServers = getGlobalConfig().mcpServers
-      if (!mcpServers) {
-        return { servers: {}, errors: [] }
+      const { servers: fileServers, errors: fileErrors } =
+        getUserMcpConfigsFromFile()
+      const legacyMcpServers = getGlobalConfig().mcpServers
+
+      if (!legacyMcpServers) {
+        return { servers: fileServers, errors: fileErrors }
       }
 
-      const { config, errors } = parseMcpConfig({
-        configObject: { mcpServers },
+      const { config: legacyConfig, errors: legacyErrors } = parseMcpConfig({
+        configObject: { mcpServers: legacyMcpServers },
         expandVars: true,
         scope: 'user',
       })
 
       return {
-        servers: addScopeToServers(config?.mcpServers, scope),
-        errors,
+        // ~/.ccr/mcp.json is the new primary user MCP file. Legacy settings
+        // are still read for compatibility, but same-name servers in mcp.json
+        // intentionally win.
+        servers: {
+          ...addScopeToServers(legacyConfig?.mcpServers, scope),
+          ...fileServers,
+        },
+        errors: [...legacyErrors, ...fileErrors],
       }
     }
     case 'local': {

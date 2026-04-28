@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { relative } from 'path';
 import { getCwd } from 'src/utils/cwd.js';
 import { addInvokedSkill } from '../bootstrap/state.js';
@@ -11,6 +12,7 @@ import { createAssistantMessage, createUserMessage, filterOrphanedThinkingOnlyMe
 import { copyPlanForResume } from './plans.js';
 import { processSessionStartHooks } from './sessionStart.js';
 import { buildConversationChain, checkResumeConsistency, getLastSessionLog, getSessionIdFromLog, isLiteLog, loadFullLog, loadMessageLogs, loadTranscriptFile, removeExtraFields, } from './sessionStorage.js';
+const require = createRequire(import.meta.url);
 // Dead code elimination: ant-only tool names are conditionally required so
 // their strings don't leak into external builds. Static imports always bundle.
 /* eslint-disable @typescript-eslint/no-require-imports */

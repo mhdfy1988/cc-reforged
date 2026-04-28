@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import type { Anthropic } from '@anthropic-ai/sdk'
+import { createRequire } from 'node:module'
 import {
   getSystemPrompt,
   SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
@@ -61,6 +62,8 @@ import { jsonStringify } from './slowOperations.js'
 import { buildEffectiveSystemPrompt } from './systemPrompt.js'
 import type { Theme } from './theme.js'
 import { getCurrentUsage } from './tokens.js'
+
+const require = createRequire(import.meta.url)
 
 const RESERVED_CATEGORY_NAME = 'Autocompact buffer'
 const MANUAL_COMPACT_BUFFER_NAME = 'Compact buffer'

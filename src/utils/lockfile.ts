@@ -9,11 +9,13 @@
  * package is only loaded the first time a lock function is actually called.
  */
 
+import { createRequire } from 'node:module'
 import type { CheckOptions, LockOptions, UnlockOptions } from 'proper-lockfile'
 
 type Lockfile = typeof import('proper-lockfile')
 
 let _lockfile: Lockfile | undefined
+const require = createRequire(import.meta.url)
 
 function getLockfile(): Lockfile {
   if (!_lockfile) {

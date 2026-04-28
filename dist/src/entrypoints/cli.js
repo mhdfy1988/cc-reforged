@@ -28,6 +28,10 @@ if (feature('ABLATION_BASELINE') && process.env.CLAUDE_CODE_ABLATION_BASELINE) {
  */
 async function main() {
     const args = process.argv.slice(2);
+    function retireLegacyChromeEntrypoint(flag) {
+        process.stderr.write(`CCR: ${flag} belongs to the retired Claude in Chrome integration. Configure Playwright MCP as a regular MCP server instead.\n`);
+        process.exitCode = 1;
+    }
     // Fast-path for --version/-v: zero module loading needed
     if (args.length === 1 && (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {
         // MACRO.VERSION is inlined at build time
@@ -56,14 +60,12 @@ async function main() {
     }
     if (process.argv[2] === '--claude-in-chrome-mcp') {
         profileCheckpoint('cli_claude_in_chrome_mcp_path');
-        const { runClaudeInChromeMcpServer } = await import('../utils/claudeInChrome/mcpServer.js');
-        await runClaudeInChromeMcpServer();
+        retireLegacyChromeEntrypoint('--claude-in-chrome-mcp');
         return;
     }
     else if (process.argv[2] === '--chrome-native-host') {
         profileCheckpoint('cli_chrome_native_host_path');
-        const { runChromeNativeHost } = await import('../utils/claudeInChrome/chromeNativeHost.js');
-        await runChromeNativeHost();
+        retireLegacyChromeEntrypoint('--chrome-native-host');
         return;
     }
     else if (feature('CHICAGO_MCP') && process.argv[2] === '--computer-use-mcp') {

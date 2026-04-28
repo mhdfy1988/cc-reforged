@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import { getShortcutDisplay } from '../keybindings/shortcutFormat.js';
 import { isExtractModeActive } from '../memdir/paths.js';
@@ -9,6 +10,7 @@ import { executeStopHooks, executeTaskCompletedHooks, executeTeammateIdleHooks, 
 import { createStopHookSummaryMessage, createSystemMessage, createUserInterruptionMessage, createUserMessage, isHookAttachmentMessage, } from '../utils/messages.js';
 import { getTaskListId, listTasks } from '../utils/tasks.js';
 import { getAgentName, getTeamName, isTeammate } from '../utils/teammate.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const extractMemoriesModule = feature('EXTRACT_MEMORIES')
     ? require('../services/extractMemories/extractMemories.js')

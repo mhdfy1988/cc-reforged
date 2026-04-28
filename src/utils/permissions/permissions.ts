@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import { APIUserAbortError } from '@anthropic-ai/sdk'
+import { createRequire } from 'node:module'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import {
   getToolNameForPermissionCheck,
@@ -54,6 +55,8 @@ import {
   type PermissionRuleFromEditableSettings,
   shouldAllowManagedPermissionRulesOnly,
 } from './permissionsLoader.js'
+
+const require = createRequire(import.meta.url)
 
 type PermissionUpdateInput =
   | Exclude<PermissionUpdate, { type: 'setMode' }>

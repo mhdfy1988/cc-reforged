@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+import { createRequire } from 'node:module';
 import { Box, Text } from '../../ink.js';
 import { feature } from 'bun:bundle';
 import * as React from 'react';
@@ -12,6 +13,7 @@ import { basename } from 'path';
 import { MessageResponse } from '../MessageResponse.js';
 import { FilePathLink } from '../FilePathLink.js';
 import { openPath } from '../../utils/browser.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemSaved = feature('TEAMMEM') ? require('./teamMemSaved.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */

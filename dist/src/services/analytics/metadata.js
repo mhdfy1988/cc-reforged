@@ -5,6 +5,7 @@
  * This module provides a single source of truth for collecting and formatting
  * event metadata across all analytics systems (Datadog, 1P).
  */
+import { createRequire } from 'node:module';
 import { extname } from 'path';
 import memoize from 'lodash-es/memoize.js';
 import { env, getHostPlatformForAnalytics } from '../../utils/env.js';
@@ -21,6 +22,7 @@ import { getAgentContext } from '../../utils/agentContext.js';
 import { jsonStringify } from '../../utils/slowOperations.js';
 import { getAgentId, getParentSessionId as getTeammateParentSessionId, getTeamName, isTeammate, } from '../../utils/teammate.js';
 import { feature } from 'bun:bundle';
+const require = createRequire(import.meta.url);
 /**
  * Sanitizes tool names for analytics logging to avoid PII exposure.
  *

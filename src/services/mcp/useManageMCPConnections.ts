@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle'
+import { createRequire } from 'node:module'
 import { basename } from 'path'
 import { useCallback, useEffect, useRef } from 'react'
 import { getSessionId } from '../../bootstrap/state.js'
@@ -17,6 +18,8 @@ import type {
   ScopedMcpServerConfig,
   ServerResource,
 } from './types.js'
+
+const require = createRequire(import.meta.url)
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const fetchMcpSkillsForClient = feature('MCP_SKILLS')

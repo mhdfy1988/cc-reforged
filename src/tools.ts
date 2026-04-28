@@ -116,9 +116,9 @@ const TerminalCaptureTool = feature('TERMINAL_PANEL')
   ? require('./tools/TerminalCaptureTool/TerminalCaptureTool.js')
       .TerminalCaptureTool
   : null
-const WebBrowserTool = feature('WEB_BROWSER_TOOL')
-  ? require('./tools/WebBrowserTool/WebBrowserTool.js').WebBrowserTool
-  : null
+// CCR 已退休旧 WebBrowserTool 路径；浏览器自动化后续统一走通用 MCP
+// provider（优先 Playwright MCP），避免打开 feature gate 时加载缺失源码。
+const WebBrowserTool = null
 const coordinatorModeModule = feature('COORDINATOR_MODE')
   ? (require('./coordinator/coordinatorMode.js') as typeof import('./coordinator/coordinatorMode.js'))
   : null

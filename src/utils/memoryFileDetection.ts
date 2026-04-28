@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module'
 import { feature } from 'bun:bundle'
 import { normalize, posix, win32 } from 'path'
 import {
@@ -12,6 +13,8 @@ import {
   posixPathToWindowsPath,
   windowsPathToPosixPath,
 } from './windowsPaths.js'
+
+const require = createRequire(import.meta.url)
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')

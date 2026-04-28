@@ -18,7 +18,10 @@
  */
 
 import { diffArrays } from 'diff'
+import { createRequire } from 'node:module'
 import { basename, extname } from 'path'
+
+const require = createRequire(import.meta.url)
 
 // Lazy: defers loading highlight.js until first render. The full bundle
 // registers 190+ language grammars at require time (~50MB, 100-200ms on

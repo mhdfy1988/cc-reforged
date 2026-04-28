@@ -1,5 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import { basename } from 'path';
 import React, { useRef } from 'react';
@@ -15,6 +16,7 @@ import { CtrlOToExpand } from '../CtrlOToExpand.js';
 import { useSelectedMessageBg } from '../messageActions.js';
 import { PrBadge } from '../PrBadge.js';
 import { ToolUseLoader } from '../ToolUseLoader.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemCollapsed = feature('TEAMMEM') ? require('./teamMemCollapsed.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */

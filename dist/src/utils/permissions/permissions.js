@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle';
 import { APIUserAbortError } from '@anthropic-ai/sdk';
+import { createRequire } from 'node:module';
 import { getToolNameForPermissionCheck, mcpInfoFromString, } from '../../services/mcp/mcpStringUtils.js';
 import { AGENT_TOOL_NAME } from '../../tools/AgentTool/constants.js';
 import { shouldUseSandbox } from '../../tools/BashTool/shouldUseSandbox.js';
@@ -17,6 +18,7 @@ import { permissionModeTitle } from './PermissionMode.js';
 import { applyPermissionUpdate, applyPermissionUpdates, persistPermissionUpdates, } from './PermissionUpdate.js';
 import { permissionRuleValueFromString, permissionRuleValueToString, } from './permissionRuleParser.js';
 import { deletePermissionRuleFromSettings, shouldAllowManagedPermissionRulesOnly, } from './permissionsLoader.js';
+const require = createRequire(import.meta.url);
 export function normalizePermissionUpdates(updates) {
     if (!updates || updates.length === 0) {
         return [];

@@ -14,6 +14,7 @@
  */
 
 import { feature } from 'bun:bundle'
+import { createRequire } from 'node:module'
 import { basename } from 'path'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
@@ -59,6 +60,8 @@ import {
   buildExtractAutoOnlyPrompt,
   buildExtractCombinedPrompt,
 } from './prompts.js'
+
+const require = createRequire(import.meta.url)
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')

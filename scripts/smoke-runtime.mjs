@@ -24,11 +24,11 @@ function runNode(args, options = {}) {
 
 const version = runNode(['cli.js', '--version']);
 assert.equal(version.status, 0, version.stderr);
-assert.match(version.stdout, /2\.1\.88/);
+assert.match(version.stdout, /^CCR v0\.1\s*$/);
 
 const help = runNode(['cli.js', '--help']);
 assert.equal(help.status, 0, help.stderr);
-assert.match(help.stdout, /Usage: claude/);
+assert.match(help.stdout, /Usage: ccr/);
 
 const authGateEnv = { ...process.env };
 for (const key of [
@@ -39,9 +39,18 @@ for (const key of [
   'ANTHROPIC_MODEL',
   'CLAUDE_CODE_USE_BEDROCK',
   'CLAUDE_CODE_USE_VERTEX',
+  'CCR_LLM_CONFIG_PATH',
+  'CCR_LLM_PROVIDER',
+  'CCR_LLM_MODEL',
+  'CCR_CODEX_OAUTH_ACCESS_TOKEN',
+  'CCR_CODEX_OAUTH_REFRESH_TOKEN',
+  'CCR_CODEX_OAUTH_EXPIRES_AT',
+  'CCR_CODEX_OAUTH_ACCOUNT_ID',
+  'CCR_CODEX_OAUTH_CREDENTIAL_FILE',
 ]) {
   delete authGateEnv[key];
 }
+authGateEnv.CCR_CONFIG_DIR = resolve(tmpDir, 'config');
 
 const unauthenticatedPrompt = runNode(
   [
@@ -61,7 +70,7 @@ const unauthenticatedPrompt = runNode(
 assert.equal(unauthenticatedPrompt.status, 1);
 const promptResult = JSON.parse(unauthenticatedPrompt.stdout);
 assert.equal(promptResult.is_error, true);
-assert.match(promptResult.result, /Not logged in/);
+assert.match(promptResult.result, /Codex OAuth|CCR_CODEX_OAUTH/);
 assert.equal(promptResult.total_cost_usd, 0);
 
 const { enableConfigs } = await import('../dist/src/utils/config.js');

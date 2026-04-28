@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import chalk from 'chalk';
 import { markPostCompaction } from 'src/bootstrap/state.js';
@@ -17,6 +18,7 @@ import { logError } from '../../utils/log.js';
 import { getMessagesAfterCompactBoundary } from '../../utils/messages.js';
 import { getUpgradeMessage } from '../../utils/model/contextWindowUpgradeCheck.js';
 import { buildEffectiveSystemPrompt, } from '../../utils/systemPrompt.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const reactiveCompact = feature('REACTIVE_COMPACT')
     ? require('../../services/compact/reactiveCompact.js')

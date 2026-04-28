@@ -1,5 +1,6 @@
 import { jsx as _jsx } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import * as React from 'react';
 import { EnterPlanModeTool } from 'src/tools/EnterPlanModeTool/EnterPlanModeTool.js';
@@ -29,6 +30,7 @@ import { NotebookEditPermissionRequest } from './NotebookEditPermissionRequest/N
 import { PowerShellPermissionRequest } from './PowerShellPermissionRequest/PowerShellPermissionRequest.js';
 import { SkillPermissionRequest } from './SkillPermissionRequest/SkillPermissionRequest.js';
 import { WebFetchPermissionRequest } from './WebFetchPermissionRequest/WebFetchPermissionRequest.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const ReviewArtifactTool = feature('REVIEW_ARTIFACT') ? require('../../tools/ReviewArtifactTool/ReviewArtifactTool.js').ReviewArtifactTool : null;
 const ReviewArtifactPermissionRequest = feature('REVIEW_ARTIFACT') ? require('./ReviewArtifactPermissionRequest/ReviewArtifactPermissionRequest.js').ReviewArtifactPermissionRequest : null;

@@ -1,9 +1,11 @@
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import { logEvent, } from '../services/analytics/index.js';
 import { isBuiltInAgent } from '../tools/AgentTool/loadAgentsDir.js';
 import { isEnvTruthy } from './envUtils.js';
 import { asSystemPrompt } from './systemPromptType.js';
 export { asSystemPrompt } from './systemPromptType.js';
+const require = createRequire(import.meta.url);
 // Dead code elimination: conditional import for proactive mode.
 // Same pattern as prompts.ts — lazy require to avoid pulling the module
 // into non-proactive builds.

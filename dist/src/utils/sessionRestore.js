@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { dirname } from 'path';
 import { getMainLoopModelOverride, getSessionId, setMainLoopModelOverride, setMainThreadAgentType, setOriginalCwd, switchSession, } from '../bootstrap/state.js';
 import { clearSystemPromptSections } from '../constants/systemPromptSections.js';
@@ -21,6 +22,7 @@ import { adoptResumedSessionFile, recordContentReplacement, resetSessionFilePoin
 import { isTodoV2Enabled } from './tasks.js';
 import { TodoListSchema } from './todo/types.js';
 import { getCurrentWorktreeSession, restoreWorktreeSession, } from './worktree.js';
+const require = createRequire(import.meta.url);
 /**
  * Scan the transcript for the last TodoWrite tool_use block and return its todos.
  * Used to hydrate AppState.todos on SDK --resume so the model's todo list

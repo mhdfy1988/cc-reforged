@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle';
 import { mkdir, writeFile } from 'fs/promises';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'path';
 import { z } from 'zod/v4';
 import { getCachedClaudeMdContent, getLastClassifierRequests, getSessionId, setLastClassifierRequests, } from '../../bootstrap/state.js';
@@ -22,6 +23,7 @@ import { tokenCountWithEstimation } from '../tokens.js';
 import { getBashPromptAllowDescriptions, getBashPromptDenyDescriptions, } from './bashClassifier.js';
 import { extractToolUseBlock, parseClassifierResponse, } from './classifierShared.js';
 import { getClaudeTempDir } from './filesystem.js';
+const require = createRequire(import.meta.url);
 // Dead code elimination: conditional imports for auto mode classifier prompts.
 // At build time, the bundler inlines .txt files as string literals. At test
 // time, require() returns {default: string} — txtRequire normalizes both.

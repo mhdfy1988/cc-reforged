@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import type { UUID } from 'crypto'
+import { createRequire } from 'node:module'
 import { relative } from 'path'
 import { getCwd } from 'src/utils/cwd.js'
 import { addInvokedSkill } from '../bootstrap/state.js'
@@ -48,6 +49,8 @@ import {
   removeExtraFields,
 } from './sessionStorage.js'
 import type { ContentReplacementRecord } from './toolResultStorage.js'
+
+const require = createRequire(import.meta.url)
 
 // Dead code elimination: ant-only tool names are conditionally required so
 // their strings don't leak into external builds. Static imports always bundle.

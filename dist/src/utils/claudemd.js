@@ -28,6 +28,7 @@ import { feature } from 'bun:bundle';
 import ignore from 'ignore';
 import memoize from 'lodash-es/memoize.js';
 import { Lexer } from 'marked';
+import { createRequire } from 'node:module';
 import { basename, dirname, extname, isAbsolute, join, parse, relative, sep, } from 'path';
 import picomatch from 'picomatch';
 import { logEvent } from 'src/services/analytics/index.js';
@@ -50,6 +51,7 @@ import { expandPath } from './path.js';
 import { pathInWorkingPath } from './permissions/filesystem.js';
 import { isSettingSourceEnabled } from './settings/constants.js';
 import { getInitialSettings } from './settings/settings.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')
     ? require('../memdir/teamMemPaths.js')

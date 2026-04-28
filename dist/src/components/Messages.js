@@ -1,5 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import chalk from 'chalk';
 import * as React from 'react';
@@ -35,6 +36,7 @@ import { isNullRenderingAttachment } from './messages/nullRenderingAttachments.j
 import { OffscreenFreeze } from './OffscreenFreeze.js';
 import { StatusNotices } from './StatusNotices.js';
 import { BACKGROUND_BASH_SUMMARY_PREFIX } from '../tasks/LocalShellTask/LocalShellTask.js';
+const require = createRequire(import.meta.url);
 const LogoHeader = React.memo(function LogoHeader({ agentDefinitions }) {
     const $ = _c(3);
     let t1;

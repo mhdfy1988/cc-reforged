@@ -13,6 +13,7 @@
  * (SDK -p mode via query.enableRemoteControl).
  */
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { hostname } from 'os';
 import { getOriginalCwd, getSessionId } from '../bootstrap/state.js';
 import { getFeatureValue_CACHED_WITH_REFRESH } from '../services/analytics/growthbook.js';
@@ -37,6 +38,7 @@ import { checkEnvLessBridgeMinVersion } from './envLessBridgeConfig.js';
 import { getPollIntervalConfig } from './pollConfig.js';
 import { initBridgeCore } from './replBridge.js';
 import { setCseShimGate } from './sessionIdCompat.js';
+const require = createRequire(import.meta.url);
 function isRecord(value) {
     return typeof value === 'object' && value !== null;
 }

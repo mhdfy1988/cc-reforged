@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import { shouldAutoEnableClaudeInChrome } from 'src/utils/claudeInChrome/setup.js';
 import { registerBatchSkill } from './batch.js';
@@ -11,6 +12,7 @@ import { registerSkillifySkill } from './skillify.js';
 import { registerStuckSkill } from './stuck.js';
 import { registerUpdateConfigSkill } from './updateConfig.js';
 import { registerVerifySkill } from './verify.js';
+const require = createRequire(import.meta.url);
 /**
  * Initialize all bundled skills.
  * Called at startup to register skills that ship with the CLI.

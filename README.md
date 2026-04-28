@@ -4,7 +4,7 @@
 
 # CCR v0.1
 
-![](https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=flat-square)
+![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 
 CCR is a terminal coding agent recovery build. The current v0.1 milestone keeps the terminal-first workflow and adds an in-repo pluggable LLM runtime with Codex OAuth support.
 
@@ -17,6 +17,7 @@ Upstream product and protocol references that still appear in the codebase or do
 - Product command: `ccr`
 - Product version: `CCR v0.1`
 - npm package name: `cc-reforged`
+- Runtime requirement: Node.js `>=24.0.0`
 - Default config directory: `~/.ccr`
 - Default LLM config file: `~/.ccr/data/llm.config.local.json`
 - Default Codex OAuth credential file: `~/.ccr/data/codex-oauth.json`
@@ -89,6 +90,10 @@ npm.cmd run smoke:codex-oauth-provider
 ```
 
 Do not run the smoke scripts with plain `node scripts/...` unless you know the script does not need the project loader. Most runtime smoke scripts must be launched through `bun-bundle-loader.mjs`, and the npm scripts already do that.
+
+## Release
+
+The npm publish checklist is documented in [`docs/release/npm-publish-workflow.md`](docs/release/npm-publish-workflow.md).
 
 ## Important Boundaries
 

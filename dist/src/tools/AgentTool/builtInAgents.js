@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { getIsNonInteractiveSession } from '../../bootstrap/state.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';
@@ -8,6 +9,7 @@ import { GENERAL_PURPOSE_AGENT } from './built-in/generalPurposeAgent.js';
 import { PLAN_AGENT } from './built-in/planAgent.js';
 import { STATUSLINE_SETUP_AGENT } from './built-in/statuslineSetup.js';
 import { VERIFICATION_AGENT } from './built-in/verificationAgent.js';
+const require = createRequire(import.meta.url);
 export function areExplorePlanAgentsEnabled() {
     if (feature('BUILTIN_EXPLORE_PLAN_AGENTS')) {
         // 3P default: true — Bedrock/Vertex keep agents enabled (matches pre-experiment

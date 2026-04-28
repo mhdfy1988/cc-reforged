@@ -1,6 +1,8 @@
 import type { ComputerUseAPI } from '@ant/computer-use-swift'
+import { createRequire } from 'node:module'
 
 let cached: ComputerUseAPI | undefined
+const require = createRequire(import.meta.url)
 
 /**
  * Package's js/index.js reads COMPUTER_USE_SWIFT_NODE_PATH (baked by

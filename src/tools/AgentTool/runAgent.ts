@@ -1,6 +1,7 @@
 import { feature } from 'bun:bundle'
 import type { UUID } from 'crypto'
 import { randomUUID } from 'crypto'
+import { createRequire } from 'node:module'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { getProjectRoot, getSessionId } from '../../bootstrap/state.js'
@@ -81,6 +82,8 @@ import type { ContentReplacementState } from '../../utils/toolResultStorage.js'
 import { createAgentId, validateUuid } from '../../utils/uuid.js'
 import { resolveAgentTools } from './agentToolUtils.js'
 import { type AgentDefinition, isBuiltInAgent } from './loadAgentsDir.js'
+
+const require = createRequire(import.meta.url)
 
 /**
  * Initialize agent-specific MCP servers

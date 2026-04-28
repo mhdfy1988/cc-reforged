@@ -4,7 +4,7 @@
 
 # CCR v0.1
 
-![](https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=flat-square)
+![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 
 CCR 是一个终端编码 Agent 的恢复构建版本。当前 v0.1 里程碑保留了终端优先的交互方式，并新增了仓库内置的可插拔 LLM 运行时，已支持 Codex OAuth。
 
@@ -17,6 +17,7 @@ CCR 是一个终端编码 Agent 的恢复构建版本。当前 v0.1 里程碑保
 - 产品命令：`ccr`
 - 产品版本：`CCR v0.1`
 - npm 包名：`cc-reforged`
+- 运行时要求：Node.js `>=24.0.0`
 - 默认配置目录：`~/.ccr`
 - 默认 LLM 配置文件：`~/.ccr/data/llm.config.local.json`
 - 默认 Codex OAuth 凭据文件：`~/.ccr/data/codex-oauth.json`
@@ -89,6 +90,10 @@ npm.cmd run smoke:codex-oauth-provider
 ```
 
 不要直接用 `node scripts/...` 运行 smoke 脚本，除非确认该脚本不需要项目 loader。大多数 runtime smoke 脚本必须通过 `bun-bundle-loader.mjs` 启动，npm scripts 已经处理好了这一点。
+
+## 发布
+
+npm 发布检查清单见 [`docs/release/npm-publish-workflow.md`](docs/release/npm-publish-workflow.md)。
 
 ## 重要边界
 

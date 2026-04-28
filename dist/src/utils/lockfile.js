@@ -8,7 +8,9 @@
  * Import this module instead of `proper-lockfile` directly. The underlying
  * package is only loaded the first time a lock function is actually called.
  */
+import { createRequire } from 'node:module';
 let _lockfile;
+const require = createRequire(import.meta.url);
 function getLockfile() {
     if (!_lockfile) {
         // eslint-disable-next-line @typescript-eslint/no-require-imports

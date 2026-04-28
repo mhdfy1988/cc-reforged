@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { markPostCompaction } from 'src/bootstrap/state.js';
 import { getSdkBetas } from '../../bootstrap/state.js';
 import { getGlobalConfig } from '../../utils/config.js';
@@ -15,6 +16,7 @@ import { setLastSummarizedMessageId } from '../SessionMemory/sessionMemoryUtils.
 import { compactConversation, ERROR_MESSAGE_USER_ABORT, } from './compact.js';
 import { runPostCompactCleanup } from './postCompactCleanup.js';
 import { trySessionMemoryCompaction } from './sessionMemoryCompact.js';
+const require = createRequire(import.meta.url);
 // Reserve this many tokens for output during compaction
 // Based on p99.99 of compact summary output being 17,387 tokens.
 const MAX_OUTPUT_TOKENS_FOR_SUMMARY = 20_000;

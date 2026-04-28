@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle'
+import { createRequire } from 'node:module'
 import type {
   Base64ImageSource,
   ContentBlockParam,
@@ -113,6 +114,8 @@ import {
 import { buildMcpToolName } from './mcpStringUtils.js'
 import { normalizeNameForMCP } from './normalization.js'
 import { getLoggingSafeMcpBaseUrl } from './utils.js'
+
+const require = createRequire(import.meta.url)
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const fetchMcpSkillsForClient = feature('MCP_SKILLS')
@@ -940,20 +943,9 @@ export const connectToServer = memoize(
         )
         logMCPDebug(name, `claude.ai proxy transport created successfully`)
       } else if (serverType === 'stdio' && isClaudeInChromeMCPServer(name)) {
-        // Run the Chrome MCP server in-process to avoid spawning a ~325 MB subprocess
-        const { createChromeContext } = await import(
-          '../../utils/claudeInChrome/mcpServer.js'
+        throw new Error(
+          'Legacy Claude in Chrome MCP has been retired in CCR. Configure Playwright MCP as a regular MCP server instead.',
         )
-        const { createClaudeForChromeMcpServer } = require('@ant/claude-for-chrome-mcp')
-        const { createLinkedTransportPair } = await import(
-          './InProcessTransport.js'
-        )
-        const context = createChromeContext(serverRef.env)
-        inProcessServer = createClaudeForChromeMcpServer(context)
-        const [clientTransport, serverTransport] = createLinkedTransportPair()
-        await inProcessServer.connect(serverTransport)
-        transport = clientTransport
-        logMCPDebug(name, `In-process Chrome MCP server started`)
       } else if (
         feature('CHICAGO_MCP') &&
         serverType === 'stdio' &&

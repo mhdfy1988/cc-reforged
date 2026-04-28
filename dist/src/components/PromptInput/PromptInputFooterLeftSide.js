@@ -1,7 +1,9 @@
 import { jsxs as _jsxs, jsx as _jsx } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
+const require = createRequire(import.meta.url);
 // Dead code elimination: conditional import for COORDINATOR_MODE
 /* eslint-disable @typescript-eslint/no-require-imports */
 const coordinatorModule = feature('COORDINATOR_MODE') ? require('../../coordinator/coordinatorMode.js') : undefined;

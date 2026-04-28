@@ -1,6 +1,7 @@
 /* eslint-disable custom-rules/no-process-exit */
 import { feature } from 'bun:bundle';
 import chalk from 'chalk';
+import { createRequire } from 'node:module';
 import { logEvent, } from 'src/services/analytics/index.js';
 import { getCwd } from 'src/utils/cwd.js';
 import { checkForReleaseNotes } from 'src/utils/releaseNotes.js';
@@ -32,6 +33,7 @@ import { getPlanSlug } from './utils/plans.js';
 import { saveWorktreeState } from './utils/sessionStorage.js';
 import { profileCheckpoint } from './utils/startupProfiler.js';
 import { createTmuxSessionForWorktree, createWorktreeForSession, generateTmuxSessionName, worktreeBranchName, } from './utils/worktree.js';
+const require = createRequire(import.meta.url);
 export async function setup(cwd, permissionMode, allowDangerouslySkipPermissions, worktreeEnabled, worktreeName, tmuxEnabled, customSessionId, worktreePRNumber, messagingSocketPath) {
     logForDiagnosticsNoPII('info', 'setup_started');
     // Check for Node.js version < 18

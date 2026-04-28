@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { dirname } from 'path';
 import React from 'react';
 import { useTerminalSize } from 'src/hooks/useTerminalSize.js';
@@ -24,6 +25,7 @@ import { createSystemMessage } from '../utils/messages.js';
 import { computeStandaloneAgentContext, restoreAgentFromSession, restoreWorktreeForResume } from '../utils/sessionRestore.js';
 import { adoptResumedSessionFile, enrichLogs, isCustomTitleEnabled, loadAllProjectsMessageLogsProgressive, loadSameRepoMessageLogsProgressive, recordContentReplacement, resetSessionFilePointer, restoreSessionMetadata } from '../utils/sessionStorage.js';
 import { REPL } from './REPL.js';
+const require = createRequire(import.meta.url);
 function parsePrIdentifier(value) {
     const directNumber = parseInt(value, 10);
     if (!isNaN(directNumber) && directNumber > 0) {

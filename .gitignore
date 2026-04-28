@@ -2,6 +2,7 @@
 node_modules/
 tmp/
 *.tgz
+.playwright-mcp/
 
 # typecheck 修复阶段的临时输出
 .codex-typecheck*.txt

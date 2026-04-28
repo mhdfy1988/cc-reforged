@@ -1,5 +1,6 @@
 import axios from 'axios'
 import memoize from 'lodash-es/memoize.js'
+import { createRequire } from 'node:module'
 import { hostname } from 'os'
 import { getOauthConfig } from '../constants/oauth.js'
 import {
@@ -11,6 +12,8 @@ import { errorMessage } from '../utils/errors.js'
 import { isEssentialTrafficOnly } from '../utils/privacyLevel.js'
 import { getSecureStorage } from '../utils/secureStorage/index.js'
 import { jsonStringify } from '../utils/slowOperations.js'
+
+const require = createRequire(import.meta.url)
 
 /**
  * Trusted device token source for bridge (remote-control) sessions.

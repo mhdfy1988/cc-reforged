@@ -6,7 +6,7 @@ import { getGlobalClaudeFile } from '../../utils/env.js';
 import { isSettingSourceEnabled } from '../../utils/settings/constants.js';
 import { getSettings_DEPRECATED, hasSkipDangerousModePermissionPrompt, } from '../../utils/settings/settings.js';
 import { jsonStringify } from '../../utils/slowOperations.js';
-import { getEnterpriseMcpFilePath, getMcpConfigByName } from './config.js';
+import { getEnterpriseMcpFilePath, getMcpConfigByName, getUserMcpFilePath, } from './config.js';
 import { mcpInfoFromString } from './mcpStringUtils.js';
 import { normalizeNameForMCP } from './normalization.js';
 import { ConfigScopeSchema, } from './types.js';
@@ -189,7 +189,7 @@ export function isMcpCommand(command) {
 export function describeMcpConfigFilePath(scope) {
     switch (scope) {
         case 'user':
-            return getGlobalClaudeFile();
+            return getUserMcpFilePath();
         case 'project':
             return join(getCwd(), '.mcp.json');
         case 'local':

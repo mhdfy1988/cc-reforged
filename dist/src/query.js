@@ -50,9 +50,12 @@ var __disposeResources = (this && this.__disposeResources) || (function (Suppres
     var e = new Error(message);
     return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
 });
+// biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+import { createRequire } from 'node:module';
 import { FallbackTriggeredError } from './services/api/withRetry.js';
 import { calculateTokenWarningState, isAutoCompactEnabled, } from './services/compact/autoCompact.js';
 import { buildPostCompactMessages } from './services/compact/compact.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const reactiveCompact = feature('REACTIVE_COMPACT')
     ? require('./services/compact/reactiveCompact.js')
