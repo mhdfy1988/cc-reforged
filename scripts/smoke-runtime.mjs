@@ -24,7 +24,7 @@ function runNode(args, options = {}) {
 
 const version = runNode(['cli.js', '--version']);
 assert.equal(version.status, 0, version.stderr);
-assert.match(version.stdout, /^CCR v0\.1\s*$/);
+assert.match(version.stdout, /^CCR v0\.2\s*$/);
 
 const help = runNode(['cli.js', '--help']);
 assert.equal(help.status, 0, help.stderr);

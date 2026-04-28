@@ -2,11 +2,11 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-# CCR v0.1
+# CCR v0.2
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 
-CCR 是一个终端编码 Agent 的恢复构建版本。当前 v0.1 里程碑保留了终端优先的交互方式，并新增了仓库内置的可插拔 LLM 运行时，已支持 Codex OAuth。
+CCR 是一个终端编码 Agent 的恢复构建版本。当前 v0.2 里程碑保留了终端优先的交互方式，新增了仓库内置的可插拔 LLM 运行时，已支持 Codex OAuth，并包含 Playwright MCP 接入。
 
 仓库或文档里仍然出现的上游产品名、协议名和兼容性引用，只在描述源码来源或外部兼容边界时保留。
 
@@ -15,7 +15,7 @@ CCR 是一个终端编码 Agent 的恢复构建版本。当前 v0.1 里程碑保
 ## 当前状态
 
 - 产品命令：`ccr`
-- 产品版本：`CCR v0.1`
+- 产品版本：`CCR v0.2`
 - npm 包名：`cc-reforged`
 - 运行时要求：Node.js `>=24.0.0`
 - 默认配置目录：`~/.ccr`
@@ -47,7 +47,7 @@ node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js
 预期版本输出：
 
 ```text
-CCR v0.1
+CCR v0.2
 ```
 
 可选的本地全局链接：
@@ -60,7 +60,7 @@ ccr
 
 ## Codex OAuth
 
-CCR v0.1 可以使用 Codex OAuth 作为当前 LLM provider。
+CCR v0.2 可以使用 Codex OAuth 作为当前 LLM provider。
 
 推荐首次使用流程：
 

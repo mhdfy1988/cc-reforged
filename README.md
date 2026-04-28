@@ -2,11 +2,11 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-# CCR v0.1
+# CCR v0.2
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 
-CCR is a terminal coding agent recovery build. The current v0.1 milestone keeps the terminal-first workflow and adds an in-repo pluggable LLM runtime with Codex OAuth support.
+CCR is a terminal coding agent recovery build. The current v0.2 milestone keeps the terminal-first workflow, adds an in-repo pluggable LLM runtime with Codex OAuth support, and includes Playwright MCP integration.
 
 Upstream product and protocol references that still appear in the codebase or docs are kept only where they describe source provenance or external compatibility boundaries.
 
@@ -15,7 +15,7 @@ Upstream product and protocol references that still appear in the codebase or do
 ## Current Status
 
 - Product command: `ccr`
-- Product version: `CCR v0.1`
+- Product version: `CCR v0.2`
 - npm package name: `cc-reforged`
 - Runtime requirement: Node.js `>=24.0.0`
 - Default config directory: `~/.ccr`
@@ -47,7 +47,7 @@ node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js
 Expected version output:
 
 ```text
-CCR v0.1
+CCR v0.2
 ```
 
 Optional local global link:
@@ -60,7 +60,7 @@ ccr
 
 ## Codex OAuth
 
-CCR v0.1 can use Codex OAuth as the active LLM provider.
+CCR v0.2 can use Codex OAuth as the active LLM provider.
 
 Recommended first-run flow:
 
