@@ -71,7 +71,16 @@
    - [docs/current-repair-backlog.md](D:/agent_project/claude-code-reforged/docs/current-repair-backlog.md)
    - 必要时同步 [docs/recovery-repair-plan.md](D:/agent_project/claude-code-reforged/docs/recovery-repair-plan.md)
 
-## 8. Provider / OAuth / SDK 接入护栏
+## 8. CCR Core 统一接口护栏
+
+1. 本仓库所有产品能力都必须优先收敛到 `CCR Core` 统一能力接口；这里的能力不仅包括 LLM 调用，也包括配置、认证、模型选择、MCP、workspace、thread/turn/session、权限、工具执行、文件操作、状态持久化和事件流。
+2. CLI / TUI / App Server / Desktop / VS Code 都只能是入口适配层。入口层负责参数解析、UI 渲染、协议收发、用户交互和事件映射，不得成为第二套业务运行时。
+3. 新增任何入口功能前必须先判断是否已有 Core API。已有 Core API 时只能调用 Core API；没有 Core API 时先补 Core API，再做入口映射。
+4. App Server 只能把 JSON-RPC request 映射到 Core API，把 Core result / Core event 映射成 JSON-RPC response / notification；不得直接读 token、拼模型请求、执行工具、管理 MCP 生命周期或自定义权限状态机。
+5. CLI/TUI 当前仍存在历史直连链路时，只能视为迁移中的旧实现细节。新增代码不得继续扩大旧链路，后续迁移应逐步改为调用 Core API。
+6. 如果某个实现看起来需要在入口层复制 Core 逻辑，必须先停下来补 `docs/architecture/ccr-core-interface-boundary.md` 或对应 Core service 设计，不得边写边形成隐性分叉。
+
+## 9. Provider / OAuth / SDK 接入护栏
 
 1. 本节不是替代全局“查询优先、试错其次”规则，而是对本仓库 LLM provider / OAuth / SDK 接入场景的强制细化。
 2. 凡是涉及 LLM provider、OAuth、外部 SDK、外部协议、成熟第三方库或陌生运行时行为，无论是新增、改造、修复、排查还是验证，都必须先做资料对照，不得直接凭印象手写；至少对照：
@@ -83,7 +92,7 @@
 5. 真实登录凭据、token、refresh token 和 credential JSON 绝不打印、不贴回复、不写入文档；验证只输出脱敏状态和路径。
 6. 这类接入验证失败时，先回到资料对照和实际 payload/transport 差异排查，不得优先猜测网络、代理或环境问题。
 
-## 9. 详细规则入口
+## 10. 详细规则入口
 
 按需读取，不要一次性加载全部分册：
 

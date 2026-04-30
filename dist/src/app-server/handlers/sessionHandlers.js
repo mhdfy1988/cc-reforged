@@ -1,0 +1,34 @@
+import { ThreadListParamsSchema, ThreadStartParamsSchema, TurnInterruptParamsSchema, TurnStartParamsSchema, } from '../protocol.js';
+export function handleThreadStart(context, params) {
+    const parsedParams = ThreadStartParamsSchema.parse(params ?? {});
+    return {
+        thread: context.core.session.startThread(parsedParams),
+    };
+}
+export function handleThreadList(context, params) {
+    ThreadListParamsSchema.parse(params ?? {});
+    return {
+        threads: context.core.session.listThreads(),
+    };
+}
+export function handleTurnStart(context, params) {
+    const parsedParams = TurnStartParamsSchema.parse(params);
+    return {
+        turn: context.core.session.startTurn({
+            threadId: parsedParams.threadId,
+            input: {
+                type: parsedParams.input.type,
+                text: parsedParams.input.text,
+            },
+        }),
+    };
+}
+export function handleTurnInterrupt(context, params) {
+    const parsedParams = TurnInterruptParamsSchema.parse(params);
+    return context.core.session.interruptTurn({
+        threadId: parsedParams.threadId,
+        turnId: parsedParams.turnId,
+        ...(parsedParams.reason ? { reason: parsedParams.reason } : {}),
+    });
+}
+//# sourceMappingURL=sessionHandlers.js.map

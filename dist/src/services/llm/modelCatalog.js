@@ -29,6 +29,18 @@ export function getLlmModelCatalogEntry(input) {
     }
     return getFallbackModelCatalogEntry(input);
 }
+export function listKnownLlmModelCatalogEntries(input) {
+    if (input.providerId === 'codex-oauth') {
+        return Object.keys(CODEX_OAUTH_MODEL_CATALOG).map(model => getCodexOAuthModelCatalogEntry(model, input.providerDefinition));
+    }
+    return [
+        getLlmModelCatalogEntry({
+            providerId: input.providerId,
+            model: input.defaultModel,
+            providerDefinition: input.providerDefinition,
+        }),
+    ];
+}
 function getAnthropicModelCatalogEntry(model, providerDefinition) {
     const maxOutput = getModelMaxOutputTokens(model);
     return {

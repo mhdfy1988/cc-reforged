@@ -1,6 +1,7 @@
 import { complete as piComplete, getModel as piGetModel, stream as piStream, } from '@mariozechner/pi-ai';
 import { getLlmProviderConfig } from '../llmConfig.js';
 import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js';
+import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js';
 import { CodexOAuthSession, } from '../sessions/CodexOAuthSession.js';
 import { createDefaultCodexOAuthSession } from '../sessions/defaultCodexOAuthSession.js';
 const DEFAULT_BASE_URL = 'https://chatgpt.com/backend-api';
@@ -120,6 +121,7 @@ export class CodexOAuthProvider {
         };
     }
     async #prepareRequest(request) {
+        configureGlobalFetchDispatcher();
         const credential = await this.#session.getValidCredential();
         const model = request.model?.trim() || this.#defaultModel;
         const reasoningEffort = normalizeReasoningEffort(getReasoningEffort(request.metadata) || this.#defaultReasoningEffort);

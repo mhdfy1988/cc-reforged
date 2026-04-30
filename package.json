@@ -54,6 +54,7 @@
     "smoke:llm-config": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-config.mjs",
     "smoke:llm-runtime": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-runtime.mjs",
     "smoke:llm-runtime-status": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-runtime-status.mjs",
+    "smoke:app-server": "node ./scripts/smoke-app-server.mjs",
     "smoke:runtime": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-runtime.mjs",
     "smoke:permissions": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-permissions.mjs",
     "smoke:deps": "node ./scripts/smoke-deps.mjs",

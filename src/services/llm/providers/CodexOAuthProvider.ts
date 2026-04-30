@@ -13,6 +13,7 @@ import {
 } from '@mariozechner/pi-ai'
 import { getLlmProviderConfig } from '../llmConfig.js'
 import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js'
+import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js'
 import type {
   LlmContentPart,
   LlmGenerateEvent,
@@ -206,6 +207,7 @@ export class CodexOAuthProvider implements LlmProvider {
   async #prepareRequest(
     request: LlmGenerateRequest,
   ): Promise<PreparedRequest> {
+    configureGlobalFetchDispatcher()
     const credential = await this.#session.getValidCredential()
     const model = request.model?.trim() || this.#defaultModel
     const reasoningEffort = normalizeReasoningEffort(

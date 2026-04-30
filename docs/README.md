@@ -11,6 +11,17 @@
 - [Playwright MCP 接入设计](./mcp/playwright-integration-design.md)
 - [MCP 示例配置](./examples/mcp/README.md)
 
+## 架构与入口
+
+- [CCR 多入口与 App Server 总体方案](./architecture/entrypoints-runtime-app-server-desktop-vscode.md)
+- [CCR Core 统一对外接口边界](./architecture/ccr-core-interface-boundary.md)
+- [CCR App Server 协议详细设计](./architecture/app-server-protocol-design.md)
+- [CCR App Server 会话 API 设计](./architecture/app-server-session-api-design.md)
+- [CCR 客户端产品与交互设计](./architecture/desktop-client-product-design.md)
+- [CCR Desktop 客户端框架选型](./architecture/desktop-framework-selection.md)
+- [CCR 升级管理策略](./architecture/upgrade-management-strategy.md)
+- [CCR App Server 实施 Todo](./stages/app-server-todo.md)
+
 ## 修复与恢复
 
 - [运行时缺失目标清单](./runtime-missing-targets.md)

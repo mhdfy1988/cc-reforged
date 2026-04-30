@@ -776,6 +776,7 @@ declare module 'undici' {
 
   export interface AgentOptions {
     connect?: TLSConnectionOptions
+    connectTimeout?: number
     pipelining?: number
   }
 
@@ -789,6 +790,7 @@ declare module 'undici' {
       httpsProxy?: string
       noProxy?: string
       connect?: TLSConnectionOptions
+      connectTimeout?: number
       requestTls?: TLSConnectionOptions
     }
   }

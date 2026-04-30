@@ -33,6 +33,7 @@ runNpm(['run', 'build', '--', '--pretty', 'false']);
 runNpm(['run', 'typecheck', '--', '--pretty', 'false']);
 run(process.execPath, ['cli.js', '--version']);
 run(process.execPath, ['cli.js', '--help']);
+runNpm(['run', 'smoke:app-server']);
 runNpm(['run', 'smoke:runtime']);
 runNpm(['run', 'smoke:permissions']);
 runNpm(['run', 'smoke:deps']);

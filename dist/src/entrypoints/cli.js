@@ -39,6 +39,19 @@ async function main() {
         console.log(`CCR v${MACRO.VERSION}`);
         return;
     }
+    if (args[0] === 'app-server') {
+        const listen = getAppServerListenMode(args.slice(1));
+        if (listen !== 'stdio') {
+            process.stderr.write(`CCR App Server only supports "--listen stdio" in this version. Received: ${listen}\n`);
+            process.exitCode = 1;
+            return;
+        }
+        const { enableConfigs } = await import('../utils/config.js');
+        enableConfigs();
+        const { runStdioAppServer } = await import('../app-server/index.js');
+        await runStdioAppServer();
+        return;
+    }
     // For all other paths, load the startup profiler
     const { profileCheckpoint } = await import('../utils/startupProfiler.js');
     profileCheckpoint('cli_entry');
@@ -222,6 +235,17 @@ async function main() {
     profileCheckpoint('cli_after_main_import');
     await cliMain();
     profileCheckpoint('cli_after_main_complete');
+}
+function getAppServerListenMode(args) {
+    const listenFlagIndex = args.indexOf('--listen');
+    if (listenFlagIndex !== -1) {
+        return args[listenFlagIndex + 1] ?? '';
+    }
+    const listenEqualsArg = args.find(arg => arg.startsWith('--listen='));
+    if (listenEqualsArg) {
+        return listenEqualsArg.slice('--listen='.length);
+    }
+    return 'stdio';
 }
 // eslint-disable-next-line custom-rules/no-top-level-side-effects
 void main();
