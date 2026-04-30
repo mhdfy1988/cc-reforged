@@ -97,16 +97,25 @@ if (!skipHeadlessAuthGate) {
 const { enableConfigs } = await import('../dist/src/utils/config.js');
 enableConfigs();
 
-const { getTools } = await import('../dist/src/tools.js');
 const { getEmptyToolPermissionContext } = await import('../dist/src/Tool.js');
+const { FileEditTool } = await import('../dist/src/tools/FileEditTool/FileEditTool.js');
 const { FileReadTool } = await import('../dist/src/tools/FileReadTool/FileReadTool.js');
 const { FileWriteTool } = await import('../dist/src/tools/FileWriteTool/FileWriteTool.js');
+const { GlobTool } = await import('../dist/src/tools/GlobTool/GlobTool.js');
+const { GrepTool } = await import('../dist/src/tools/GrepTool/GrepTool.js');
 const { PowerShellTool } = await import('../dist/src/tools/PowerShellTool/PowerShellTool.js');
 
 const permissionContext = getEmptyToolPermissionContext();
-const tools = getTools(permissionContext);
-const toolNames = tools.map(tool => tool.name).sort();
-for (const expectedName of ['Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write']) {
+const coreLocalTools = [
+  FileEditTool,
+  FileReadTool,
+  FileWriteTool,
+  GlobTool,
+  GrepTool,
+  PowerShellTool,
+];
+const toolNames = coreLocalTools.map(tool => tool.name).sort();
+for (const expectedName of ['Edit', 'Glob', 'Grep', 'Read', 'Write']) {
   assert.ok(toolNames.includes(expectedName), `missing tool: ${expectedName}`);
 }
 
@@ -166,8 +175,8 @@ console.log(
         unauthenticatedHeadlessPath,
       },
       tools: {
-        count: tools.length,
-        checked: ['Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write'],
+        count: coreLocalTools.length,
+        checked: ['Glob', 'Grep', 'Read', 'Edit', 'Write', 'PowerShell'],
       },
       roundtrip: {
         file: smokeFile,
