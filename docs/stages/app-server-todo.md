@@ -11,16 +11,16 @@
 - [x] P6 Thread / Turn / Item 会话 API 设计
 - [x] P6.5 CCR Core 统一能力接口边界补强
 - [x] P7 Turn 执行与事件流最小闭环
-- [ ] P8 权限请求与客户端响应闭环
+- [x] P8 权限请求与客户端响应闭环
 - [ ] P9 Desktop 原型接入准备
 - [ ] P10 VS Code 插件接入准备
 - [ ] P11 版本、升级、回滚与协议兼容加固
 
 ## 当前指针
 
-- 进行中：P8 权限请求与客户端响应闭环
-- 当前正在做：P8 第二刀已完成，Core session 已改为通过 `runCoreQueryTurn` 复用现有 `query()` 主执行链；下一步补更强的工具流 smoke / 真实工具验证。
-- 完成后下一项：P9 Desktop 原型接入准备
+- 进行中：P9 Desktop 原型接入准备
+- 当前正在做：P8 已完成真实 Codex OAuth 工具流验证；下一步进入 Desktop 原型接入准备。
+- 完成后下一项：P10 VS Code 插件接入准备
 
 ## P0 现状盘点与边界确认
 
@@ -305,6 +305,8 @@ scripts/smoke-app-server-workspace.mjs
 
 ## P8 权限请求与客户端响应闭环
 
+状态：已完成。
+
 目标：
 
 - 把工具权限请求转成 `permission/requested` 通知。
@@ -325,7 +327,10 @@ scripts/smoke-app-server-workspace.mjs
 - P8 第一刀应先实现薄 adapter：把原 SDK `can_use_tool` 语义映射成 App Server 的 `permission/requested` 和 `permission/respond`。
 - Core permission adapter 与 App Server `permission/respond` 第一刀已实现，已验证 pending/respond/重复响应/缺失 request/cancel。
 - Core session 第二刀已改为调用 `runCoreQueryTurn`，通过现有 `query()` 主链生成工具 schema、处理模型 tool_use、调用 `StreamingToolExecutor` / `runTools` 并复用 adapter 提供的 `canUseTool`。
-- 当前自动化 smoke 仍以协议、无登录失败路径和权限桥为主，没有真实消耗模型额度跑工具调用；下一步需要补 fake-model 工具流 smoke 或在真实 Codex OAuth 下做一轮小型工具调用验证。
+- 已完成真实 Codex OAuth 工具流验证：
+- Allow 场景：临时 workspace 内让模型调用 `Write` 创建 `ccr_tool_permission_test.txt`，App Server 发出 `permission/requested`，客户端回 `permission/respond allow`，工具成功创建文件，最终 `turn/completed`。
+- Deny 场景：临时 workspace 内让模型请求文件工具权限，客户端回 `permission/respond deny`，工具返回拒绝结果，目标文件未创建，最终 `turn/completed`，模型能解释“写入被拒绝”。
+- 已发现并修复真实接入顺序 bug：`queryModel()` 在判断内置 LLM runtime 前先执行 Claude AI 订阅判断，导致 Codex OAuth App Server turn 被 Anthropic 凭据检查误拦；现在 Anthropic 专属 off-switch 检查只在非内置 runtime 下执行。
 - 详细方案见 [CCR App Server 权限复用设计](../architecture/app-server-permission-reuse-design.md)。
 
 ## P9 Desktop 原型接入准备
@@ -392,11 +397,12 @@ scripts/smoke-app-server-workspace.mjs
 - 第 11 轮：P8 先完成方向校准，确认原代码已有权限体系，不能另写一套。已新增 [CCR App Server 权限复用设计](../architecture/app-server-permission-reuse-design.md)，明确 App Server 应复用 `hasPermissionsToUseTool(...)`、SDK `control_request: can_use_tool` 字段语义和 `PermissionPromptToolResultSchema`，只补 `permission/requested -> permission/respond` 薄 adapter。当前 `runTextOnlyCoreTurn` 仍无工具流，下一步先实现 adapter 与 smoke，再接真实 tool-capable runner。
 - 第 12 轮：P8 第一刀已实现并验证通过。新增 `CorePermissionService`，它提供 `createCanUseTool(...)`、pending permission request、`respondPermission(...)`、`cancelForTurn(...)`，底层复用 `hasPermissionsToUseTool(...)` 和 `PermissionPromptToolResultSchema`；App Server 新增 `permission/respond` handler、`permission/requested` / `permission/cancelled` notification 映射，并把 `permissions` capability 打开。新增 `scripts/smoke-app-server-permissions.mjs` 并接入 `smoke:app-server`，已覆盖 permission/requested、allow、重复响应、缺失 request、cancel。`typecheck`、`build`、`smoke:app-server` 均通过。下一步接真实 tool-capable runner，让 Bash/FileEdit/WebFetch 等工具流实际使用该 adapter。
 - 第 13 轮：P8 第二刀已完成，新增 `runCoreQueryTurn` 并让 `CoreSessionService` 从 text-only runner 切到现有 `query()` 主执行链。该 runner 会构造 Core 专用 `ToolUseContext`，复用 `getSystemPrompt()`、`assembleToolPool()`、`query()`、`StreamingToolExecutor` / `runTools` 以及 `CorePermissionService.createCanUseTool(...)`，把 App Server turn 接回真实模型/工具链路；同时保留 Core item 事件映射和 session interrupt 到 query abort 的传递。`typecheck`、`build`、`smoke:app-server` 均通过。剩余风险是自动化 smoke 还没有用 fake model 或真实小工具调用完整验证 `tool_use -> permission/requested -> permission/respond -> tool_result -> follow-up` 全路径。
+- 第 14 轮：P8 真实 Codex OAuth 工具权限流已验证完成。第一轮直接用 `TestingPermission` 暴露出测试方式错误：设置 `NODE_ENV=test` 会触发旧 Claude auth 的 Anthropic/Claude token 强校验，不适合作为真实链路测试；随后改用真实工具。Bash 工具测试证明 Codex OAuth 能产出 `tool_use` 并进入工具执行，但 Windows 下缺 POSIX shell，Bash tool result 为错误且未触发权限请求。最终使用临时 workspace + `Write` 工具完成 allow 测试：收到 1 次 `permission/requested`，`permission/respond allow` 返回 `{ accepted: true }`，文件内容为 `CCR_WRITE_TOOL_OK`，turn 正常完成。又补 deny 测试：`permission/respond deny` 后工具结果为拒绝错误，目标文件未创建，turn 正常完成。过程中修复 `queryModel()` 的 provider 顺序 bug，避免 Codex OAuth 被 Anthropic 凭据检查误拦。`typecheck`、`build`、`smoke:app-server` 均通过。P8 标记完成，下一步进入 P9 Desktop 原型接入准备。
 
 ## 备注
 
 - 当前状态：active
-- 下一步需要：补 P8 工具流专项验证，优先用 fake model / testing tool 避免真实额度消耗；必要时再用真实 Codex OAuth 跑一轮最小工具调用。
+- 下一步需要：进入 P9 Desktop 原型接入准备，先设计并实现最小 App Server client SDK / spawn 管理边界。
 - 当前仓库：`D:\agent_project\claude-code-reforged`
 - 当前主线：先补 App Server，再做 Desktop，再做 VS Code 插件。
 - 第一阶段非目标：不做 websocket、daemon、多客户端共享、完整模型工具流、Desktop UI。

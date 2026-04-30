@@ -839,10 +839,12 @@ export function stripExcessMediaItems(messages, limit) {
     });
 }
 async function* queryModel(messages, systemPrompt, thinkingConfig, tools, signal, options) {
+    const useBuiltinLlmRuntime = shouldUseBuiltinLlmRuntime();
     // Check cheap conditions first — the off-switch await blocks on GrowthBook
     // init (~10ms). For non-Opus models (haiku, sonnet) this skips the await
     // entirely. Subscribers don't hit this path at all.
-    if (!isClaudeAISubscriber() &&
+    if (!useBuiltinLlmRuntime &&
+        !isClaudeAISubscriber() &&
         isNonCustomOpusModel(options.model) &&
         (await getDynamicConfig_BLOCKS_ON_INIT('tengu-off-switch', {
             activated: false,
@@ -1131,7 +1133,7 @@ async function* queryModel(messages, systemPrompt, thinkingConfig, tools, signal
         });
     }
     const allTools = [...toolSchemas, ...extraToolSchemas];
-    if (shouldUseBuiltinLlmRuntime()) {
+    if (useBuiltinLlmRuntime) {
         yield* queryWithLlmRuntime({
             messages: messagesForAPI,
             systemPrompt,

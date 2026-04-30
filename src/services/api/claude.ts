@@ -1358,10 +1358,13 @@ async function* queryModel(
   StreamEvent | AssistantMessage | SystemAPIErrorMessage,
   void
 > {
+  const useBuiltinLlmRuntime = shouldUseBuiltinLlmRuntime()
+
   // Check cheap conditions first — the off-switch await blocks on GrowthBook
   // init (~10ms). For non-Opus models (haiku, sonnet) this skips the await
   // entirely. Subscribers don't hit this path at all.
   if (
+    !useBuiltinLlmRuntime &&
     !isClaudeAISubscriber() &&
     isNonCustomOpusModel(options.model) &&
     (
@@ -1742,7 +1745,7 @@ async function* queryModel(
   }
   const allTools = [...toolSchemas, ...extraToolSchemas]
 
-  if (shouldUseBuiltinLlmRuntime()) {
+  if (useBuiltinLlmRuntime) {
     yield* queryWithLlmRuntime({
       messages: messagesForAPI,
       systemPrompt,
