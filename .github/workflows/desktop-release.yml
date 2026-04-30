@@ -48,6 +48,8 @@ jobs:
         run: npm.cmd install
 
       - name: Run core smoke gate
+        env:
+          CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE: '1'
         run: npm.cmd run ci:smoke
 
       - name: Build unsigned Desktop installer

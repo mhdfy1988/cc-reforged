@@ -53,40 +53,46 @@ for (const key of [
 const authGateConfigDir = resolve(tmpDir, 'auth-gate-config');
 rmSync(authGateConfigDir, { recursive: true, force: true });
 mkdirSync(authGateConfigDir, { recursive: true });
-authGateEnv.CCR_CONFIG_DIR = authGateConfigDir;
-authGateEnv.CCR_LLM_CONFIG_PATH = resolve(
-  authGateConfigDir,
-  'data',
-  'llm.config.local.json',
-);
-authGateEnv.CCR_LLM_PROVIDER = 'codex-oauth';
-authGateEnv.CCR_LLM_MODEL = 'gpt-5.4';
-authGateEnv.CCR_CODEX_OAUTH_CREDENTIAL_FILE = resolve(
-  authGateConfigDir,
-  'data',
-  'codex-oauth.json',
-);
+const skipHeadlessAuthGate =
+  process.env.CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE === '1';
+let unauthenticatedHeadlessPath = 'skipped';
+if (!skipHeadlessAuthGate) {
+  authGateEnv.CCR_CONFIG_DIR = authGateConfigDir;
+  authGateEnv.CCR_LLM_CONFIG_PATH = resolve(
+    authGateConfigDir,
+    'data',
+    'llm.config.local.json',
+  );
+  authGateEnv.CCR_LLM_PROVIDER = 'codex-oauth';
+  authGateEnv.CCR_LLM_MODEL = 'gpt-5.4';
+  authGateEnv.CCR_CODEX_OAUTH_CREDENTIAL_FILE = resolve(
+    authGateConfigDir,
+    'data',
+    'codex-oauth.json',
+  );
 
-const unauthenticatedPrompt = runNode(
-  [
-    'cli.js',
-    '-p',
-    'Reply exactly: OK',
-    '--model',
-    'gpt-5.4',
-    '--output-format',
-    'json',
-    '--max-budget-usd',
-    '0.01',
-    '--no-session-persistence',
-  ],
-  { env: authGateEnv, timeout: 20_000 },
-);
-assert.equal(unauthenticatedPrompt.status, 1);
-const promptResult = JSON.parse(unauthenticatedPrompt.stdout);
-assert.equal(promptResult.is_error, true);
-assert.match(promptResult.result, /Codex OAuth|CCR_CODEX_OAUTH/);
-assert.equal(promptResult.total_cost_usd, 0);
+  const unauthenticatedPrompt = runNode(
+    [
+      'cli.js',
+      '-p',
+      'Reply exactly: OK',
+      '--model',
+      'gpt-5.4',
+      '--output-format',
+      'json',
+      '--max-budget-usd',
+      '0.01',
+      '--no-session-persistence',
+    ],
+    { env: authGateEnv, timeout: 20_000 },
+  );
+  assert.equal(unauthenticatedPrompt.status, 1);
+  const promptResult = JSON.parse(unauthenticatedPrompt.stdout);
+  assert.equal(promptResult.is_error, true);
+  assert.match(promptResult.result, /Codex OAuth|CCR_CODEX_OAUTH/);
+  assert.equal(promptResult.total_cost_usd, 0);
+  unauthenticatedHeadlessPath = 'json-auth-gate';
+}
 
 const { enableConfigs } = await import('../dist/src/utils/config.js');
 enableConfigs();
@@ -157,7 +163,7 @@ console.log(
       ok: true,
       cli: {
         version: version.stdout.trim(),
-        unauthenticatedHeadlessPath: 'json-auth-gate',
+        unauthenticatedHeadlessPath,
       },
       tools: {
         count: tools.length,

@@ -93,7 +93,7 @@ require_signed = false
 ```text
 checkout tag
 -> npm.cmd install
--> npm.cmd run ci:smoke
+-> CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE=1 npm.cmd run ci:smoke
 -> npm.cmd run desktop:dist
 -> npm.cmd run smoke:desktop-release-artifacts
 -> npm.cmd run smoke:desktop-signing-readiness
@@ -185,6 +185,7 @@ CI 正式上传
 - `latest.yml`、安装器和 `.blockmap` 必须来自同一次构建。
 - workflow 只负责发布 Desktop 安装器，不负责 npm publish。
 - workflow 中的 smoke 必须是可重复的隔离测试，不允许依赖本机 `~/.ccr`、真实登录态或用户目录里的 OAuth 凭据；如果要验证未登录分支，必须显式指定临时 `CCR_CONFIG_DIR`、临时 `CCR_LLM_CONFIG_PATH`、临时 `CCR_CODEX_OAUTH_CREDENTIAL_FILE`。
+- Desktop 发布 workflow 会显式设置 `CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE=1`，跳过需要启动 `cli.js -p` 的未登录 headless prompt 子进程。原因是 GitHub Actions 无用户态、无真实 OAuth 凭据，这条检查容易变成环境相关超时；本地 `ci:smoke` 仍保留完整未登录 JSON auth gate 验证。
 
 ## 7. 本地校验
 
