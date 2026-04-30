@@ -10,8 +10,8 @@
 
 ## 当前指针
 
-- 进行中：A4 验证与下一阶段决策
-- 当前正在做：GitHub Actions 发布流水线准备已完成；等待进入自动更新状态机设计与实现。
+- 进行中：无
+- 当前正在做：GitHub Actions 远端发布演练已完成；等待进入自动更新状态机设计与实现。
 - 完成后下一项：自动更新状态机设计与实现
 
 ## A0 发布流水线边界与触发方式
@@ -112,7 +112,7 @@
 
 ## A4 验证与下一阶段决策
 
-状态：未开始。
+状态：已完成。
 
 目标：
 
@@ -136,6 +136,9 @@
 - 已验证 `npm.cmd run release:desktop:dry-run` 通过，release 命令包含 `--verify-tag`。
 - 已验证 `npm.cmd run ci:smoke` 通过。
 - 已验证 `git diff --check` 通过。
+- 已完成真实远端 workflow dry-run：`v0.2.0-desktop-dry-run-20260430-5`。
+- 已验证 GitHub Actions run 成功：`https://github.com/mhdfy1988/cc-reforged/actions/runs/25166772924`。
+- 已验证 GitHub Release draft 创建成功，包含 `CCR-Desktop-0.2.0-win-x64.exe`、`.blockmap`、`latest.yml`。
 - 下一阶段建议进入自动更新状态机设计与实现。
 
 ## 后续记录（追加）
@@ -143,11 +146,12 @@
 - 初始化：从本地 GitHub Release 发布准备继续推进到正式 GitHub Actions 发布流水线。当前只做手动触发 draft release，不真实运行远端 workflow，不启用证书签名。
 - 第 1 轮：完成 A0-A3。新增 `Desktop Release` GitHub Actions workflow，发布入口固定为手动触发，输入 `tag/draft/signed/require_signed`，默认 unsigned draft release。workflow 复用本地 `prepare-desktop-github-release.mjs` 创建 release，避免 CI 和本地两套发布逻辑；脚本新增 `--verify-tag`，防止 GitHub CLI 误创建 tag。新增 workflow smoke 并纳入 `ci:smoke`，发布文档和索引已更新。
 - 第 2 轮：完成 A4 验证。`smoke:desktop-github-actions-release`、`release:desktop:check`、`release:desktop:dry-run`、`ci:smoke`、`git diff --check` 均通过。本轮未真实运行远端 workflow，也未创建 GitHub Release；当前只完成流水线文件和本地结构验证。
+- 第 3 轮：完成真实远端发布演练。前几次失败暴露出发布 CI 不应依赖真实用户认证：`cli.js -p` 未登录分支、`getTools()` 全量工具枚举、`FileReadTool.mapToolResultToToolResultBlockParam()` 都会在无凭据 GitHub Actions 中触发旧 Anthropic 认证链路。最终改为发布 workflow 设置 `CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE=1`，runtime smoke 在该模式下只验证核心本地工具 roundtrip。第 5 次 dry-run tag `v0.2.0-desktop-dry-run-20260430-5` 成功完成，并创建 GitHub Release draft。
 
 ## 备注
 
-- 当前状态：active
+- 当前状态：completed
 - 下一步需要：进入自动更新状态机设计与实现。
 - 当前仓库：`D:\agent_project\claude-code-reforged`
 - 当前主线：Desktop GitHub Actions 发布流水线。
-- 当前非目标：不真实创建 GitHub Release、不公开发布、不购买或提交证书、不做自动更新状态机、不做 VS Code 插件。
+- 当前非目标：不公开发布、不购买或提交证书、不做自动更新状态机、不做 VS Code 插件。
