@@ -1,11 +1,48 @@
 import { z } from 'zod';
 export const APP_SERVER_PROTOCOL_VERSION = '0.1';
+export const APP_SERVER_CONFIG_SCHEMA_VERSION = '0.1';
 export const JsonRpcIdSchema = z.union([z.string(), z.number()]);
 export const JsonRpcParamsSchema = z.record(z.string(), z.unknown());
 export const JsonRpcRequestSchema = z
     .object({
     jsonrpc: z.literal('2.0'),
     id: JsonRpcIdSchema,
+    method: z.string().min(1),
+    params: JsonRpcParamsSchema.optional(),
+})
+    .strict();
+export const JsonRpcSuccessResponseSchema = z
+    .object({
+    jsonrpc: z.literal('2.0'),
+    id: JsonRpcIdSchema.nullable(),
+    result: z.unknown(),
+})
+    .strict();
+export const JsonRpcErrorResponseSchema = z
+    .object({
+    jsonrpc: z.literal('2.0'),
+    id: JsonRpcIdSchema.nullable(),
+    error: z
+        .object({
+        code: z.number(),
+        message: z.string(),
+        data: z
+            .object({
+            kind: z.string(),
+            details: z.unknown().optional(),
+        })
+            .strict(),
+    })
+        .strict(),
+})
+    .strict();
+export const JsonRpcResponseSchema = z.union([
+    JsonRpcSuccessResponseSchema,
+    JsonRpcErrorResponseSchema,
+]);
+export const JsonRpcNotificationSchema = z
+    .object({
+    jsonrpc: z.literal('2.0'),
     method: z.string().min(1),
     params: JsonRpcParamsSchema.optional(),
 })

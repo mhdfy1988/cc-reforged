@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 export const APP_SERVER_PROTOCOL_VERSION = '0.1'
+export const APP_SERVER_CONFIG_SCHEMA_VERSION = '0.1'
 
 export const JsonRpcIdSchema = z.union([z.string(), z.number()])
 
@@ -10,6 +11,46 @@ export const JsonRpcRequestSchema = z
   .object({
     jsonrpc: z.literal('2.0'),
     id: JsonRpcIdSchema,
+    method: z.string().min(1),
+    params: JsonRpcParamsSchema.optional(),
+  })
+  .strict()
+
+export const JsonRpcSuccessResponseSchema = z
+  .object({
+    jsonrpc: z.literal('2.0'),
+    id: JsonRpcIdSchema.nullable(),
+    result: z.unknown(),
+  })
+  .strict()
+
+export const JsonRpcErrorResponseSchema = z
+  .object({
+    jsonrpc: z.literal('2.0'),
+    id: JsonRpcIdSchema.nullable(),
+    error: z
+      .object({
+        code: z.number(),
+        message: z.string(),
+        data: z
+          .object({
+            kind: z.string(),
+            details: z.unknown().optional(),
+          })
+          .strict(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const JsonRpcResponseSchema = z.union([
+  JsonRpcSuccessResponseSchema,
+  JsonRpcErrorResponseSchema,
+])
+
+export const JsonRpcNotificationSchema = z
+  .object({
+    jsonrpc: z.literal('2.0'),
     method: z.string().min(1),
     params: JsonRpcParamsSchema.optional(),
   })
@@ -130,8 +171,12 @@ export type JsonRpcRequest = z.infer<typeof JsonRpcRequestSchema>
 export type ClientInfo = z.infer<typeof ClientInfoSchema>
 export type ClientCapabilities = z.infer<typeof ClientCapabilitiesSchema>
 export type InitializeParams = z.infer<typeof InitializeParamsSchema>
+export type AuthStatusParams = z.infer<typeof AuthStatusParamsSchema>
+export type ModelListParams = z.infer<typeof ModelListParamsSchema>
+export type McpListParams = z.infer<typeof McpListParamsSchema>
 export type WorkspaceOpenParams = z.infer<typeof WorkspaceOpenParamsSchema>
 export type ThreadStartParams = z.infer<typeof ThreadStartParamsSchema>
+export type TurnInterruptParams = z.infer<typeof TurnInterruptParamsSchema>
 export type TurnStartParams = z.infer<typeof TurnStartParamsSchema>
 export type PermissionRespondParams = z.infer<
   typeof PermissionRespondParamsSchema
@@ -173,6 +218,99 @@ export type JsonRpcNotification = {
   jsonrpc: '2.0'
   method: string
   params?: JsonRpcParams
+}
+
+export type PlatformInfo = {
+  os: string
+  arch: string
+  node: string
+}
+
+export type ServerInfo = {
+  name: string
+  version: string
+  serverVersion: string
+  coreVersion: string
+}
+
+export type SchemaVersions = {
+  config: string
+}
+
+export type InitializeResult = {
+  serverInfo: ServerInfo
+  serverVersion: string
+  protocolVersion: string
+  schemaVersions: SchemaVersions
+  ccrHome: string
+  platform: PlatformInfo
+  capabilities: ServerCapabilities
+}
+
+export type ShutdownResult = {
+  accepted: boolean
+}
+
+export type ConfigGetResult = Record<string, unknown>
+
+export type AuthStatusResult = Record<string, unknown>
+
+export type ModelListResult = Record<string, unknown>
+
+export type McpListResult = Record<string, unknown>
+
+export type WorkspaceOpenResult = {
+  workspace: {
+    path: string
+    trusted: boolean
+  }
+}
+
+export type AppServerThread = {
+  threadId: string
+  workspacePath: string
+  title: string
+  status: string
+  createdAt: string
+  updatedAt: string
+  activeTurnId: string | null
+  metadata: Record<string, unknown>
+}
+
+export type AppServerTurn = {
+  turnId: string
+  threadId: string
+  status: string
+  input: {
+    type: 'text'
+    text: string
+  }
+  provider: string
+  model: string
+  createdAt: string
+  startedAt: string | null
+  completedAt: string | null
+  error: Record<string, unknown> | null
+}
+
+export type ThreadStartResult = {
+  thread: AppServerThread
+}
+
+export type ThreadListResult = {
+  threads: AppServerThread[]
+}
+
+export type TurnStartResult = {
+  turn: AppServerTurn
+}
+
+export type TurnInterruptResult = {
+  accepted: boolean
+}
+
+export type PermissionRespondResult = {
+  accepted: boolean
 }
 
 export const DEFAULT_SERVER_CAPABILITIES: ServerCapabilities = {

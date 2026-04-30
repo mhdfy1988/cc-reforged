@@ -31,9 +31,16 @@ function runNpm(args) {
 
 runNpm(['run', 'build', '--', '--pretty', 'false']);
 runNpm(['run', 'typecheck', '--', '--pretty', 'false']);
+runNpm(['run', 'typecheck:desktop']);
+runNpm(['run', 'desktop:build']);
+runNpm(['run', 'smoke:desktop-auto-update']);
+runNpm(['run', 'smoke:desktop-branding']);
+runNpm(['run', 'smoke:desktop-github-actions-release']);
+runNpm(['run', 'smoke:desktop-signing-readiness']);
 run(process.execPath, ['cli.js', '--version']);
 run(process.execPath, ['cli.js', '--help']);
 runNpm(['run', 'smoke:app-server']);
+runNpm(['run', 'smoke:app-server-client']);
 runNpm(['run', 'smoke:runtime']);
 runNpm(['run', 'smoke:permissions']);
 runNpm(['run', 'smoke:deps']);

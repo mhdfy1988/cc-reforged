@@ -435,10 +435,15 @@ Result:
 {
   "serverInfo": {
     "name": "ccr-app-server",
-    "version": "0.1.0",
+    "version": "0.1",
+    "serverVersion": "0.1",
     "coreVersion": "0.2.0"
   },
+  "serverVersion": "0.1",
   "protocolVersion": "0.1",
+  "schemaVersions": {
+    "config": "0.1"
+  },
   "ccrHome": "C:/Users/<user>/.ccr",
   "platform": {
     "os": "win32",
@@ -1129,7 +1134,7 @@ P4 再补 `config/get`、`auth/status`、`model/list`、`mcp/list`、`workspace/
 1. 启动 app-server。
 2. 发送 config/get，确认返回 not_initialized。
 3. 发送 malformed JSON，确认返回 parse_error。
-4. 发送 initialize，确认返回 protocolVersion/coreVersion/ccrHome。
+4. 发送 initialize，确认返回 protocolVersion/serverVersion/coreVersion/schemaVersions/ccrHome。
 5. 发送 unknown method，确认返回 method_not_found。
 6. 发送 shutdown，确认进程退出。
 ```

@@ -17,6 +17,7 @@ import {
 } from './handlers/sessionHandlers.js'
 import { handleWorkspaceOpen } from './handlers/workspaceHandlers.js'
 import {
+  APP_SERVER_CONFIG_SCHEMA_VERSION,
   APP_SERVER_PROTOCOL_VERSION,
   DEFAULT_SERVER_CAPABILITIES,
   InitializeParamsSchema,
@@ -156,9 +157,14 @@ function initialize(
     serverInfo: {
       name: 'ccr-app-server',
       version: APP_SERVER_PROTOCOL_VERSION,
+      serverVersion: APP_SERVER_PROTOCOL_VERSION,
       coreVersion: getCoreVersion(),
     },
+    serverVersion: APP_SERVER_PROTOCOL_VERSION,
     protocolVersion: APP_SERVER_PROTOCOL_VERSION,
+    schemaVersions: {
+      config: APP_SERVER_CONFIG_SCHEMA_VERSION,
+    },
     ccrHome: context.ccrHome,
     platform: {
       os: process.platform,

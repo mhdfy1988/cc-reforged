@@ -43,7 +43,10 @@ try {
 
   assert.equal(responses[2].id, 2);
   assert.equal(responses[2].result.protocolVersion, '0.1');
+  assert.equal(responses[2].result.serverVersion, '0.1');
   assert.equal(responses[2].result.serverInfo.name, 'ccr-app-server');
+  assert.equal(responses[2].result.serverInfo.serverVersion, '0.1');
+  assert.equal(responses[2].result.schemaVersions.config, '0.1');
   assert.equal(responses[2].result.capabilities.threads, true);
   assert.equal(responses[2].result.capabilities.turns, true);
 
@@ -94,6 +97,7 @@ try {
   const sessionNotifications = sessionMessages.filter(message => !('id' in message));
 
   assert.equal(sessionResponses[0].result.protocolVersion, '0.1');
+  assert.equal(sessionResponses[0].result.serverVersion, '0.1');
   assert.equal(sessionResponses[1].result.workspace.trusted, true);
   const thread = sessionResponses[2].result.thread;
   assert.equal(thread.title, 'Smoke thread');

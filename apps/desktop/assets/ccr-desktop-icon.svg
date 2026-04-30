@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="CCR Desktop icon">
+  <defs>
+    <linearGradient id="paper" x1="128" x2="896" y1="96" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF7E8"/>
+      <stop offset="1" stop-color="#F2E4CF"/>
+    </linearGradient>
+    <linearGradient id="green" x1="240" x2="720" y1="180" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1FAF91"/>
+      <stop offset="1" stop-color="#087865"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="168" x2="720" y1="160" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFB33A"/>
+      <stop offset="1" stop-color="#E47800"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#2D2115" flood-opacity=".20"/>
+    </filter>
+  </defs>
+  <rect x="72" y="72" width="880" height="880" rx="214" fill="url(#paper)"/>
+  <rect x="72" y="72" width="880" height="880" rx="214" fill="none" stroke="#F8D9A4" stroke-width="18"/>
+  <g filter="url(#softShadow)">
+    <path d="M616 266c-52-45-127-70-207-61-150 17-262 144-262 307s112 290 262 307c80 9 155-16 207-61" fill="none" stroke="url(#amber)" stroke-width="142" stroke-linecap="round"/>
+    <path d="M408 758c52 45 127 70 207 61 150-17 262-144 262-307S765 222 615 205c-80-9-155 16-207 61" fill="none" stroke="url(#green)" stroke-width="142" stroke-linecap="round"/>
+  </g>
+  <rect x="420" y="438" width="184" height="148" rx="34" fill="#211B16"/>
+  <path d="M474 486l46 32-46 32" fill="none" stroke="#FFF7E8" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M540 552h54" fill="none" stroke="#F59E0B" stroke-width="24" stroke-linecap="round"/>
+</svg>

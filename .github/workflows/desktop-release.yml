@@ -1,0 +1,91 @@
+name: Desktop Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing git tag to publish, for example v0.2.0
+        required: true
+        type: string
+      draft:
+        description: Create a GitHub Release draft
+        required: true
+        default: true
+        type: boolean
+      signed:
+        description: Build with Windows code signing secrets
+        required: true
+        default: false
+        type: boolean
+      require_signed:
+        description: Fail if the installer Authenticode signature is not valid
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  desktop-release:
+    name: Build and publish Desktop release draft
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm.cmd install
+
+      - name: Run core smoke gate
+        run: npm.cmd run ci:smoke
+
+      - name: Build unsigned Desktop installer
+        if: ${{ !inputs.signed }}
+        run: npm.cmd run desktop:dist
+
+      - name: Build signed Desktop installer
+        if: ${{ inputs.signed }}
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: npm.cmd run desktop:dist:signed
+
+      - name: Verify Desktop release artifacts
+        run: npm.cmd run smoke:desktop-release-artifacts
+
+      - name: Verify Desktop signing readiness
+        env:
+          CCR_REQUIRE_SIGNED: ${{ inputs.require_signed && '1' || '0' }}
+        run: npm.cmd run smoke:desktop-signing-readiness
+
+      - name: Prepare Desktop release summary
+        env:
+          CCR_DESKTOP_RELEASE_TAG: ${{ inputs.tag }}
+        run: npm.cmd run release:desktop:check
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CCR_DESKTOP_RELEASE_TAG: ${{ inputs.tag }}
+        shell: pwsh
+        run: |
+          $releaseArgs = @('--execute')
+          if ('${{ inputs.draft }}' -eq 'true') {
+            $releaseArgs += '--draft'
+          } else {
+            $releaseArgs += '--public'
+          }
+          node ./scripts/prepare-desktop-github-release.mjs @releaseArgs
