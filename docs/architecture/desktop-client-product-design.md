@@ -27,12 +27,12 @@ CCR 客户端的定位是：
 它负责：
 
 - 管理工作区。
-- 展示登录状态。
+- 以轻量方式展示系统状态，正常时只显示 `状态正常`。
 - 选择 provider 和 model。
 - 发起会话和一轮请求。
 - 展示模型流式输出。
 - 展示工具调用过程。
-- 弹出权限确认。
+- 在主聊天流内展示权限请求卡，并回传用户决策。
 - 管理 MCP。
 - 查看日志和诊断信息。
 
@@ -83,7 +83,7 @@ flowchart TD
 6. 用户进入聊天页面。
 7. 用户发送一条消息。
 8. 客户端展示 `item/delta` 流式输出。
-9. 如果工具需要权限，客户端弹窗确认。
+9. 如果工具需要权限，客户端在主聊天流展示权限请求卡。
 10. Turn 完成后展示最终状态。
 
 ---
@@ -121,8 +121,7 @@ flowchart TD
   当前工作区
   模型选择
   上下文用量
-  认证状态
-  App Server 状态
+  状态正常
 
 聊天页内部：
   当前任务现场
@@ -144,7 +143,31 @@ flowchart TD
 
 - [CCR Desktop 主工作台最终版 HTML 视觉稿](./assets/ccr-desktop-main-workbench-clean.html)
 
-最终版方向：浅色主工作台、自适应侧栏、顶部只保留工作区、模型、上下文用量和一个合并后的 `状态正常` 入口。`Codex OAuth`、`App Server`、`Core` 等系统细节只在状态详情里展示，避免占据主界面。
+最终版方向：浅色主工作台、自适应侧栏、顶部只保留工作区、模型、上下文用量和一个合并后的 `状态正常` 入口。`Codex OAuth`、`App Server`、`Core`、最近请求状态等系统细节只在状态详情里展示，避免占据主界面。
+
+最终设计决策：
+
+- 左侧是自适应侧栏，不是固定窄栏，也不是永久展开的文字导航。
+- 顶部只放当前工作所需的最小状态：工作区、模型、上下文用量、`状态正常`。
+- `Codex OAuth`、`App Server`、`Core` 不再作为大号状态胶囊常驻展示。
+- 主聊天区承担任务全过程，工具调用、权限请求、错误和详情都优先在聊天流内展开。
+- 不设计常驻右侧面板；右侧区域后续再用于文件树、diff、上下文文件或任务计划。
+- 底部输入框左侧只保留一个简单 `+`，不写 `+ 上下文`。
+
+顶部状态条最终口径：
+
+```text
+D:\agent_project\xxx    GPT-5.4 ▼    上下文 20K / 200K    ● 状态正常
+```
+
+点击 `状态正常` 后展开详情：
+
+```text
+认证：Codex OAuth 已连接
+App Server：stdio 就绪
+Core：运行中
+最近请求：正常
+```
 
 侧栏交互规则：
 
@@ -152,6 +175,8 @@ flowchart TD
 - 折叠宽度建议 `72px - 88px`，只显示图标，悬停显示 tooltip。
 - 侧栏右边缘支持拖动调整宽度，拖动范围建议 `72px - 240px`。
 - 用户手动折叠、展开或拖动后的宽度应写入本地 UI 配置，下一次启动恢复。
+- 不在侧栏边缘常驻悬浮折叠小按钮，避免干扰工作区和主内容。
+- 折叠入口可以放在菜单、快捷键、双击拖动线或后续设置项里。
 - 侧栏不是工作区入口，工作区始终在顶部状态条展示和切换。
 
 导航关系：
@@ -261,7 +286,7 @@ CCR Desktop
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ 顶栏：workspace / model / context usage / auth / app server  │
+│ 顶栏：workspace / model / context usage / health status      │
 ├───────────────┬─────────────────────────────────────────────┤
 │ 左侧导航      │ 主聊天区                                     │
 │ 聊天          │ 当前任务现场                                 │
@@ -278,7 +303,7 @@ CCR Desktop
 顶部状态条建议：
 
 ```text
-D:\agent_project\xxx    GPT-5.4 ▼    上下文 20K / 200K    Codex OAuth 已连接    App Server 就绪
+D:\agent_project\xxx    GPT-5.4 ▼    上下文 20K / 200K    ● 状态正常
 ```
 
 底部输入框只保留一个简单 `+`，不要写成 `+ 上下文`。`+` 的含义是添加内容，点击后再展开具体菜单：
@@ -322,23 +347,25 @@ D:\agent_project\xxx    GPT-5.4 ▼    上下文 20K / 200K    Codex OAuth 已�
 
 第一版可以只让 `+` 支持引用工作区文件和选择文本文件；图片、目录批量选择、paste store 后续再加。
 
-## 6.4 权限弹窗
+## 6.4 权限请求卡
 
 目标：
 
 - 所有危险工具执行都必须经过用户确认。
 - 客户端只展示和回传决定，不自己判断安全。
+- 权限请求默认内嵌在主聊天流里，不做常驻右侧面板。
+- 如果后续需要阻塞式提醒，可以在权限卡出现时额外触发轻量 toast 或系统通知，但主交互仍以权限卡为准。
 
-权限弹窗内容：
+权限请求卡内容：
 
 ```text
-工具请求权限
-
-工具：Bash
+权限请求
+风险：中风险 · 将执行本地命令
+工具：ShellExecute
 命令：npm.cmd run test
-风险：将执行本地命令
 工作区：D:\agent_project\claude-code-reforged
 
+[详情]
 [允许一次] [本会话允许] [拒绝]
 ```
 
@@ -363,6 +390,7 @@ D:\agent_project\xxx    GPT-5.4 ▼    上下文 20K / 200K    Codex OAuth 已�
 权限判断属于 Core。
 权限展示属于客户端。
 权限结果通过 App Server 回到 Core。
+工具未被允许前，工具结果卡不能提前显示成功态。
 ```
 
 ## 6.5 模型与认证设置页
@@ -404,6 +432,7 @@ Model: GPT-5.4
 - 不展示 refresh token。
 - 账号只展示脱敏信息。
 - 登录流程由 Core 管理，客户端只触发。
+- 主界面顶部不常驻展示 `Codex OAuth 已连接`；正常状态统一收进 `状态正常` 详情。
 
 ## 6.6 MCP 管理页
 
@@ -538,6 +567,27 @@ type PermissionState = {
   pending: PermissionRequestView[]
 }
 ```
+
+## 7.6 UiState
+
+```ts
+type UiState = {
+  sidebar: {
+    mode: 'expanded' | 'collapsed'
+    width: number
+  }
+  healthPopoverOpen: boolean
+  modelPickerOpen: boolean
+  contextMenuOpen: boolean
+}
+```
+
+UI 状态规则：
+
+- `sidebar.width` 只影响客户端布局，不影响 Core。
+- `healthPopoverOpen` 只展示脱敏状态详情，不读取 token。
+- `contextMenuOpen` 对应底部 `+` 菜单，例如引用工作区文件、选择本地文件、粘贴文本。
+- 这些状态可以持久化到 Desktop UI 配置，但不能写进 Core 会话状态。
 
 注意：
 
@@ -748,9 +798,12 @@ apps/desktop/
       McpPage.tsx
       LogsPage.tsx
     components/
+      AdaptiveSidebar.tsx
       ChatTimeline.tsx
-      PermissionDialog.tsx
+      PermissionRequestCard.tsx
       ModelPicker.tsx
+      HealthStatusPopover.tsx
+      ContextAddMenu.tsx
 ```
 
 职责：
@@ -759,7 +812,7 @@ apps/desktop/
 | --- | --- |
 | Main | spawn app-server、stdio JSON-RPC、文件选择、系统通知 |
 | Preload | 暴露安全 IPC API |
-| Renderer | React UI、状态展示、用户交互 |
+| Renderer | React UI、状态展示、侧栏折叠/拖动、用户交互 |
 | App Server | 协议入口 |
 | Core | 真实业务能力 |
 
@@ -837,13 +890,14 @@ Renderer 不直接接触 JSON-RPC 行协议，只调用 preload 暴露的高层�
 - 当前 workspace。
 - 当前 provider / model。
 - 当前上下文用量，例如 `上下文 20K / 200K`。
-- 登录状态。
+- 合并状态入口，例如 `● 状态正常`，点击后展示认证、App Server、Core 和最近请求状态。
 - 会话下拉和历史入口。
 - 消息时间线。
 - 输入框。
 - 输入框左侧简单 `+` 添加入口。
 - 停止按钮。
 - 聊天流内嵌权限请求卡。
+- 自适应侧栏，支持展开、折叠和拖动宽度。
 
 可以后置：
 
@@ -888,18 +942,18 @@ P9 先做 app-server client SDK + 极薄测试客户端。
 客户端第一版可以按下面标准验收：
 
 - 能启动内置 App Server。
-- 能显示 coreVersion 和 protocolVersion。
-- 能读取当前登录状态。
+- 能通过 `状态正常` 详情显示 coreVersion、protocolVersion、认证状态和 App Server 状态。
 - 能读取当前 provider / model。
 - 能打开 workspace。
 - 能创建 thread。
 - 能发送一条消息。
 - 能展示流式输出。
 - 能中断 turn。
-- 能展示 permission/requested 并回传 permission/respond。
+- 能在主聊天流展示 `permission/requested` 权限请求卡并回传 `permission/respond`。
 - 能展示 turn/failed 错误。
 - 不泄露 token。
 - 退出时能关闭 app-server 子进程。
+- 能记住侧栏展开/折叠和拖动宽度。
 
 ---
 
