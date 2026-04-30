@@ -5,6 +5,7 @@ import type { CcrDesktopEvent } from './global.js'
 
 type DesktopStatus = {
   appServer: string
+  platform: string
   repoRoot: string
   runtimeMode: string
   workspacePath: string | null
@@ -109,6 +110,14 @@ type LogSnapshot = {
   }>
 }
 
+const UPDATE_MOCK_ACTIONS = [
+  { status: 'available', label: '发现更新' },
+  { status: 'downloading', label: '下载中' },
+  { status: 'downloaded', label: '已下载' },
+  { status: 'error', label: '失败' },
+  { status: 'disabled', label: '关闭模拟' },
+] as const
+
 function App() {
   const [status, setStatus] = useState<DesktopStatus | null>(null)
   const [events, setEvents] = useState<CcrDesktopEvent[]>([])
@@ -125,6 +134,7 @@ function App() {
   const [page, setPage] = useState<PageId>('chat')
   const [logSnapshot, setLogSnapshot] = useState<LogSnapshot | null>(null)
   const [busy, setBusy] = useState(false)
+  const [activeTurnId, setActiveTurnId] = useState<string | null>(null)
 
   useEffect(() => {
     window.ccr.getStatus().then((nextStatus: DesktopStatus) => {
@@ -152,6 +162,10 @@ function App() {
   const protocol = status?.initialized?.protocolVersion ?? 'unknown'
   const workspacePath = status?.workspacePath ?? workspaceInput
   const updateStatus = status?.updates
+  const canUseUpdateMock = status?.runtimeMode === 'development'
+  const canInterruptTurn = Boolean(activeTurnId && activeTurnId !== 'pending')
+  const hasCustomTitleBar =
+    status?.platform === 'win32' || navigator.userAgent.includes('Windows')
 
   async function runAction(action: () => Promise<unknown>): Promise<void> {
     setBusy(true)
@@ -203,6 +217,7 @@ function App() {
   function applyDesktopEvent(event: CcrDesktopEvent): void {
     if (event.type !== 'notification') {
       if (event.type === 'client-error') {
+        setActiveTurnId(null)
         appendMessage({
           id: `${event.at}-client-error`,
           role: 'error',
@@ -216,11 +231,7 @@ function App() {
     const params = notification.params ?? {}
 
     if (notification.method === 'turn/started') {
-      appendMessage({
-        id: `${event.at}-turn-started`,
-        role: 'system',
-        text: `Turn 已开始：${String(params.turnId ?? 'unknown')}`,
-      })
+      setActiveTurnId(String(params.turnId ?? 'pending'))
       return
     }
 
@@ -242,15 +253,17 @@ function App() {
     }
 
     if (notification.method === 'turn/completed') {
-      appendMessage({
-        id: `${event.at}-turn-completed`,
-        role: 'system',
-        text: 'Turn 已完成。',
-      })
+      setActiveTurnId(null)
+      return
+    }
+
+    if (notification.method === 'turn/cancelled') {
+      setActiveTurnId(null)
       return
     }
 
     if (notification.method === 'turn/failed') {
+      setActiveTurnId(null)
       appendMessage({
         id: `${event.at}-turn-failed`,
         role: 'error',
@@ -295,13 +308,42 @@ function App() {
       role: 'user',
       text,
     })
+    setActiveTurnId('pending')
     setPrompt('')
 
     await runAction(async () => {
-      await window.ccr.startTurn(text)
+      const result = (await window.ccr.startTurn(text)) as {
+        turn?: { turnId?: string }
+      }
+      if (result.turn?.turnId) {
+        setActiveTurnId(result.turn.turnId)
+      }
     }).catch(error => {
+      setActiveTurnId(null)
       appendMessage({
         id: `${Date.now()}-send-error`,
+        role: 'error',
+        text: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
+
+  async function interruptCurrentTurn(): Promise<void> {
+    if (!canInterruptTurn) {
+      return
+    }
+
+    await runAction(async () => {
+      await window.ccr.interruptTurn()
+      setActiveTurnId(null)
+    }).catch(error => {
+      if (isTurnNotActiveError(error)) {
+        setActiveTurnId(null)
+        return
+      }
+
+      appendMessage({
+        id: `${Date.now()}-interrupt-error`,
         role: 'error',
         text: error instanceof Error ? error.message : String(error),
       })
@@ -338,15 +380,10 @@ function App() {
   }
 
   return (
-    <main className="shell">
+    <div className={`app-frame ${hasCustomTitleBar ? 'has-titlebar' : ''}`}>
+      {hasCustomTitleBar ? <WindowTitlebar /> : null}
+      <main className="shell">
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">C</div>
-          <div>
-            <strong>CCR Desktop</strong>
-            <span>v0.1 prototype</span>
-          </div>
-        </div>
         <nav className="nav">
           <button
             className={`nav-item ${page === 'chat' ? 'active' : ''}`}
@@ -381,13 +418,20 @@ function App() {
 
       <section className="workspace">
         <header className="topbar">
-          <div className="workspace-card">
-            <span className="folder">□</span>
+          <button
+            aria-label="选择工作区"
+            className="workspace-card workspace-card-button"
+            disabled={busy}
+            title="点击选择并打开工作区"
+            type="button"
+            onClick={() => runAction(() => window.ccr.chooseWorkspace())}
+          >
+            <span className="workspace-icon" aria-hidden="true" />
             <div>
               <strong>{workspacePath || '未选择工作区'}</strong>
-              <span>Core {coreVersion} · Protocol {protocol}</span>
+              <span>{workspacePath ? '当前工作区 · 点击切换' : '点击选择工作区'}</span>
             </div>
-          </div>
+          </button>
           <button className="model-chip">{model}</button>
           <div className="context-chip">上下文 0K / 200K</div>
           <div className="health-chip">
@@ -401,95 +445,66 @@ function App() {
           />
         </header>
 
-        <section className="hero">
-          <div>
-            <p className="eyebrow">当前任务现场</p>
-            <h1>Desktop 已接入 App Server Client SDK</h1>
-            <p>
-              这个原型已经不是静态壳：main process 会启动本地 App Server，
-              renderer 只能通过 preload 白名单 API 访问。
-            </p>
-          </div>
-          <button
-            className="secondary"
-            disabled={busy}
-            onClick={() => runAction(() => window.ccr.restartAppServer())}
-          >
-            重启 App Server
-          </button>
-        </section>
-
-        <section className="panel controls">
-          <label>
-            工作区
-            <input
-              value={workspaceInput}
-              onChange={event => setWorkspaceInput(event.target.value)}
-              placeholder="D:\\agent_project\\claude-code-reforged"
-            />
-          </label>
-          <button
-            disabled={busy}
-            onClick={() => runAction(() => window.ccr.chooseWorkspace())}
-          >
-            选择
-          </button>
-          <button
-            disabled={busy || !workspaceInput}
-            onClick={() => runAction(() => window.ccr.openWorkspace(workspaceInput))}
-          >
-            信任并打开
-          </button>
-          <button
-            disabled={busy}
-            onClick={() => runAction(() => window.ccr.startThread('CCR Desktop 会话'))}
-          >
-            新建会话
-          </button>
-        </section>
-
         {page === 'chat' ? (
           <>
-            <section className="chat">
-              {messages.map(message => (
-                <div className={`message ${message.role}`} key={message.id}>
-                  <b>{getRoleLabel(message.role)}</b>
-                  <span>
-                    {message.text}
-                    {message.status ? <small> · {message.status}</small> : null}
-                  </span>
+            <section className="workbench-main">
+              <div className="workbench-head">
+                <div className="session-meta">
+                  {status?.thread?.title ?? '当前会话'}
                 </div>
-              ))}
+                <div className="head-actions">
+                  <button
+                    className="head-btn"
+                    disabled={busy}
+                    onClick={() => runAction(() => window.ccr.startThread('CCR Desktop 会话'))}
+                  >
+                    新建会话
+                  </button>
+                </div>
+              </div>
 
-              {permissions.map(permission => (
-                <div className="permission-card" key={permission.permissionRequestId}>
-                  <div>
-                    <b>权限请求</b>
-                    <strong>{permission.toolName}</strong>
-                    <span>{permission.status}</span>
+              <section className="chat">
+                {messages.map(message => (
+                  <div className={`message ${message.role}`} key={message.id}>
+                    <b>{getRoleLabel(message.role)}</b>
+                    <MessageContent message={message} />
                   </div>
-                  <pre>{JSON.stringify(permission.input, null, 2)}</pre>
-                  <div className="permission-actions">
-                    <button
-                      disabled={permission.status !== 'pending'}
-                      onClick={() =>
-                        respondPermission(permission.permissionRequestId, 'allow')
-                      }
-                    >
-                      允许一次
-                    </button>
-                    <button
-                      className="danger"
-                      disabled={permission.status !== 'pending'}
-                      onClick={() =>
-                        respondPermission(permission.permissionRequestId, 'deny')
-                      }
-                    >
-                      拒绝
-                    </button>
+                ))}
+
+                {activeTurnId ? (
+                  <ThinkingIndicator canStop={canInterruptTurn} />
+                ) : null}
+
+                {permissions.map(permission => (
+                  <div className="permission-card" key={permission.permissionRequestId}>
+                    <div>
+                      <b>权限请求</b>
+                      <strong>{permission.toolName}</strong>
+                      <span>{permission.status}</span>
+                    </div>
+                    <pre>{JSON.stringify(permission.input, null, 2)}</pre>
+                    <div className="permission-actions">
+                      <button
+                        disabled={permission.status !== 'pending'}
+                        onClick={() =>
+                          respondPermission(permission.permissionRequestId, 'allow')
+                        }
+                      >
+                        允许一次
+                      </button>
+                      <button
+                        className="danger"
+                        disabled={permission.status !== 'pending'}
+                        onClick={() =>
+                          respondPermission(permission.permissionRequestId, 'deny')
+                        }
+                      >
+                        拒绝
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </section>
             </section>
 
             <footer className="composer">
@@ -504,19 +519,29 @@ function App() {
                 }}
                 placeholder="输入任务，按 Enter 发送..."
               />
-              <button
-                className="send"
-                disabled={busy || !prompt.trim()}
-                onClick={() => sendPrompt()}
-              >
-                发送
-              </button>
+              {activeTurnId ? (
+                <button
+                  className="send stop"
+                  disabled={busy || !canInterruptTurn}
+                  onClick={() => interruptCurrentTurn()}
+                >
+                  停止
+                </button>
+              ) : (
+                <button
+                  className="send"
+                  disabled={busy || !prompt.trim()}
+                  onClick={() => sendPrompt()}
+                >
+                  发送
+                </button>
+              )}
             </footer>
           </>
         ) : null}
 
         {page === 'mcp' ? (
-          <section className="page-panel">
+          <section className="page-panel workbench-main">
             <div className="page-title">
               <div>
                 <p className="eyebrow">MCP 管理</p>
@@ -535,7 +560,7 @@ function App() {
         ) : null}
 
         {page === 'settings' ? (
-          <section className="page-panel cards-grid">
+          <section className="page-panel cards-grid workbench-main">
             <InfoCard title="模型" value={model} detail={`provider: ${provider}`} />
             <InfoCard title="认证" value={authText} detail={status?.auth?.provider ?? 'unknown'} />
             <InfoCard title="Core" value={coreVersion} detail={`protocol: ${protocol}`} />
@@ -587,12 +612,28 @@ function App() {
                   重启安装
                 </button>
               </div>
+              {canUseUpdateMock ? (
+                <div className="dev-mock-actions">
+                  <span>开发态模拟</span>
+                  <div>
+                    {UPDATE_MOCK_ACTIONS.map(action => (
+                      <button
+                        key={action.status}
+                        disabled={busy}
+                        onClick={() => runAction(() => window.ccr.mockUpdateState(action.status))}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </article>
           </section>
         ) : null}
 
         {page === 'logs' ? (
-          <section className="page-panel logs">
+          <section className="page-panel logs workbench-main">
             <div className="page-title">
               <div>
                 <p className="eyebrow">运行日志</p>
@@ -637,7 +678,19 @@ function App() {
           </section>
         ) : null}
       </section>
-    </main>
+      </main>
+    </div>
+  )
+}
+
+function WindowTitlebar() {
+  return (
+    <div className="window-titlebar">
+      <div className="window-titlebar-brand">
+        <span className="window-titlebar-icon">C</span>
+        <span>CCR Desktop</span>
+      </div>
+    </div>
   )
 }
 
@@ -648,6 +701,22 @@ function InfoCard(props: { title: string; value: string; detail: string }) {
       <strong>{props.value}</strong>
       <small>{props.detail}</small>
     </article>
+  )
+}
+
+function ThinkingIndicator(props: { canStop: boolean }) {
+  return (
+    <div aria-live="polite" className="message assistant thinking-message">
+      <b>C</b>
+      <div className="thinking-content">
+        <span>{props.canStop ? '正在处理，可点击停止' : '正在启动'}</span>
+        <span className="thinking-dots" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -699,6 +768,136 @@ function getRoleLabel(role: ChatMessage['role']): string {
   return 'i'
 }
 
+function MessageContent(props: { message: ChatMessage }) {
+  const visibleStatus =
+    props.message.status && props.message.status !== 'completed'
+      ? props.message.status
+      : null
+
+  return (
+    <div className="message-content">
+      {renderMessageBlocks(props.message.text)}
+      {visibleStatus ? <small className="message-status"> · {visibleStatus}</small> : null}
+    </div>
+  )
+}
+
+function renderMessageBlocks(text: string): React.ReactNode[] {
+  const lines = normalizeMessageText(text).split('\n')
+  const blocks: React.ReactNode[] = []
+  let paragraph: string[] = []
+
+  function flushParagraph(): void {
+    if (!paragraph.length) {
+      return
+    }
+
+    const key = `p-${blocks.length}`
+    blocks.push(
+      <p key={key}>
+        {paragraph.map((line, index) => (
+          <React.Fragment key={`${key}-${index}`}>
+            {index > 0 ? <br /> : null}
+            {renderInlineText(line)}
+          </React.Fragment>
+        ))}
+      </p>,
+    )
+    paragraph = []
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim()
+
+    if (!line) {
+      flushParagraph()
+      continue
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/)
+    if (heading) {
+      flushParagraph()
+      blocks.push(<h3 key={`h-${blocks.length}`}>{renderInlineText(heading[2])}</h3>)
+      continue
+    }
+
+    const unordered = line.match(/^[-*]\s+(.+)$/)
+    if (unordered) {
+      const items: string[] = []
+      while (index < lines.length) {
+        const item = lines[index].trim().match(/^[-*]\s+(.+)$/)
+        if (!item) {
+          break
+        }
+        items.push(item[1])
+        index += 1
+      }
+      index -= 1
+      flushParagraph()
+      blocks.push(
+        <ul key={`ul-${blocks.length}`}>
+          {items.map((item, itemIndex) => (
+            <li key={itemIndex}>{renderInlineText(item)}</li>
+          ))}
+        </ul>,
+      )
+      continue
+    }
+
+    const ordered = line.match(/^\d+\.\s+(.+)$/)
+    if (ordered) {
+      const items: string[] = []
+      while (index < lines.length) {
+        const item = lines[index].trim().match(/^\d+\.\s+(.+)$/)
+        if (!item) {
+          break
+        }
+        items.push(item[1])
+        index += 1
+      }
+      index -= 1
+      flushParagraph()
+      blocks.push(
+        <ol key={`ol-${blocks.length}`}>
+          {items.map((item, itemIndex) => (
+            <li key={itemIndex}>{renderInlineText(item)}</li>
+          ))}
+        </ol>,
+      )
+      continue
+    }
+
+    paragraph.push(line)
+  }
+
+  flushParagraph()
+  return blocks.length ? blocks : [<p key="empty">暂无内容</p>]
+}
+
+function normalizeMessageText(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\s+---\s+(#{1,6}\s+)/g, '\n\n$1')
+    .replace(/(\S)\s+(#{1,6}\s+)/g, '$1\n\n$2')
+    .replace(/([。；;：:])\s+(-\s+(?=\S))/g, '$1\n$2')
+    .replace(/([。；;：:])\s+(\d+\.\s+(?=\S))/g, '$1\n$2')
+}
+
+function renderInlineText(text: string): React.ReactNode[] {
+  return text
+    .split(/(`[^`]+`|\*\*[^*]+\*\*)/g)
+    .filter(Boolean)
+    .map((part, index) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={index}>{part.slice(2, -2)}</strong>
+      }
+      if (part.startsWith('`') && part.endsWith('`')) {
+        return <code key={index}>{part.slice(1, -1)}</code>
+      }
+      return <React.Fragment key={index}>{part}</React.Fragment>
+    })
+}
+
 function getToolName(params: JsonObject): string {
   const tool = params.tool
   if (tool && typeof tool === 'object' && 'name' in tool) {
@@ -727,6 +926,10 @@ function stringifyErrorPayload(payload: unknown): string {
     }
   }
   return JSON.stringify(payload)
+}
+
+function isTurnNotActiveError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Turn is not active')
 }
 
 function getUpdateStatusText(updateStatus: DesktopUpdateState | null | undefined): string {

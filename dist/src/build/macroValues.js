@@ -1,6 +1,6 @@
 const defaultBuildTime = new Date().toISOString();
 export const RECOVERY_MACRO_VALUES = Object.freeze({
-    VERSION: process.env.CC_REFORGED_VERSION ?? '0.2',
+    VERSION: process.env.CC_REFORGED_VERSION ?? '0.3',
     BUILD_TIME: process.env.CC_REFORGED_BUILD_TIME ?? defaultBuildTime,
     PACKAGE_URL: process.env.CC_REFORGED_PACKAGE_URL ?? 'ccr-cli',
     NATIVE_PACKAGE_URL: process.env.CC_REFORGED_NATIVE_PACKAGE_URL ?? 'ccr-cli',

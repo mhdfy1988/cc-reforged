@@ -19,7 +19,9 @@ const api = {
   checkForUpdates: () => ipcRenderer.invoke('ccr:update-check'),
   downloadUpdate: () => ipcRenderer.invoke('ccr:update-download'),
   installUpdate: () => ipcRenderer.invoke('ccr:update-install'),
+  mockUpdateState: (status: string) => ipcRenderer.invoke('ccr:update-dev-mock', status),
   startTurn: (text: string) => ipcRenderer.invoke('ccr:start-turn', text),
+  interruptTurn: () => ipcRenderer.invoke('ccr:turn-interrupt'),
   respondPermission: (input: {
     permissionRequestId: string
     behavior: 'allow' | 'deny'

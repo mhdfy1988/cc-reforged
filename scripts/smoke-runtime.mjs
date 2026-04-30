@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const tmpDir = resolve(repoRoot, 'tmp', 'runtime-smoke');
 mkdirSync(tmpDir, { recursive: true });
+const packageJson = JSON.parse(
+  readFileSync(resolve(repoRoot, 'package.json'), 'utf8'),
+);
+const expectedCliVersion = packageJson.version.split('.').slice(0, 2).join('.');
 
 function runNode(args, options = {}) {
   const result = spawnSync(process.execPath, args, {
@@ -24,7 +28,7 @@ function runNode(args, options = {}) {
 
 const version = runNode(['cli.js', '--version']);
 assert.equal(version.status, 0, version.stderr);
-assert.match(version.stdout, /^CCR v0\.2\s*$/);
+assert.equal(version.stdout.trim(), `CCR v${expectedCliVersion}`);
 
 const help = runNode(['cli.js', '--help']);
 assert.equal(help.status, 0, help.stderr);

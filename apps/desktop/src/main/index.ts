@@ -1,14 +1,15 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron'
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  AppServerClientError,
   startManagedStdioAppServerClient,
   type ManagedStdioAppServerClient,
 } from '../../../../src/app-server/client/index.js'
 import { DesktopUpdateService } from './updateService.js'
-import type { DesktopUpdateState } from './updateState.js'
+import type { DesktopUpdateState, DesktopUpdateStatus } from './updateState.js'
 import type {
   AuthStatusResult,
   ConfigGetResult,
@@ -16,6 +17,7 @@ import type {
   JsonRpcNotification,
   McpListResult,
   ThreadStartResult,
+  TurnInterruptResult,
   TurnStartResult,
   WorkspaceOpenResult,
 } from '../../../../src/app-server/protocol.js'
@@ -39,6 +41,7 @@ type DesktopRuntime = {
 
 type DesktopStatus = {
   appServer: DesktopAppServerStatus
+  platform: NodeJS.Platform
   repoRoot: string
   runtimeMode: DesktopRuntimeMode
   workspacePath: string | null
@@ -88,6 +91,7 @@ let updateInstallInProgress = false
 
 const status: DesktopStatus = {
   appServer: 'idle',
+  platform: process.platform,
   repoRoot,
   runtimeMode: runtime.mode,
   workspacePath: null,
@@ -177,7 +181,7 @@ function getLogDir(): string {
 }
 
 async function appendDesktopLog(
-  fileName: 'main.log' | 'app-server.stderr.log' | 'client-error.log',
+  fileName: 'main.log' | 'app-server.stderr.log' | 'client-error.log' | 'renderer.log',
   payload: Record<string, unknown>,
 ): Promise<void> {
   try {
@@ -198,7 +202,7 @@ async function appendDesktopLog(
 async function readDesktopLogs(): Promise<DesktopLogSnapshot> {
   const logDir = getLogDir()
   const files = await Promise.all(
-    ['main.log', 'app-server.stderr.log', 'client-error.log'].map(
+    ['main.log', 'app-server.stderr.log', 'client-error.log', 'renderer.log'].map(
       async name => ({
         name,
         path: join(logDir, name),
@@ -382,15 +386,77 @@ async function bootstrapAppServer(): Promise<void> {
 }
 
 function handleNotification(notification: JsonRpcNotification): void {
+  const params = notification.params
+
   if (notification.method === 'thread/started') {
-    const thread = notification.params?.thread
+    const thread = params?.thread
     if (thread && typeof thread === 'object') {
       status.thread = thread as DesktopStatus['thread']
     }
   }
 
+  if (notification.method === 'turn/started') {
+    const threadId = String(params?.threadId ?? '')
+    const turnId = String(params?.turnId ?? '')
+    if (status.thread?.threadId === threadId) {
+      status.thread = {
+        ...status.thread,
+        activeTurnId: turnId,
+        status: 'running',
+        updatedAt: new Date().toISOString(),
+      }
+    }
+    if (status.lastTurn?.turnId === turnId) {
+      status.lastTurn = {
+        ...status.lastTurn,
+        status: 'running',
+        startedAt: new Date().toISOString(),
+      }
+    }
+  }
+
+  if (notification.method === 'turn/completed') {
+    updateTurnFinishedState(params, 'completed')
+  }
+
+  if (notification.method === 'turn/cancelled') {
+    updateTurnFinishedState(params, 'cancelled')
+  }
+
   if (notification.method === 'turn/failed') {
+    updateTurnFinishedState(params, 'failed', params?.error)
     status.lastError = 'Turn failed. Open event details for more information.'
+  }
+}
+
+function updateTurnFinishedState(
+  params: JsonRpcNotification['params'],
+  nextStatus: NonNullable<DesktopStatus['lastTurn']>['status'],
+  error?: unknown,
+): void {
+  const threadId = String(params?.threadId ?? '')
+  const turnId = String(params?.turnId ?? '')
+  const completedAt = new Date().toISOString()
+
+  if (status.thread?.threadId === threadId) {
+    status.thread = {
+      ...status.thread,
+      activeTurnId: null,
+      status: nextStatus,
+      updatedAt: completedAt,
+    }
+  }
+
+  if (status.lastTurn?.turnId === turnId) {
+    status.lastTurn = {
+      ...status.lastTurn,
+      status: nextStatus,
+      completedAt,
+      error:
+        error && typeof error === 'object'
+          ? (error as Record<string, unknown>)
+          : status.lastTurn.error,
+    }
   }
 }
 
@@ -458,12 +524,64 @@ async function startTurn(text: string): Promise<TurnStartResult> {
     },
   })
   status.lastTurn = result.turn
+  if (status.thread?.threadId === result.turn.threadId) {
+    status.thread = {
+      ...status.thread,
+      activeTurnId: result.turn.turnId,
+      status: result.turn.status,
+      updatedAt: new Date().toISOString(),
+    }
+  }
   broadcast('state', { message: 'turn queued', turn: result.turn })
   return result
 }
 
+async function interruptTurn(): Promise<TurnInterruptResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+
+  const threadId = status.thread?.threadId ?? status.lastTurn?.threadId
+  const turnId = status.thread?.activeTurnId
+  if (!threadId || !turnId) {
+    return { accepted: false }
+  }
+
+  try {
+    const result = await managedClient.client.interruptTurn({
+      threadId,
+      turnId,
+      reason: 'Desktop user requested stop.',
+    })
+    broadcast('state', { message: 'turn interrupt requested', threadId, turnId })
+    return result
+  } catch (error) {
+    if (isTurnNotActiveError(error)) {
+      updateTurnFinishedState({ threadId, turnId }, 'completed')
+      broadcast('state', { message: 'turn already inactive', threadId, turnId })
+      return { accepted: false }
+    }
+    throw error
+  }
+}
+
+function isTurnNotActiveError(error: unknown): boolean {
+  if (error instanceof AppServerClientError) {
+    const details = error.details
+    return (
+      typeof details === 'object' &&
+      details !== null &&
+      'kind' in details &&
+      details.kind === 'turn_not_active'
+    )
+  }
+  return error instanceof Error && error.message.includes('Turn is not active')
+}
+
 function createWindow(): void {
   const windowIcon = resolveDesktopWindowIcon()
+  const useCustomTitleBar = process.platform === 'win32'
 
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -473,13 +591,27 @@ function createWindow(): void {
     title: 'CCR Desktop',
     icon: windowIcon,
     backgroundColor: '#f7efe3',
+    autoHideMenuBar: true,
+    ...(useCustomTitleBar
+      ? {
+          titleBarStyle: 'hidden',
+          titleBarOverlay: {
+            color: '#fbf4e9',
+            symbolColor: '#211b16',
+            height: 34,
+          },
+        }
+      : {}),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
     },
   })
+
+  mainWindow.setMenuBarVisibility(false)
+  attachRendererDiagnostics(mainWindow)
 
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -490,6 +622,92 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+}
+
+function attachRendererDiagnostics(window: BrowserWindow): void {
+  const diagnosticsEnabled =
+    runtime.mode === 'development' || process.env.CCR_DESKTOP_RENDERER_DIAGNOSTICS === '1'
+  if (!diagnosticsEnabled) {
+    return
+  }
+
+  const preloadPath = join(__dirname, '../preload/index.mjs')
+  void appendDesktopLog('renderer.log', {
+    event: 'window-created',
+    rendererUrl: process.env.ELECTRON_RENDERER_URL ?? null,
+    preloadPath,
+    preloadExists: existsSync(preloadPath),
+  })
+
+  window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    void appendDesktopLog('renderer.log', {
+      event: 'console-message',
+      level,
+      message,
+      line,
+      sourceId,
+    })
+  })
+
+  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    void appendDesktopLog('renderer.log', {
+      event: 'did-fail-load',
+      errorCode,
+      errorDescription,
+      validatedURL,
+    })
+  })
+
+  window.webContents.on('preload-error', (_event, preloadPath, error) => {
+    void appendDesktopLog('renderer.log', {
+      event: 'preload-error',
+      preloadPath,
+      message: error.message,
+      stack: error.stack,
+    })
+  })
+
+  window.webContents.on('render-process-gone', (_event, details) => {
+    void appendDesktopLog('renderer.log', {
+      event: 'render-process-gone',
+      details,
+    })
+  })
+
+  window.webContents.on('did-finish-load', () => {
+    void appendDesktopLog('renderer.log', {
+      event: 'did-finish-load',
+      url: window.webContents.getURL(),
+    })
+    void window.webContents
+      .executeJavaScript(
+        `({
+          href: window.location.href,
+          hasCcr: Boolean(window.ccr),
+          hasRoot: Boolean(document.getElementById('root')),
+          rootChildren: document.getElementById('root')?.childElementCount ?? null,
+          bodyText: document.body.innerText.slice(0, 300),
+          scripts: Array.from(document.scripts).map(script => script.src),
+        })`,
+        true,
+      )
+      .then(snapshot => {
+        void appendDesktopLog('renderer.log', {
+          event: 'renderer-snapshot',
+          snapshot,
+        })
+      })
+      .catch(error => {
+        void appendDesktopLog('renderer.log', {
+          event: 'renderer-snapshot-error',
+          message: error instanceof Error ? error.message : String(error),
+        })
+      })
+  })
+
+  if (process.env.CCR_DESKTOP_OPEN_DEVTOOLS === '1') {
+    window.webContents.openDevTools({ mode: 'detach' })
+  }
 }
 
 function resolveDesktopWindowIcon(): string | undefined {
@@ -579,8 +797,16 @@ ipcMain.handle('ccr:update-install', async () => {
   return ensureUpdateService().installUpdate()
 })
 
+ipcMain.handle('ccr:update-dev-mock', async (_event, nextStatus: DesktopUpdateStatus) => {
+  return ensureUpdateService().applyDevelopmentMock(nextStatus)
+})
+
 ipcMain.handle('ccr:start-turn', async (_event, text: string) => {
   return startTurn(text)
+})
+
+ipcMain.handle('ccr:turn-interrupt', async () => {
+  return interruptTurn()
 })
 
 ipcMain.handle(
@@ -602,6 +828,7 @@ ipcMain.handle(
 )
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null)
   createWindow()
   ensureUpdateService()
   ensureAppServer().catch(() => undefined)

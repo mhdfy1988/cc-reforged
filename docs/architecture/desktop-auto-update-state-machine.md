@@ -92,6 +92,14 @@ development mode
 -> disabled
 ```
 
+开发态可通过专用模拟入口临时切换到：
+
+```text
+available / downloading / downloaded / error
+```
+
+这条路径只用于肉眼验收顶栏提示、设置页状态和按钮交互，不访问真实 GitHub Release，也不触发真实安装器。
+
 ## 4. 关键输入输出
 
 输入：
@@ -119,6 +127,14 @@ disabled: auto update is disabled in development mode
 ```
 
 原因是开发态没有真实安装器、没有稳定 app identity，也不应该误触发下载和安装。
+
+为了验证 UI，开发态额外提供状态模拟入口：
+
+```text
+设置页 -> 自动更新 -> 开发态模拟
+```
+
+模拟入口可以切换 `发现更新 / 下载中 / 已下载 / 失败 / 关闭模拟`。它复用同一份 `DesktopUpdateState` 和同一套 renderer 展示逻辑，但 `DesktopUpdateService` 会拦截真实 `checkForUpdates / downloadUpdate / installUpdate` 调用，不会调用 `electron-updater` 下载或退出安装。
 
 ### 打包态可用
 
@@ -167,6 +183,7 @@ DesktopUpdateService.installUpdate()
 | `ccr:update-check` | 检查更新 |
 | `ccr:update-download` | 下载更新 |
 | `ccr:update-install` | 重启并安装更新 |
+| `ccr:update-dev-mock` | 开发态模拟更新状态 |
 
 preload 只暴露白名单方法：
 
@@ -175,6 +192,7 @@ getUpdateStatus()
 checkForUpdates()
 downloadUpdate()
 installUpdate()
+mockUpdateState()
 ```
 
 renderer 不直接访问 `electron-updater`。
@@ -182,6 +200,13 @@ renderer 不直接访问 `electron-updater`。
 ## 7. UI 第一版
 
 自动更新入口放在设置页。
+
+顶栏只在需要用户注意时出现轻量提示：
+
+- `available`：展示新版本和 `下载更新`。
+- `downloading`：展示下载进度。
+- `downloaded`：展示 `重启安装`。
+- `error`：展示失败原因和 `重试`。
 
 显示内容：
 
@@ -198,6 +223,8 @@ renderer 不直接访问 `electron-updater`。
 - 重启安装。
 
 按钮是否可点击由主进程状态里的 `canCheck / canDownload / canInstall` 决定。
+
+开发态设置页会额外显示“开发态模拟”按钮，用于不用真实 release 就预览上述顶栏状态；打包态不显示这组按钮。
 
 ## 8. 后续增强
 
