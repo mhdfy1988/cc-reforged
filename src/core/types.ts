@@ -51,6 +51,24 @@ export type CoreItem = CoreJsonObject & {
   status: string
 }
 
+export type CorePermissionRequest = {
+  permissionRequestId: string
+  threadId: string
+  turnId: string
+  tool: {
+    name: string
+    displayName?: string
+    description?: string
+  }
+  input: CoreJsonObject
+  permissionSuggestions?: readonly CoreJsonObject[]
+  blockedPath?: string
+  decisionReason?: string
+  toolUseId: string
+  agentId?: string
+  createdAt: string
+}
+
 export type CoreTurnEvent =
   | {
       type: 'thread_started'
@@ -93,6 +111,17 @@ export type CoreTurnEvent =
     }
   | {
       type: 'turn_cancelled'
+      threadId: string
+      turnId: string
+      reason: string
+    }
+  | {
+      type: 'permission_requested'
+      request: CorePermissionRequest
+    }
+  | {
+      type: 'permission_cancelled'
+      permissionRequestId: string
       threadId: string
       turnId: string
       reason: string

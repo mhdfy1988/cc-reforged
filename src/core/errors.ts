@@ -6,6 +6,8 @@ export type CoreErrorKind =
   | 'thread_not_found'
   | 'turn_not_found'
   | 'turn_not_active'
+  | 'permission_not_found'
+  | 'permission_not_pending'
   | 'internal_error'
 
 export class CoreError extends Error {

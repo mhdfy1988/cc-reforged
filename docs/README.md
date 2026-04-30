@@ -17,6 +17,7 @@
 - [CCR Core 统一对外接口边界](./architecture/ccr-core-interface-boundary.md)
 - [CCR App Server 协议详细设计](./architecture/app-server-protocol-design.md)
 - [CCR App Server 会话 API 设计](./architecture/app-server-session-api-design.md)
+- [CCR App Server 权限复用设计](./architecture/app-server-permission-reuse-design.md)
 - [CCR 客户端产品与交互设计](./architecture/desktop-client-product-design.md)
 - [CCR Desktop 客户端框架选型](./architecture/desktop-framework-selection.md)
 - [CCR 升级管理策略](./architecture/upgrade-management-strategy.md)

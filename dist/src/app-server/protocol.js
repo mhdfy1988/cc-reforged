@@ -90,6 +90,20 @@ export const TurnInterruptParamsSchema = z
     reason: z.string().min(1).optional(),
 })
     .strict();
+export const PermissionRespondParamsSchema = z
+    .object({
+    permissionRequestId: z.string().min(1),
+    behavior: z.enum(['allow', 'deny']),
+    updatedInput: JsonRpcParamsSchema.optional(),
+    updatedPermissions: z.array(z.unknown()).optional(),
+    message: z.string().optional(),
+    interrupt: z.boolean().optional(),
+    toolUseID: z.string().optional(),
+    decisionClassification: z
+        .enum(['user_temporary', 'user_permanent', 'user_reject'])
+        .optional(),
+})
+    .strict();
 export const DEFAULT_SERVER_CAPABILITIES = {
     config: true,
     auth: true,
@@ -98,7 +112,7 @@ export const DEFAULT_SERVER_CAPABILITIES = {
     workspace: true,
     threads: true,
     turns: true,
-    permissions: false,
+    permissions: true,
 };
 export function successResponse(id, result) {
     return {

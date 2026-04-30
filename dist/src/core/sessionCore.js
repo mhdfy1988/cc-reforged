@@ -84,6 +84,11 @@ export class CoreSessionService {
             throw new CoreError('turn_not_active', 'Turn is not active.');
         }
         this.#activeTurn.abortController.abort(input.reason ?? 'interrupted');
+        this.options.cancelPermissionsForTurn?.({
+            threadId: thread.threadId,
+            turnId: turn.turnId,
+            reason: input.reason ?? 'interrupted',
+        });
         turn.status = 'cancelled';
         turn.completedAt = new Date().toISOString();
         thread.activeTurnId = null;
@@ -152,6 +157,11 @@ export class CoreSessionService {
             if (this.#activeTurn?.turnId === turn.turnId) {
                 this.#activeTurn = null;
             }
+            this.options.cancelPermissionsForTurn?.({
+                threadId: turn.threadId,
+                turnId: turn.turnId,
+                reason: turn.status,
+            });
             thread.updatedAt = new Date().toISOString();
         }
     }

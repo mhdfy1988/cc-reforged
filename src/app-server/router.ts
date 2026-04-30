@@ -8,6 +8,7 @@ import {
   handleModelList,
 } from './handlers/llmHandlers.js'
 import { handleMcpList } from './handlers/mcpHandlers.js'
+import { handlePermissionRespond } from './handlers/permissionHandlers.js'
 import {
   handleThreadList,
   handleThreadStart,
@@ -118,6 +119,11 @@ export async function handleJsonRpcMessage(
         return successResponse(
           request.id,
           handleTurnInterrupt(context, request.params),
+        )
+      case 'permission/respond':
+        return successResponse(
+          request.id,
+          handlePermissionRespond(context, request.params),
         )
       default:
         return errorResponse(

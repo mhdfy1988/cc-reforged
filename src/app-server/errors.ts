@@ -16,6 +16,8 @@ export type AppServerErrorKind =
   | 'thread_not_found'
   | 'turn_not_found'
   | 'turn_not_active'
+  | 'permission_not_found'
+  | 'permission_not_pending'
 
 type ErrorDescriptor = {
   code: number
@@ -78,6 +80,14 @@ const ERROR_DESCRIPTORS: Record<AppServerErrorKind, ErrorDescriptor> = {
   turn_not_active: {
     code: -32013,
     message: 'Turn is not active.',
+  },
+  permission_not_found: {
+    code: -32021,
+    message: 'Permission request not found.',
+  },
+  permission_not_pending: {
+    code: -32022,
+    message: 'Permission request is no longer pending.',
   },
 }
 

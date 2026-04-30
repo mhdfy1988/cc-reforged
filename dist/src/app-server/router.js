@@ -4,6 +4,7 @@ import { coreEventToJsonRpcNotification } from './coreEventMapper.js';
 import { AppServerError, errorResponse } from './errors.js';
 import { handleAuthStatus, handleConfigGet, handleModelList, } from './handlers/llmHandlers.js';
 import { handleMcpList } from './handlers/mcpHandlers.js';
+import { handlePermissionRespond } from './handlers/permissionHandlers.js';
 import { handleThreadList, handleThreadStart, handleTurnInterrupt, handleTurnStart, } from './handlers/sessionHandlers.js';
 import { handleWorkspaceOpen } from './handlers/workspaceHandlers.js';
 import { APP_SERVER_PROTOCOL_VERSION, DEFAULT_SERVER_CAPABILITIES, InitializeParamsSchema, JsonRpcRequestSchema, ShutdownParamsSchema, successResponse, } from './protocol.js';
@@ -56,6 +57,8 @@ export async function handleJsonRpcMessage(context, rawMessage) {
                 return successResponse(request.id, handleTurnStart(context, request.params));
             case 'turn/interrupt':
                 return successResponse(request.id, handleTurnInterrupt(context, request.params));
+            case 'permission/respond':
+                return successResponse(request.id, handlePermissionRespond(context, request.params));
             default:
                 return errorResponse(request.id, new AppServerError('method_not_found', `Method not found: ${request.method}`));
         }

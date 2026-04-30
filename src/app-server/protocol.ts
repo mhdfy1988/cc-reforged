@@ -108,6 +108,21 @@ export const TurnInterruptParamsSchema = z
   })
   .strict()
 
+export const PermissionRespondParamsSchema = z
+  .object({
+    permissionRequestId: z.string().min(1),
+    behavior: z.enum(['allow', 'deny']),
+    updatedInput: JsonRpcParamsSchema.optional(),
+    updatedPermissions: z.array(z.unknown()).optional(),
+    message: z.string().optional(),
+    interrupt: z.boolean().optional(),
+    toolUseID: z.string().optional(),
+    decisionClassification: z
+      .enum(['user_temporary', 'user_permanent', 'user_reject'])
+      .optional(),
+  })
+  .strict()
+
 export type JsonRpcId = z.infer<typeof JsonRpcIdSchema>
 export type JsonRpcResponseId = JsonRpcId | null
 export type JsonRpcParams = z.infer<typeof JsonRpcParamsSchema>
@@ -118,6 +133,9 @@ export type InitializeParams = z.infer<typeof InitializeParamsSchema>
 export type WorkspaceOpenParams = z.infer<typeof WorkspaceOpenParamsSchema>
 export type ThreadStartParams = z.infer<typeof ThreadStartParamsSchema>
 export type TurnStartParams = z.infer<typeof TurnStartParamsSchema>
+export type PermissionRespondParams = z.infer<
+  typeof PermissionRespondParamsSchema
+>
 
 export type ServerCapabilities = {
   config: boolean
@@ -165,7 +183,7 @@ export const DEFAULT_SERVER_CAPABILITIES: ServerCapabilities = {
   workspace: true,
   threads: true,
   turns: true,
-  permissions: false,
+  permissions: true,
 }
 
 export function successResponse(

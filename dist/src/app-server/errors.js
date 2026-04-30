@@ -56,6 +56,14 @@ const ERROR_DESCRIPTORS = {
         code: -32013,
         message: 'Turn is not active.',
     },
+    permission_not_found: {
+        code: -32021,
+        message: 'Permission request not found.',
+    },
+    permission_not_pending: {
+        code: -32022,
+        message: 'Permission request is no longer pending.',
+    },
 };
 export class AppServerError extends Error {
     kind;

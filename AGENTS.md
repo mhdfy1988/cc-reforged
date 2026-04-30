@@ -92,7 +92,15 @@
 5. 真实登录凭据、token、refresh token 和 credential JSON 绝不打印、不贴回复、不写入文档；验证只输出脱敏状态和路径。
 6. 这类接入验证失败时，先回到资料对照和实际 payload/transport 差异排查，不得优先猜测网络、代理或环境问题。
 
-## 10. 详细规则入口
+## 10. 已有能力与成熟方案复用护栏
+
+1. 新增或改造功能前，必须先检索当前仓库是否已经存在同类能力、类型、协议、service、hook、UI 组件或测试脚本；已有能力不得重复造一套。
+2. 如果已有能力只差入口适配，应优先做适配层或补 Core API，不得在 App Server / Desktop / VS Code / CLI / TUI 各自复制业务逻辑。
+3. 如果第三方已经有成熟稳定的通用能力，默认先评估复用；不要为了“自己写”而手搓 OAuth、SDK 协议、MCP 客户端、运行时校验、日志、HTTP/JSON-RPC、配置解析等通用工程能力。
+4. 只有在确认现有能力不适用、第三方方案边界不匹配或为了阶段性最小原型时，才允许新写实现；必须在文档或代码注释里说明不复用的原因。
+5. 详细执行清单见 [06-existing-capability-and-reuse.md](D:/agent_project/claude-code-reforged/docs/agent-rules/06-existing-capability-and-reuse.md)。
+
+## 11. 详细规则入口
 
 按需读取，不要一次性加载全部分册：
 
@@ -101,3 +109,4 @@
 3. [03-type-narrowing-patterns.md](D:/agent_project/claude-code-reforged/docs/agent-rules/03-type-narrowing-patterns.md)（类型收口与 guard 模式）
 4. [04-review-thread-governance.md](D:/agent_project/claude-code-reforged/docs/agent-rules/04-review-thread-governance.md)（审查线程治理与纠偏）
 5. [05-retro-and-doc-sync.md](D:/agent_project/claude-code-reforged/docs/agent-rules/05-retro-and-doc-sync.md)（复盘模板与文档同步）
+6. [06-existing-capability-and-reuse.md](D:/agent_project/claude-code-reforged/docs/agent-rules/06-existing-capability-and-reuse.md)（已有能力检索、第三方成熟方案复用、新实现准入）

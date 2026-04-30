@@ -73,6 +73,23 @@ export function coreEventToJsonRpcNotification(event) {
                     reason: event.reason,
                 },
             };
+        case 'permission_requested':
+            return {
+                jsonrpc: '2.0',
+                method: 'permission/requested',
+                params: event.request,
+            };
+        case 'permission_cancelled':
+            return {
+                jsonrpc: '2.0',
+                method: 'permission/cancelled',
+                params: {
+                    permissionRequestId: event.permissionRequestId,
+                    threadId: event.threadId,
+                    turnId: event.turnId,
+                    reason: event.reason,
+                },
+            };
     }
 }
 //# sourceMappingURL=coreEventMapper.js.map

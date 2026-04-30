@@ -3,7 +3,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const tempDir = mkdtempSync(join(tmpdir(), 'ccr-app-server-smoke-'));
@@ -117,6 +117,19 @@ try {
     ),
   );
 
+  const permissionSmoke = runPermissionSmoke();
+  assert.equal(permissionSmoke.status, 0, permissionSmoke.stderr);
+  assert.equal(permissionSmoke.stderr, '');
+  const permissionSmokeResult = JSON.parse(permissionSmoke.stdout);
+  assert.equal(permissionSmokeResult.ok, true);
+  assert.ok(permissionSmokeResult.checked.includes('permission/requested'));
+  assert.ok(permissionSmokeResult.checked.includes('permission/respond_allow'));
+  assert.ok(
+    permissionSmokeResult.checked.includes('permission/respond_duplicate'),
+  );
+  assert.ok(permissionSmokeResult.checked.includes('permission/respond_missing'));
+  assert.ok(permissionSmokeResult.checked.includes('permission/cancelled'));
+
   console.log(
     JSON.stringify(
       {
@@ -135,6 +148,11 @@ try {
           'thread/start',
           'thread/list',
           'turn/start_auth_required_failure',
+          'permission/requested',
+          'permission/respond_allow',
+          'permission/respond_duplicate',
+          'permission/respond_missing',
+          'permission/cancelled',
         ],
       },
       null,
@@ -156,6 +174,24 @@ function runAppServer(messages) {
     input,
     maxBuffer: 1024 * 1024 * 10,
   });
+}
+
+function runPermissionSmoke() {
+  return spawnSync(
+    process.execPath,
+    [
+      '--no-warnings',
+      '--experimental-loader',
+      pathToFileURL(join(repoRoot, 'bun-bundle-loader.mjs')).href,
+      join(repoRoot, 'scripts', 'smoke-app-server-permissions.mjs'),
+    ],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: getSmokeEnv(),
+      maxBuffer: 1024 * 1024 * 10,
+    },
+  );
 }
 
 async function runInteractiveSessionSmoke() {
