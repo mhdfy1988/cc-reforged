@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -50,7 +50,22 @@ for (const key of [
 ]) {
   delete authGateEnv[key];
 }
-authGateEnv.CCR_CONFIG_DIR = resolve(tmpDir, 'config');
+const authGateConfigDir = resolve(tmpDir, 'auth-gate-config');
+rmSync(authGateConfigDir, { recursive: true, force: true });
+mkdirSync(authGateConfigDir, { recursive: true });
+authGateEnv.CCR_CONFIG_DIR = authGateConfigDir;
+authGateEnv.CCR_LLM_CONFIG_PATH = resolve(
+  authGateConfigDir,
+  'data',
+  'llm.config.local.json',
+);
+authGateEnv.CCR_LLM_PROVIDER = 'codex-oauth';
+authGateEnv.CCR_LLM_MODEL = 'gpt-5.4';
+authGateEnv.CCR_CODEX_OAUTH_CREDENTIAL_FILE = resolve(
+  authGateConfigDir,
+  'data',
+  'codex-oauth.json',
+);
 
 const unauthenticatedPrompt = runNode(
   [
@@ -58,14 +73,14 @@ const unauthenticatedPrompt = runNode(
     '-p',
     'Reply exactly: OK',
     '--model',
-    'sonnet',
+    'gpt-5.4',
     '--output-format',
     'json',
     '--max-budget-usd',
     '0.01',
     '--no-session-persistence',
   ],
-  { env: authGateEnv, timeout: 60_000 },
+  { env: authGateEnv, timeout: 20_000 },
 );
 assert.equal(unauthenticatedPrompt.status, 1);
 const promptResult = JSON.parse(unauthenticatedPrompt.stdout);

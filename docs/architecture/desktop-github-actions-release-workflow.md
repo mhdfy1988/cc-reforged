@@ -184,6 +184,7 @@ CI 正式上传
 - release 资产必须先通过本地 metadata 校验。
 - `latest.yml`、安装器和 `.blockmap` 必须来自同一次构建。
 - workflow 只负责发布 Desktop 安装器，不负责 npm publish。
+- workflow 中的 smoke 必须是可重复的隔离测试，不允许依赖本机 `~/.ccr`、真实登录态或用户目录里的 OAuth 凭据；如果要验证未登录分支，必须显式指定临时 `CCR_CONFIG_DIR`、临时 `CCR_LLM_CONFIG_PATH`、临时 `CCR_CODEX_OAUTH_CREDENTIAL_FILE`。
 
 ## 7. 本地校验
 
