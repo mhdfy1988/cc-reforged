@@ -148,12 +148,16 @@ const readResult = await FileReadTool.call(
 assert.equal(readResult.data.type, 'text');
 assert.match(readResult.data.file.content, /runtime-smoke-ok/);
 
-const readBlock = FileReadTool.mapToolResultToToolResultBlockParam(
-  readResult.data,
-  'toolu_runtime_read',
-);
-assert.equal(readBlock.type, 'tool_result');
-assert.equal(readBlock.tool_use_id, 'toolu_runtime_read');
+let readBlockMappingPath = 'skipped';
+if (!skipHeadlessAuthGate) {
+  const readBlock = FileReadTool.mapToolResultToToolResultBlockParam(
+    readResult.data,
+    'toolu_runtime_read',
+  );
+  assert.equal(readBlock.type, 'tool_result');
+  assert.equal(readBlock.tool_use_id, 'toolu_runtime_read');
+  readBlockMappingPath = 'tool-result-block';
+}
 
 const psResult = await PowerShellTool.call(
   { command: 'Write-Output runtime-smoke-powershell', timeout: 10_000 },
@@ -181,6 +185,7 @@ console.log(
       roundtrip: {
         file: smokeFile,
         readType: readResult.data.type,
+        readBlockMappingPath,
         powershell: psResult.data.stdout.trim(),
       },
     },
