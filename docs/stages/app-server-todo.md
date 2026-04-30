@@ -19,7 +19,7 @@
 ## 当前指针
 
 - 进行中：P8 权限请求与客户端响应闭环
-- 当前正在做：P8 第一刀已完成，已有 Core permission adapter 与 App Server `permission/respond` 协议桥；下一步是把真实 tool-capable runner 接进 adapter 提供的 `canUseTool`。
+- 当前正在做：P8 第二刀已完成，Core session 已改为通过 `runCoreQueryTurn` 复用现有 `query()` 主执行链；下一步补更强的工具流 smoke / 真实工具验证。
 - 完成后下一项：P9 Desktop 原型接入准备
 
 ## P0 现状盘点与边界确认
@@ -324,7 +324,8 @@ scripts/smoke-app-server-workspace.mjs
 - 原代码已有完整权限体系，App Server 不能重写权限大脑。
 - P8 第一刀应先实现薄 adapter：把原 SDK `can_use_tool` 语义映射成 App Server 的 `permission/requested` 和 `permission/respond`。
 - Core permission adapter 与 App Server `permission/respond` 第一刀已实现，已验证 pending/respond/重复响应/缺失 request/cancel。
-- 当前 `runTextOnlyCoreTurn` 仍是 `toolSchemas: []`，没有真实工具执行；真实 Bash/FileEdit/WebFetch 等工具权限流要在后续 tool-capable runner 接入后验证。
+- Core session 第二刀已改为调用 `runCoreQueryTurn`，通过现有 `query()` 主链生成工具 schema、处理模型 tool_use、调用 `StreamingToolExecutor` / `runTools` 并复用 adapter 提供的 `canUseTool`。
+- 当前自动化 smoke 仍以协议、无登录失败路径和权限桥为主，没有真实消耗模型额度跑工具调用；下一步需要补 fake-model 工具流 smoke 或在真实 Codex OAuth 下做一轮小型工具调用验证。
 - 详细方案见 [CCR App Server 权限复用设计](../architecture/app-server-permission-reuse-design.md)。
 
 ## P9 Desktop 原型接入准备
@@ -390,11 +391,12 @@ scripts/smoke-app-server-workspace.mjs
 - 第 10 轮：P7 真实 Codex OAuth `turn/start` 已跑通。根因是 Node/Undici 默认连接超时不适合当前 `chatgpt.com` 链路，TLS 建连约 11 秒而默认 10 秒超时；已在统一 `proxy.ts` 网络工具里设置默认 `connectTimeout = 30000`，并让 `CodexOAuthProvider` 请求前复用该入口。真实 App Server 会话已收到 `turn/started -> item/delta -> item/completed -> turn/completed`，英文算术 prompt 返回 `4`。当前指针切到 P8，下一步补权限请求与客户端响应闭环。
 - 第 11 轮：P8 先完成方向校准，确认原代码已有权限体系，不能另写一套。已新增 [CCR App Server 权限复用设计](../architecture/app-server-permission-reuse-design.md)，明确 App Server 应复用 `hasPermissionsToUseTool(...)`、SDK `control_request: can_use_tool` 字段语义和 `PermissionPromptToolResultSchema`，只补 `permission/requested -> permission/respond` 薄 adapter。当前 `runTextOnlyCoreTurn` 仍无工具流，下一步先实现 adapter 与 smoke，再接真实 tool-capable runner。
 - 第 12 轮：P8 第一刀已实现并验证通过。新增 `CorePermissionService`，它提供 `createCanUseTool(...)`、pending permission request、`respondPermission(...)`、`cancelForTurn(...)`，底层复用 `hasPermissionsToUseTool(...)` 和 `PermissionPromptToolResultSchema`；App Server 新增 `permission/respond` handler、`permission/requested` / `permission/cancelled` notification 映射，并把 `permissions` capability 打开。新增 `scripts/smoke-app-server-permissions.mjs` 并接入 `smoke:app-server`，已覆盖 permission/requested、allow、重复响应、缺失 request、cancel。`typecheck`、`build`、`smoke:app-server` 均通过。下一步接真实 tool-capable runner，让 Bash/FileEdit/WebFetch 等工具流实际使用该 adapter。
+- 第 13 轮：P8 第二刀已完成，新增 `runCoreQueryTurn` 并让 `CoreSessionService` 从 text-only runner 切到现有 `query()` 主执行链。该 runner 会构造 Core 专用 `ToolUseContext`，复用 `getSystemPrompt()`、`assembleToolPool()`、`query()`、`StreamingToolExecutor` / `runTools` 以及 `CorePermissionService.createCanUseTool(...)`，把 App Server turn 接回真实模型/工具链路；同时保留 Core item 事件映射和 session interrupt 到 query abort 的传递。`typecheck`、`build`、`smoke:app-server` 均通过。剩余风险是自动化 smoke 还没有用 fake model 或真实小工具调用完整验证 `tool_use -> permission/requested -> permission/respond -> tool_result -> follow-up` 全路径。
 
 ## 备注
 
 - 当前状态：active
-- 下一步需要：实现 P8 权限请求与客户端响应闭环，先补 Core permission service，再映射 App Server `permission/respond`。
+- 下一步需要：补 P8 工具流专项验证，优先用 fake model / testing tool 避免真实额度消耗；必要时再用真实 Codex OAuth 跑一轮最小工具调用。
 - 当前仓库：`D:\agent_project\claude-code-reforged`
 - 当前主线：先补 App Server，再做 Desktop，再做 VS Code 插件。
 - 第一阶段非目标：不做 websocket、daemon、多客户端共享、完整模型工具流、Desktop UI。

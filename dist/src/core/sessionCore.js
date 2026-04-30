@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { loadLlmConfig } from '../services/llm/llmConfig.js';
+import { runCoreQueryTurn } from './coreQueryTurnRunner.js';
 import { CoreError } from './errors.js';
-import { runTextOnlyCoreTurn } from './textOnlyCoreTurnRunner.js';
 export class CoreSessionService {
     options;
     #threads = new Map();
@@ -117,10 +117,16 @@ export class CoreSessionService {
                 provider: turn.provider,
                 model: turn.model,
             });
-            await runTextOnlyCoreTurn({
+            const workspace = this.options.getWorkspace();
+            if (!workspace) {
+                throw new CoreError('workspace_not_open', 'Workspace is not open.');
+            }
+            await runCoreQueryTurn({
                 turn,
+                workspace,
                 signal: abortController.signal,
                 emit: this.options.emit,
+                createCanUseTool: this.options.createCanUseTool,
             });
             if (!isTurnCancelled(turn)) {
                 turn.status = 'completed';

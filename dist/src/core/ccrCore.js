@@ -13,6 +13,7 @@ export function createCcrCore(options = {}) {
         emit,
         getWorkspace: () => workspace.getWorkspace(),
         cancelPermissionsForTurn: input => permission.cancelForTurn(input),
+        createCanUseTool: input => permission.createCanUseTool(input),
     });
     return {
         config: {

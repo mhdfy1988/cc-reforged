@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
+import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import { loadLlmConfig } from '../services/llm/llmConfig.js'
+import { runCoreQueryTurn } from './coreQueryTurnRunner.js'
 import { CoreError } from './errors.js'
-import { runTextOnlyCoreTurn } from './textOnlyCoreTurnRunner.js'
 import type {
   CoreEventEmitter,
   CoreJsonObject,
@@ -29,6 +30,10 @@ export class CoreSessionService {
         turnId: string
         reason: string
       }) => void
+      createCanUseTool: (input: {
+        threadId: string
+        turnId: string
+      }) => CanUseToolFn
     },
   ) {}
 
@@ -173,10 +178,17 @@ export class CoreSessionService {
         model: turn.model,
       })
 
-      await runTextOnlyCoreTurn({
+      const workspace = this.options.getWorkspace()
+      if (!workspace) {
+        throw new CoreError('workspace_not_open', 'Workspace is not open.')
+      }
+
+      await runCoreQueryTurn({
         turn,
+        workspace,
         signal: abortController.signal,
         emit: this.options.emit,
+        createCanUseTool: this.options.createCanUseTool,
       })
 
       if (!isTurnCancelled(turn)) {
