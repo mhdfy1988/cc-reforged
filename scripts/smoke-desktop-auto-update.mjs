@@ -70,8 +70,12 @@ for (const expected of [
   '检查更新',
   '下载',
   '重启安装',
+  'TopbarUpdateNotice',
+  'topbar-update',
+  '下载更新',
   'getUpdateStatusText',
   'getUpdateDetailText',
+  'shouldShowTopbarUpdateNotice',
 ]) {
   assertText(files.renderer, expected, 'renderer is missing update UI affordance')
 }
@@ -90,6 +94,7 @@ console.log(
         'main IPC channels',
         'preload API',
         'settings UI controls',
+        'topbar update download action',
       ],
     },
     null,

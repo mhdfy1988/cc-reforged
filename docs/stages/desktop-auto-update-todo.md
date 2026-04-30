@@ -81,6 +81,7 @@
 
 - preload 已暴露更新 API。
 - 设置页已新增自动更新卡片、进度条和按钮。
+- 顶栏已新增 Codex 风格轻量更新提示：检测到更新后在右侧显示版本信息和 `下载更新` 按钮；下载完成后切换为 `重启安装`。
 - renderer 只通过 `window.ccr` 调用主进程。
 
 ## U3 自动更新 smoke 与文档索引
@@ -133,6 +134,7 @@
 - 已验证 `npm.cmd run desktop:build` 通过。
 - 已验证 `npm.cmd run ci:smoke` 通过。
 - 已验证 `git diff --check` 通过。
+- 已追加验证顶栏更新提示：`typecheck:desktop`、`smoke:desktop-auto-update`、`desktop:build` 通过。
 - 下一阶段建议进入真实远端发布演练。
 
 ## 后续记录（追加）
@@ -140,6 +142,7 @@
 - 初始化：从 GitHub Actions 发布流水线继续进入自动更新状态机。当前只做本地状态机、主进程适配层、IPC 和 UI 入口，不真实下载或安装远端更新。
 - 第 1 轮：完成 U0-U3。引入 `electron-updater`，新增 `updateState.ts` 和 `updateService.ts`，主进程接入 update IPC，preload 暴露白名单 API，设置页新增自动更新卡片，新增自动更新 smoke 与设计文档。当前等待验证。
 - 第 2 轮：完成 U4 验证。`smoke:desktop-auto-update`、`typecheck:desktop`、`desktop:build`、`ci:smoke`、`git diff --check` 均通过。当前自动更新只在打包态启用，开发态显示 disabled，不会真实下载或安装远端更新。
+- 第 3 轮：补充 Codex 风格顶栏更新提示。设置页仍作为完整自动更新管理入口；顶栏只在 `available/downloading/downloaded/installing/error` 这些需要用户注意的状态出现，按钮放在右侧，支持 `下载更新`、`重启安装`、失败后 `重试`。开发态 disabled、idle、not-available 不打扰主界面。
 
 ## 备注
 

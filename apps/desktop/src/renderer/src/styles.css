@@ -150,7 +150,7 @@ button:disabled {
 
 .topbar {
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) auto auto auto;
+  grid-template-columns: minmax(300px, 1fr) auto auto auto auto;
   gap: 12px;
   align-items: center;
 }
@@ -158,7 +158,8 @@ button:disabled {
 .workspace-card,
 .model-chip,
 .context-chip,
-.health-chip {
+.health-chip,
+.topbar-update {
   min-height: 50px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -202,6 +203,81 @@ button:disabled {
   align-items: center;
   gap: 8px;
   color: #0a715c;
+}
+
+.topbar-update {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 260px;
+  padding: 8px 10px 8px 14px;
+  border-color: rgba(239, 151, 0, 0.35);
+  background: linear-gradient(135deg, #fff7e8, #fffdf8);
+  box-shadow: 0 10px 30px rgba(239, 151, 0, 0.1);
+}
+
+.topbar-update strong,
+.topbar-update span {
+  display: block;
+}
+
+.topbar-update strong {
+  color: #9a5c00;
+  font-size: 13px;
+}
+
+.topbar-update span {
+  overflow: hidden;
+  max-width: 180px;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-update em {
+  color: #9a5c00;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.topbar-update button {
+  border: 0;
+  border-radius: 12px;
+  color: white;
+  background: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.topbar-update.downloaded {
+  border-color: rgba(12, 143, 114, 0.28);
+  background: linear-gradient(135deg, #eafff7, #fffdf8);
+}
+
+.topbar-update.downloaded strong {
+  color: #08715b;
+}
+
+.topbar-update.downloaded button {
+  background: var(--green);
+}
+
+.topbar-update.error {
+  border-color: rgba(196, 77, 77, 0.26);
+  background: linear-gradient(135deg, #fff1ec, #fffdf8);
+}
+
+.topbar-update.error strong {
+  color: var(--red);
+}
+
+.topbar-update.error button {
+  background: var(--red);
 }
 
 .dot {

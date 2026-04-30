@@ -394,6 +394,11 @@ function App() {
             <span className={status?.appServer === 'ready' ? 'dot ok' : 'dot warn'} />
             {provider} · {authText}
           </div>
+          <TopbarUpdateNotice
+            busy={busy}
+            updateStatus={updateStatus}
+            onAction={runAction}
+          />
         </header>
 
         <section className="hero">
@@ -646,6 +651,41 @@ function InfoCard(props: { title: string; value: string; detail: string }) {
   )
 }
 
+function TopbarUpdateNotice(props: {
+  busy: boolean
+  updateStatus: DesktopUpdateState | null | undefined
+  onAction: (action: () => Promise<unknown>) => Promise<void>
+}) {
+  const updateStatus = props.updateStatus
+  if (!shouldShowTopbarUpdateNotice(updateStatus)) {
+    return null
+  }
+
+  const action = getTopbarUpdateAction(updateStatus)
+  const progress =
+    updateStatus?.status === 'downloading'
+      ? `${Math.round(updateStatus.progress?.percent ?? 0)}%`
+      : null
+
+  return (
+    <div className={`topbar-update ${updateStatus?.status ?? 'idle'}`}>
+      <div>
+        <strong>{getTopbarUpdateTitle(updateStatus)}</strong>
+        <span>{getTopbarUpdateSubtitle(updateStatus)}</span>
+      </div>
+      {progress ? <em>{progress}</em> : null}
+      {action ? (
+        <button
+          disabled={props.busy || action.disabled}
+          onClick={() => props.onAction(action.run)}
+        >
+          {action.label}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 function getRoleLabel(role: ChatMessage['role']): string {
   if (role === 'user') {
     return '我'
@@ -706,6 +746,86 @@ function getUpdateStatusText(updateStatus: DesktopUpdateState | null | undefined
     return `下载中 ${updateStatus.progress?.percent ?? 0}%`
   }
   return updateStatus.status
+}
+
+function shouldShowTopbarUpdateNotice(
+  updateStatus: DesktopUpdateState | null | undefined,
+): boolean {
+  return Boolean(
+    updateStatus?.enabled &&
+      ['available', 'downloading', 'downloaded', 'installing', 'error'].includes(
+        updateStatus.status,
+      ),
+  )
+}
+
+function getTopbarUpdateTitle(
+  updateStatus: DesktopUpdateState | null | undefined,
+): string {
+  if (updateStatus?.status === 'downloaded') {
+    return '更新已就绪'
+  }
+  if (updateStatus?.status === 'downloading') {
+    return '正在下载更新'
+  }
+  if (updateStatus?.status === 'installing') {
+    return '正在安装更新'
+  }
+  if (updateStatus?.status === 'error') {
+    return '更新检查失败'
+  }
+  return `发现 ${updateStatus?.availableUpdate?.version ?? '新版本'}`
+}
+
+function getTopbarUpdateSubtitle(
+  updateStatus: DesktopUpdateState | null | undefined,
+): string {
+  if (!updateStatus) {
+    return ''
+  }
+  if (updateStatus.lastError) {
+    return updateStatus.lastError
+  }
+  if (updateStatus.availableUpdate?.version) {
+    return `当前 ${updateStatus.currentVersion} -> ${updateStatus.availableUpdate.version}`
+  }
+  return `当前 ${updateStatus.currentVersion}`
+}
+
+function getTopbarUpdateAction(
+  updateStatus: DesktopUpdateState | null | undefined,
+):
+  | {
+      label: string
+      disabled: boolean
+      run: () => Promise<unknown>
+    }
+  | null {
+  if (!updateStatus) {
+    return null
+  }
+  if (updateStatus.canDownload) {
+    return {
+      label: '下载更新',
+      disabled: false,
+      run: () => window.ccr.downloadUpdate(),
+    }
+  }
+  if (updateStatus.canInstall) {
+    return {
+      label: '重启安装',
+      disabled: false,
+      run: () => window.ccr.installUpdate(),
+    }
+  }
+  if (updateStatus.status === 'error' && updateStatus.canCheck) {
+    return {
+      label: '重试',
+      disabled: false,
+      run: () => window.ccr.checkForUpdates(),
+    }
+  }
+  return null
 }
 
 function getUpdateDetailText(updateStatus: DesktopUpdateState | null | undefined): string {
