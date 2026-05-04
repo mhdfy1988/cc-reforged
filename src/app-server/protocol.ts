@@ -291,6 +291,7 @@ export type AppServerTurn = {
   startedAt: string | null
   completedAt: string | null
   error: Record<string, unknown> | null
+  metadata?: Record<string, unknown>
 }
 
 export type ThreadStartResult = {

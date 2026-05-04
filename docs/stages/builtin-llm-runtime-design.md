@@ -452,19 +452,20 @@ user tool_result
 为了不改主循环，`LLM Runtime` 对内统一返回：
 
 ```ts
-export type LlmContentBlock =
+export type LlmContentPart =
   | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'thinking'; text: string }
+  | { type: 'thinking'; thinking: string; signature?: string; redacted?: boolean }
+  | { type: 'tool_call'; id: string; name: string; input: unknown }
+  | { type: 'tool_result'; toolCallId: string; result: unknown }
 ```
 
 Provider 负责转换：
 
 ```text
 Codex function_call
-  -> LlmContentBlock.tool_use
+  -> LlmContentPart.tool_call
 
-LlmContentBlock.tool_result
+LlmContentPart.tool_result
   -> Codex function_call_output
 ```
 
@@ -478,6 +479,9 @@ LlmContentBlock.tool_result
 export type LlmGenerateEvent =
   | { type: 'message_start'; model: string; providerId: string; usage?: LlmUsage }
   | { type: 'content_delta'; index: number; delta: LlmContentDelta }
+  | { type: 'thinking_start'; index: number }
+  | { type: 'thinking_delta'; index: number; delta: string }
+  | { type: 'thinking_end'; index: number; content: string }
   | { type: 'content_block_stop'; index: number }
   | { type: 'message_stop'; stopReason: LlmStopReason; usage?: LlmUsage }
   | { type: 'error'; error: LlmError }
@@ -496,6 +500,24 @@ Codex streaming
 ```
 
 如果 Codex OAuth 初期只能稳定非流式，provider 仍然应该通过统一事件模型输出完整消息，而不是让上层知道“这是非流式”。
+
+### 9.1 思考过程事件桥接
+
+`Codex OAuth Provider` 不能把 `thinking_start / thinking_delta / thinking_end` 丢掉，否则 Desktop 只能看到“正在处理”，看不到模型返回的推理摘要或思考过程片段。
+
+当前实现口径：
+
+- `@mariozechner/pi-ai` 返回 `thinking_start / thinking_delta / thinking_end`。
+- `CodexOAuthProvider` 映射为 `LlmThinkingStartEvent / LlmThinkingDeltaEvent / LlmThinkingEndEvent`，并保留 `contentIndex`。
+- `claudeApiAdapter.ts` 再转回项目原有能识别的 Claude-style `content_block_start(thinking) / content_block_delta(thinking_delta) / content_block_stop`。
+- `coreQueryTurnRunner.ts` 将 thinking block 转成 App Server `item_started / item_delta / item_completed`，其中 `item_delta.delta.type = "thinking"`。
+- Desktop renderer 把 `thinking` 渲染成独立的 `thinking-event` 消息，不和最终回答混在同一段里。
+
+边界约束：
+
+- 只展示上游 provider 明确返回的 `thinking` / 推理摘要事件，不在前端伪造隐藏思维。
+- `redacted_thinking` 只能展示“思考内容已由模型服务隐藏”，不得尝试解密或展开。
+- 最终 assistant 消息里如果已经通过流式事件展示过 `text / thinking`，Core 不应重复再发同一份正文；只补发未流式展示的工具调用等结构化块。
 
 ## 10. 错误和用量设计
 

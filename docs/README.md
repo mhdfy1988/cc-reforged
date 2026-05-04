@@ -31,6 +31,11 @@
 - [CCR Desktop 日志与错误可观测方案](./architecture/desktop-logging-observability.md)
 - [CCR Desktop 安装器与发布准备方案](./architecture/desktop-installer-release-readiness.md)
 - [CCR Desktop 发布验收 Runbook](./architecture/desktop-release-acceptance-runbook.md)
+- [CCR Desktop 输出展示与前端模块化方案](./architecture/desktop-output-display-and-modularization.md)
+- [CCR Desktop 与 App Server 事件字段契约](./architecture/desktop-app-server-event-contract.md)
+- [CCR Desktop 运行元数据字段来源表](./architecture/desktop-runtime-metadata-field-map.md)
+- [CCR Desktop 工具事件卡片契约](./architecture/desktop-tool-event-card-contract.md)
+- [CCR Desktop 体验增强路线](./architecture/desktop-experience-roadmap.md)
 - [CCR 升级管理策略](./architecture/upgrade-management-strategy.md)
 - [CCR App Server 实施 Todo](./stages/app-server-todo.md)
 - [CCR Desktop 自动更新状态机 Todo](./stages/desktop-auto-update-todo.md)
@@ -39,6 +44,7 @@
 - [CCR Desktop 代码签名准备 Todo](./stages/desktop-code-signing-todo.md)
 - [CCR Desktop GitHub Release 发布流程 Todo](./stages/desktop-github-release-todo.md)
 - [CCR Desktop GitHub Actions 发布流水线 Todo](./stages/desktop-github-actions-release-todo.md)
+- [CCR 工具能力治理修复清单](./stages/tool-capability-repair-list.md)
 
 ## 修复与恢复
 

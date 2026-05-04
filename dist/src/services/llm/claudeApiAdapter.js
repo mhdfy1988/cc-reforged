@@ -49,6 +49,49 @@ export async function* queryWithLlmRuntime(params) {
     const runtime = params.runtime ?? createDefaultLlmRuntime();
     try {
         let blockIndex = 0;
+        let openTextBlockIndex = null;
+        const nextBlockIndex = (contentIndex) => {
+            if (typeof contentIndex === 'number') {
+                blockIndex = Math.max(blockIndex, contentIndex + 1);
+                return contentIndex;
+            }
+            const index = blockIndex;
+            blockIndex += 1;
+            return index;
+        };
+        const currentBlockIndex = (contentIndex) => typeof contentIndex === 'number' ? contentIndex : Math.max(blockIndex - 1, 0);
+        const closeOpenTextBlock = () => {
+            if (openTextBlockIndex === null) {
+                return [];
+            }
+            openTextBlockIndex = null;
+            return [
+                {
+                    type: 'stream_event',
+                    event: {
+                        type: 'content_block_stop',
+                    },
+                },
+            ];
+        };
+        const openTextBlock = (index) => {
+            if (openTextBlockIndex === index) {
+                return [];
+            }
+            const events = closeOpenTextBlock();
+            openTextBlockIndex = index;
+            events.push({
+                type: 'stream_event',
+                event: {
+                    type: 'content_block_start',
+                    index,
+                    content_block: {
+                        type: 'text',
+                    },
+                },
+            });
+            return events;
+        };
         for await (const event of runtime.stream(request)) {
             switch (event.type) {
                 case 'response_start':
@@ -64,12 +107,73 @@ export async function* queryWithLlmRuntime(params) {
                     };
                     break;
                 case 'content_part':
-                    for (const streamEvent of toStreamEvents(event.part, blockIndex)) {
+                    {
+                        const index = nextBlockIndex(event.contentIndex);
+                        if (event.part.type === 'text') {
+                            for (const streamEvent of openTextBlock(index)) {
+                                yield streamEvent;
+                            }
+                            yield {
+                                type: 'stream_event',
+                                event: {
+                                    type: 'content_block_delta',
+                                    index,
+                                    delta: {
+                                        type: 'text_delta',
+                                        text: event.part.text,
+                                    },
+                                },
+                            };
+                            break;
+                        }
+                        for (const streamEvent of closeOpenTextBlock()) {
+                            yield streamEvent;
+                        }
+                        for (const streamEvent of toStreamEvents(event.part, index)) {
+                            yield streamEvent;
+                        }
+                    }
+                    break;
+                case 'thinking_start':
+                    for (const streamEvent of closeOpenTextBlock()) {
                         yield streamEvent;
                     }
-                    blockIndex += 1;
+                    yield {
+                        type: 'stream_event',
+                        event: {
+                            type: 'content_block_start',
+                            index: nextBlockIndex(event.contentIndex),
+                            content_block: {
+                                type: 'thinking',
+                            },
+                        },
+                    };
+                    break;
+                case 'thinking_delta':
+                    yield {
+                        type: 'stream_event',
+                        event: {
+                            type: 'content_block_delta',
+                            index: currentBlockIndex(event.contentIndex),
+                            delta: {
+                                type: 'thinking_delta',
+                                thinking: event.delta,
+                            },
+                        },
+                    };
+                    break;
+                case 'thinking_end':
+                    yield {
+                        type: 'stream_event',
+                        event: {
+                            type: 'content_block_stop',
+                        },
+                    };
                     break;
                 case 'response_complete':
+                    for (const streamEvent of closeOpenTextBlock()) {
+                        yield streamEvent;
+                    }
                     yield {
                         type: 'stream_event',
                         event: {
@@ -170,6 +274,28 @@ function toAssistantParts(message) {
             }
             continue;
         }
+        if (block.type === 'thinking' && typeof block.thinking === 'string') {
+            const thinking = block.thinking.trim();
+            if (thinking) {
+                parts.push({
+                    type: 'thinking',
+                    thinking,
+                    ...(typeof block.signature === 'string'
+                        ? { signature: block.signature }
+                        : {}),
+                });
+            }
+            continue;
+        }
+        if (block.type === 'redacted_thinking') {
+            parts.push({
+                type: 'thinking',
+                thinking: '',
+                redacted: true,
+                ...(typeof block.data === 'string' ? { signature: block.data } : {}),
+            });
+            continue;
+        }
         if (block.type === 'tool_use' &&
             typeof block.id === 'string' &&
             typeof block.name === 'string') {
@@ -243,6 +369,47 @@ function toStreamEvents(part, index) {
             },
         ];
     }
+    if (part.type === 'thinking') {
+        return [
+            {
+                type: 'stream_event',
+                event: {
+                    type: 'content_block_start',
+                    index,
+                    content_block: part.redacted
+                        ? {
+                            type: 'redacted_thinking',
+                            ...(part.signature ? { data: part.signature } : {}),
+                        }
+                        : {
+                            type: 'thinking',
+                            ...(part.signature ? { signature: part.signature } : {}),
+                        },
+                },
+            },
+            ...(part.redacted
+                ? []
+                : [
+                    {
+                        type: 'stream_event',
+                        event: {
+                            type: 'content_block_delta',
+                            index,
+                            delta: {
+                                type: 'thinking_delta',
+                                thinking: part.thinking,
+                            },
+                        },
+                    },
+                ]),
+            {
+                type: 'stream_event',
+                event: {
+                    type: 'content_block_stop',
+                },
+            },
+        ];
+    }
     if (part.type === 'tool_call') {
         return [
             {
@@ -289,6 +456,21 @@ function toAssistantContentBlocks(output) {
             contentBlocks.push({
                 type: 'text',
                 text: part.text,
+            });
+            continue;
+        }
+        if (part.type === 'thinking') {
+            if (part.redacted) {
+                contentBlocks.push({
+                    type: 'redacted_thinking',
+                    data: part.signature ?? part.thinking,
+                });
+                continue;
+            }
+            contentBlocks.push({
+                type: 'thinking',
+                thinking: part.thinking,
+                signature: part.signature ?? '',
             });
             continue;
         }

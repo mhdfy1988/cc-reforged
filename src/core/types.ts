@@ -16,6 +16,29 @@ export type CoreTurnStatus =
   | 'cancelled'
   | 'interrupted'
 
+export type CoreTurnUsage = {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  cacheCreationInputTokens?: number
+  cacheReadInputTokens?: number
+  raw?: unknown
+}
+
+export type CoreTurnMetadata = {
+  provider?: string
+  model?: string
+  contextWindow?: number
+  usage?: CoreTurnUsage
+  stopReason?: string
+  requestId?: string
+  latencyMs?: number
+  timeToFirstTokenMs?: number
+  startedAt?: string | null
+  completedAt?: string | null
+  errorKind?: string
+}
+
 export type CoreThread = {
   threadId: string
   workspacePath: string
@@ -41,6 +64,7 @@ export type CoreTurn = {
   startedAt: string | null
   completedAt: string | null
   error: CoreJsonObject | null
+  metadata: CoreTurnMetadata
 }
 
 export type CoreItem = CoreJsonObject & {
@@ -80,6 +104,7 @@ export type CoreTurnEvent =
       turnId: string
       provider: string
       model: string
+      metadata?: CoreTurnMetadata
     }
   | {
       type: 'item_started'
@@ -94,6 +119,8 @@ export type CoreTurnEvent =
     }
   | {
       type: 'item_completed'
+      threadId: string
+      turnId: string
       itemId: string
       status: string
       content?: readonly CoreJsonObject[]
@@ -102,18 +129,21 @@ export type CoreTurnEvent =
       type: 'turn_completed'
       threadId: string
       turnId: string
+      metadata?: CoreTurnMetadata
     }
   | {
       type: 'turn_failed'
       threadId: string
       turnId: string
       error: CoreJsonObject
+      metadata?: CoreTurnMetadata
     }
   | {
       type: 'turn_cancelled'
       threadId: string
       turnId: string
       reason: string
+      metadata?: CoreTurnMetadata
     }
   | {
       type: 'permission_requested'

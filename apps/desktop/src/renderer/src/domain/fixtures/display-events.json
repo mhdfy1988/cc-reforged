@@ -1,0 +1,170 @@
+{
+  "events": [
+    {
+      "id": "fixture-user-1",
+      "type": "user_message",
+      "text": "帮我检查工作区权限流"
+    },
+    {
+      "id": "fixture-assistant-1",
+      "type": "assistant_message",
+      "text": "我会先检查工作区配置，再确认权限请求链路。"
+    },
+    {
+      "id": "fixture-thinking-1",
+      "type": "thinking_summary",
+      "text": "正在整理执行计划。",
+      "status": "streaming"
+    },
+    {
+      "id": "fixture-tool-call-1",
+      "type": "tool_call",
+      "text": "运行命令：npm.cmd run typecheck:desktop",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-tool-call-1",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_bash",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-tool-call-1",
+        "kind": "call",
+        "name": "Bash",
+        "displayName": "Bash",
+        "category": "shell",
+        "status": "completed",
+        "statusLabel": "成功",
+        "summary": "运行命令：npm.cmd run typecheck:desktop",
+        "command": "npm.cmd run typecheck:desktop",
+        "cwd": "D:\\agent_project\\claude-code-reforged",
+        "shell": "powershell",
+        "input": {
+          "command": "npm.cmd run typecheck:desktop",
+          "cwd": "D:\\agent_project\\claude-code-reforged",
+          "description": "验证 Desktop 类型"
+        },
+        "result": "typecheck:desktop passed"
+      }
+    },
+    {
+      "id": "fixture-tool-call-2",
+      "type": "tool_call",
+      "text": "运行命令：ls `D:/learn_code`",
+      "status": "failed",
+      "identity": {
+        "itemId": "fixture-tool-call-2",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_shell_error",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-tool-call-2",
+        "kind": "call",
+        "name": "Bash",
+        "displayName": "Bash",
+        "category": "shell",
+        "status": "failed",
+        "statusLabel": "失败",
+        "summary": "运行命令：ls `D:/learn_code`",
+        "command": "ls `D:/learn_code`",
+        "shell": "bash/posix",
+        "input": {
+          "command": "ls `D:/learn_code`",
+          "description": "列出工作区内容"
+        },
+        "result": "No suitable shell found. Claude CLI requires a Posix shell environment.",
+        "errorClass": "shell_unavailable",
+        "errorMessage": "No suitable shell found. Claude CLI requires a Posix shell environment.",
+        "actionableHint": "当前环境没有可用 POSIX shell。Windows 下应优先使用 PowerShell、CMD、Node 原生文件能力或高层文件工具。"
+      }
+    },
+    {
+      "id": "fixture-todo-1",
+      "type": "todo_list",
+      "text": "TodoWrite 已更新 3 个任务。",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-todo-1",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_todo",
+        "missingFields": [],
+        "raw": {}
+      },
+      "todoSnapshot": {
+        "id": "fixture-todo-1",
+        "title": "TodoWrite",
+        "items": [
+          {
+            "content": "确认事件字段来源",
+            "status": "completed"
+          },
+          {
+            "content": "补 fixture 和 smoke",
+            "status": "in_progress",
+            "activeForm": "正在补 fixture 和 smoke"
+          },
+          {
+            "content": "记录长期体验方向",
+            "status": "pending"
+          }
+        ],
+        "raw": {
+          "todos": []
+        }
+      }
+    },
+    {
+      "id": "fixture-ask-user-question-1",
+      "type": "tool_call",
+      "text": "调用工具：AskUserQuestion",
+      "status": "completed",
+      "timelineHidden": true,
+      "identity": {
+        "itemId": "fixture-ask-user-question-1",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_question",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-ask-user-question-1",
+        "kind": "call",
+        "name": "AskUserQuestion",
+        "displayName": "AskUserQuestion",
+        "category": "control",
+        "status": "completed",
+        "statusLabel": "成功",
+        "summary": "调用工具：AskUserQuestion",
+        "input": {
+          "question": "请选择继续方向"
+        },
+        "result": "question rendered by assistant message"
+      }
+    },
+    {
+      "id": "fixture-error-1",
+      "type": "error",
+      "text": "App Server 返回了可解释错误。"
+    }
+  ],
+  "permission": {
+    "permissionRequestId": "perm_fixture_1",
+    "toolUseId": "toolu_fixture_bash",
+    "toolName": "Bash",
+    "status": "pending",
+    "input": {
+      "command": "npm.cmd run desktop:build"
+    }
+  }
+}

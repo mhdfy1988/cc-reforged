@@ -8,5 +8,7 @@ export type {
   CoreThread,
   CoreTurn,
   CoreTurnEvent,
+  CoreTurnMetadata,
+  CoreTurnUsage,
   CoreWorkspace,
 } from './types.js'

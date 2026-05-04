@@ -20,6 +20,7 @@ export function coreEventToJsonRpcNotification(
           turnId: event.turnId,
           provider: event.provider,
           model: event.model,
+          ...(event.metadata ? { metadata: event.metadata } : {}),
         },
       }
     case 'item_started':
@@ -44,6 +45,8 @@ export function coreEventToJsonRpcNotification(
         jsonrpc: '2.0',
         method: 'item/completed',
         params: {
+          threadId: event.threadId,
+          turnId: event.turnId,
           itemId: event.itemId,
           status: event.status,
           ...(event.content ? { content: event.content } : {}),
@@ -56,6 +59,7 @@ export function coreEventToJsonRpcNotification(
         params: {
           threadId: event.threadId,
           turnId: event.turnId,
+          ...(event.metadata ? { metadata: event.metadata } : {}),
         },
       }
     case 'turn_failed':
@@ -66,6 +70,7 @@ export function coreEventToJsonRpcNotification(
           threadId: event.threadId,
           turnId: event.turnId,
           error: event.error,
+          ...(event.metadata ? { metadata: event.metadata } : {}),
         },
       }
     case 'turn_cancelled':
@@ -76,6 +81,7 @@ export function coreEventToJsonRpcNotification(
           threadId: event.threadId,
           turnId: event.turnId,
           reason: event.reason,
+          ...(event.metadata ? { metadata: event.metadata } : {}),
         },
       }
     case 'permission_requested':

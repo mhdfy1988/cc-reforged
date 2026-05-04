@@ -411,6 +411,10 @@ function handleNotification(notification: JsonRpcNotification): void {
         ...status.lastTurn,
         status: 'running',
         startedAt: new Date().toISOString(),
+        metadata: mergeTurnMetadata(
+          status.lastTurn.metadata,
+          getTurnMetadataFromParams(params),
+        ),
       }
     }
   }
@@ -456,8 +460,44 @@ function updateTurnFinishedState(
         error && typeof error === 'object'
           ? (error as Record<string, unknown>)
           : status.lastTurn.error,
+      metadata: mergeTurnMetadata(
+        status.lastTurn.metadata,
+        getTurnMetadataFromParams(params),
+      ),
     }
   }
+}
+
+function getTurnMetadataFromParams(
+  params: JsonRpcNotification['params'],
+): Record<string, unknown> | undefined {
+  const metadata = params?.metadata
+  return metadata && typeof metadata === 'object'
+    ? (metadata as Record<string, unknown>)
+    : undefined
+}
+
+function mergeTurnMetadata(
+  current: Record<string, unknown> | undefined,
+  next: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!current && !next) {
+    return undefined
+  }
+  return {
+    ...(current ?? {}),
+    ...(next ?? {}),
+    usage: {
+      ...getNestedObject(current?.usage),
+      ...getNestedObject(next?.usage),
+    },
+  }
+}
+
+function getNestedObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : {}
 }
 
 async function closeManagedClient(): Promise<void> {

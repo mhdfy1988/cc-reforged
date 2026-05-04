@@ -69,6 +69,7 @@
     "smoke:app-server-client": "node ./scripts/smoke-app-server-client.mjs",
     "smoke:desktop-auto-update": "node ./scripts/smoke-desktop-auto-update.mjs",
     "smoke:desktop-branding": "node ./scripts/smoke-desktop-branding.mjs",
+    "smoke:desktop-display-events": "node ./scripts/smoke-desktop-display-events.mjs",
     "smoke:desktop-github-actions-release": "node ./scripts/smoke-desktop-github-actions-release.mjs",
     "smoke:desktop-packaged": "node ./scripts/smoke-desktop-packaged-app-server.mjs",
     "smoke:desktop-release-artifacts": "node ./scripts/smoke-desktop-release-artifacts.mjs",

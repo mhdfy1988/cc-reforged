@@ -1,6 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
-import { loadLlmConfig } from '../services/llm/llmConfig.js'
+import {
+  loadLlmConfig,
+  type ResolvedLlmConfig,
+} from '../services/llm/llmConfig.js'
+import { getLlmModelCatalogEntry } from '../services/llm/modelCatalog.js'
+import {
+  createLlmProviderDefinition,
+  getBuiltinLlmProviderDefinition,
+} from '../services/llm/providerDefinitions.js'
 import { runCoreQueryTurn } from './coreQueryTurnRunner.js'
 import { CoreError } from './errors.js'
 import type {
@@ -8,6 +16,7 @@ import type {
   CoreJsonObject,
   CoreThread,
   CoreTurn,
+  CoreTurnMetadata,
   CoreWorkspace,
 } from './types.js'
 
@@ -101,6 +110,7 @@ export class CoreSessionService {
       startedAt: null,
       completedAt: null,
       error: null,
+      metadata: createInitialTurnMetadata(config),
     }
 
     this.#turns.set(turn.turnId, turn)
@@ -145,6 +155,11 @@ export class CoreSessionService {
     })
     turn.status = 'cancelled'
     turn.completedAt = new Date().toISOString()
+    turn.metadata = mergeTurnMetadata(turn.metadata, {
+      completedAt: turn.completedAt,
+      latencyMs: computeLatencyMs(turn),
+      stopReason: input.reason ?? 'interrupted',
+    })
     thread.activeTurnId = null
     this.#activeTurn = null
     this.emitLater({
@@ -152,6 +167,7 @@ export class CoreSessionService {
       threadId: thread.threadId,
       turnId: turn.turnId,
       reason: input.reason ?? 'interrupted',
+      metadata: turn.metadata,
     })
 
     return { accepted: true }
@@ -176,6 +192,9 @@ export class CoreSessionService {
         turnId: turn.turnId,
         provider: turn.provider,
         model: turn.model,
+        metadata: mergeTurnMetadata(turn.metadata, {
+          startedAt: turn.startedAt,
+        }),
       })
 
       const workspace = this.options.getWorkspace()
@@ -183,7 +202,7 @@ export class CoreSessionService {
         throw new CoreError('workspace_not_open', 'Workspace is not open.')
       }
 
-      await runCoreQueryTurn({
+      const runtimeMetadata = await runCoreQueryTurn({
         turn,
         workspace,
         signal: abortController.signal,
@@ -194,11 +213,17 @@ export class CoreSessionService {
       if (!isTurnCancelled(turn)) {
         turn.status = 'completed'
         turn.completedAt = new Date().toISOString()
+        turn.metadata = mergeTurnMetadata(turn.metadata, runtimeMetadata, {
+          completedAt: turn.completedAt,
+          latencyMs: computeLatencyMs(turn),
+          stopReason: runtimeMetadata.stopReason ?? 'completed',
+        })
         thread.activeTurnId = null
         this.options.emit({
           type: 'turn_completed',
           threadId: turn.threadId,
           turnId: turn.turnId,
+          metadata: turn.metadata,
         })
       }
     } catch (error) {
@@ -216,12 +241,19 @@ export class CoreSessionService {
           kind: coreError.kind,
           message: coreError.message,
         }
+        turn.metadata = mergeTurnMetadata(turn.metadata, {
+          completedAt: turn.completedAt,
+          latencyMs: computeLatencyMs(turn),
+          stopReason: 'error',
+          errorKind: coreError.kind,
+        })
         thread.activeTurnId = null
         this.options.emit({
           type: 'turn_failed',
           threadId: turn.threadId,
           turnId: turn.turnId,
           error: turn.error,
+          metadata: turn.metadata,
         })
       }
     } finally {
@@ -248,4 +280,65 @@ function createId(prefix: string): string {
 
 function isTurnCancelled(turn: CoreTurn): boolean {
   return turn.status === 'cancelled'
+}
+
+function createInitialTurnMetadata(
+  config: ResolvedLlmConfig,
+): CoreTurnMetadata {
+  return compactTurnMetadata({
+    provider: config.provider,
+    model: config.model,
+    contextWindow: resolveContextWindow(config),
+  })
+}
+
+function resolveContextWindow(config: ResolvedLlmConfig): number | undefined {
+  try {
+    const providerConfig = config.providers[config.provider]
+    const providerDefinition =
+      getBuiltinLlmProviderDefinition(config.provider) ??
+      createLlmProviderDefinition({
+        id: config.provider,
+        displayName: providerConfig?.displayName ?? config.provider,
+        apiMode: providerConfig?.apiMode ?? 'custom',
+        authStrategy: providerConfig?.authStrategy ?? 'unknown',
+        capabilities: {
+          streaming: providerConfig?.supportsStreaming,
+          tools: providerConfig?.supportsTools,
+          reasoning: providerConfig?.supportsReasoning,
+          usage: providerConfig?.supportsUsage,
+        },
+      })
+    return getLlmModelCatalogEntry({
+      providerId: config.provider,
+      model: config.model,
+      providerDefinition,
+    }).contextWindow
+  } catch {
+    return undefined
+  }
+}
+
+function mergeTurnMetadata(
+  ...metadataList: Array<CoreTurnMetadata | undefined>
+): CoreTurnMetadata {
+  return compactTurnMetadata(Object.assign({}, ...metadataList))
+}
+
+function compactTurnMetadata(metadata: CoreTurnMetadata): CoreTurnMetadata {
+  return Object.fromEntries(
+    Object.entries(metadata).filter(([, value]) => value !== undefined),
+  ) as CoreTurnMetadata
+}
+
+function computeLatencyMs(turn: CoreTurn): number | undefined {
+  if (!turn.startedAt || !turn.completedAt) {
+    return undefined
+  }
+  const startedAt = Date.parse(turn.startedAt)
+  const completedAt = Date.parse(turn.completedAt)
+  if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt)) {
+    return undefined
+  }
+  return Math.max(0, completedAt - startedAt)
 }

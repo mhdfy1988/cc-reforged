@@ -105,21 +105,29 @@ try {
   assert.equal(sessionResponses[3].result.threads[0].threadId, thread.threadId);
   assert.equal(sessionResponses[4].result.turn.threadId, thread.threadId);
   assert.equal(sessionResponses[4].result.turn.status, 'queued');
+  assert.equal(sessionResponses[4].result.turn.metadata.provider, 'codex-oauth');
+  assert.equal(sessionResponses[4].result.turn.metadata.model, 'gpt-5.4');
+  assert.equal(sessionResponses[4].result.turn.metadata.contextWindow, 200000);
   assert.ok(
     sessionNotifications.some(
       notification => notification.method === 'thread/started',
     ),
   );
-  assert.ok(
-    sessionNotifications.some(
-      notification => notification.method === 'turn/started',
-    ),
+  const turnStartedNotification = sessionNotifications.find(
+    notification => notification.method === 'turn/started',
   );
-  assert.ok(
-    sessionNotifications.some(
-      notification => notification.method === 'turn/failed',
-    ),
+  assert.ok(turnStartedNotification);
+  assert.equal(turnStartedNotification.params.metadata.provider, 'codex-oauth');
+  assert.equal(turnStartedNotification.params.metadata.model, 'gpt-5.4');
+  assert.equal(turnStartedNotification.params.metadata.contextWindow, 200000);
+
+  const turnFailedNotification = sessionNotifications.find(
+    notification => notification.method === 'turn/failed',
   );
+  assert.ok(turnFailedNotification);
+  assert.equal(turnFailedNotification.params.metadata.stopReason, 'error');
+  assert.equal(turnFailedNotification.params.metadata.errorKind, 'auth_required');
+  assert.equal(typeof turnFailedNotification.params.metadata.latencyMs, 'number');
 
   const permissionSmoke = runPermissionSmoke();
   assert.equal(permissionSmoke.status, 0, permissionSmoke.stderr);

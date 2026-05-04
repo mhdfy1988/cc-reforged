@@ -100,7 +100,16 @@
 4. 只有在确认现有能力不适用、第三方方案边界不匹配或为了阶段性最小原型时，才允许新写实现；必须在文档或代码注释里说明不复用的原因。
 5. 详细执行清单见 [06-existing-capability-and-reuse.md](D:/agent_project/claude-code-reforged/docs/agent-rules/06-existing-capability-and-reuse.md)。
 
-## 11. 详细规则入口
+## 11. CLI / TUI 兼容护栏
+
+1. Desktop / App Server 的体验修复默认不得改变原 TUI 和 `-p` CLI 的输出语义；除非任务目标明确要求统一迁移，否则不要把 Desktop 展示层判断写回 CLI/TUI 打印链路。
+2. 修改 `apps/desktop/**` 的 UI、样式、renderer 状态和 Desktop 专属组件时，通常只需验证 Desktop；不得误称会修复 TUI/CLI。
+3. 修改 `src/core/**`、`src/app-server/**`、`src/services/llm/**`、工具协议、消息转换、provider、OAuth、模型适配或 `dist/src/**` 对应产物时，必须视为共享链路改动。
+4. 共享链路改动合入前，至少跑三路回归：Desktop/App Server 定向 smoke、`ccr -p` 非交互 CLI、`ccr` 交互式 TUI 基础启动或等价最小验证。
+5. 如果某次修复只为了 Desktop 展示，例如工具卡片合并、Todo 浮窗、思考展示、权限卡片布局，应优先把逻辑限制在 Desktop domain / renderer 层；确实需要 Core 事件补字段时，只补协议字段和稳定 ID，不改变 CLI/TUI 消费的原始消息内容。
+6. 每次解释影响面时，必须明确标注该改动属于：Desktop-only、App Server 协议层、Core 共享层、LLM 共享层或构建产物同步。
+
+## 12. 详细规则入口
 
 按需读取，不要一次性加载全部分册：
 

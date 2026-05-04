@@ -20,15 +20,44 @@ const mockProvider = {
   },
   async *stream(request) {
     yield {
-      type: 'content_part',
+      type: 'thinking_start',
       provider: request.provider,
       model: request.model,
-      part: { type: 'text', text: 'hello from codex' },
+      contentIndex: 0,
+    };
+    yield {
+      type: 'thinking_delta',
+      provider: request.provider,
+      model: request.model,
+      contentIndex: 0,
+      delta: 'plan first',
+    };
+    yield {
+      type: 'thinking_end',
+      provider: request.provider,
+      model: request.model,
+      contentIndex: 0,
+      content: 'plan first',
     };
     yield {
       type: 'content_part',
       provider: request.provider,
       model: request.model,
+      contentIndex: 1,
+      part: { type: 'text', text: 'hello ' },
+    };
+    yield {
+      type: 'content_part',
+      provider: request.provider,
+      model: request.model,
+      contentIndex: 1,
+      part: { type: 'text', text: 'from codex' },
+    };
+    yield {
+      type: 'content_part',
+      provider: request.provider,
+      model: request.model,
+      contentIndex: 2,
       part: {
         type: 'tool_call',
         id: 'toolu_smoke_1',
@@ -44,6 +73,7 @@ const mockProvider = {
         provider: request.provider,
         model: request.model,
         output: [
+          { type: 'thinking', thinking: 'plan first', signature: 'sig_smoke_1' },
           { type: 'text', text: 'hello from codex' },
           {
             type: 'tool_call',
@@ -77,6 +107,7 @@ runtime.registerProvider(mockProvider);
 const assistantWithToolUse = createAssistantMessage({
   content: [
     { type: 'text', text: 'let me read that file' },
+    { type: 'thinking', thinking: 'previous plan', signature: 'sig_prev_1' },
     {
       type: 'tool_use',
       id: 'toolu_prev_1',
@@ -138,6 +169,7 @@ assert.equal(request.messages.length, 5);
 assert.equal(request.messages[0].role, 'system');
 assert.equal(request.messages[2].role, 'user');
 assert.equal(request.messages[3].role, 'assistant');
+assert.equal(request.messages[3].parts[1].type, 'thinking');
 assert.equal(request.messages[4].role, 'tool');
 assert.equal(request.tools.length, 1);
 assert.equal(request.tools[0].name, 'Read');
@@ -201,10 +233,28 @@ assert.ok(
     message =>
       message.type === 'stream_event' &&
       message.event.type === 'content_block_delta' &&
-      message.event.delta.type === 'text_delta' &&
-      message.event.delta.text === 'hello from codex',
+      message.event.delta.type === 'thinking_delta' &&
+      message.event.delta.thinking === 'plan first',
   ),
 );
+
+const textBlockStarts = emitted.filter(
+  message =>
+    message.type === 'stream_event' &&
+    message.event.type === 'content_block_start' &&
+    message.event.content_block.type === 'text',
+);
+assert.equal(textBlockStarts.length, 1);
+
+const textDeltas = emitted
+  .filter(
+    message =>
+      message.type === 'stream_event' &&
+      message.event.type === 'content_block_delta' &&
+      message.event.delta.type === 'text_delta',
+  )
+  .map(message => message.event.delta.text);
+assert.deepEqual(textDeltas, ['hello ', 'from codex']);
 
 const finalAssistant = emitted.find(message => message.type === 'assistant');
 assert.ok(finalAssistant, 'expected final assistant message');
@@ -213,6 +263,11 @@ assert.equal(finalAssistant.message.model, 'gpt-5.4');
 assert.equal(finalAssistant.message.stop_reason, 'tool_use');
 assert.equal(finalAssistant.message.usage.input_tokens, 11);
 assert.equal(finalAssistant.message.usage.output_tokens, 7);
+assert.ok(
+  finalAssistant.message.content.some(
+    block => block.type === 'thinking' && block.thinking === 'plan first',
+  ),
+);
 assert.ok(
   finalAssistant.message.content.some(
     block =>

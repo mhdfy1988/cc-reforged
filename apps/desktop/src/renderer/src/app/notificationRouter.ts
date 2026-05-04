@@ -1,0 +1,352 @@
+import type { SessionAction } from './sessionState.js'
+import { createErrorDisplayEvent } from '../domain/displayEvents.js'
+import type {
+  JsonObject,
+  NotificationPayload,
+  TurnRuntimeMetadata,
+  TurnUsage,
+} from '../domain/displayTypes.js'
+import { createCompletedItemContractContext } from '../domain/eventContract.js'
+import type { CcrDesktopEvent } from '../global.js'
+
+export type RoutedDesktopEvent = {
+  sessionActions: SessionAction[]
+  itemMetadata?: {
+    itemId: string
+    item: JsonObject
+  }
+}
+
+export function routeDesktopEvent(
+  event: CcrDesktopEvent,
+  itemMetadata: ReadonlyMap<string, JsonObject>,
+): RoutedDesktopEvent {
+  if (event.type !== 'notification') {
+    return routeNonNotificationEvent(event)
+  }
+
+  const notification = event.payload as NotificationPayload
+  const params = notification.params ?? {}
+
+  switch (notification.method) {
+    case 'turn/started':
+      return {
+        sessionActions: [
+          {
+            type: 'set-active-turn',
+            turnId: String(params.turnId ?? 'pending'),
+          },
+          {
+            type: 'merge-turn-metadata',
+            metadata: getTurnMetadataFromParams(params, 'running'),
+          },
+        ],
+      }
+
+    case 'item/started':
+      return routeItemStarted(params)
+
+    case 'item/delta':
+      return routeItemDelta(event, params, itemMetadata)
+
+    case 'item/completed':
+      return routeItemCompleted(params, itemMetadata)
+
+    case 'turn/completed':
+    case 'turn/cancelled':
+      return {
+        sessionActions: [
+          {
+            type: 'merge-turn-metadata',
+            metadata: getTurnMetadataFromParams(
+              params,
+              notification.method === 'turn/completed'
+                ? 'completed'
+                : 'cancelled',
+            ),
+          },
+          { type: 'set-active-turn', turnId: null },
+          { type: 'clear-permissions' },
+        ],
+      }
+
+    case 'turn/failed':
+      return {
+        sessionActions: [
+          {
+            type: 'merge-turn-metadata',
+            metadata: getTurnMetadataFromParams(params, 'failed'),
+          },
+          { type: 'set-active-turn', turnId: null },
+          { type: 'clear-permissions' },
+          {
+            type: 'append-display-event',
+            event: createErrorDisplayEvent(
+              `${event.at}-turn-failed`,
+              stringifyErrorPayload(params.error ?? params),
+            ),
+          },
+        ],
+      }
+
+    case 'permission/requested':
+      return {
+        sessionActions: [
+          {
+            type: 'add-permission',
+            permission: {
+              permissionRequestId: String(params.permissionRequestId),
+              toolUseId: getString(
+                params.toolUseId ?? params.toolUseID ?? params.tool_use_id,
+              ),
+              toolName: getToolName(params),
+              input: (params.input ?? {}) as JsonObject,
+              status: 'pending',
+            },
+          },
+        ],
+      }
+
+    case 'permission/cancelled':
+      return {
+        sessionActions: [
+          {
+            type: 'set-permission-status',
+            permissionRequestId: String(params.permissionRequestId ?? ''),
+            status: 'cancelled',
+          },
+          {
+            type: 'remove-permission',
+            permissionRequestId: String(params.permissionRequestId ?? ''),
+          },
+        ],
+      }
+
+    default:
+      return { sessionActions: [] }
+  }
+}
+
+function routeNonNotificationEvent(event: CcrDesktopEvent): RoutedDesktopEvent {
+  if (event.type !== 'client-error') {
+    return { sessionActions: [] }
+  }
+
+  return {
+    sessionActions: [
+      { type: 'set-active-turn', turnId: null },
+      {
+        type: 'append-display-event',
+        event: createErrorDisplayEvent(
+          `${event.at}-client-error`,
+          stringifyErrorPayload(event.payload),
+        ),
+      },
+    ],
+  }
+}
+
+function routeItemStarted(params: JsonObject): RoutedDesktopEvent {
+  const item = params.item
+  if (!item || typeof item !== 'object') {
+    return { sessionActions: [] }
+  }
+
+  const object = item as JsonObject
+  const itemId = String(object.itemId ?? '')
+  if (!itemId) {
+    return { sessionActions: [] }
+  }
+
+  return {
+    sessionActions: [],
+    itemMetadata: {
+      itemId,
+      item: object,
+    },
+  }
+}
+
+function routeItemDelta(
+  event: CcrDesktopEvent,
+  params: JsonObject,
+  itemMetadata: ReadonlyMap<string, JsonObject>,
+): RoutedDesktopEvent {
+  const itemId = String(params.itemId ?? `${event.at}-assistant`)
+  const delta = (params.delta ?? {}) as JsonObject
+  const sessionActions: SessionAction[] = []
+
+  if (delta.type === 'text' && typeof delta.text === 'string') {
+    sessionActions.push({
+      type: 'upsert-assistant-delta',
+      itemId,
+      text: delta.text,
+      context: createCompletedItemContractContext({
+        itemId,
+        params,
+        item: itemMetadata.get(itemId),
+      }),
+    })
+  }
+
+  const thinkingSummary = getThinkingSummaryDelta(delta)
+  if (thinkingSummary) {
+    sessionActions.push({
+      type: 'upsert-thinking-delta',
+      itemId,
+      thinking: thinkingSummary,
+      context: createCompletedItemContractContext({
+        itemId,
+        params,
+        item: itemMetadata.get(itemId),
+      }),
+    })
+  }
+
+  return { sessionActions }
+}
+
+function getThinkingSummaryDelta(delta: JsonObject): string | null {
+  const type = typeof delta.type === 'string' ? delta.type : ''
+  if (
+    type !== 'thinking_summary' &&
+    type !== 'reasoning_summary' &&
+    type !== 'summary_text'
+  ) {
+    return null
+  }
+
+  const text = getStringDelta(delta.text ?? delta.thinking ?? delta.summary)
+  return text && text.trim() ? text : null
+}
+
+function routeItemCompleted(
+  params: JsonObject,
+  itemMetadata: ReadonlyMap<string, JsonObject>,
+): RoutedDesktopEvent {
+  const itemId = String(params.itemId ?? '')
+  if (!itemId) {
+    return { sessionActions: [] }
+  }
+
+  const metadata = itemMetadata.get(itemId)
+  const kind =
+    metadata && typeof metadata.kind === 'string' ? metadata.kind : undefined
+  const content =
+    'content' in params
+      ? params.content
+      : metadata && 'content' in metadata
+        ? metadata.content
+        : undefined
+
+  return {
+    sessionActions: [
+      {
+        type: 'upsert-completed-item-message',
+        itemId,
+        kind,
+        content,
+        statusText: String(params.status ?? 'completed'),
+        context: createCompletedItemContractContext({
+          itemId,
+          params,
+          item: metadata,
+        }),
+      },
+    ],
+  }
+}
+
+function getToolName(params: JsonObject): string {
+  const tool = params.tool
+  if (tool && typeof tool === 'object' && 'name' in tool) {
+    return String((tool as JsonObject).name)
+  }
+  return '未知工具'
+}
+
+function getTurnMetadataFromParams(
+  params: JsonObject,
+  status: string,
+): TurnRuntimeMetadata {
+  const nestedMetadata = getObjectRecord(params.metadata)
+  const usage = normalizeUsage(nestedMetadata?.usage)
+  return compactObject({
+    threadId: getString(params.threadId),
+    turnId: getString(params.turnId),
+    status,
+    provider: getString(params.provider ?? nestedMetadata?.provider),
+    model: getString(params.model ?? nestedMetadata?.model),
+    contextWindow: getNumber(nestedMetadata?.contextWindow),
+    stopReason: getString(nestedMetadata?.stopReason),
+    requestId: getString(nestedMetadata?.requestId),
+    latencyMs: getNumber(nestedMetadata?.latencyMs),
+    timeToFirstTokenMs: getNumber(nestedMetadata?.timeToFirstTokenMs),
+    startedAt: getNullableString(nestedMetadata?.startedAt),
+    completedAt: getNullableString(nestedMetadata?.completedAt),
+    errorKind: getString(nestedMetadata?.errorKind),
+    ...(usage ? { usage } : {}),
+  }) as TurnRuntimeMetadata
+}
+
+function normalizeUsage(value: unknown): TurnUsage | undefined {
+  const usage = getObjectRecord(value)
+  if (!usage) {
+    return undefined
+  }
+  return compactObject({
+    inputTokens: getNumber(usage.inputTokens),
+    outputTokens: getNumber(usage.outputTokens),
+    totalTokens: getNumber(usage.totalTokens),
+    cacheCreationInputTokens: getNumber(usage.cacheCreationInputTokens),
+    cacheReadInputTokens: getNumber(usage.cacheReadInputTokens),
+  }) as TurnUsage
+}
+
+function getObjectRecord(value: unknown): JsonObject | null {
+  return value && typeof value === 'object' ? (value as JsonObject) : null
+}
+
+function getString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+function getNullableString(value: unknown): string | null | undefined {
+  return value === null ? null : getString(value)
+}
+
+function getNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function compactObject(value: JsonObject): JsonObject {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, nestedValue]) => nestedValue !== undefined),
+  )
+}
+
+function getStringDelta(value: unknown): string | null {
+  return typeof value === 'string' ? value : null
+}
+
+function stringifyErrorPayload(payload: unknown): string {
+  if (!payload) {
+    return '未知错误'
+  }
+  if (typeof payload === 'string') {
+    return payload
+  }
+  if (payload instanceof Error) {
+    return payload.message
+  }
+  if (typeof payload === 'object') {
+    const object = payload as JsonObject
+    if (typeof object.message === 'string') {
+      return object.message
+    }
+    if (typeof object.kind === 'string') {
+      return object.kind
+    }
+  }
+  return JSON.stringify(payload)
+}

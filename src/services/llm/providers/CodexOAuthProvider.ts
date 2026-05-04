@@ -425,8 +425,21 @@ function toPiAiAssistantContent(
       })
       continue
     }
+    if (part.type === 'thinking') {
+      const thinking = part.thinking.trim()
+      if (!thinking && !part.redacted) {
+        continue
+      }
+      mapped.push({
+        type: 'thinking',
+        thinking,
+        ...(part.signature ? { thinkingSignature: part.signature } : {}),
+        ...(part.redacted ? { redacted: true } : {}),
+      })
+      continue
+    }
     throw new Error(
-      'CodexOAuthProvider assistant messages only support text and tool_call parts.',
+      'CodexOAuthProvider assistant messages only support text, thinking, and tool_call parts.',
     )
   }
   return mapped
@@ -547,6 +560,17 @@ function extractAssistantContentParts(
         name: item.name,
         input: item.arguments,
       })
+      continue
+    }
+    if (item.type === 'thinking') {
+      mapped.push({
+        type: 'thinking',
+        thinking: item.thinking,
+        ...(item.thinkingSignature
+          ? { signature: item.thinkingSignature }
+          : {}),
+        ...(item.redacted ? { redacted: true } : {}),
+      })
     }
   }
   return mapped
@@ -605,16 +629,41 @@ function mapStreamingEvent(input: {
         type: 'content_part',
         provider: input.provider,
         model: input.model,
+        contentIndex: input.event.contentIndex ?? 0,
         part: {
           type: 'text',
           text: input.event.delta,
         },
+      }
+    case 'thinking_start':
+      return {
+        type: 'thinking_start',
+        provider: input.provider,
+        model: input.model,
+        contentIndex: input.event.contentIndex ?? 0,
+      }
+    case 'thinking_delta':
+      return {
+        type: 'thinking_delta',
+        provider: input.provider,
+        model: input.model,
+        contentIndex: input.event.contentIndex ?? 0,
+        delta: input.event.delta,
+      }
+    case 'thinking_end':
+      return {
+        type: 'thinking_end',
+        provider: input.provider,
+        model: input.model,
+        contentIndex: input.event.contentIndex ?? 0,
+        content: input.event.content,
       }
     case 'toolcall_end':
       return {
         type: 'content_part',
         provider: input.provider,
         model: input.model,
+        contentIndex: input.event.contentIndex,
         part: {
           type: 'tool_call',
           id: input.event.toolCall.id,

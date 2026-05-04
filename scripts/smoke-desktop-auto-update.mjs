@@ -106,6 +106,14 @@ for (const expected of [
   '停止',
   'WindowTitlebar',
   'window-titlebar',
+  "notification.method === 'item/started'",
+  'upsertCompletedItemMessage',
+  'upsertThinkingDelta',
+  "delta.type === 'thinking'",
+  'formatCompletedItemText',
+  'thinking-event',
+  'tool-event',
+  'setPermissions([])',
 ]) {
   assertText(files.renderer, expected, 'renderer is missing update UI affordance')
 }
@@ -125,6 +133,8 @@ console.log(
         'main IPC channels',
         'preload API',
         'turn interrupt action',
+        'turn item event rendering',
+        'permission cleanup',
         'custom title bar',
         'settings UI controls',
         'topbar update download action',

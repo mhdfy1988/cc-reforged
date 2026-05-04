@@ -21,6 +21,13 @@ export interface LlmTextPart {
   text: string
 }
 
+export interface LlmThinkingPart {
+  type: 'thinking'
+  thinking: string
+  signature?: string
+  redacted?: boolean
+}
+
 export interface LlmToolCallPart {
   type: 'tool_call'
   id: string
@@ -38,6 +45,7 @@ export interface LlmToolResultPart {
 
 export type LlmContentPart =
   | LlmTextPart
+  | LlmThinkingPart
   | LlmToolCallPart
   | LlmToolResultPart
 
@@ -127,7 +135,31 @@ export interface LlmContentPartEvent {
   type: 'content_part'
   provider: LlmProviderId
   model: LlmModelId
+  contentIndex?: number
   part: LlmContentPart
+}
+
+export interface LlmThinkingStartEvent {
+  type: 'thinking_start'
+  provider: LlmProviderId
+  model: LlmModelId
+  contentIndex?: number
+}
+
+export interface LlmThinkingDeltaEvent {
+  type: 'thinking_delta'
+  provider: LlmProviderId
+  model: LlmModelId
+  contentIndex?: number
+  delta: string
+}
+
+export interface LlmThinkingEndEvent {
+  type: 'thinking_end'
+  provider: LlmProviderId
+  model: LlmModelId
+  contentIndex?: number
+  content: string
 }
 
 export interface LlmResponseCompleteEvent {
@@ -147,6 +179,9 @@ export interface LlmResponseErrorEvent {
 export type LlmGenerateEvent =
   | LlmResponseStartEvent
   | LlmContentPartEvent
+  | LlmThinkingStartEvent
+  | LlmThinkingDeltaEvent
+  | LlmThinkingEndEvent
   | LlmResponseCompleteEvent
   | LlmResponseErrorEvent
 
