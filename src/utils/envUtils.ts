@@ -1,16 +1,19 @@
 import memoize from 'lodash-es/memoize.js'
+import { createRequire } from 'node:module'
 import { homedir } from 'os'
 import { join } from 'path'
 
-// Memoized: 150+ callers, many on hot paths. Keyed off CLAUDE_CONFIG_DIR so
+const require = createRequire(import.meta.url)
+
+// Memoized: 150+ callers, many on hot paths. Keyed off CCR_CONFIG_DIR so
 // tests that change the env var get a fresh value without explicit cache.clear.
 export const getClaudeConfigHomeDir = memoize(
   (): string => {
     return (
-      process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude')
+      process.env.CCR_CONFIG_DIR ?? join(homedir(), '.ccr')
     ).normalize('NFC')
   },
-  () => process.env.CLAUDE_CONFIG_DIR,
+  () => process.env.CCR_CONFIG_DIR,
 )
 
 export function getTeamsDir(): string {

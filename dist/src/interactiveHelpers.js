@@ -85,6 +85,18 @@ export async function renderAndRun(root, element) {
     await root.waitUntilExit();
     await gracefulShutdown(0);
 }
+async function showLlmLoginIfAuthMissing(root) {
+    const { getLlmRuntimeAuthStatus } = await import('./services/llm/runtimeStatus.js');
+    const authStatus = await getLlmRuntimeAuthStatus();
+    if (authStatus.available) {
+        return false;
+    }
+    const { LlmLoginFlow } = await import('./components/LlmLoginFlow.js');
+    await showSetupDialog(root, done => _jsx(LlmLoginFlow, { onDone: () => void done() }), {
+        onChangeAppState
+    });
+    return true;
+}
 export async function showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions, commands, claudeInChrome, devChannels) {
     if (process.env.NODE_ENV === 'test' || process.env.IS_DEMO // Skip onboarding in demo mode
     ) {
@@ -103,6 +115,8 @@ export async function showSetupScreens(root, permissionMode, allowDangerouslySki
             onChangeAppState
         });
     }
+    const llmLoginShown = await showLlmLoginIfAuthMissing(root);
+    onboardingShown = onboardingShown || llmLoginShown;
     // Always show the trust dialog in interactive sessions, regardless of permission mode.
     // The trust dialog is the workspace trust boundary — it warns about untrusted repos
     // and checks CLAUDE.md external includes. bypassPermissions mode

@@ -1,4 +1,6 @@
+import { createRequire } from 'node:module';
 let cached;
+const require = createRequire(import.meta.url);
 /**
  * Package's js/index.js reads COMPUTER_USE_SWIFT_NODE_PATH (baked by
  * build-with-plugins.ts on darwin targets, unset otherwise — falls through to

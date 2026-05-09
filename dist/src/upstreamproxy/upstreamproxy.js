@@ -20,12 +20,14 @@
  */
 import { mkdir, readFile, unlink, writeFile } from 'fs/promises';
 import { homedir } from 'os';
+import { createRequire } from 'node:module';
 import { join } from 'path';
 import { registerCleanup } from '../utils/cleanupRegistry.js';
 import { logForDebugging } from '../utils/debug.js';
 import { isEnvTruthy } from '../utils/envUtils.js';
 import { isENOENT } from '../utils/errors.js';
 import { startUpstreamProxyRelay } from './relay.js';
+const require = createRequire(import.meta.url);
 export const SESSION_TOKEN_PATH = '/run/ccr/session_token';
 const SYSTEM_CA_BUNDLE = '/etc/ssl/certs/ca-certificates.crt';
 // Hosts the proxy must NOT intercept. Covers loopback, RFC1918, the IMDS

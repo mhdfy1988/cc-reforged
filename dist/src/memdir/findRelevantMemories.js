@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import { logForDebugging } from '../utils/debug.js';
 import { errorMessage } from '../utils/errors.js';
@@ -5,6 +6,7 @@ import { getDefaultSonnetModel } from '../utils/model/model.js';
 import { sideQuery } from '../utils/sideQuery.js';
 import { jsonParse } from '../utils/slowOperations.js';
 import { formatMemoryManifest, scanMemoryFiles, } from './memoryScan.js';
+const require = createRequire(import.meta.url);
 const SELECT_MEMORIES_SYSTEM_PROMPT = `You are selecting memories that will be useful to Claude Code as it processes a user's query. You will be given the user's query and a list of available memory files with their filenames and descriptions.
 
 Return a list of filenames for the memories that will clearly be useful to Claude Code as it processes the user's query (up to 5). Only include memories that you are certain will be helpful based on their name and description.

@@ -178,9 +178,7 @@ export function useReplBridge(messages, setMessages, abortControllerRef, command
                             const { resolveAndPrepend } = await import('../bridge/inboundAttachments.js');
                             let sanitized = fields.content;
                             if (feature('KAIROS_GITHUB_WEBHOOKS')) {
-                                /* eslint-disable @typescript-eslint/no-require-imports */
-                                const { sanitizeWebhookPayload: sanitizeInboundWebhookContent } = require('../bridge/webhookSanitizer.js');
-                                /* eslint-enable @typescript-eslint/no-require-imports */
+                                const { sanitizeWebhookPayload: sanitizeInboundWebhookContent } = await import('../bridge/webhookSanitizer.js');
                                 sanitized = sanitizeInboundWebhookContent(fields.content);
                             }
                             const content = await resolveAndPrepend(msg, sanitized);

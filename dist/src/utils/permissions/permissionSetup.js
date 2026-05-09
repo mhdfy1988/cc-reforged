@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { relative } from 'path';
 import { getOriginalCwd, handleAutoModeTransition, handlePlanModeTransition, setHasExitedPlanMode, setNeedsAutoModeExitAttachment, } from '../../bootstrap/state.js';
 import { getCwd } from '../cwd.js';
@@ -8,6 +9,7 @@ import { getSettings_DEPRECATED, getSettingsFilePathForSource, getUseAutoModeDur
 import { permissionModeFromString, } from './PermissionMode.js';
 import { applyPermissionRulesToPermissionContext } from './permissions.js';
 import { loadAllPermissionRulesFromDisk } from './permissionsLoader.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
     ? require('./autoModeState.js')

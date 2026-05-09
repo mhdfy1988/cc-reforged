@@ -101,6 +101,22 @@ export async function renderAndRun(root: Root, element: React.ReactNode): Promis
   await root.waitUntilExit();
   await gracefulShutdown(0);
 }
+async function showLlmLoginIfAuthMissing(root: Root): Promise<boolean> {
+  const {
+    getLlmRuntimeAuthStatus
+  } = await import('./services/llm/runtimeStatus.js');
+  const authStatus = await getLlmRuntimeAuthStatus();
+  if (authStatus.available) {
+    return false;
+  }
+  const {
+    LlmLoginFlow
+  } = await import('./components/LlmLoginFlow.js');
+  await showSetupDialog(root, done => <LlmLoginFlow onDone={() => void done()} />, {
+    onChangeAppState
+  });
+  return true;
+}
 export async function showSetupScreens(root: Root, permissionMode: PermissionMode, allowDangerouslySkipPermissions: boolean, commands?: Command[], claudeInChrome?: boolean, devChannels?: ChannelEntry[]): Promise<boolean> {
   if (process.env.NODE_ENV === 'test' || process.env.IS_DEMO // Skip onboarding in demo mode
   ) {
@@ -121,6 +137,8 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
       onChangeAppState
     });
   }
+  const llmLoginShown = await showLlmLoginIfAuthMissing(root);
+  onboardingShown = onboardingShown || llmLoginShown;
 
   // Always show the trust dialog in interactive sessions, regardless of permission mode.
   // The trust dialog is the workspace trust boundary — it warns about untrusted repos

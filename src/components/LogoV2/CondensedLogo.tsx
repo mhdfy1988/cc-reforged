@@ -5,6 +5,7 @@ import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { stringWidth } from '../../ink/stringWidth.js';
 import { Box, Text } from '../../ink.js';
+import { getLlmRuntimeDisplayStatus } from '../../services/llm/runtimeStatus.js';
 import { useAppState } from '../../state/AppState.js';
 import { getEffortSuffix, parseEffortValue } from '../../utils/effort.js';
 import { truncate } from '../../utils/format.js';
@@ -24,7 +25,8 @@ export function CondensedLogo() {
   const agent = useAppState(_temp);
   const effortValue = useAppState(_temp2);
   const model = useMainLoopModel();
-  const modelDisplayName = renderModelSetting(model);
+  const llmStatus = getLlmRuntimeDisplayStatus();
+  const modelDisplayName = llmStatus.providerId === 'anthropic' ? renderModelSetting(model) : llmStatus.modelCatalogEntry.displayName;
   const {
     version,
     cwd,
@@ -32,6 +34,7 @@ export function CondensedLogo() {
     agentName: agentNameFromSettings
   } = getLogoDisplayData();
   const agentName = typeof agent === 'string' ? agent : agentNameFromSettings;
+  const displayBillingType = llmStatus.providerId === 'anthropic' ? billingType : llmStatus.providerDisplayName;
   const showGuestPassesUpsell = useShowGuestPassesUpsell();
   const showOverageCreditUpsell = useShowOverageCreditUpsell();
   let t0;
@@ -72,12 +75,12 @@ export function CondensedLogo() {
   const textWidth = Math.max(columns - 15, 20);
   const truncatedVersion = truncate(version, Math.max(textWidth - 13, 6));
   const normalizedEffortValue = parseEffortValue(effortValue);
-  const effortSuffix = getEffortSuffix(model, normalizedEffortValue);
+  const effortSuffix = llmStatus.providerId === 'anthropic' ? getEffortSuffix(model, normalizedEffortValue) : '';
   const {
     shouldSplit,
     truncatedModel,
     truncatedBilling
-  } = formatModelAndBilling(modelDisplayName + effortSuffix, billingType, textWidth);
+  } = formatModelAndBilling(modelDisplayName + effortSuffix, displayBillingType, textWidth);
   const cwdAvailableWidth = agentName ? textWidth - 1 - stringWidth(agentName) - 3 : textWidth;
   const truncatedCwd = truncatePath(cwd, Math.max(cwdAvailableWidth, 10));
   let t4;
@@ -89,7 +92,7 @@ export function CondensedLogo() {
   }
   let t5;
   if ($[8] === Symbol.for("react.memo_cache_sentinel")) {
-    t5 = <Text bold={true}>Claude Code</Text>;
+    t5 = <Text bold={true}>CCR</Text>;
     $[8] = t5;
   } else {
     t5 = $[8];

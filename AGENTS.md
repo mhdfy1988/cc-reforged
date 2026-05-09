@@ -30,6 +30,7 @@
 1. 默认执行“完整审查本轮所有改动文件”，非抽查。
 2. 评审必须基于真实文件与验证输出；无 diff 不给通过口径。
 3. 高风险入口（运行时/服务/权限/命令）额外检查：禁止假成功、静默吞错、过宽桥接。
+4. 当前仓库运行时是 ESM；恢复源码里残留的懒加载 `require(...)` 必须改为 `createRequire(import.meta.url)` 或动态 `import(...)`，不得依赖全局 `require`。
 
 ## 5. 专用审查线程
 
@@ -70,7 +71,46 @@
    - [docs/current-repair-backlog.md](D:/agent_project/claude-code-reforged/docs/current-repair-backlog.md)
    - 必要时同步 [docs/recovery-repair-plan.md](D:/agent_project/claude-code-reforged/docs/recovery-repair-plan.md)
 
-## 8. 详细规则入口
+## 8. CCR Core 统一接口护栏
+
+1. 本仓库所有产品能力都必须优先收敛到 `CCR Core` 统一能力接口；这里的能力不仅包括 LLM 调用，也包括配置、认证、模型选择、MCP、workspace、thread/turn/session、权限、工具执行、文件操作、状态持久化和事件流。
+2. CLI / TUI / App Server / Desktop / VS Code 都只能是入口适配层。入口层负责参数解析、UI 渲染、协议收发、用户交互和事件映射，不得成为第二套业务运行时。
+3. 新增任何入口功能前必须先判断是否已有 Core API。已有 Core API 时只能调用 Core API；没有 Core API 时先补 Core API，再做入口映射。
+4. App Server 只能把 JSON-RPC request 映射到 Core API，把 Core result / Core event 映射成 JSON-RPC response / notification；不得直接读 token、拼模型请求、执行工具、管理 MCP 生命周期或自定义权限状态机。
+5. CLI/TUI 当前仍存在历史直连链路时，只能视为迁移中的旧实现细节。新增代码不得继续扩大旧链路，后续迁移应逐步改为调用 Core API。
+6. 如果某个实现看起来需要在入口层复制 Core 逻辑，必须先停下来补 `docs/architecture/ccr-core-interface-boundary.md` 或对应 Core service 设计，不得边写边形成隐性分叉。
+
+## 9. Provider / OAuth / SDK 接入护栏
+
+1. 本节不是替代全局“查询优先、试错其次”规则，而是对本仓库 LLM provider / OAuth / SDK 接入场景的强制细化。
+2. 凡是涉及 LLM provider、OAuth、外部 SDK、外部协议、成熟第三方库或陌生运行时行为，无论是新增、改造、修复、排查还是验证，都必须先做资料对照，不得直接凭印象手写；至少对照：
+   - 官方文档或官方源码/README
+   - 本机已有成熟实现或参考仓库
+   - 第三方依赖的源码、类型声明和示例
+3. 如果本机已有跑通过的成熟实现，优先复用其调用路径和参数口径；只有在项目边界确实不同的情况下，才允许改走更底层 API，并必须写清楚差异原因。
+4. 如果从高层 helper 切到低层 `stream/complete` 等 API，必须逐字段对照入参名称、默认值、传输方式和错误降级行为，并补 smoke 断言防止口径漂移。
+5. 真实登录凭据、token、refresh token 和 credential JSON 绝不打印、不贴回复、不写入文档；验证只输出脱敏状态和路径。
+6. 这类接入验证失败时，先回到资料对照和实际 payload/transport 差异排查，不得优先猜测网络、代理或环境问题。
+7. 模型可见的系统身份、产品说明和归因头必须按 provider 隔离：官方 Anthropic / Bedrock / Vertex / Foundry 链路可保留 Claude Code 兼容信息；`codex-oauth`、BigModel、OpenAI-compatible 或其他 Anthropic-compatible 代理不得注入 `cc_version`、`x-anthropic-billing-header` 或 “You are Claude Code” 这类会被模型复述的身份信息。
+
+## 10. 已有能力与成熟方案复用护栏
+
+1. 新增或改造功能前，必须先检索当前仓库是否已经存在同类能力、类型、协议、service、hook、UI 组件或测试脚本；已有能力不得重复造一套。
+2. 如果已有能力只差入口适配，应优先做适配层或补 Core API，不得在 App Server / Desktop / VS Code / CLI / TUI 各自复制业务逻辑。
+3. 如果第三方已经有成熟稳定的通用能力，默认先评估复用；不要为了“自己写”而手搓 OAuth、SDK 协议、MCP 客户端、运行时校验、日志、HTTP/JSON-RPC、配置解析等通用工程能力。
+4. 只有在确认现有能力不适用、第三方方案边界不匹配或为了阶段性最小原型时，才允许新写实现；必须在文档或代码注释里说明不复用的原因。
+5. 详细执行清单见 [06-existing-capability-and-reuse.md](D:/agent_project/claude-code-reforged/docs/agent-rules/06-existing-capability-and-reuse.md)。
+
+## 11. CLI / TUI 兼容护栏
+
+1. Desktop / App Server 的体验修复默认不得改变原 TUI 和 `-p` CLI 的输出语义；除非任务目标明确要求统一迁移，否则不要把 Desktop 展示层判断写回 CLI/TUI 打印链路。
+2. 修改 `apps/desktop/**` 的 UI、样式、renderer 状态和 Desktop 专属组件时，通常只需验证 Desktop；不得误称会修复 TUI/CLI。
+3. 修改 `src/core/**`、`src/app-server/**`、`src/services/llm/**`、工具协议、消息转换、provider、OAuth、模型适配或 `dist/src/**` 对应产物时，必须视为共享链路改动。
+4. 共享链路改动合入前，至少跑三路回归：Desktop/App Server 定向 smoke、`ccr -p` 非交互 CLI、`ccr` 交互式 TUI 基础启动或等价最小验证。
+5. 如果某次修复只为了 Desktop 展示，例如工具卡片合并、Todo 浮窗、思考展示、权限卡片布局，应优先把逻辑限制在 Desktop domain / renderer 层；确实需要 Core 事件补字段时，只补协议字段和稳定 ID，不改变 CLI/TUI 消费的原始消息内容。
+6. 每次解释影响面时，必须明确标注该改动属于：Desktop-only、App Server 协议层、Core 共享层、LLM 共享层或构建产物同步。
+
+## 12. 详细规则入口
 
 按需读取，不要一次性加载全部分册：
 
@@ -79,3 +119,4 @@
 3. [03-type-narrowing-patterns.md](D:/agent_project/claude-code-reforged/docs/agent-rules/03-type-narrowing-patterns.md)（类型收口与 guard 模式）
 4. [04-review-thread-governance.md](D:/agent_project/claude-code-reforged/docs/agent-rules/04-review-thread-governance.md)（审查线程治理与纠偏）
 5. [05-retro-and-doc-sync.md](D:/agent_project/claude-code-reforged/docs/agent-rules/05-retro-and-doc-sync.md)（复盘模板与文档同步）
+6. [06-existing-capability-and-reuse.md](D:/agent_project/claude-code-reforged/docs/agent-rules/06-existing-capability-and-reuse.md)（已有能力检索、第三方成熟方案复用、新实现准入）

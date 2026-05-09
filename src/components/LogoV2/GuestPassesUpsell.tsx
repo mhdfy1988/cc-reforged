@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Text } from '../../ink.js';
 import { logEvent } from '../../services/analytics/index.js';
 import { checkCachedPassesEligibility, formatCreditAmount, getCachedReferrerReward, getCachedRemainingPasses } from '../../services/api/referral.js';
+import { getLlmRuntimeDisplayStatus } from '../../services/llm/runtimeStatus.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 function resetIfPassesRefreshed(): void {
   const remaining = getCachedRemainingPasses();
@@ -20,6 +21,7 @@ function resetIfPassesRefreshed(): void {
   }
 }
 function shouldShowGuestPassesUpsell(): boolean {
+  if (getLlmRuntimeDisplayStatus().providerId !== 'anthropic') return false;
   const {
     eligible,
     hasCache
@@ -60,7 +62,7 @@ export function GuestPassesUpsell() {
   let t0;
   if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
     const reward = getCachedReferrerReward();
-    t0 = <Text dimColor={true}><Text color="claude">[✻]</Text> <Text color="claude">[✻]</Text>{" "}<Text color="claude">[✻]</Text> ·{" "}{reward ? `Share Claude Code and earn ${formatCreditAmount(reward)} of extra usage · /passes` : "3 guest passes at /passes"}</Text>;
+    t0 = <Text dimColor={true}><Text color="claude">[✻]</Text> <Text color="claude">[✻]</Text>{" "}<Text color="claude">[✻]</Text> ·{" "}{reward ? `Share CCR and earn ${formatCreditAmount(reward)} of extra usage · /passes` : "3 guest passes at /passes"}</Text>;
     $[0] = t0;
   } else {
     t0 = $[0];

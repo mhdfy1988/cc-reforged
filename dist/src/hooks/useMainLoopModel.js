@@ -1,5 +1,6 @@
 import { useEffect, useReducer } from 'react';
 import { onGrowthBookRefresh } from '../services/analytics/growthbook.js';
+import { loadLlmConfig } from '../services/llm/llmConfig.js';
 import { useAppState } from '../state/AppState.js';
 import { getDefaultMainLoopModelSetting, parseUserSpecifiedModel, } from '../utils/model/model.js';
 function useTypedAppState(selector) {
@@ -21,9 +22,15 @@ export function useMainLoopModel() {
     // while /model (which also re-resolves) displays another.
     const [, forceRerender] = useReducer(x => x + 1, 0);
     useEffect(() => onGrowthBookRefresh(forceRerender), []);
-    const model = parseUserSpecifiedModel(mainLoopModelForSession ??
-        mainLoopModel ??
-        getDefaultMainLoopModelSetting());
+    const llmConfig = loadLlmConfig();
+    if (llmConfig.provider !== 'anthropic') {
+        return llmConfig.model;
+    }
+    const configuredModel = mainLoopModelForSession ?? mainLoopModel;
+    if (configuredModel) {
+        return parseUserSpecifiedModel(configuredModel);
+    }
+    const model = parseUserSpecifiedModel(getDefaultMainLoopModelSetting());
     return model;
 }
 //# sourceMappingURL=useMainLoopModel.js.map

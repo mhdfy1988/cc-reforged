@@ -79,7 +79,7 @@ function Install({ onDone, force, target }) {
                 logForDebugging(`Install: installLatest returned version=${result.latestVersion}, wasUpdated=${result.wasUpdated}, lockFailed=${result.lockFailed}`);
                 // Check specifically for lock failure
                 if (result.lockFailed) {
-                    throw new Error('Could not install - another process is currently installing Claude. Please try again in a moment.');
+                    throw new Error('Could not install - another process is currently installing CCR. Please try again in a moment.');
                 }
                 // If we couldn't get the version, there might be an issue
                 if (!result.latestVersion) {
@@ -166,24 +166,24 @@ function Install({ onDone, force, target }) {
     useEffect(() => {
         if (state.type === 'success') {
             // Give success message time to render before exiting
-            setTimeout(onDone, 2000, 'Claude Code installation completed successfully', {
+            setTimeout(onDone, 2000, 'CCR installation completed successfully', {
                 display: 'system'
             });
         }
         else if (state.type === 'error') {
             // Give error message time to render before exiting
-            setTimeout(onDone, 3000, 'Claude Code installation failed', {
+            setTimeout(onDone, 3000, 'CCR installation failed', {
                 display: 'system'
             });
         }
     }, [state, onDone]);
-    return _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [state.type === 'checking' && _jsx(Text, { color: "claude", children: "Checking installation status..." }), state.type === 'cleaning-npm' && _jsx(Text, { color: "warning", children: "Cleaning up old npm installations..." }), state.type === 'installing' && _jsxs(Text, { color: "claude", children: ["Installing Claude Code native build ", state.version, "..."] }), state.type === 'setting-up' && _jsx(Text, { color: "claude", children: "Setting up launcher and shell integration..." }), state.type === 'set-up' && _jsx(SetupNotes, { messages: state.messages }), state.type === 'success' && _jsxs(Box, { flexDirection: "column", gap: 1, children: [_jsxs(Box, { children: [_jsx(StatusIcon, { status: "success", withSpace: true }), _jsx(Text, { color: "success", bold: true, children: "Claude Code successfully installed!" })] }), _jsxs(Box, { marginLeft: 2, flexDirection: "column", gap: 1, children: [state.version !== 'current' && _jsxs(Box, { children: [_jsx(Text, { dimColor: true, children: "Version: " }), _jsx(Text, { color: "claude", children: state.version })] }), _jsxs(Box, { children: [_jsx(Text, { dimColor: true, children: "Location: " }), _jsx(Text, { color: "text", children: getInstallationPath() })] })] }), _jsx(Box, { marginLeft: 2, flexDirection: "column", gap: 1, children: _jsxs(Box, { marginTop: 1, children: [_jsx(Text, { dimColor: true, children: "Next: Run " }), _jsx(Text, { color: "claude", bold: true, children: "claude --help" }), _jsx(Text, { dimColor: true, children: " to get started" })] }) }), state.setupMessages && _jsx(SetupNotes, { messages: state.setupMessages })] }), state.type === 'error' && _jsxs(Box, { flexDirection: "column", gap: 1, children: [_jsxs(Box, { children: [_jsx(StatusIcon, { status: "error", withSpace: true }), _jsx(Text, { color: "error", children: "Installation failed" })] }), _jsx(Text, { color: "error", children: state.message }), _jsx(Box, { marginTop: 1, children: _jsx(Text, { dimColor: true, children: "Try running with --force to override checks" }) })] })] });
+    return _jsxs(Box, { flexDirection: "column", marginTop: 1, children: [state.type === 'checking' && _jsx(Text, { color: "claude", children: "Checking installation status..." }), state.type === 'cleaning-npm' && _jsx(Text, { color: "warning", children: "Cleaning up old npm installations..." }), state.type === 'installing' && _jsxs(Text, { color: "claude", children: ["Installing CCR native build ", state.version, "..."] }), state.type === 'setting-up' && _jsx(Text, { color: "claude", children: "Setting up launcher and shell integration..." }), state.type === 'set-up' && _jsx(SetupNotes, { messages: state.messages }), state.type === 'success' && _jsxs(Box, { flexDirection: "column", gap: 1, children: [_jsxs(Box, { children: [_jsx(StatusIcon, { status: "success", withSpace: true }), _jsx(Text, { color: "success", bold: true, children: "CCR successfully installed!" })] }), _jsxs(Box, { marginLeft: 2, flexDirection: "column", gap: 1, children: [state.version !== 'current' && _jsxs(Box, { children: [_jsx(Text, { dimColor: true, children: "Version: " }), _jsx(Text, { color: "claude", children: state.version })] }), _jsxs(Box, { children: [_jsx(Text, { dimColor: true, children: "Location: " }), _jsx(Text, { color: "text", children: getInstallationPath() })] })] }), _jsx(Box, { marginLeft: 2, flexDirection: "column", gap: 1, children: _jsxs(Box, { marginTop: 1, children: [_jsx(Text, { dimColor: true, children: "Next: Run " }), _jsx(Text, { color: "claude", bold: true, children: "ccr --help" }), _jsx(Text, { dimColor: true, children: " to get started" })] }) }), state.setupMessages && _jsx(SetupNotes, { messages: state.setupMessages })] }), state.type === 'error' && _jsxs(Box, { flexDirection: "column", gap: 1, children: [_jsxs(Box, { children: [_jsx(StatusIcon, { status: "error", withSpace: true }), _jsx(Text, { color: "error", children: "Installation failed" })] }), _jsx(Text, { color: "error", children: state.message }), _jsx(Box, { marginTop: 1, children: _jsx(Text, { dimColor: true, children: "Try running with --force to override checks" }) })] })] });
 }
 // This is only used from cli.tsx, not as a slash command
 export const install = {
     type: 'local-jsx',
     name: 'install',
-    description: 'Install Claude Code native build',
+    description: 'Install CCR native build',
     argumentHint: '[options]',
     async call(onDone, _context, args) {
         // Parse arguments

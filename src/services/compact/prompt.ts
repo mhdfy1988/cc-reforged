@@ -1,5 +1,8 @@
 import { feature } from 'bun:bundle'
+import { createRequire } from 'node:module'
 import type { PartialCompactDirection } from '../../types/message.js'
+
+const require = createRequire(import.meta.url)
 
 // Dead code elimination: conditional import for proactive mode
 /* eslint-disable @typescript-eslint/no-require-imports */

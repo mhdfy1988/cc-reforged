@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 /**
  * djb2 string hash — fast non-cryptographic hash returning a signed 32-bit int.
  * Deterministic across runtimes (unlike Bun.hash which uses wyhash). Use as a
@@ -19,9 +20,7 @@ export function hashContent(content) {
     if (typeof Bun !== 'undefined') {
         return Bun.hash(content).toString();
     }
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const crypto = require('crypto');
-    return crypto.createHash('sha256').update(content).digest('hex');
+    return createHash('sha256').update(content).digest('hex');
 }
 /**
  * Hash two strings without allocating a concatenated temp string. Bun path
@@ -33,10 +32,7 @@ export function hashPair(a, b) {
     if (typeof Bun !== 'undefined') {
         return Bun.hash(b, Bun.hash(a)).toString();
     }
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const crypto = require('crypto');
-    return crypto
-        .createHash('sha256')
+    return createHash('sha256')
         .update(a)
         .update('\0')
         .update(b)

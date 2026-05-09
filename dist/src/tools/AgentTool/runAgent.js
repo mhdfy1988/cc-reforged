@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle';
 import { randomUUID } from 'crypto';
+import { createRequire } from 'node:module';
 import uniqBy from 'lodash-es/uniqBy.js';
 import { logForDebugging } from 'src/utils/debug.js';
 import { getProjectRoot, getSessionId } from '../../bootstrap/state.js';
@@ -30,6 +31,7 @@ import { isPerfettoTracingEnabled, registerAgent as registerPerfettoAgent, unreg
 import { createAgentId, validateUuid } from '../../utils/uuid.js';
 import { resolveAgentTools } from './agentToolUtils.js';
 import { isBuiltInAgent } from './loadAgentsDir.js';
+const require = createRequire(import.meta.url);
 /**
  * Initialize agent-specific MCP servers
  * Agents can define their own MCP servers in their frontmatter that are additive

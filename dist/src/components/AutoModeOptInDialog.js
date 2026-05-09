@@ -7,7 +7,7 @@ import { updateSettingsForSource } from '../utils/settings/settings.js';
 import { Select } from './CustomSelect/index.js';
 import { Dialog } from './design-system/Dialog.js';
 // NOTE: This copy is legally reviewed — do not modify without Legal team approval.
-export const AUTO_MODE_DESCRIPTION = "Auto mode lets Claude handle permission prompts automatically — Claude checks each tool call for risky actions and prompt injection before executing. Actions Claude identifies as safe are executed, while actions Claude identifies as risky are blocked and Claude may try a different approach. Ideal for long-running tasks. Sessions are slightly more expensive. Claude can make mistakes that allow harmful commands to run, it's recommended to only use in isolated environments. Shift+Tab to change mode.";
+export const AUTO_MODE_DESCRIPTION = "Auto mode lets CCR handle permission prompts automatically — CCR checks each tool call for risky actions and prompt injection before executing. Actions CCR identifies as safe are executed, while actions CCR identifies as risky are blocked and CCR may try a different approach. Ideal for long-running tasks. Sessions are slightly more expensive. CCR can make mistakes that allow harmful commands to run, it's recommended to only use in isolated environments. Shift+Tab to change mode.";
 export function AutoModeOptInDialog(t0) {
     const $ = _c(18);
     const { onAccept, onDecline, declineExits } = t0;
@@ -62,7 +62,7 @@ export function AutoModeOptInDialog(t0) {
     const onChange = t2;
     let t3;
     if ($[4] === Symbol.for("react.memo_cache_sentinel")) {
-        t3 = _jsxs(Box, { flexDirection: "column", gap: 1, children: [_jsx(Text, { children: AUTO_MODE_DESCRIPTION }), _jsx(Link, { url: "https://code.claude.com/docs/en/security" })] });
+        t3 = _jsxs(Box, { flexDirection: "column", gap: 1, children: [_jsx(Text, { children: AUTO_MODE_DESCRIPTION }), _jsx(Link, { url: "https://github.com/mhdfy1988/cc-reforged" })] });
         $[4] = t3;
     }
     else {

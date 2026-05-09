@@ -13,6 +13,7 @@
  * (SDK -p mode via query.enableRemoteControl).
  */
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { hostname } from 'os';
 import { getOriginalCwd, getSessionId } from '../bootstrap/state.js';
 import { getFeatureValue_CACHED_WITH_REFRESH } from '../services/analytics/growthbook.js';
@@ -37,6 +38,7 @@ import { checkEnvLessBridgeMinVersion } from './envLessBridgeConfig.js';
 import { getPollIntervalConfig } from './pollConfig.js';
 import { initBridgeCore } from './replBridge.js';
 import { setCseShimGate } from './sessionIdCompat.js';
+const require = createRequire(import.meta.url);
 function isRecord(value) {
     return typeof value === 'object' && value !== null;
 }
@@ -293,7 +295,7 @@ export async function initReplBridge(options) {
         const versionError = await checkEnvLessBridgeMinVersion();
         if (versionError) {
             logBridgeSkip('version_too_old', `[bridge:repl] Skipping: ${versionError}`, true);
-            onStateChange?.('failed', 'run `claude update` to upgrade');
+            onStateChange?.('failed', 'run `ccr update` to upgrade');
             return null;
         }
         logForDebugging('[bridge:repl] Using env-less bridge path (tengu_bridge_repl_v2)');
@@ -330,7 +332,7 @@ export async function initReplBridge(options) {
     const versionError = checkBridgeMinVersion();
     if (versionError) {
         logBridgeSkip('version_too_old', `[bridge:repl] Skipping: ${versionError}`);
-        onStateChange?.('failed', 'run `claude update` to upgrade');
+        onStateChange?.('failed', 'run `ccr update` to upgrade');
         return null;
     }
     // Gather git context — this is the bootstrap-read boundary.

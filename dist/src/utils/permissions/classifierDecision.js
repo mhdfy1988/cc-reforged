@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { ASK_USER_QUESTION_TOOL_NAME } from '../../tools/AskUserQuestionTool/prompt.js';
 import { ENTER_PLAN_MODE_TOOL_NAME } from '../../tools/EnterPlanModeTool/constants.js';
 import { EXIT_PLAN_MODE_TOOL_NAME } from '../../tools/ExitPlanModeTool/constants.js';
@@ -20,6 +21,7 @@ import { TEAM_DELETE_TOOL_NAME } from '../../tools/TeamDeleteTool/constants.js';
 import { TODO_WRITE_TOOL_NAME } from '../../tools/TodoWriteTool/constants.js';
 import { TOOL_SEARCH_TOOL_NAME } from '../../tools/ToolSearchTool/prompt.js';
 import { YOLO_CLASSIFIER_TOOL_NAME } from './yoloClassifier.js';
+const require = createRequire(import.meta.url);
 // Ant-only tool names: conditional require so Bun can DCE these in external builds.
 // Gates mirror tools.ts. Keeps the tool name strings out of cli.js.
 /* eslint-disable @typescript-eslint/no-require-imports */

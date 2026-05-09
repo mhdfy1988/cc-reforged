@@ -1,38 +1,141 @@
 {
-  "name": "@anthropic-ai/claude-code",
-  "version": "2.1.88",
+  "name": "cc-reforged",
+  "version": "0.4.1",
+  "main": "out/main/index.js",
   "bin": {
-    "claude": "cli.js"
+    "ccr": "cli.js"
   },
   "files": [
     "README.md",
+    "README.zh-CN.md",
     "LICENSE.md",
     "cli.js",
     "bun-bundle-loader.mjs",
-    "dist/",
+    "dist/**/*.js",
+    "dist/**/*.txt",
     "vendor/claude-for-chrome-mcp-stub.mjs"
   ],
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.0.0"
   },
   "type": "module",
-  "author": "Anthropic <support@anthropic.com>",
-  "license": "SEE LICENSE IN README.md",
-  "description": "Use Claude, Anthropic's AI assistant, right from your terminal. Claude can understand your codebase, edit files, run terminal commands, and handle entire workflows for you.",
-  "homepage": "https://github.com/anthropics/claude-code",
+  "author": "CCR maintainers",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "description": "CCR is a terminal coding agent recovery build with a built-in pluggable LLM runtime.",
+  "keywords": [
+    "ccr",
+    "coding-agent",
+    "llm",
+    "codex-oauth",
+    "terminal"
+  ],
+  "homepage": "https://github.com/mhdfy1988/cc-reforged",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mhdfy1988/cc-reforged.git"
+  },
   "bugs": {
-    "url": "https://github.com/anthropics/claude-code/issues"
+    "url": "https://github.com/mhdfy1988/cc-reforged/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "prepublishOnly": "node -e \"if (!process.env.AUTHORIZED) { console.error('ERROR: Direct publishing is not allowed.\\nPlease see the release workflow documentation to publish this package.'); process.exit(1); }\"",
     "build": "tsc -p tsconfig.build.json",
+    "postbuild": "node ./scripts/copy-text-assets.mjs",
+    "desktop:icons": "node ./scripts/build-desktop-icons.mjs",
+    "desktop:dev": "electron-vite dev --config apps/desktop/electron.vite.config.ts",
+    "desktop:build": "electron-vite build --config apps/desktop/electron.vite.config.ts",
+    "desktop:pack": "node ./scripts/desktop-package.mjs --dir",
+    "desktop:dist": "node ./scripts/desktop-package.mjs --dist",
+    "desktop:dist:signed": "node ./scripts/desktop-package.mjs --dist --signed",
+    "release:desktop:check": "node ./scripts/prepare-desktop-github-release.mjs --check",
+    "release:desktop:dry-run": "node ./scripts/prepare-desktop-github-release.mjs",
+    "release:desktop:draft": "node ./scripts/prepare-desktop-github-release.mjs --execute --draft",
+    "typecheck:desktop": "tsc -p apps/desktop/tsconfig.json --noEmit",
+    "audit:runtime-targets": "node ./scripts/audit-runtime-targets.mjs",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "typecheck:config": "tsc -p tsconfig.typecheck.json --showConfig",
     "build:config": "tsc -p tsconfig.build.json --showConfig",
+    "smoke:anthropic-provider": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-anthropic-provider.mjs",
+    "smoke:codex-oauth-session": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-codex-oauth-session.mjs",
+    "smoke:codex-oauth-provider": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-codex-oauth-provider.mjs",
+    "smoke:llm-claude-adapter": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-claude-adapter.mjs",
+    "smoke:llm-config": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-config.mjs",
+    "smoke:llm-runtime": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-runtime.mjs",
+    "smoke:llm-runtime-status": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-runtime-status.mjs",
+    "smoke:system-identity": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-system-identity.mjs",
+    "smoke:app-server": "node ./scripts/smoke-app-server.mjs",
+    "smoke:app-server-context": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-app-server-context-state.mjs",
+    "smoke:app-server-client": "node ./scripts/smoke-app-server-client.mjs",
+    "smoke:desktop-auto-update": "node ./scripts/smoke-desktop-auto-update.mjs",
+    "smoke:desktop-branding": "node ./scripts/smoke-desktop-branding.mjs",
+    "smoke:desktop-display-events": "node ./scripts/smoke-desktop-display-events.mjs",
+    "smoke:desktop-github-actions-release": "node ./scripts/smoke-desktop-github-actions-release.mjs",
+    "smoke:desktop-package-layout": "node ./scripts/smoke-desktop-package-layout.mjs",
+    "report:desktop-package-layout": "node ./scripts/smoke-desktop-package-layout.mjs --report-only",
+    "smoke:desktop-packaged": "node ./scripts/smoke-desktop-packaged-app-server.mjs",
+    "smoke:desktop-release-artifacts": "node ./scripts/smoke-desktop-release-artifacts.mjs",
+    "smoke:desktop-shell-cards": "node ./scripts/smoke-desktop-shell-cards.mjs",
+    "smoke:desktop-signing-readiness": "node ./scripts/smoke-desktop-signing-readiness.mjs",
     "smoke:runtime": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-runtime.mjs",
     "smoke:permissions": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-permissions.mjs",
     "smoke:deps": "node ./scripts/smoke-deps.mjs",
     "ci:smoke": "node ./scripts/ci-smoke.mjs"
+  },
+  "build": {
+    "appId": "dev.ccr.desktop",
+    "productName": "CCR Desktop",
+    "directories": {
+      "output": "release/desktop"
+    },
+    "files": [
+      "out/**/*",
+      "apps/desktop/assets/generated/**/*",
+      "dist/**/*",
+      "vendor/**/*",
+      "cli.js",
+      "bun-bundle-loader.mjs",
+      "package.json",
+      "LICENSE.md",
+      "README.md",
+      "README.zh-CN.md"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "win": {
+      "icon": "apps/desktop/assets/generated/icon.ico",
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "CCR-Desktop-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "apps/desktop/assets/generated/icon.ico",
+      "uninstallerIcon": "apps/desktop/assets/generated/icon.ico",
+      "uninstallDisplayName": "CCR Desktop"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "mhdfy1988",
+        "repo": "cc-reforged"
+      }
+    ]
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "^0.3.0",
@@ -40,6 +143,7 @@
     "@anthropic-ai/sdk": "^0.57.0",
     "@commander-js/extra-typings": "^14.0.0",
     "@growthbook/growthbook": "^1.6.5",
+    "@mariozechner/pi-ai": "^0.58.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/api-logs": "^0.214.0",
@@ -67,6 +171,7 @@
     "chokidar": "^4.0.3",
     "cli-boxes": "^4.0.1",
     "diff": "^7.0.0",
+    "electron-updater": "^6.8.3",
     "env-paths": "^4.0.0",
     "execa": "^9.5.2",
     "fflate": "^0.8.2",
@@ -84,8 +189,8 @@
     "plist": "^3.1.0",
     "proper-lockfile": "^4.1.2",
     "qrcode": "^1.5.4",
-    "react": "^19.1.0",
-    "react-reconciler": "^0.31.0",
+    "react": "19.2.4",
+    "react-reconciler": "^0.33.0",
     "semver": "^7.7.1",
     "shell-quote": "^1.8.3",
     "strip-ansi": "^7.1.0",
@@ -105,19 +210,16 @@
     "@types/lodash-es": "^4.17.12",
     "@types/node": "^22.15.2",
     "@types/proper-lockfile": "^4.1.4",
-    "@types/react": "^19.1.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.3",
     "@types/semver": "^7.7.0",
-    "typescript": "^5.8.3"
-  },
-  "optionalDependencies": {
-    "@img/sharp-darwin-arm64": "^0.34.2",
-    "@img/sharp-darwin-x64": "^0.34.2",
-    "@img/sharp-linux-arm": "^0.34.2",
-    "@img/sharp-linux-arm64": "^0.34.2",
-    "@img/sharp-linux-x64": "^0.34.2",
-    "@img/sharp-linuxmusl-arm64": "^0.34.2",
-    "@img/sharp-linuxmusl-x64": "^0.34.2",
-    "@img/sharp-win32-arm64": "^0.34.2",
-    "@img/sharp-win32-x64": "^0.34.2"
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^5.0.0",
+    "react-dom": "19.2.4",
+    "sharp": "^0.34.5",
+    "typescript": "^5.8.3",
+    "vite": "^7.3.2"
   }
 }

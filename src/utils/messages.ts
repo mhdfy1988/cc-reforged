@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle'
+import { createRequire } from 'node:module'
 import type { BetaUsage as Usage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import type {
   ContentBlock,
@@ -85,6 +86,8 @@ import { quote } from './bash/shellQuote.js'
 import { formatNumber, formatTokens } from './format.js'
 import { getPewterLedgerVariant } from './planModeV2.js'
 import { jsonStringify } from './slowOperations.js'
+
+const require = createRequire(import.meta.url)
 
 type SnipCompactModule = {
   isSnipRuntimeEnabled?: () => boolean

@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { createRequire } from 'node:module';
 import { getAPIProvider, isFirstPartyAnthropicBaseUrl, } from 'src/utils/model/providers.js';
 import { getAttributionHeader, getCLISyspromptPrefix, } from '../../constants/system.js';
 import { getEmptyToolPermissionContext, toolMatchesName, } from '../../Tool.js';
@@ -20,6 +21,7 @@ import { tokenCountFromLastAPIResponse } from '../../utils/tokens.js';
 import { getDynamicConfig_BLOCKS_ON_INIT } from '../analytics/growthbook.js';
 import { currentLimits, extractQuotaStatusFromError, extractQuotaStatusFromHeaders, } from '../claudeAiLimits.js';
 import { getAPIContextManagement } from '../compact/apiMicrocompact.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
     ? require('../../utils/permissions/autoModeState.js')
@@ -63,10 +65,12 @@ import { isBetaTracingEnabled, startLLMRequestSpan, } from '../../utils/telemetr
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { logEvent, } from '../analytics/index.js';
 import { consumePendingCacheEdits, getPinnedCacheEdits, markToolsSentToAPIState, pinCacheEdits, } from '../compact/microCompact.js';
+import { queryWithLlmRuntime, shouldUseBuiltinLlmRuntime, } from '../llm/claudeApiAdapter.js';
+import { getDefaultAnthropicProvider } from '../llm/providers/defaultAnthropicProvider.js';
 import { getInitializationStatus } from '../lsp/manager.js';
 import { isToolFromMcpServer } from '../mcp/utils.js';
 import { withStreamingVCR, withVCR } from '../vcr.js';
-import { CLIENT_REQUEST_ID_HEADER, getAnthropicClient } from './client.js';
+import { CLIENT_REQUEST_ID_HEADER } from './client.js';
 import { API_ERROR_MESSAGE_PREFIX, CUSTOM_OFF_SWITCH_MESSAGE, getAssistantMessageFromError, getErrorMessageIfRefusal, } from './errors.js';
 import { EMPTY_USAGE, logAPIError, logAPIQuery, logAPISuccessAndDuration, } from './logging.js';
 import { CACHE_TTL_1HOUR_MS, checkResponseForCacheBreak, recordPromptState, } from './promptCacheBreakDetection.js';
@@ -507,7 +511,8 @@ export async function verifyApiKey(apiKey, isNonInteractiveSession) {
         // WARNING: if you change this to use a non-Haiku model, this request will fail in 1P unless it uses getCLISyspromptPrefix.
         const model = getSmallFastModel();
         const betas = getModelBetas(model);
-        return await returnValue(withRetry(() => getAnthropicClient({
+        const anthropicProvider = getDefaultAnthropicProvider();
+        return await returnValue(withRetry(() => anthropicProvider.getClient({
             apiKey,
             maxRetries: 3,
             model,
@@ -687,7 +692,8 @@ export async function* executeNonStreamingRequest(clientOptions, retryOptions, p
  */
 originatingRequestId) {
     const fallbackTimeoutMs = getNonstreamingFallbackTimeoutMs();
-    const generator = withRetry(() => getAnthropicClient({
+    const anthropicProvider = getDefaultAnthropicProvider();
+    const generator = withRetry(() => anthropicProvider.getClient({
         maxRetries: 0,
         model: clientOptions.model,
         fetchOverride: clientOptions.fetchOverride,
@@ -833,10 +839,12 @@ export function stripExcessMediaItems(messages, limit) {
     });
 }
 async function* queryModel(messages, systemPrompt, thinkingConfig, tools, signal, options) {
+    const useBuiltinLlmRuntime = shouldUseBuiltinLlmRuntime();
     // Check cheap conditions first — the off-switch await blocks on GrowthBook
     // init (~10ms). For non-Opus models (haiku, sonnet) this skips the await
     // entirely. Subscribers don't hit this path at all.
-    if (!isClaudeAISubscriber() &&
+    if (!useBuiltinLlmRuntime &&
+        !isClaudeAISubscriber() &&
         isNonCustomOpusModel(options.model) &&
         (await getDynamicConfig_BLOCKS_ON_INIT('tengu-off-switch', {
             activated: false,
@@ -1125,6 +1133,20 @@ async function* queryModel(messages, systemPrompt, thinkingConfig, tools, signal
         });
     }
     const allTools = [...toolSchemas, ...extraToolSchemas];
+    if (useBuiltinLlmRuntime) {
+        yield* queryWithLlmRuntime({
+            messages: messagesForAPI,
+            systemPrompt,
+            toolSchemas: allTools,
+            signal,
+            model: options.model,
+            maxOutputTokens: options.maxOutputTokensOverride ||
+                getMaxOutputTokensForModel(options.model),
+            temperature: options.temperatureOverride,
+            reasoningEffort: resolveAppliedEffort(options.model, options.effortValue),
+        });
+        return;
+    }
     const isFastMode = isFastModeEnabled() &&
         isFastModeAvailable() &&
         !isFastModeCooldown() &&
@@ -1427,7 +1449,8 @@ async function* queryModel(messages, systemPrompt, thinkingConfig, tools, signal
     let isAdvisorInProgress = false;
     try {
         queryCheckpoint('query_client_creation_start');
-        const generator = withRetry(() => getAnthropicClient({
+        const anthropicProvider = getDefaultAnthropicProvider();
+        const generator = withRetry(() => anthropicProvider.getClient({
             maxRetries: 0, // Disabled auto-retry in favor of manual implementation
             model: options.model,
             fetchOverride: options.fetchOverride,

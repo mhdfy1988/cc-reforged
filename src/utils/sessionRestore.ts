@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import type { UUID } from 'crypto'
+import { createRequire } from 'node:module'
 import { dirname } from 'path'
 import {
   getMainLoopModelOverride,
@@ -60,6 +61,8 @@ import {
   getCurrentWorktreeSession,
   restoreWorktreeSession,
 } from './worktree.js'
+
+const require = createRequire(import.meta.url)
 
 type ResumeResult = {
   messages?: Message[]

@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle';
 import { randomUUID } from 'crypto';
+import { createRequire } from 'node:module';
 import { getSdkBetas, getSessionId } from 'src/bootstrap/state.js';
 import { DEFAULT_OUTPUT_STYLE_NAME } from 'src/constants/outputStyles.js';
 import { AGENT_TOOL_NAME, LEGACY_AGENT_TOOL_NAME, } from 'src/tools/AgentTool/constants.js';
@@ -7,6 +8,7 @@ import { getAnthropicApiKeyWithSource } from '../auth.js';
 import { getCwd } from '../cwd.js';
 import { getFastModeState } from '../fastMode.js';
 import { getSettings_DEPRECATED } from '../settings/settings.js';
+const require = createRequire(import.meta.url);
 // TODO(next-minor): remove this translation once SDK consumers have migrated
 // to the 'Agent' tool name. The wire name was renamed Task → Agent in #19647,
 // but emitting the new name in init/result events broke SDK consumers on a

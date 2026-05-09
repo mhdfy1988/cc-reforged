@@ -1,5 +1,6 @@
 import { jsx as _jsx } from "react/jsx-runtime";
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import * as React from 'react';
 import { buildTool, toolMatchesName } from 'src/Tool.js';
 import { getQuerySourceForAgent } from 'src/utils/promptCategory.js';
@@ -51,6 +52,7 @@ import { filterAgentsByMcpRequirements, hasRequiredMcpServers, isBuiltInAgent } 
 import { getPrompt } from './prompt.js';
 import { runAgent } from './runAgent.js';
 import { renderGroupedAgentToolUse, renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessage, renderToolUseProgressMessage, renderToolUseRejectedMessage, renderToolUseTag, userFacingName, userFacingNameBackgroundColor } from './UI.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../../proactive/index.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */

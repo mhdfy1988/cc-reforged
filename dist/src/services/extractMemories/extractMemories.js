@@ -13,6 +13,7 @@
  * initExtractMemories() in beforeEach to get a fresh closure.
  */
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { basename } from 'path';
 import { getIsRemoteMode } from '../../bootstrap/state.js';
 import { ENTRYPOINT_NAME } from '../../memdir/memdir.js';
@@ -34,6 +35,7 @@ import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
 import { logEvent } from '../analytics/index.js';
 import { sanitizeToolNameForAnalytics } from '../analytics/metadata.js';
 import { buildExtractAutoOnlyPrompt, buildExtractCombinedPrompt, } from './prompts.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')
     ? require('../../memdir/teamMemPaths.js')

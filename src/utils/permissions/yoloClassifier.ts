@@ -2,6 +2,7 @@ import { feature } from 'bun:bundle'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages.js'
 import { mkdir, writeFile } from 'fs/promises'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'path'
 import { z } from 'zod/v4'
 import {
@@ -42,6 +43,8 @@ import {
   parseClassifierResponse,
 } from './classifierShared.js'
 import { getClaudeTempDir } from './filesystem.js'
+
+const require = createRequire(import.meta.url)
 
 // Dead code elimination: conditional imports for auto mode classifier prompts.
 // At build time, the bundler inlines .txt files as string literals. At test

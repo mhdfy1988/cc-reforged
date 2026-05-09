@@ -7,7 +7,7 @@ export function General() {
     const $ = _c(2);
     let t0;
     if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
-        t0 = _jsx(Box, { children: _jsx(Text, { children: "Claude understands your codebase, makes edits with your permission, and executes commands \u2014 right from your terminal." }) });
+        t0 = _jsx(Box, { children: _jsx(Text, { children: "CCR understands your codebase, makes edits with your permission, and executes commands \u2014 right from your terminal." }) });
         $[0] = t0;
     }
     else {

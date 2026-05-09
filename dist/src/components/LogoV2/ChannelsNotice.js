@@ -67,7 +67,7 @@ export function ChannelsNotice() {
         }
         let t2;
         if ($[9] === Symbol.for("react.memo_cache_sentinel")) {
-            t2 = _jsx(Text, { dimColor: true, children: "Channels require claude.ai authentication \u00B7 run /login, then restart" });
+            t2 = _jsx(Text, { dimColor: true, children: "Channels require Claude account authentication \u00B7 run /login, then restart" });
             $[9] = t2;
         }
         else {
@@ -139,7 +139,7 @@ export function ChannelsNotice() {
     }
     let t2;
     if ($[24] !== flag) {
-        t2 = _jsxs(Text, { dimColor: true, children: ["Experimental \u00B7 inbound messages will be pushed into this session, this carries prompt injection risks. Restart Claude Code without ", flag, " to disable."] });
+        t2 = _jsxs(Text, { dimColor: true, children: ["Experimental \u00B7 inbound messages will be pushed into this session, this carries prompt injection risks. Restart CCR without ", flag, " to disable."] });
         $[24] = flag;
         $[25] = t2;
     }

@@ -21,6 +21,7 @@ import { countCharInString } from './stringUtils.js'
 import { count, uniq } from './array.js'
 import { getFsImplementation } from './fsOperations.js'
 import { readdir, stat } from 'fs/promises'
+import { createRequire } from 'node:module'
 import type { IDESelection } from '../hooks/useIdeSelection.js'
 import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
 import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js'
@@ -86,6 +87,9 @@ import { getProjectRoot } from '../bootstrap/state.js'
 import { formatCommandsWithinBudget } from '../tools/SkillTool/prompt.js'
 import { getContextWindowForModel } from './context.js'
 import type { DiscoverySignal } from '../services/skillSearch/signals.js'
+
+const require = createRequire(import.meta.url)
+
 // Conditional require for DCE. All skill-search string literals that would
 // otherwise leak into external builds live inside these modules. The only
 // surfaces in THIS file are: the maybe() call (gated via spread below) and
@@ -172,8 +176,6 @@ import {
   isMcpInstructionsDeltaEnabled,
   type ClientSideInstruction,
 } from './mcpInstructionsDelta.js'
-import { CLAUDE_IN_CHROME_MCP_SERVER_NAME } from './claudeInChrome/common.js'
-import { CHROME_TOOL_SEARCH_INSTRUCTIONS } from './claudeInChrome/prompt.js'
 import type { MCPServerConnection } from '../services/mcp/types.js'
 import type {
   HookEvent,
@@ -1558,26 +1560,15 @@ export function getAgentListingDeltaAttachment(
 // Exported for compact.ts / reactiveCompact.ts — single source of truth for the gate.
 export function getMcpInstructionsDeltaAttachment(
   mcpClients: MCPServerConnection[],
-  tools: Tools,
-  model: string,
+  _tools: Tools,
+  _model: string,
   messages: Message[] | undefined,
 ): Attachment[] {
   if (!isMcpInstructionsDeltaEnabled()) return []
 
-  // The chrome ToolSearch hint is client-authored and ToolSearch-conditional;
-  // actual server `instructions` are unconditional. Decide the chrome part
-  // here, pass it into the pure diff as a synthesized entry.
+  // CCR 已退休旧 Chrome client-side instructions。后续浏览器工具的说明
+  // 应由通用 MCP server 自己通过 `instructions` 暴露。
   const clientSide: ClientSideInstruction[] = []
-  if (
-    isToolSearchEnabledOptimistic() &&
-    modelSupportsToolReference(model) &&
-    isToolSearchToolAvailable(tools)
-  ) {
-    clientSide.push({
-      serverName: CLAUDE_IN_CHROME_MCP_SERVER_NAME,
-      block: CHROME_TOOL_SEARCH_INSTRUCTIONS,
-    })
-  }
 
   const delta = getMcpInstructionsDelta(mcpClients, messages ?? [], clientSide)
   if (!delta) return []
@@ -3519,7 +3510,7 @@ async function getAsyncHookResponseAttachments(): Promise<Attachment[]> {
 
 /**
  * Get teammate mailbox attachments for agent swarm communication
- * Teammates are independent Claude Code sessions running in parallel (swarms),
+ * Teammates are independent CCR sessions running in parallel (swarms),
  * not parent-child subagent relationships.
  *
  * This function checks two sources for messages:

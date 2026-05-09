@@ -1,4 +1,5 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+import { createRequire } from 'node:module';
 import { type as osType, version as osVersion, release as osRelease } from 'os';
 import { env } from '../utils/env.js';
 import { getIsGit } from '../utils/git.js';
@@ -39,6 +40,8 @@ import { logForDebugging } from '../utils/debug.js';
 import { loadMemoryPrompt } from '../memdir/memdir.js';
 import { isUndercover } from '../utils/undercover.js';
 import { isMcpInstructionsDeltaEnabled } from '../utils/mcpInstructionsDelta.js';
+import { getCLISyspromptPrefix, shouldUseClaudeCodeSystemIdentity, } from './system.js';
+const require = createRequire(import.meta.url);
 // Dead code elimination: conditional imports for feature-gated modules
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getCachedMCConfigForFRC = feature('CACHED_MICROCOMPACT')
@@ -117,6 +120,9 @@ export function prependBullets(items) {
         ? item.map(subitem => `  - ${subitem}`)
         : [` - ${item}`]);
 }
+function getRuntimeProductName() {
+    return shouldUseClaudeCodeSystemIdentity() ? 'Claude Code' : 'CCR';
+}
 function getSimpleIntroSection(outputStyleConfig) {
     // eslint-disable-next-line custom-rules/prompt-spacing
     return `
@@ -153,7 +159,7 @@ function getSimpleDoingTasksSection() {
             : []),
     ];
     const userHelpSubitems = [
-        `/help: Get help with using Claude Code`,
+        `/help: Get help with using ${getRuntimeProductName()}`,
         `To give feedback, users should ${MACRO.ISSUES_EXPLAINER}`,
     ];
     const items = [
@@ -359,7 +365,10 @@ function getSimpleToneAndStyleSection() {
 export async function getSystemPrompt(tools, model, additionalWorkingDirectories, mcpClients) {
     if (isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)) {
         return [
-            `You are Claude Code, Anthropic's official CLI for Claude.\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
+            `${getCLISyspromptPrefix({
+                isNonInteractive: false,
+                hasAppendSystemPrompt: false,
+            })}\n\nCWD: ${getCwd()}\nDate: ${getSessionStartDate()}`,
         ];
     }
     const cwd = getCwd();
@@ -525,6 +534,8 @@ export async function computeSimpleEnvInfo(modelId, additionalWorkingDirectories
         : null;
     const cwd = getCwd();
     const isWorktree = getCurrentWorktreeSession() !== null;
+    const useClaudeCodeIdentity = shouldUseClaudeCodeSystemIdentity();
+    const showAnthropicProductNotes = useClaudeCodeIdentity && !(process.env.USER_TYPE === 'ant' && isUndercover());
     const envItems = [
         `Primary working directory: ${cwd}`,
         isWorktree
@@ -542,15 +553,15 @@ export async function computeSimpleEnvInfo(modelId, additionalWorkingDirectories
         `OS Version: ${unameSR}`,
         modelDescription,
         knowledgeCutoffMessage,
-        process.env.USER_TYPE === 'ant' && isUndercover()
-            ? null
-            : `The most recent Claude model family is Claude 4.5/4.6. Model IDs — Opus 4.6: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.opus}', Sonnet 4.6: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.sonnet}', Haiku 4.5: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.haiku}'. When building AI applications, default to the latest and most capable Claude models.`,
-        process.env.USER_TYPE === 'ant' && isUndercover()
-            ? null
-            : `Claude Code is available as a CLI in the terminal, desktop app (Mac/Windows), web app (claude.ai/code), and IDE extensions (VS Code, JetBrains).`,
-        process.env.USER_TYPE === 'ant' && isUndercover()
-            ? null
-            : `Fast mode for Claude Code uses the same ${FRONTIER_MODEL_NAME} model with faster output. It does NOT switch to a different model. It can be toggled with /fast.`,
+        showAnthropicProductNotes
+            ? `The most recent Claude model family is Claude 4.5/4.6. Model IDs — Opus 4.6: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.opus}', Sonnet 4.6: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.sonnet}', Haiku 4.5: '${CLAUDE_4_5_OR_4_6_MODEL_IDS.haiku}'. When building AI applications, default to the latest and most capable Claude models.`
+            : null,
+        showAnthropicProductNotes
+            ? `Claude Code is available as a CLI in the terminal, desktop app (Mac/Windows), web app (claude.ai/code), and IDE extensions (VS Code, JetBrains).`
+            : `CCR is running as the coding agent in this session.`,
+        showAnthropicProductNotes
+            ? `Fast mode for Claude Code uses the same ${FRONTIER_MODEL_NAME} model with faster output. It does NOT switch to a different model. It can be toggled with /fast.`
+            : null,
     ].filter(item => item !== null);
     return [
         `# Environment`,
@@ -603,7 +614,9 @@ export function getUnameSR() {
     }
     return `${osType()} ${osRelease()}`;
 }
-export const DEFAULT_AGENT_PROMPT = `You are an agent for Claude Code, Anthropic's official CLI for Claude. Given the user's message, you should use the tools available to complete the task. Complete the task fully—don't gold-plate, but don't leave it half-done. When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.`;
+export const DEFAULT_AGENT_PROMPT = shouldUseClaudeCodeSystemIdentity()
+    ? `You are an agent for Claude Code, Anthropic's official CLI for Claude. Given the user's message, you should use the tools available to complete the task. Complete the task fully—don't gold-plate, but don't leave it half-done. When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.`
+    : `You are an agent for CCR. Given the user's message, you should use the tools available to complete the task. Complete the task fully—don't gold-plate, but don't leave it half-done. When you complete the task, respond with a concise report covering what was done and any key findings — the caller will relay this to the user, so it only needs the essentials.`;
 export async function enhanceSystemPromptWithEnvDetails(existingSystemPrompt, model, additionalWorkingDirectories, enabledToolNames) {
     const notes = `Notes:
 - Agent threads always have their cwd reset between bash calls, as a result please only use absolute file paths.

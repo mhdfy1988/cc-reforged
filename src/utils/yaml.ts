@@ -6,6 +6,10 @@
  * non-Bun branch so native Bun builds never load the ~270KB yaml parser.
  */
 
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+
 export function parseYaml(input: string): unknown {
   if (typeof Bun !== 'undefined') {
     return Bun.YAML.parse(input)

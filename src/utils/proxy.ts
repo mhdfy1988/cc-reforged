@@ -2,6 +2,7 @@
 // dynamically in getAWSClientProxyConfig() to defer ~929KB of AWS SDK.
 // undici is lazy-required inside getProxyAgent/configureGlobalAgents to defer
 // ~1.5MB when no HTTPS_PROXY/mTLS env vars are set (the common case).
+import { createRequire } from 'node:module'
 import axios, { type AxiosInstance } from 'axios'
 import type { LookupOptions } from 'dns'
 import type { Agent } from 'http'
@@ -17,6 +18,9 @@ import {
   getTLSFetchOptions,
   type TLSConfig,
 } from './mtls.js'
+
+const require = createRequire(import.meta.url)
+const DEFAULT_UNDICI_CONNECT_TIMEOUT_MS = 30_000
 
 // Disable fetch keep-alive after a stale-pool ECONNRESET so retries open a
 // fresh TCP connection instead of reusing the dead pooled socket. Sticky for
@@ -55,6 +59,23 @@ export function getAddressFamily(options: LookupOptions): 0 | 4 | 6 {
 }
 
 type EnvLike = Record<string, string | undefined>
+
+function getUndiciConnectTimeoutMs(env: EnvLike = process.env): number {
+  const parsed = Number.parseInt(env.CCR_FETCH_CONNECT_TIMEOUT_MS ?? '', 10)
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : DEFAULT_UNDICI_CONNECT_TIMEOUT_MS
+}
+
+function createDirectUndiciAgent(connect?: TLSConfig): undici.Dispatcher {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const undiciMod = require('undici') as typeof undici
+  return new undiciMod.Agent({
+    connectTimeout: getUndiciConnectTimeoutMs(),
+    ...(connect ? { connect } : {}),
+    pipelining: 1,
+  })
+}
 
 /**
  * Get the active proxy URL if one is configured
@@ -215,6 +236,7 @@ export const getProxyAgent = memoize((uri: string): undici.Dispatcher => {
     httpProxy: uri,
     httpsProxy: uri,
     noProxy: process.env.NO_PROXY || process.env.no_proxy,
+    connectTimeout: getUndiciConnectTimeoutMs(),
   }
 
   // Set both connect and requestTls so TLS options apply to both paths:
@@ -323,6 +345,52 @@ export function getProxyFetchOptions(opts?: { forAnthropicAPI?: boolean }): {
  * This ensures all HTTP requests use the proxy and/or mTLS if configured
  */
 let proxyInterceptorId: number | undefined
+let fetchDispatcherSignature: string | undefined
+
+export function configureGlobalFetchDispatcher(): void {
+  if (typeof Bun !== 'undefined') {
+    return
+  }
+
+  const proxyUrl = getProxyUrl()
+  const mtlsConfig = getMTLSConfig()
+  const caCerts = getCACertificates()
+  const timeoutMs = getUndiciConnectTimeoutMs()
+  const signature = JSON.stringify({
+    proxyUrl,
+    noProxy: getNoProxy(),
+    hasMTLS: Boolean(mtlsConfig),
+    hasCACerts: Boolean(caCerts),
+    timeoutMs,
+  })
+
+  if (fetchDispatcherSignature === signature) {
+    return
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const undiciMod = require('undici') as typeof undici
+
+  if (proxyUrl) {
+    undiciMod.setGlobalDispatcher(getProxyAgent(proxyUrl))
+  } else {
+    const connect = {
+      ...(mtlsConfig && {
+        cert: mtlsConfig.cert,
+        key: mtlsConfig.key,
+        passphrase: mtlsConfig.passphrase,
+      }),
+      ...(caCerts && { ca: caCerts }),
+    }
+    undiciMod.setGlobalDispatcher(
+      createDirectUndiciAgent(
+        Object.keys(connect).length > 0 ? connect : undefined,
+      ),
+    )
+  }
+
+  fetchDispatcherSignature = signature
+}
 
 export function configureGlobalAgents(): void {
   const proxyUrl = getProxyUrl()
@@ -367,24 +435,12 @@ export function configureGlobalAgents(): void {
       return config
     })
 
-    // Set global dispatcher that now respects NO_PROXY via EnvHttpProxyAgent
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    ;(require('undici') as typeof undici).setGlobalDispatcher(
-      getProxyAgent(proxyUrl),
-    )
   } else if (mtlsAgent) {
     // No proxy but mTLS is configured
     axios.defaults.httpsAgent = mtlsAgent
-
-    // Set undici global dispatcher with mTLS
-    const mtlsOptions = getTLSFetchOptions()
-    if (mtlsOptions.dispatcher) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      ;(require('undici') as typeof undici).setGlobalDispatcher(
-        mtlsOptions.dispatcher,
-      )
-    }
   }
+
+  configureGlobalFetchDispatcher()
 }
 
 /**
@@ -422,5 +478,6 @@ export async function getAWSClientProxyConfig(): Promise<object> {
  */
 export function clearProxyCache(): void {
   getProxyAgent.cache.clear?.()
+  fetchDispatcherSignature = undefined
   logForDebugging('Cleared proxy agent cache')
 }

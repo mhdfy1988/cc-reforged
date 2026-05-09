@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { randomUUID } from 'crypto';
 import isObject from 'lodash-es/isObject.js';
 import last from 'lodash-es/last.js';
@@ -20,6 +21,7 @@ import { quote } from './bash/shellQuote.js';
 import { formatNumber, formatTokens } from './format.js';
 import { getPewterLedgerVariant } from './planModeV2.js';
 import { jsonStringify } from './slowOperations.js';
+const require = createRequire(import.meta.url);
 function isHookAttachmentWithName(attachment) {
     if (!isObject(attachment) || !('type' in attachment)) {
         return false;

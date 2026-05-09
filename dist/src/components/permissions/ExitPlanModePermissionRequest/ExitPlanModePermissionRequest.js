@@ -1,4 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import figures from 'figures';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -34,6 +35,7 @@ import { Markdown } from '../../Markdown.js';
 import { PermissionDialog } from '../PermissionDialog.js';
 import { PermissionRuleExplanation } from '../PermissionRuleExplanation.js';
 import { PERMISSION_MODES, toExternalPermissionMode } from '../../../utils/permissions/PermissionMode.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('../../../utils/permissions/autoModeState.js') : null;
 import { maybeResizeAndDownsampleImageBlock } from '../../../utils/imageResizer.js';
@@ -669,7 +671,7 @@ export function buildPlanApprovalOptions({ showClearContext, showUltraplan, used
     });
     if (showUltraplan) {
         options.push({
-            label: 'No, refine with Ultraplan on Claude Code on the web',
+            label: 'No, refine with Ultraplan on CCR on the web',
             value: 'ultraplan'
         });
     }

@@ -2,6 +2,7 @@
  * Conversation clearing utility.
  * This module has heavier dependencies and should be lazy-loaded when possible.
  */
+import { createRequire } from 'node:module'
 import { feature } from 'bun:bundle'
 import { randomUUID, type UUID } from 'crypto'
 import {
@@ -45,6 +46,8 @@ import {
 } from '../../utils/task/diskOutput.js'
 import { getCurrentWorktreeSession } from '../../utils/worktree.js'
 import { clearSessionCaches } from './caches.js'
+
+const require = createRequire(import.meta.url)
 
 export async function clearConversation({
   setMessages,

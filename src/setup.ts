@@ -2,6 +2,7 @@
 
 import { feature } from 'bun:bundle'
 import chalk from 'chalk'
+import { createRequire } from 'node:module'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
@@ -52,6 +53,8 @@ import {
   generateTmuxSessionName,
   worktreeBranchName,
 } from './utils/worktree.js'
+
+const require = createRequire(import.meta.url)
 
 export async function setup(
   cwd: string,

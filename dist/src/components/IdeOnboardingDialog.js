@@ -69,7 +69,7 @@ export function IdeOnboardingDialog(t0) {
     }
     let t6;
     if ($[8] !== ideName) {
-        t6 = _jsxs(_Fragment, { children: [t5, _jsxs(Text, { children: ["Welcome to Claude Code for ", ideName] })] });
+        t6 = _jsxs(_Fragment, { children: [t5, _jsxs(Text, { children: ["Welcome to CCR for ", ideName] })] });
         $[8] = ideName;
         $[9] = t6;
     }
@@ -87,7 +87,7 @@ export function IdeOnboardingDialog(t0) {
     }
     let t9;
     if ($[11] === Symbol.for("react.memo_cache_sentinel")) {
-        t9 = _jsxs(Text, { children: ["\u2022 Claude has context of ", t8, " ", "and ", _jsx(Text, { color: "suggestion", children: "\u29C9 selected lines" })] });
+        t9 = _jsxs(Text, { children: ["\u2022 CCR has context of ", t8, " ", "and ", _jsx(Text, { color: "suggestion", children: "\u29C9 selected lines" })] });
         $[11] = t9;
     }
     else {
@@ -103,7 +103,7 @@ export function IdeOnboardingDialog(t0) {
     }
     let t11;
     if ($[13] === Symbol.for("react.memo_cache_sentinel")) {
-        t11 = _jsxs(Text, { children: ["\u2022 Review Claude Code's changes", " ", t10, " ", _jsx(Text, { color: "diffRemovedWord", children: "-22" }), " in the comfort of your IDE"] });
+        t11 = _jsxs(Text, { children: ["\u2022 Review CCR's changes", " ", t10, " ", _jsx(Text, { color: "diffRemovedWord", children: "-22" }), " in the comfort of your IDE"] });
         $[13] = t11;
     }
     else {

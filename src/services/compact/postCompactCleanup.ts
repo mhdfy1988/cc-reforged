@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle'
+import { createRequire } from 'node:module'
 import type { QuerySource } from '../../constants/querySource.js'
 import { clearSystemPromptSections } from '../../constants/systemPromptSections.js'
 import { getUserContext } from '../../context.js'
@@ -8,6 +9,8 @@ import { resetGetMemoryFilesCache } from '../../utils/claudemd.js'
 import { clearSessionMessagesCache } from '../../utils/sessionStorage.js'
 import { clearBetaTracingState } from '../../utils/telemetry/betaSessionTracing.js'
 import { resetMicrocompactState } from './microCompact.js'
+
+const require = createRequire(import.meta.url)
 
 /**
  * Run cleanup of caches and tracking state after compaction.

@@ -538,7 +538,7 @@ function EmptyStateMessage(t0) {
             {
                 let t1;
                 if ($[0] === Symbol.for("react.memo_cache_sentinel")) {
-                    t1 = _jsxs(_Fragment, { children: [_jsx(Text, { dimColor: true, children: "Git is required to install marketplaces." }), _jsx(Text, { dimColor: true, children: "Please install git and restart Claude Code." })] });
+                    t1 = _jsxs(_Fragment, { children: [_jsx(Text, { dimColor: true, children: "Git is required to install marketplaces." }), _jsx(Text, { dimColor: true, children: "Please install git and restart CCR." })] });
                     $[0] = t1;
                 }
                 else {

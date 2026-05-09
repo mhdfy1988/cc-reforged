@@ -1,4 +1,5 @@
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import { readFile, stat } from 'fs/promises';
 import { dirname } from 'path';
@@ -131,6 +132,7 @@ import { initializeGrowthBook } from '../services/analytics/growthbook.js';
 import { errorMessage, toError } from '../utils/errors.js';
 import { sleep } from '../utils/sleep.js';
 import { isExtractModeActive } from '../memdir/paths.js';
+const require = createRequire(import.meta.url);
 // Dead code elimination: conditional imports
 /* eslint-disable @typescript-eslint/no-require-imports */
 const coordinatorModeModule = feature('COORDINATOR_MODE')
@@ -3900,7 +3902,7 @@ async function loadInitialMessages(setAppState, options) {
             // In print mode - we require a valid session ID, JSONL file or URL
             const parsedSessionId = parseSessionIdentifier(typeof options.resume === 'string' ? options.resume : '');
             if (!parsedSessionId) {
-                let errorMessage = 'Error: --resume requires a valid session ID when used with --print. Usage: claude -p --resume <session-id>';
+                let errorMessage = 'Error: --resume requires a valid session ID when used with --print. Usage: ccr -p --resume <session-id>';
                 if (typeof options.resume === 'string') {
                     errorMessage += `. Session IDs must be in UUID format (e.g., 550e8400-e29b-41d4-a716-446655440000). Provided value "${options.resume}" is not a valid UUID`;
                 }

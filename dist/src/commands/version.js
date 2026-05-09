@@ -2,8 +2,8 @@ const call = async () => {
     return {
         type: 'text',
         value: MACRO.BUILD_TIME
-            ? `${MACRO.VERSION} (built ${MACRO.BUILD_TIME})`
-            : MACRO.VERSION,
+            ? `CCR v${MACRO.VERSION} (built ${MACRO.BUILD_TIME})`
+            : `CCR v${MACRO.VERSION}`,
     };
 };
 const version = {

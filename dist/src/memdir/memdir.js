@@ -1,7 +1,9 @@
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import { join } from 'path';
 import { getFsImplementation } from '../utils/fsOperations.js';
 import { getAutoMemPath, isAutoMemoryEnabled } from './paths.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')
     ? require('./teamMemPaths.js')

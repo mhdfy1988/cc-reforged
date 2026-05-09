@@ -29,7 +29,7 @@ import { formatReviewStageCounts, RemoteSessionProgress } from './RemoteSessionP
 export function formatToolUseSummary(name, input) {
     // plan_ready phase is only reached via ExitPlanMode tool
     if (name === EXIT_PLAN_MODE_V2_TOOL_NAME) {
-        return 'Review the plan in Claude Code on the web';
+        return 'Review the plan in CCR on the web';
     }
     if (!input || typeof input !== 'object')
         return name;
@@ -150,7 +150,7 @@ function UltraplanSessionDetail(t0) {
         }
         let t7;
         if ($[12] === Symbol.for("react.memo_cache_sentinel")) {
-            t7 = _jsx(Text, { dimColor: true, children: "This will terminate the Claude Code on the web session." });
+            t7 = _jsx(Text, { dimColor: true, children: "This will terminate the CCR on the web session." });
             $[12] = t7;
         }
         else {
@@ -309,7 +309,7 @@ function UltraplanSessionDetail(t0) {
     let t19;
     if ($[47] === Symbol.for("react.memo_cache_sentinel")) {
         t19 = {
-            label: "Review in Claude Code on the web",
+            label: "Review in CCR on the web",
             value: "open"
         };
         $[47] = t19;
@@ -605,13 +605,13 @@ function ReviewSessionDetail(t0) {
     let t3;
     if ($[11] !== completed || $[12] !== onKill || $[13] !== running) {
         t3 = completed ? [{
-                label: "Open in Claude Code on the web",
+                label: "Open in CCR on the web",
                 value: "open"
             }, {
                 label: "Dismiss",
                 value: "dismiss"
             }] : [{
-                label: "Open in Claude Code on the web",
+                label: "Open in CCR on the web",
                 value: "open"
             }, ...(onKill && running ? [{
                     label: "Stop ultrareview",

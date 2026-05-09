@@ -6,9 +6,13 @@ import { UP_ARROW } from '../../constants/figures.js';
 import { Box, Text } from '../../ink.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import { isOpus1mMergeEnabled } from '../../utils/model/model.js';
+import { getLlmRuntimeDisplayStatus } from '../../services/llm/runtimeStatus.js';
 import { AnimatedAsterisk } from './AnimatedAsterisk.js';
 const MAX_SHOW_COUNT = 6;
 export function shouldShowOpus1mMergeNotice() {
+    if (getLlmRuntimeDisplayStatus().providerId !== 'anthropic') {
+        return false;
+    }
     return isOpus1mMergeEnabled() && (getGlobalConfig().opus1mMergeNoticeSeenCount ?? 0) < MAX_SHOW_COUNT;
 }
 export function Opus1mMergeNotice() {

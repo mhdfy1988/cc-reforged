@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle'
+import { createRequire } from 'node:module'
 import { microcompactMessages } from '../../services/compact/microCompact.js'
 import type { AppState } from '../../state/AppStateStore.js'
 import type { Tools, ToolUseContext } from '../../Tool.js'
@@ -12,6 +13,8 @@ import { formatTokens } from '../../utils/format.js'
 import { getMessagesAfterCompactBoundary } from '../../utils/messages.js'
 import { getSourceDisplayName } from '../../utils/settings/constants.js'
 import { plural } from '../../utils/stringUtils.js'
+
+const require = createRequire(import.meta.url)
 
 /**
  * Shared data-collection path for `/context` (slash command) and the SDK
@@ -48,10 +51,9 @@ export async function collectContextData(
 
   let apiView = getMessagesAfterCompactBoundary(messages)
   if (feature('CONTEXT_COLLAPSE')) {
-    /* eslint-disable @typescript-eslint/no-require-imports */
-    const { projectView } =
-      require('../../services/contextCollapse/operations.js') as typeof import('../../services/contextCollapse/operations.js')
-    /* eslint-enable @typescript-eslint/no-require-imports */
+    const { projectView } = await import(
+      '../../services/contextCollapse/operations.js'
+    )
     apiView = projectView(apiView)
   }
 

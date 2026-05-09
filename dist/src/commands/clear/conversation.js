@@ -2,6 +2,7 @@
  * Conversation clearing utility.
  * This module has heavier dependencies and should be lazy-loaded when possible.
  */
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import { randomUUID } from 'crypto';
 import { getLastMainRequestId, getOriginalCwd, getSessionId, regenerateSessionId, } from '../../bootstrap/state.js';
@@ -20,6 +21,7 @@ import { clearSessionMetadata, getAgentTranscriptPath, resetSessionFilePointer, 
 import { evictTaskOutput, initTaskOutputAsSymlink, } from '../../utils/task/diskOutput.js';
 import { getCurrentWorktreeSession } from '../../utils/worktree.js';
 import { clearSessionCaches } from './caches.js';
+const require = createRequire(import.meta.url);
 export async function clearConversation({ setMessages, readFileState, discoveredSkillNames, loadedNestedMemoryPaths, getAppState, setAppState, setConversationId, }) {
     // Execute SessionEnd hooks before clearing (bounded by
     // CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS, default 1.5s)

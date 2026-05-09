@@ -264,6 +264,7 @@ Codex OAuth provider 复用已有可行经验，但不直接把 `adaptive-memory
 - token 保存、过期判断、refresh。
 - ChatGPT/Codex backend API 调用。
 - reasoning effort / model / max output tokens 配置。
+- 传输层默认优先使用稳定 `SSE`；`auto/WebSocket` 只能作为后续可观测优化项，不能影响第一版 CLI 可用性。
 
 建议抽象成：
 
@@ -286,6 +287,12 @@ CodexOAuthProvider
 - `CodexResponsesClient` 只负责 Codex 请求/响应协议。
 - `CodexOAuthProvider` 负责把内部 `LlmGenerateRequest` 转为 Codex 请求。
 - `toolProtocol.ts` 负责工具调用协议转换，不混进 provider 主类。
+
+传输层约束：
+
+- `@mariozechner/pi-ai` 的 `completeSimple` 会把 `reasoning` 转成底层 `reasoningEffort`，但 CCR 当前 provider 直接调用 `complete/stream`，因此必须直接传 `reasoningEffort`。
+- `auto` transport 会优先尝试 WebSocket；在当前真实入口中，WebSocket 已出现服务端 `1011` 关闭，且连接启动后不会自动回退 SSE。
+- 第一版产品默认固定为 `sse`，保证 `ccr -p` 和交互式入口先稳定跑通；后续若要恢复 WebSocket，应单独做 provider session / transport session 的失败观测和降级策略。
 
 ## 6. 前台模型展示
 
@@ -445,19 +452,20 @@ user tool_result
 为了不改主循环，`LLM Runtime` 对内统一返回：
 
 ```ts
-export type LlmContentBlock =
+export type LlmContentPart =
   | { type: 'text'; text: string }
-  | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'thinking'; text: string }
+  | { type: 'thinking'; thinking: string; signature?: string; redacted?: boolean }
+  | { type: 'tool_call'; id: string; name: string; input: unknown }
+  | { type: 'tool_result'; toolCallId: string; result: unknown }
 ```
 
 Provider 负责转换：
 
 ```text
 Codex function_call
-  -> LlmContentBlock.tool_use
+  -> LlmContentPart.tool_call
 
-LlmContentBlock.tool_result
+LlmContentPart.tool_result
   -> Codex function_call_output
 ```
 
@@ -471,6 +479,9 @@ LlmContentBlock.tool_result
 export type LlmGenerateEvent =
   | { type: 'message_start'; model: string; providerId: string; usage?: LlmUsage }
   | { type: 'content_delta'; index: number; delta: LlmContentDelta }
+  | { type: 'thinking_start'; index: number }
+  | { type: 'thinking_delta'; index: number; delta: string }
+  | { type: 'thinking_end'; index: number; content: string }
   | { type: 'content_block_stop'; index: number }
   | { type: 'message_stop'; stopReason: LlmStopReason; usage?: LlmUsage }
   | { type: 'error'; error: LlmError }
@@ -489,6 +500,24 @@ Codex streaming
 ```
 
 如果 Codex OAuth 初期只能稳定非流式，provider 仍然应该通过统一事件模型输出完整消息，而不是让上层知道“这是非流式”。
+
+### 9.1 思考过程事件桥接
+
+`Codex OAuth Provider` 不能把 `thinking_start / thinking_delta / thinking_end` 丢掉，否则 Desktop 只能看到“正在处理”，看不到模型返回的推理摘要或思考过程片段。
+
+当前实现口径：
+
+- `@mariozechner/pi-ai` 返回 `thinking_start / thinking_delta / thinking_end`。
+- `CodexOAuthProvider` 映射为 `LlmThinkingStartEvent / LlmThinkingDeltaEvent / LlmThinkingEndEvent`，并保留 `contentIndex`。
+- `claudeApiAdapter.ts` 再转回项目原有能识别的 Claude-style `content_block_start(thinking) / content_block_delta(thinking_delta) / content_block_stop`。
+- `coreQueryTurnRunner.ts` 将 thinking block 转成 App Server `item_started / item_delta / item_completed`，其中 `item_delta.delta.type = "thinking"`。
+- Desktop renderer 把 `thinking` 渲染成独立的 `thinking-event` 消息，不和最终回答混在同一段里。
+
+边界约束：
+
+- 只展示上游 provider 明确返回的 `thinking` / 推理摘要事件，不在前端伪造隐藏思维。
+- `redacted_thinking` 只能展示“思考内容已由模型服务隐藏”，不得尝试解密或展开。
+- 最终 assistant 消息里如果已经通过流式事件展示过 `text / thinking`，Core 不应重复再发同一份正文；只补发未流式展示的工具调用等结构化块。
 
 ## 10. 错误和用量设计
 
@@ -740,3 +769,35 @@ QueryEngine / query / tools
 ```
 
 也就是说，`cc-haha-main` 是“参考实现库”，不是“目标架构蓝本”。它能帮我们少踩协议转换和 provider 配置的坑，但不能决定我们的核心分层。
+
+## 18. 当前实现落点（已完成）
+
+截至当前版本，这份设计稿中的主干能力已经在 `feature/builtin-llm-runtime` 分支落地为一个可验证的最小闭环：
+
+- `src/services/llm/types.ts`、`providerRegistry.ts`、`llmRuntime.ts` 已建立统一 runtime 骨架。
+- `AnthropicProvider` 与 `CodexOAuthProvider` 已作为同级 provider 注册进默认 runtime。
+- `services/api/claude.ts` 已经通过 `claudeApiAdapter.ts` 在非 `anthropic` provider 场景下切到内置 runtime 主链。
+- `providerDefinitions.ts` 已补齐 `LlmProviderDefinition`、最小 `apiMode` 和 provider 能力声明。
+- `llmConfig.ts` 已补齐 provider 元数据覆盖，并修复 provider 配置浅合并覆盖默认元数据的问题。
+- `runtimeStatus.ts` 已能统一输出真实 `provider / apiMode / authStrategy / model catalog` 口径。
+- `modelCatalog.ts` 已为 `anthropic` 与 `codex-oauth` 建立最小模型目录。
+- `auth status --json` 与状态栏属性已能展示 `apiMode`、认证策略和模型画像。
+
+当前已形成的最小稳定分层是：
+
+```text
+QueryEngine / query / tools
+  -> services/api/claude.ts
+  -> services/llm/claudeApiAdapter.ts
+  -> services/llm/LlmRuntime
+  -> services/llm/providerRegistry.ts
+  -> services/llm/providers/*
+  -> services/llm/providerDefinitions.ts
+  -> services/llm/modelCatalog.ts
+```
+
+这意味着本设计稿已经不只是方向稿，而是和当前实现一一对应的架构说明。后续继续扩展时，建议优先沿这套边界前进：
+
+1. 新增 `openai api / openai-compatible / local provider` 中的一个。
+2. 把 `/model` 从“最小配置写回”推进到“真实 catalog 驱动”。
+3. 如后续出现长连接、sticky turn state、provider-native session 复用，再补 `Provider Session / Transport Session` 层，而不是提前引入重型插件框架。

@@ -35,6 +35,7 @@ const PermissionAllowResultSchema = lazySchema(() => z.object({
         logForDebugging(`Malformed updatedPermissions from SDK host ignored: ${ctx.error.issues[0]?.message ?? 'unknown'}`, { level: 'warn' });
         return undefined;
     }),
+    acceptFeedback: z.string().optional(),
     toolUseID: z.string().optional(),
     decisionClassification: decisionClassificationField(),
 }));

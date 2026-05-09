@@ -8,6 +8,7 @@ import { countCharInString } from './stringUtils.js';
 import { count, uniq } from './array.js';
 import { getFsImplementation } from './fsOperations.js';
 import { readdir, stat } from 'fs/promises';
+import { createRequire } from 'node:module';
 import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js';
 import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js';
 import { TASK_UPDATE_TOOL_NAME } from '../tools/TaskUpdateTool/constants.js';
@@ -36,6 +37,7 @@ import uniqBy from 'lodash-es/uniqBy.js';
 import { getProjectRoot } from '../bootstrap/state.js';
 import { formatCommandsWithinBudget } from '../tools/SkillTool/prompt.js';
 import { getContextWindowForModel } from './context.js';
+const require = createRequire(import.meta.url);
 // Conditional require for DCE. All skill-search string literals that would
 // otherwise leak into external builds live inside these modules. The only
 // surfaces in THIS file are: the maybe() call (gated via spread below) and
@@ -71,8 +73,6 @@ import { drainPendingMessages } from '../tasks/LocalAgentTask/LocalAgentTask.js'
 import { getOriginalCwd, getSessionId, getSdkBetas, getTotalCostUSD, getTotalOutputTokens, getCurrentTurnTokenBudget, getTurnOutputTokens, hasExitedPlanModeInSession, setHasExitedPlanMode, needsPlanModeExitAttachment, setNeedsPlanModeExitAttachment, needsAutoModeExitAttachment, setNeedsAutoModeExitAttachment, getLastEmittedDate, setLastEmittedDate, getKairosActive, } from '../bootstrap/state.js';
 import { getDeferredToolsDelta, isDeferredToolsDeltaEnabled, isToolSearchEnabledOptimistic, isToolSearchToolAvailable, modelSupportsToolReference, } from './toolSearch.js';
 import { getMcpInstructionsDelta, isMcpInstructionsDeltaEnabled, } from './mcpInstructionsDelta.js';
-import { CLAUDE_IN_CHROME_MCP_SERVER_NAME } from './claudeInChrome/common.js';
-import { CHROME_TOOL_SEARCH_INSTRUCTIONS } from './claudeInChrome/prompt.js';
 import { checkForAsyncHookResponses, removeDeliveredAsyncHooks, } from './hooks/AsyncHookRegistry.js';
 import { checkForLSPDiagnostics, clearAllLSPDiagnostics, } from '../services/lsp/LSPDiagnosticRegistry.js';
 import { logForDebugging } from './debug.js';
@@ -741,21 +741,12 @@ export function getAgentListingDeltaAttachment(toolUseContext, messages) {
     ];
 }
 // Exported for compact.ts / reactiveCompact.ts — single source of truth for the gate.
-export function getMcpInstructionsDeltaAttachment(mcpClients, tools, model, messages) {
+export function getMcpInstructionsDeltaAttachment(mcpClients, _tools, _model, messages) {
     if (!isMcpInstructionsDeltaEnabled())
         return [];
-    // The chrome ToolSearch hint is client-authored and ToolSearch-conditional;
-    // actual server `instructions` are unconditional. Decide the chrome part
-    // here, pass it into the pure diff as a synthesized entry.
+    // CCR 已退休旧 Chrome client-side instructions。后续浏览器工具的说明
+    // 应由通用 MCP server 自己通过 `instructions` 暴露。
     const clientSide = [];
-    if (isToolSearchEnabledOptimistic() &&
-        modelSupportsToolReference(model) &&
-        isToolSearchToolAvailable(tools)) {
-        clientSide.push({
-            serverName: CLAUDE_IN_CHROME_MCP_SERVER_NAME,
-            block: CHROME_TOOL_SEARCH_INSTRUCTIONS,
-        });
-    }
     const delta = getMcpInstructionsDelta(mcpClients, messages ?? [], clientSide);
     if (!delta)
         return [];
@@ -2158,7 +2149,7 @@ async function getAsyncHookResponseAttachments() {
 }
 /**
  * Get teammate mailbox attachments for agent swarm communication
- * Teammates are independent Claude Code sessions running in parallel (swarms),
+ * Teammates are independent CCR sessions running in parallel (swarms),
  * not parent-child subagent relationships.
  *
  * This function checks two sources for messages:

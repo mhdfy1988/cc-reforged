@@ -57,6 +57,7 @@ const PermissionAllowResultSchema = lazySchema(() =>
         )
         return undefined
       }),
+    acceptFeedback: z.string().optional(),
     toolUseID: z.string().optional(),
     decisionClassification: decisionClassificationField(),
   }),

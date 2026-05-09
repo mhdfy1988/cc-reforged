@@ -31,19 +31,17 @@ import { isPowerShellToolEnabled } from './shell/shellToolUtils.js'
 // (and transitively parser.ts, validators, etc.) at startup on all
 // platforms, defeating tools.ts's lazy require. Deferred until the
 // first skill with `shell: powershell` actually runs.
-/* eslint-disable @typescript-eslint/no-require-imports */
 const getPowerShellTool = (() => {
   let cached: PromptShellTool | undefined
-  return (): PromptShellTool => {
+  return async (): Promise<PromptShellTool> => {
     if (!cached) {
       cached = (
-        require('../tools/PowerShellTool/PowerShellTool.js') as typeof import('../tools/PowerShellTool/PowerShellTool.js')
+        await import('../tools/PowerShellTool/PowerShellTool.js')
       ).PowerShellTool
     }
     return cached
   }
 })()
-/* eslint-enable @typescript-eslint/no-require-imports */
 
 // Pattern for code blocks: ```! command ```
 const BLOCK_PATTERN = /```!\s*\n?([\s\S]*?)\n?```/g
@@ -79,7 +77,7 @@ export async function executeShellCommandsInPrompt(
   // author's frontmatter choice doesn't override the user's opt-in/out.
   const shellTool: PromptShellTool =
     shell === 'powershell' && isPowerShellToolEnabled()
-      ? getPowerShellTool()
+      ? await getPowerShellTool()
       : BashTool
 
   // INLINE_PATTERN's lookbehind is ~100x slower than BLOCK_PATTERN on large

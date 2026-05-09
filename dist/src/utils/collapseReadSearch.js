@@ -1,4 +1,5 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { findToolByName } from '../Tool.js';
 import { extractBashCommentLabel } from '../tools/BashTool/commentLabel.js';
 import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js';
@@ -11,6 +12,7 @@ import { TOOL_SEARCH_TOOL_NAME } from '../tools/ToolSearchTool/prompt.js';
 import { getDisplayPath } from './file.js';
 import { isFullscreenEnvEnabled } from './fullscreen.js';
 import { isAutoManagedMemoryFile, isAutoManagedMemoryPattern, isMemoryDirectory, isShellCommandTargetingMemory, } from './memoryFileDetection.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemOps = feature('TEAMMEM')
     ? require('./teamMemoryOps.js')

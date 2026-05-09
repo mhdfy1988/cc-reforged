@@ -1,0 +1,105 @@
+import { JsonRpcClient } from './jsonRpcClient.js';
+import { startAppServerProcess, } from './appServerProcess.js';
+export class StdioAppServerClient {
+    rpc;
+    constructor(rpc) {
+        this.rpc = rpc;
+    }
+    initialize(params = {}, options) {
+        return this.rpc.request('initialize', params, options);
+    }
+    shutdown(options) {
+        return this.rpc.request('shutdown', {}, options);
+    }
+    getConfig(options) {
+        return this.rpc.request('config/get', {}, options);
+    }
+    getAuthStatus(params = {}, options) {
+        return this.rpc.request('auth/status', params, options);
+    }
+    listModels(params = {}, options) {
+        return this.rpc.request('model/list', params, options);
+    }
+    listMcp(params = {}, options) {
+        return this.rpc.request('mcp/list', params, options);
+    }
+    openWorkspace(params, options) {
+        return this.rpc.request('workspace/open', params, options);
+    }
+    startThread(params = {}, options) {
+        return this.rpc.request('thread/start', params, options);
+    }
+    listThreads(options) {
+        return this.rpc.request('thread/list', {}, options);
+    }
+    listSessionHistory(params = {}, options) {
+        return this.rpc.request('session/history/list', params, options);
+    }
+    resumeThread(params, options) {
+        return this.rpc.request('thread/resume', params, options);
+    }
+    startTurn(params, options) {
+        return this.rpc.request('turn/start', params, options);
+    }
+    interruptTurn(params, options) {
+        return this.rpc.request('turn/interrupt', params, options);
+    }
+    respondPermission(params, options) {
+        return this.rpc.request('permission/respond', params, options);
+    }
+    getPermissionSettings(options) {
+        return this.rpc.request('permission/settings/get', {}, options);
+    }
+    updatePermissionSettings(params, options) {
+        return this.rpc.request('permission/settings/update', params, options);
+    }
+    getContextStatus(params = {}, options) {
+        return this.rpc.request('context/status', params, options);
+    }
+    analyzeContext(params = {}, options) {
+        return this.rpc.request('context/analyze', params, options);
+    }
+    getCompactStatus(params = {}, options) {
+        return this.rpc.request('compact/status', params, options);
+    }
+    runCompact(params, options) {
+        return this.rpc.request('compact/run', params, options);
+    }
+    getMemorySessionStatus(params = {}, options) {
+        return this.rpc.request('memory/session/status', params, options);
+    }
+    onNotification(listener) {
+        return this.rpc.onNotification(listener);
+    }
+    onError(listener) {
+        return this.rpc.onError(listener);
+    }
+    close() {
+        this.rpc.close();
+    }
+}
+export function createStdioAppServerClient(transport, options = {}) {
+    return new StdioAppServerClient(new JsonRpcClient(transport, options));
+}
+export function startManagedStdioAppServerClient(options = {}) {
+    const process = startAppServerProcess(options.process);
+    const client = createStdioAppServerClient(process, options);
+    return {
+        client,
+        process,
+        async close() {
+            try {
+                await client.shutdown({ timeoutMs: 5_000 });
+                await process.waitForExit();
+            }
+            catch {
+                process.close();
+                await process.waitForExit();
+            }
+            finally {
+                client.close();
+            }
+        },
+    };
+}
+//# sourceMappingURL=stdioAppServerClient.js.map

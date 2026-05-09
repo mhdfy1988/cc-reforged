@@ -16,7 +16,7 @@ import { connectToServer, getMcpServerConnectionBatchSize } from '../../services
 import { addMcpConfig, getAllMcpConfigs, getMcpConfigByName, getMcpConfigsByScope, removeMcpConfig } from '../../services/mcp/config.js';
 import { describeMcpConfigFilePath, ensureConfigScope, getScopeLabel } from '../../services/mcp/utils.js';
 import { AppStateProvider } from '../../state/AppState.js';
-import { getCurrentProjectConfig, getGlobalConfig, saveCurrentProjectConfig } from '../../utils/config.js';
+import { getCurrentProjectConfig, saveCurrentProjectConfig } from '../../utils/config.js';
 import { isFsInaccessible } from '../../utils/errors.js';
 import { gracefulShutdown } from '../../utils/gracefulShutdown.js';
 import { safeParseJSON } from '../../utils/json.js';
@@ -89,9 +89,9 @@ export async function mcpRemoveHandler(name, options) {
         }
         // If no scope specified, check where the server exists
         const projectConfig = getCurrentProjectConfig();
-        const globalConfig = getGlobalConfig();
         // Check if server exists in project scope (.mcp.json)
         const { servers: projectServers } = getMcpConfigsByScope('project');
+        const { servers: userServers } = getMcpConfigsByScope('user');
         const mcpJsonExists = !!projectServers[name];
         // Count how many scopes contain this server
         const scopes = [];
@@ -99,7 +99,7 @@ export async function mcpRemoveHandler(name, options) {
             scopes.push('local');
         if (mcpJsonExists)
             scopes.push('project');
-        if (globalConfig.mcpServers?.[name])
+        if (userServers[name])
             scopes.push('user');
         if (scopes.length === 0) {
             cliError(`No MCP server found with name: "${name}"`);
@@ -124,7 +124,7 @@ export async function mcpRemoveHandler(name, options) {
             });
             process.stderr.write('\nTo remove from a specific scope, use:\n');
             scopes.forEach(scope => {
-                process.stderr.write(`  claude mcp remove "${name}" -s ${scope}\n`);
+                process.stderr.write(`  ccr mcp remove "${name}" -s ${scope}\n`);
             });
             cliError();
         }
@@ -139,7 +139,7 @@ export async function mcpListHandler() {
     const { servers: configs } = await getAllMcpConfigs();
     if (Object.keys(configs).length === 0) {
         // biome-ignore lint/suspicious/noConsole:: intentional console output
-        console.log('No MCP servers configured. Use `claude mcp add` to add a server.');
+        console.log('No MCP servers configured. Use `ccr mcp add` to add a server.');
     }
     else {
         // biome-ignore lint/suspicious/noConsole:: intentional console output
@@ -268,7 +268,7 @@ export async function mcpGetHandler(name) {
         }
     }
     // biome-ignore lint/suspicious/noConsole:: intentional console output
-    console.log(`\nTo remove this server, run: claude mcp remove "${name}" -s ${server.scope}`);
+    console.log(`\nTo remove this server, run: ccr mcp remove "${name}" -s ${server.scope}`);
     // Use gracefulShutdown to properly clean up MCP server connections
     // (process.exit bypasses cleanup handlers, leaving child processes orphaned)
     await gracefulShutdown(0);
@@ -334,6 +334,6 @@ export async function mcpResetChoicesHandler() {
         disabledMcpjsonServers: [],
         enableAllProjectMcpServers: false
     }));
-    cliOk('All project-scoped (.mcp.json) server approvals and rejections have been reset.\n' + 'You will be prompted for approval next time you start Claude Code.');
+    cliOk('All project-scoped (.mcp.json) server approvals and rejections have been reset.\n' + 'You will be prompted for approval next time you start CCR.');
 }
 //# sourceMappingURL=mcp.js.map

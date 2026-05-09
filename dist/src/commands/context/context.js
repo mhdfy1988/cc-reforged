@@ -1,4 +1,5 @@
 import { jsx as _jsx } from "react/jsx-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import * as React from 'react';
 import { ContextVisualization } from '../../components/ContextVisualization.js';
@@ -6,6 +7,7 @@ import { microcompactMessages } from '../../services/compact/microCompact.js';
 import { analyzeContextUsage } from '../../utils/analyzeContext.js';
 import { getMessagesAfterCompactBoundary } from '../../utils/messages.js';
 import { renderToAnsiString } from '../../utils/staticRender.js';
+const require = createRequire(import.meta.url);
 /**
  * Apply the same context transforms query.ts does before the API call, so
  * /context shows what the model actually sees rather than the REPL's raw

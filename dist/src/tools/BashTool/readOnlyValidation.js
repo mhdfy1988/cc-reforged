@@ -1390,9 +1390,9 @@ const READONLY_COMMAND_REGEXES = new Set([
     // Allow newlines in single quotes (safe) but not in double quotes (could be dangerous with variable expansion)
     // Also allow optional 2>&1 stderr redirection at the end
     /^echo(?:\s+(?:'[^']*'|"[^"$<>\n\r]*"|[^|;&`$(){}><#\\!"'\s]+))*(?:\s+2>&1)?\s*$/,
-    // Claude CLI help
-    /^claude -h$/,
-    /^claude --help$/,
+    // CCR CLI help
+    /^ccr -h$/,
+    /^ccr --help$/,
     // Git readonly commands are now handled via COMMAND_ALLOWLIST with explicit flag validation
     // (git status, git blame, git ls-files, git config --get, git remote, git tag, git branch)
     /^uniq(?:\s+(?:-[a-zA-Z]+|--[a-zA-Z-]+(?:=\S+)?|-[fsw]\s+\d+))*(?:\s|$)\s*$/, // Only allow flags, no input/output files

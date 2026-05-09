@@ -24,5 +24,9 @@
    主题：每轮复盘模板、审查后文档同步、全仓快照刷新要求。  
    何时读：一轮修复收束后，要更新 backlog/plan 或刷新任务状态时。
 
+6. [06-existing-capability-and-reuse.md](D:/agent_project/claude-code-reforged/docs/agent-rules/06-existing-capability-and-reuse.md)
+   主题：写代码前先确认已有能力、复用成熟第三方方案、新实现准入条件。
+   何时读：新增/改造权限、认证、LLM、MCP、App Server、Desktop、VS Code、工具执行、配置或协议能力前。
+
 主入口仍是精简版：
 [AGENTS.md](D:/agent_project/claude-code-reforged/AGENTS.md)

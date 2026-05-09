@@ -1,7 +1,9 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
 import { initAutoDream } from '../services/autoDream/autoDream.js';
 import { initMagicDocs } from '../services/MagicDocs/magicDocs.js';
 import { initSkillImprovement } from './hooks/skillImprovement.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const extractMemoriesModule = feature('EXTRACT_MEMORIES')
     ? require('../services/extractMemories/extractMemories.js')

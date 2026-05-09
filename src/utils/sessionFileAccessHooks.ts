@@ -4,6 +4,7 @@
  * Also tracks memdir file access via Read, Grep, Glob, Edit, and Write tools.
  */
 import { feature } from 'bun:bundle'
+import { createRequire } from 'node:module'
 import { registerHookCallbacks } from '../bootstrap/state.js'
 import type { HookInput, HookJSONOutput } from '../entrypoints/agentSdkTypes.js'
 import {
@@ -27,6 +28,8 @@ import {
   isAutoMemFile,
   memoryScopeForPath,
 } from './memoryFileDetection.js'
+
+const require = createRequire(import.meta.url)
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const teamMemPaths = feature('TEAMMEM')

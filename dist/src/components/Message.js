@@ -1,5 +1,6 @@
 import { jsx as _jsx } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import * as React from 'react';
 import { useTerminalSize } from '../hooks/useTerminalSize.js';
@@ -24,6 +25,7 @@ import { UserTextMessage } from './messages/UserTextMessage.js';
 import { UserToolResultMessage } from './messages/UserToolResultMessage/UserToolResultMessage.js';
 import { OffscreenFreeze } from './OffscreenFreeze.js';
 import { ExpandShellOutputProvider } from './shell/ExpandShellOutputContext.js';
+const require = createRequire(import.meta.url);
 function MessageImpl(t0) {
     const $ = _c(94);
     const { message, lookups, containerWidth, addMargin, tools, commands, verbose, inProgressToolUseIDs, progressMessagesForMessage, shouldAnimate, shouldShowDot, style, width, isTranscriptMode, onOpenRateLimitOptions, isActiveCollapsedGroup, isUserContinuation: t1, lastThinkingBlockId, latestBashOutputUUID } = t0;

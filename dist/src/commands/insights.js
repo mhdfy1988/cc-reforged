@@ -1960,20 +1960,20 @@ function generateHtmlReport(data, insights) {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Claude Code Insights</title>
+  <title>CCR Insights</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>${css}</style>
 </head>
 <body>
   <div class="container">
-    <h1>Claude Code Insights</h1>
+    <h1>CCR Insights</h1>
     <p class="subtitle">${data.total_messages.toLocaleString()} messages across ${data.total_sessions} sessions${data.total_sessions_scanned && data.total_sessions_scanned > data.total_sessions ? ` (${data.total_sessions_scanned.toLocaleString()} total)` : ''} | ${data.date_range.start} to ${data.date_range.end}</p>
 
     ${atAGlanceHtml}
 
     <nav class="nav-toc">
       <a href="#section-work">What You Work On</a>
-      <a href="#section-usage">How You Use CC</a>
+      <a href="#section-usage">How You Use CCR</a>
       <a href="#section-wins">Impressive Things</a>
       <a href="#section-friction">Where Things Go Wrong</a>
       <a href="#section-features">Features to Try</a>
@@ -2050,7 +2050,7 @@ function generateHtmlReport(data, insights) {
           </div>
         </div>
         <p style="font-size: 13px; color: #475569; margin-top: 12px;">
-          You run multiple Claude Code sessions simultaneously. Multi-clauding is detected when sessions
+          You run multiple CCR sessions simultaneously. Multi-session usage is detected when sessions
           overlap in time, suggesting parallel workflows.
         </p>
       `}
@@ -2415,7 +2415,7 @@ function safeKeys(obj) {
 const usageReport = {
     type: 'prompt',
     name: 'insights',
-    description: 'Generate a report analyzing your Claude Code sessions',
+    description: 'Generate a report analyzing your CCR sessions',
     contentLength: 0, // Dynamic content
     progressMessage: 'analyzing your sessions',
     source: 'builtin',
@@ -2503,7 +2503,7 @@ ${atAGlance.quick_wins ? `**Quick wins to try:** ${atAGlance.quick_wins} See _Fe
 
 ${atAGlance.ambitious_workflows ? `**Ambitious workflows:** ${atAGlance.ambitious_workflows} See _On the Horizon_.` : ''}`
             : '_No insights generated_';
-        const header = `# Claude Code Insights
+        const header = `# CCR Insights
 
 ${stats}
 ${data.date_range.start} to ${data.date_range.end}
@@ -2516,7 +2516,7 @@ Your full shareable insights report is ready: ${reportUrl}${uploadHint}`;
         return [
             {
                 type: 'text',
-                text: `The user just ran /insights to generate a usage report analyzing their Claude Code sessions.
+                text: `The user just ran /insights to generate a usage report analyzing their CCR sessions.
 
 Here is the full insights data:
 ${jsonStringify(insights, null, 2)}

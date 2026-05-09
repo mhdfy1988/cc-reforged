@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 let prewarmed = false;
 /**
  * Pre-warm the native module by loading it in advance.

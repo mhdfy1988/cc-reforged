@@ -1,5 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import figures from 'figures';
 import React, { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
@@ -30,6 +31,7 @@ import { DreamDetailDialog } from './DreamDetailDialog.js';
 import { InProcessTeammateDetailDialog } from './InProcessTeammateDetailDialog.js';
 import { RemoteSessionDetailDialog } from './RemoteSessionDetailDialog.js';
 import { ShellDetailDialog } from './ShellDetailDialog.js';
+const require = createRequire(import.meta.url);
 function isRecord(value) {
     return typeof value === 'object' && value !== null;
 }
@@ -62,7 +64,7 @@ function getKillMonitorMcpFn(moduleValue) {
 // bundler can dead-code-eliminate the branch.
 /* eslint-disable @typescript-eslint/no-require-imports */
 const WorkflowDetailDialog = feature('WORKFLOW_SCRIPTS') ? require('./WorkflowDetailDialog.js').WorkflowDetailDialog : null;
-const workflowTaskModule = feature('WORKFLOW_SCRIPTS') ? require('src/tasks/LocalWorkflowTask/LocalWorkflowTask.js') : null;
+const workflowTaskModule = feature('WORKFLOW_SCRIPTS') ? require('../../tasks/LocalWorkflowTask/LocalWorkflowTask.js') : null;
 const killWorkflowTask = getKillWorkflowTaskFn(workflowTaskModule);
 const skipWorkflowAgent = getSkipWorkflowAgentFn(workflowTaskModule);
 const retryWorkflowAgent = getRetryWorkflowAgentFn(workflowTaskModule);

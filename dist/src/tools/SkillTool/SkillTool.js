@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle';
 import uniqBy from 'lodash-es/uniqBy.js';
+import { createRequire } from 'node:module';
 import { dirname } from 'path';
 import { getProjectRoot } from 'src/bootstrap/state.js';
 import { builtInCommandNames, findCommand, getCommands, } from 'src/commands.js';
@@ -43,6 +44,7 @@ async function getAllCommands(context) {
     const localCommands = await getCommands(getProjectRoot());
     return uniqBy([...localCommands, ...mcpSkills], 'name');
 }
+const require = createRequire(import.meta.url);
 // Conditional require for remote skill modules — static imports here would
 // pull in akiBackend.ts (via remoteSkillLoader → akiBackend), which has
 // module-level memoize()/lazySchema() consts that survive tree-shaking as

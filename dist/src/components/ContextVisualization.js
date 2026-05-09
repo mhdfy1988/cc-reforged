@@ -1,5 +1,6 @@
 import { jsxs as _jsxs, Fragment as _Fragment, jsx as _jsx } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import * as React from 'react';
 import { Box, Text } from '../ink.js';
@@ -9,6 +10,7 @@ import { formatTokens } from '../utils/format.js';
 import { getSourceDisplayName } from '../utils/settings/constants.js';
 import { plural } from '../utils/stringUtils.js';
 import { ContextSuggestions } from './ContextSuggestions.js';
+const require = createRequire(import.meta.url);
 const RESERVED_CATEGORY_NAME = 'Autocompact buffer';
 /**
  * One-liner for the legend header showing what context-collapse has done.

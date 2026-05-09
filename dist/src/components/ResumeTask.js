@@ -100,13 +100,13 @@ export function ResumeTask({ onSelect, onCancel, isEmbedded = false }) {
         return _jsx(TeleportError, { onComplete: handleErrorComplete });
     }
     if (loading) {
-        return _jsxs(Box, { flexDirection: "column", padding: 1, children: [_jsxs(Box, { flexDirection: "row", children: [_jsx(Spinner, {}), _jsx(Text, { bold: true, children: "Loading Claude Code sessions\u2026" })] }), _jsx(Text, { dimColor: true, children: retrying ? 'Retrying…' : 'Fetching your Claude Code sessions…' })] });
+        return _jsxs(Box, { flexDirection: "column", padding: 1, children: [_jsxs(Box, { flexDirection: "row", children: [_jsx(Spinner, {}), _jsx(Text, { bold: true, children: "Loading CCR sessions\u2026" })] }), _jsx(Text, { dimColor: true, children: retrying ? 'Retrying…' : 'Fetching your CCR sessions…' })] });
     }
     if (loadErrorType) {
-        return _jsxs(Box, { flexDirection: "column", padding: 1, children: [_jsx(Text, { bold: true, color: "error", children: "Error loading Claude Code sessions" }), renderErrorSpecificGuidance(loadErrorType), _jsxs(Text, { dimColor: true, children: ["Press ", _jsx(Text, { bold: true, children: "Ctrl+R" }), " to retry \u00B7 Press", ' ', _jsx(Text, { bold: true, children: escKey }), " to cancel"] })] });
+        return _jsxs(Box, { flexDirection: "column", padding: 1, children: [_jsx(Text, { bold: true, color: "error", children: "Error loading CCR sessions" }), renderErrorSpecificGuidance(loadErrorType), _jsxs(Text, { dimColor: true, children: ["Press ", _jsx(Text, { bold: true, children: "Ctrl+R" }), " to retry \u00B7 Press", ' ', _jsx(Text, { bold: true, children: escKey }), " to cancel"] })] });
     }
     if (sessions.length === 0) {
-        return _jsxs(Box, { flexDirection: "column", padding: 1, children: [_jsxs(Text, { bold: true, children: ["No Claude Code sessions found", currentRepo && _jsxs(Text, { children: [" for ", currentRepo] })] }), _jsx(Box, { marginTop: 1, children: _jsxs(Text, { dimColor: true, children: ["Press ", _jsx(Text, { bold: true, children: escKey }), " to cancel"] }) })] });
+        return _jsxs(Box, { flexDirection: "column", padding: 1, children: [_jsxs(Text, { bold: true, children: ["No CCR sessions found", currentRepo && _jsxs(Text, { children: [" for ", currentRepo] })] }), _jsx(Box, { marginTop: 1, children: _jsxs(Text, { dimColor: true, children: ["Press ", _jsx(Text, { bold: true, children: escKey }), " to cancel"] }) })] });
     }
     const sessionMetadata = sessions.map(session_0 => ({
         ...session_0,

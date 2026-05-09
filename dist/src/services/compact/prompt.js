@@ -1,4 +1,6 @@
 import { feature } from 'bun:bundle';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 // Dead code elimination: conditional import for proactive mode
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS')

@@ -1,8 +1,10 @@
 import { Agent as HttpsAgent } from 'https';
+import { createRequire } from 'node:module';
 import memoize from 'lodash-es/memoize.js';
 import { getCACertificates } from './caCerts.js';
 import { logForDebugging } from './debug.js';
 import { getFsImplementation } from './fsOperations.js';
+const require = createRequire(import.meta.url);
 /**
  * Get mTLS configuration from environment variables
  */

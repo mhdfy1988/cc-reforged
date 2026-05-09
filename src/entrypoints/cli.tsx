@@ -33,11 +33,35 @@ if (feature('ABLATION_BASELINE') && process.env.CLAUDE_CODE_ABLATION_BASELINE) {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
+  function retireLegacyChromeEntrypoint(flag: string): void {
+    process.stderr.write(
+      `CCR: ${flag} belongs to the retired Claude in Chrome integration. Configure Playwright MCP as a regular MCP server instead.\n`,
+    );
+    process.exitCode = 1;
+  }
+
   // Fast-path for --version/-v: zero module loading needed
   if (args.length === 1 && (args[0] === '--version' || args[0] === '-v' || args[0] === '-V')) {
     // MACRO.VERSION is inlined at build time
     // biome-ignore lint/suspicious/noConsole:: intentional console output
-    console.log(`${MACRO.VERSION} (Claude Code)`);
+    console.log(`CCR v${MACRO.VERSION}`);
+    return;
+  }
+
+  if (args[0] === 'app-server') {
+    const listen = getAppServerListenMode(args.slice(1));
+    if (listen !== 'stdio') {
+      process.stderr.write(
+        `CCR App Server only supports "--listen stdio" in this version. Received: ${listen}\n`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const { enableConfigs } = await import('../utils/config.js');
+    enableConfigs();
+    const { runStdioAppServer } = await import('../app-server/index.js');
+    await runStdioAppServer();
     return;
   }
 
@@ -71,17 +95,11 @@ async function main(): Promise<void> {
   }
   if (process.argv[2] === '--claude-in-chrome-mcp') {
     profileCheckpoint('cli_claude_in_chrome_mcp_path');
-    const {
-      runClaudeInChromeMcpServer
-    } = await import('../utils/claudeInChrome/mcpServer.js');
-    await runClaudeInChromeMcpServer();
+    retireLegacyChromeEntrypoint('--claude-in-chrome-mcp');
     return;
   } else if (process.argv[2] === '--chrome-native-host') {
     profileCheckpoint('cli_chrome_native_host_path');
-    const {
-      runChromeNativeHost
-    } = await import('../utils/claudeInChrome/chromeNativeHost.js');
-    await runChromeNativeHost();
+    retireLegacyChromeEntrypoint('--chrome-native-host');
     return;
   } else if (feature('CHICAGO_MCP') && process.argv[2] === '--computer-use-mcp') {
     profileCheckpoint('cli_computer_use_mcp_path');
@@ -302,6 +320,20 @@ async function main(): Promise<void> {
   profileCheckpoint('cli_after_main_import');
   await cliMain();
   profileCheckpoint('cli_after_main_complete');
+}
+
+function getAppServerListenMode(args: string[]): string {
+  const listenFlagIndex = args.indexOf('--listen');
+  if (listenFlagIndex !== -1) {
+    return args[listenFlagIndex + 1] ?? '';
+  }
+
+  const listenEqualsArg = args.find(arg => arg.startsWith('--listen='));
+  if (listenEqualsArg) {
+    return listenEqualsArg.slice('--listen='.length);
+  }
+
+  return 'stdio';
 }
 
 // eslint-disable-next-line custom-rules/no-top-level-side-effects

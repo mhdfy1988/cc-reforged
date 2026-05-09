@@ -38,7 +38,7 @@ export function createWhatsNewFeed(releaseNotes) {
             text: note
         };
     });
-    const emptyMessage = isAntUser ? 'Unable to fetch latest claude-cli-internal commits' : 'Check the Claude Code changelog for updates';
+    const emptyMessage = isAntUser ? 'Unable to fetch latest claude-cli-internal commits' : 'Check the CCR changelog for updates';
     return {
         title: isAntUser ? "What's new [ANT-ONLY: Latest CC commits]" : "What's new",
         lines,
@@ -54,7 +54,7 @@ export function createProjectOnboardingFeed(steps) {
             text: `${checkmark}${text}`
         };
     });
-    const warningText = getCwd() === homedir() ? 'Note: You have launched claude in your home directory. For the best experience, launch it in a project directory instead.' : undefined;
+    const warningText = getCwd() === homedir() ? 'Note: You have launched CCR in your home directory. For the best experience, launch it in a project directory instead.' : undefined;
     if (warningText) {
         lines.push({
             text: warningText
@@ -67,7 +67,7 @@ export function createProjectOnboardingFeed(steps) {
 }
 export function createGuestPassesFeed() {
     const reward = getCachedReferrerReward();
-    const subtitle = reward ? `Share Claude Code and earn ${formatCreditAmount(reward)} of extra usage` : 'Share Claude Code with friends';
+    const subtitle = reward ? `Share CCR and earn ${formatCreditAmount(reward)} of extra usage` : 'Share CCR with friends';
     return {
         title: '3 guest passes',
         lines: [],

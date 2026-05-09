@@ -1,45 +1,113 @@
 > **Disclaimer:** This repository contains source code recovered from the source map (`cli.js.map`) bundled in the [`@anthropic-ai/claude-code@2.1.88`](https://www.npmjs.com/package/@anthropic-ai/claude-code/v/2.1.88) npm package. It is not an official source release by Anthropic. All rights belong to their respective owners.
 
-# Claude Code
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-![](https://img.shields.io/badge/Node.js-18%2B-brightgreen?style=flat-square) [![npm]](https://www.npmjs.com/package/@anthropic-ai/claude-code)
+# CCR v0.2
 
-[npm]: https://img.shields.io/npm/v/@anthropic-ai/claude-code.svg?style=flat-square
+![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 
-Claude Code is an agentic coding tool that lives in your terminal, understands your codebase, and helps you code faster by executing routine tasks, explaining complex code, and handling git workflows -- all through natural language commands. Use it in your terminal, IDE, or tag @claude on Github.
+CCR is a terminal coding agent recovery build. The current v0.2 milestone keeps the terminal-first workflow, adds an in-repo pluggable LLM runtime with Codex OAuth support, and includes Playwright MCP integration.
 
-**Learn more at [Claude Code Homepage](https://claude.com/product/claude-code)** | [Documentation](https://code.claude.com/docs/en/overview)
+Upstream product and protocol references that still appear in the codebase or docs are kept only where they describe source provenance or external compatibility boundaries.
 
 <img src="https://github.com/anthropics/claude-code/blob/main/demo.gif?raw=1" />
 
-## Get started
+## Current Status
 
-1. Install Claude Code:
+- Product command: `ccr`
+- Product version: `CCR v0.2`
+- npm package name: `cc-reforged`
+- Runtime requirement: Node.js `>=24.0.0`
+- Default config directory: `~/.ccr`
+- Default LLM config file: `~/.ccr/data/llm.config.local.json`
+- Default Codex OAuth credential file: `~/.ccr/data/codex-oauth.json`
+- Current runtime direction: built-in provider runtime first, Anthropic compatibility retained where still needed
 
-```sh
-npm install -g @anthropic-ai/claude-code
+## Install From npm
+
+After the first npm release is published:
+
+```powershell
+npm.cmd install -g cc-reforged
+ccr --version
+ccr
 ```
 
-2. Navigate to your project directory and run `claude`.
+## Run From Source
+
+This repository is currently intended to be run from source or linked locally.
+
+```powershell
+npm.cmd install
+npm.cmd run build
+node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js --version
+node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js
+```
+
+Expected version output:
+
+```text
+CCR v0.2
+```
+
+Optional local global link:
+
+```powershell
+npm.cmd link
+ccr --version
+ccr
+```
+
+## Codex OAuth
+
+CCR v0.2 can use Codex OAuth as the active LLM provider.
+
+Recommended first-run flow:
+
+1. Start CCR with `ccr` or the source command above.
+2. Run `/login` in the TUI.
+3. Select `Codex OAuth`.
+4. Complete the browser login.
+5. Run a simple prompt to confirm the model is responding.
+
+Runtime status can be checked with:
+
+```powershell
+node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js auth status --json
+```
+
+The default Codex OAuth model is currently `gpt-5.4`. Model/provider configuration is intentionally stored under `~/.ccr` to avoid conflicts with local Claude Code, Codex, or OpenClaw installations.
+
+## Development Checks
+
+```powershell
+npm.cmd run typecheck -- --pretty false
+npm.cmd run build -- --pretty false
+npm.cmd run smoke:llm-config
+npm.cmd run smoke:llm-runtime-status
+npm.cmd run smoke:codex-oauth-session
+npm.cmd run smoke:codex-oauth-provider
+```
+
+Do not run the smoke scripts with plain `node scripts/...` unless you know the script does not need the project loader. Most runtime smoke scripts must be launched through `bun-bundle-loader.mjs`, and the npm scripts already do that.
+
+## Release
+
+The npm publish checklist is documented in [`docs/release/npm-publish-workflow.md`](docs/release/npm-publish-workflow.md).
+
+## Important Boundaries
+
+- CCR is not an official Anthropic source release.
+- `CLAUDE.md` remains a compatibility filename in parts of the recovered codebase.
+- Some Anthropic, Claude, Claude Desktop, Chrome extension, GitHub App, and remote-session text may still exist where it names an external service or protocol.
+- User-facing CCR product identity is being migrated gradually and should use `CCR` / `ccr` for new work.
 
 ## Reporting Bugs
 
-We welcome your feedback. Use the `/bug` command to report issues directly within Claude Code, or file a [GitHub issue](https://github.com/anthropics/claude-code/issues).
+Use the `/bug` command inside CCR, or file a [GitHub issue](https://github.com/mhdfy1988/cc-reforged/issues).
 
-## Connect on Discord
+## Upstream References
 
-Join the [Claude Developers Discord](https://anthropic.com/discord) to connect with other developers using Claude Code. Get help, share feedback, and discuss your projects with the community.
-
-## Data collection, usage, and retention
-
-When you use Claude Code, we collect feedback, which includes usage data (such as code acceptance or rejections), associated conversation data, and user feedback submitted via the `/bug` command.
-
-### How we use your data
-
-See our [data usage policies](https://code.claude.com/docs/en/data-usage).
-
-### Privacy safeguards
-
-We have implemented several safeguards to protect your data, including limited retention periods for sensitive information and restricted access to user session data.
-
-For full details, please review our [Commercial Terms of Service](https://www.anthropic.com/legal/commercial-terms) and [Privacy Policy](https://www.anthropic.com/legal/privacy).
+- Upstream source provenance: [`@anthropic-ai/claude-code@2.1.88`](https://www.npmjs.com/package/@anthropic-ai/claude-code/v/2.1.88)
+- Upstream product overview: [Claude Code](https://claude.com/product/claude-code)
+- Upstream documentation reference: [code.claude.com/docs](https://code.claude.com/docs/en/overview)

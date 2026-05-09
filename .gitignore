@@ -1,7 +1,10 @@
 # 本地依赖与临时产物
 node_modules/
 tmp/
+out/
+release/
 *.tgz
+.playwright-mcp/
 
 # typecheck 修复阶段的临时输出
 .codex-typecheck*.txt

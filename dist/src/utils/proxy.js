@@ -2,6 +2,7 @@
 // dynamically in getAWSClientProxyConfig() to defer ~929KB of AWS SDK.
 // undici is lazy-required inside getProxyAgent/configureGlobalAgents to defer
 // ~1.5MB when no HTTPS_PROXY/mTLS env vars are set (the common case).
+import { createRequire } from 'node:module';
 import axios, {} from 'axios';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import memoize from 'lodash-es/memoize.js';
@@ -9,6 +10,8 @@ import { getCACertificates } from './caCerts.js';
 import { logForDebugging } from './debug.js';
 import { isEnvTruthy } from './envUtils.js';
 import { getMTLSAgent, getMTLSConfig, getTLSFetchOptions, } from './mtls.js';
+const require = createRequire(import.meta.url);
+const DEFAULT_UNDICI_CONNECT_TIMEOUT_MS = 30_000;
 // Disable fetch keep-alive after a stale-pool ECONNRESET so retries open a
 // fresh TCP connection instead of reusing the dead pooled socket. Sticky for
 // the process lifetime — once the pool is known-bad, don't trust it again.
@@ -40,6 +43,21 @@ export function getAddressFamily(options) {
         default:
             throw new Error(`Unsupported address family: ${options.family}`);
     }
+}
+function getUndiciConnectTimeoutMs(env = process.env) {
+    const parsed = Number.parseInt(env.CCR_FETCH_CONNECT_TIMEOUT_MS ?? '', 10);
+    return Number.isFinite(parsed) && parsed > 0
+        ? parsed
+        : DEFAULT_UNDICI_CONNECT_TIMEOUT_MS;
+}
+function createDirectUndiciAgent(connect) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const undiciMod = require('undici');
+    return new undiciMod.Agent({
+        connectTimeout: getUndiciConnectTimeoutMs(),
+        ...(connect ? { connect } : {}),
+        pipelining: 1,
+    });
 }
 /**
  * Get the active proxy URL if one is configured
@@ -172,6 +190,7 @@ export const getProxyAgent = memoize((uri) => {
         httpProxy: uri,
         httpsProxy: uri,
         noProxy: process.env.NO_PROXY || process.env.no_proxy,
+        connectTimeout: getUndiciConnectTimeoutMs(),
     };
     // Set both connect and requestTls so TLS options apply to both paths:
     // - requestTls: used by ProxyAgent for the TLS connection through CONNECT tunnels
@@ -258,6 +277,43 @@ export function getProxyFetchOptions(opts) {
  * This ensures all HTTP requests use the proxy and/or mTLS if configured
  */
 let proxyInterceptorId;
+let fetchDispatcherSignature;
+export function configureGlobalFetchDispatcher() {
+    if (typeof Bun !== 'undefined') {
+        return;
+    }
+    const proxyUrl = getProxyUrl();
+    const mtlsConfig = getMTLSConfig();
+    const caCerts = getCACertificates();
+    const timeoutMs = getUndiciConnectTimeoutMs();
+    const signature = JSON.stringify({
+        proxyUrl,
+        noProxy: getNoProxy(),
+        hasMTLS: Boolean(mtlsConfig),
+        hasCACerts: Boolean(caCerts),
+        timeoutMs,
+    });
+    if (fetchDispatcherSignature === signature) {
+        return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const undiciMod = require('undici');
+    if (proxyUrl) {
+        undiciMod.setGlobalDispatcher(getProxyAgent(proxyUrl));
+    }
+    else {
+        const connect = {
+            ...(mtlsConfig && {
+                cert: mtlsConfig.cert,
+                key: mtlsConfig.key,
+                passphrase: mtlsConfig.passphrase,
+            }),
+            ...(caCerts && { ca: caCerts }),
+        };
+        undiciMod.setGlobalDispatcher(createDirectUndiciAgent(Object.keys(connect).length > 0 ? connect : undefined));
+    }
+    fetchDispatcherSignature = signature;
+}
 export function configureGlobalAgents() {
     const proxyUrl = getProxyUrl();
     const mtlsAgent = getMTLSAgent();
@@ -297,19 +353,12 @@ export function configureGlobalAgents() {
             }
             return config;
         });
-        require('undici').setGlobalDispatcher(getProxyAgent(proxyUrl));
     }
     else if (mtlsAgent) {
         // No proxy but mTLS is configured
         axios.defaults.httpsAgent = mtlsAgent;
-        // Set undici global dispatcher with mTLS
-        const mtlsOptions = getTLSFetchOptions();
-        if (mtlsOptions.dispatcher) {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            ;
-            require('undici').setGlobalDispatcher(mtlsOptions.dispatcher);
-        }
     }
+    configureGlobalFetchDispatcher();
 }
 /**
  * Get AWS SDK client configuration with proxy support
@@ -341,6 +390,7 @@ export async function getAWSClientProxyConfig() {
  */
 export function clearProxyCache() {
     getProxyAgent.cache.clear?.();
+    fetchDispatcherSignature = undefined;
     logForDebugging('Cleared proxy agent cache');
 }
 //# sourceMappingURL=proxy.js.map

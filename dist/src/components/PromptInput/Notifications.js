@@ -1,5 +1,6 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
+import { createRequire } from 'node:module';
 import { feature } from 'bun:bundle';
 import * as React from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -13,6 +14,7 @@ import { useVoiceEnabled } from '../../hooks/useVoiceEnabled.js';
 import { Box, Text } from '../../ink.js';
 import { useClaudeAiLimits } from '../../services/claudeAiLimitsHook.js';
 import { calculateTokenWarningState } from '../../services/compact/autoCompact.js';
+import { getLlmRuntimeAuthStatusSync } from '../../services/llm/runtimeStatus.js';
 import { getApiKeyHelperElapsedMs, getConfiguredApiKeyHelper, getSubscriptionType } from '../../utils/auth.js';
 import { getExternalEditor } from '../../utils/editor.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';
@@ -28,6 +30,7 @@ import { MemoryUsageIndicator } from '../MemoryUsageIndicator.js';
 import { SentryErrorBoundary } from '../SentryErrorBoundary.js';
 import { TokenWarning } from '../TokenWarning.js';
 import { SandboxPromptFooterHint } from './SandboxPromptFooterHint.js';
+const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const VoiceIndicator = feature('VOICE_MODE') ? require('./VoiceIndicator.js').VoiceIndicator : () => null;
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -217,11 +220,13 @@ function NotificationContent({ ideSelection, mcpClients, notifications, isInOver
     const isBriefOnly = feature('KAIROS') || feature('KAIROS_BRIEF') ?
         // biome-ignore lint/correctness/useHookAtTopLevel: feature() is a compile-time constant
         useAppState(s_1 => s_1.isBriefOnly) : false;
+    const llmAuthStatus = getLlmRuntimeAuthStatusSync();
+    const shouldShowAuthError = !llmAuthStatus.available && (apiKeyStatus === 'invalid' || apiKeyStatus === 'missing');
     // When voice is actively recording or processing, replace all
     // notifications with just the voice indicator.
     if (feature('VOICE_MODE') && voiceEnabled && (voiceState === 'recording' || voiceState === 'processing')) {
         return _jsx(VoiceIndicator, { voiceState: voiceState });
     }
-    return _jsxs(_Fragment, { children: [_jsx(IdeStatusIndicator, { ideSelection: ideSelection, mcpClients: mcpClients }), notifications.current && ('jsx' in notifications.current ? _jsx(Text, { wrap: "truncate", children: notifications.current.jsx }, notifications.current.key) : _jsx(Text, { color: notifications.current.color, dimColor: !notifications.current.color, wrap: "truncate", children: notifications.current.text })), isInOverageMode && !isTeamOrEnterprise && _jsx(Box, { children: _jsx(Text, { dimColor: true, wrap: "truncate", children: "Now using extra usage" }) }), apiKeyHelperSlow && _jsxs(Box, { children: [_jsxs(Text, { color: "warning", wrap: "truncate", children: ["apiKeyHelper is taking a while", ' '] }), _jsxs(Text, { dimColor: true, wrap: "truncate", children: ["(", apiKeyHelperSlow, ")"] })] }), (apiKeyStatus === 'invalid' || apiKeyStatus === 'missing') && _jsx(Box, { children: _jsx(Text, { color: "error", wrap: "truncate", children: isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ? 'Authentication error · Try again' : 'Not logged in · Run /login' }) }), debug && _jsx(Box, { children: _jsx(Text, { color: "warning", wrap: "truncate", children: "Debug mode" }) }), apiKeyStatus !== 'invalid' && apiKeyStatus !== 'missing' && verbose && _jsx(Box, { children: _jsxs(Text, { dimColor: true, wrap: "truncate", children: [tokenUsage, " tokens"] }) }), !isBriefOnly && _jsx(TokenWarning, { tokenUsage: tokenUsage, model: mainLoopModel }), shouldShowAutoUpdater && _jsx(AutoUpdaterWrapper, { verbose: verbose, onAutoUpdaterResult: onAutoUpdaterResult, autoUpdaterResult: autoUpdaterResult, isUpdating: isAutoUpdating, onChangeIsUpdating: onChangeIsUpdating, showSuccessMessage: !isShowingCompactMessage }), feature('VOICE_MODE') ? voiceEnabled && voiceError && _jsx(Box, { children: _jsx(Text, { color: "error", wrap: "truncate", children: voiceError }) }) : null, _jsx(MemoryUsageIndicator, {}), _jsx(SandboxPromptFooterHint, {})] });
+    return _jsxs(_Fragment, { children: [_jsx(IdeStatusIndicator, { ideSelection: ideSelection, mcpClients: mcpClients }), notifications.current && ('jsx' in notifications.current ? _jsx(Text, { wrap: "truncate", children: notifications.current.jsx }, notifications.current.key) : _jsx(Text, { color: notifications.current.color, dimColor: !notifications.current.color, wrap: "truncate", children: notifications.current.text })), isInOverageMode && !isTeamOrEnterprise && _jsx(Box, { children: _jsx(Text, { dimColor: true, wrap: "truncate", children: "Now using extra usage" }) }), apiKeyHelperSlow && _jsxs(Box, { children: [_jsxs(Text, { color: "warning", wrap: "truncate", children: ["apiKeyHelper is taking a while", ' '] }), _jsxs(Text, { dimColor: true, wrap: "truncate", children: ["(", apiKeyHelperSlow, ")"] })] }), shouldShowAuthError && _jsx(Box, { children: _jsx(Text, { color: "error", wrap: "truncate", children: isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) ? 'Authentication error · Try again' : `${llmAuthStatus.message} · Run /login` }) }), debug && _jsx(Box, { children: _jsx(Text, { color: "warning", wrap: "truncate", children: "Debug mode" }) }), apiKeyStatus !== 'invalid' && apiKeyStatus !== 'missing' && verbose && _jsx(Box, { children: _jsxs(Text, { dimColor: true, wrap: "truncate", children: [tokenUsage, " tokens"] }) }), !isBriefOnly && _jsx(TokenWarning, { tokenUsage: tokenUsage, model: mainLoopModel }), shouldShowAutoUpdater && _jsx(AutoUpdaterWrapper, { verbose: verbose, onAutoUpdaterResult: onAutoUpdaterResult, autoUpdaterResult: autoUpdaterResult, isUpdating: isAutoUpdating, onChangeIsUpdating: onChangeIsUpdating, showSuccessMessage: !isShowingCompactMessage }), feature('VOICE_MODE') ? voiceEnabled && voiceError && _jsx(Box, { children: _jsx(Text, { color: "error", wrap: "truncate", children: voiceError }) }) : null, _jsx(MemoryUsageIndicator, {}), _jsx(SandboxPromptFooterHint, {})] });
 }
 //# sourceMappingURL=Notifications.js.map

@@ -256,14 +256,14 @@ function handleErrorStatus(status, data, context) {
             throw new BridgeFatalError(`${context}: Authentication failed (401)${detail ? `: ${detail}` : ''}. ${BRIDGE_LOGIN_INSTRUCTION}`, 401, errorType);
         case 403:
             throw new BridgeFatalError(isExpiredErrorType(errorType)
-                ? 'Remote Control session has expired. Please restart with `claude remote-control` or /remote-control.'
+                ? 'Remote Control session has expired. Please restart with `ccr remote-control` or /remote-control.'
                 : `${context}: Access denied (403)${detail ? `: ${detail}` : ''}. Check your organization permissions.`, 403, errorType);
         case 404:
             throw new BridgeFatalError(detail ??
                 `${context}: Not found (404). Remote Control may not be available for this organization.`, 404, errorType);
         case 410:
             throw new BridgeFatalError(detail ??
-                'Remote Control session has expired. Please restart with `claude remote-control` or /remote-control.', 410, errorType ?? 'environment_expired');
+                'Remote Control session has expired. Please restart with `ccr remote-control` or /remote-control.', 410, errorType ?? 'environment_expired');
         case 429:
             throw new Error(`${context}: Rate limited (429). Polling too frequently.`);
         default:

@@ -48,7 +48,7 @@ export function BypassPermissionsModeDialog(t0) {
     const handleEscape = _temp2;
     let t3;
     if ($[3] === Symbol.for("react.memo_cache_sentinel")) {
-        t3 = _jsxs(Box, { flexDirection: "column", gap: 1, children: [_jsxs(Text, { children: ["In Bypass Permissions mode, Claude Code will not ask for your approval before running potentially dangerous commands.", _jsx(Newline, {}), "This mode should only be used in a sandboxed container/VM that has restricted internet access and can easily be restored if damaged."] }), _jsx(Text, { children: "By proceeding, you accept all responsibility for actions taken while running in Bypass Permissions mode." }), _jsx(Link, { url: "https://code.claude.com/docs/en/security" })] });
+        t3 = _jsxs(Box, { flexDirection: "column", gap: 1, children: [_jsxs(Text, { children: ["In Bypass Permissions mode, CCR will not ask for your approval before running potentially dangerous commands.", _jsx(Newline, {}), "This mode should only be used in a sandboxed container/VM that has restricted internet access and can easily be restored if damaged."] }), _jsx(Text, { children: "By proceeding, you accept all responsibility for actions taken while running in Bypass Permissions mode." }), _jsx(Link, { url: "https://github.com/mhdfy1988/cc-reforged" })] });
         $[3] = t3;
     }
     else {
@@ -70,7 +70,7 @@ export function BypassPermissionsModeDialog(t0) {
     }
     let t5;
     if ($[5] !== onChange) {
-        t5 = _jsxs(Dialog, { title: "WARNING: Claude Code running in Bypass Permissions mode", color: "error", onCancel: handleEscape, children: [t3, _jsx(Select, { options: t4, onChange: value_0 => onChange(value_0) })] });
+        t5 = _jsxs(Dialog, { title: "WARNING: CCR running in Bypass Permissions mode", color: "error", onCancel: handleEscape, children: [t3, _jsx(Select, { options: t4, onChange: value_0 => onChange(value_0) })] });
         $[5] = onChange;
         $[6] = t5;
     }

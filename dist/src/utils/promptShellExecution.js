@@ -11,17 +11,15 @@ import { isPowerShellToolEnabled } from './shell/shellToolUtils.js';
 // (and transitively parser.ts, validators, etc.) at startup on all
 // platforms, defeating tools.ts's lazy require. Deferred until the
 // first skill with `shell: powershell` actually runs.
-/* eslint-disable @typescript-eslint/no-require-imports */
 const getPowerShellTool = (() => {
     let cached;
-    return () => {
+    return async () => {
         if (!cached) {
-            cached = require('../tools/PowerShellTool/PowerShellTool.js').PowerShellTool;
+            cached = (await import('../tools/PowerShellTool/PowerShellTool.js')).PowerShellTool;
         }
         return cached;
     };
 })();
-/* eslint-enable @typescript-eslint/no-require-imports */
 // Pattern for code blocks: ```! command ```
 const BLOCK_PATTERN = /```!\s*\n?([\s\S]*?)\n?```/g;
 // Pattern for inline: !`command`
@@ -47,7 +45,7 @@ export async function executeShellCommandsInPrompt(text, context, slashCommandNa
     // hit BashTool. PowerShell only when the runtime gate allows — a skill
     // author's frontmatter choice doesn't override the user's opt-in/out.
     const shellTool = shell === 'powershell' && isPowerShellToolEnabled()
-        ? getPowerShellTool()
+        ? await getPowerShellTool()
         : BashTool;
     // INLINE_PATTERN's lookbehind is ~100x slower than BLOCK_PATTERN on large
     // skill content (265µs vs 2µs @ 17KB). 93% of skills have no !` at all,

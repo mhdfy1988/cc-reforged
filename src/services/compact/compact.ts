@@ -1,6 +1,9 @@
 import { feature } from 'bun:bundle'
 import type { UUID } from 'crypto'
+import { createRequire } from 'node:module'
 import uniqBy from 'lodash-es/uniqBy.js'
+
+const require = createRequire(import.meta.url)
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const sessionTranscriptModule = feature('KAIROS')

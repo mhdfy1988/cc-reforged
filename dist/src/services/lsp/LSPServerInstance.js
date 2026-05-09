@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { getCwd } from '../../utils/cwd.js';
@@ -5,6 +6,7 @@ import { logForDebugging } from '../../utils/debug.js';
 import { errorMessage } from '../../utils/errors.js';
 import { logError } from '../../utils/log.js';
 import { sleep } from '../../utils/sleep.js';
+const require = createRequire(import.meta.url);
 /**
  * LSP error code for "content modified" - indicates the server's state changed
  * during request processing (e.g., rust-analyzer still indexing the project).

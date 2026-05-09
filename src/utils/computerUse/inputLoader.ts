@@ -2,8 +2,10 @@ import type {
   ComputerUseInput,
   ComputerUseInputAPI,
 } from '@ant/computer-use-input'
+import { createRequire } from 'node:module'
 
 let cached: ComputerUseInputAPI | undefined
+const require = createRequire(import.meta.url)
 
 /**
  * Package's js/index.js reads COMPUTER_USE_INPUT_NODE_PATH (baked by

@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 import { c as _c } from "react/compiler-runtime";
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
+import { createRequire } from 'node:module';
 import * as React from 'react';
 import { Box, Text, color } from '../../ink.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
@@ -27,6 +28,7 @@ import { EmergencyTip } from './EmergencyTip.js';
 import { VoiceModeNotice } from './VoiceModeNotice.js';
 import { Opus1mMergeNotice } from './Opus1mMergeNotice.js';
 import { feature } from 'bun:bundle';
+const require = createRequire(import.meta.url);
 // Conditional require so ChannelsNotice.tsx tree-shakes when both flags are
 // false. A module-scope helper component inside a feature() ternary does NOT
 // tree-shake (docs/feature-gating.md); the require pattern eliminates the
@@ -43,6 +45,7 @@ import { useAppState } from '../../state/AppState.js';
 import { getEffortSuffix, parseEffortValue } from '../../utils/effort.js';
 import { useMainLoopModel } from '../../hooks/useMainLoopModel.js';
 import { renderModelSetting } from '../../utils/model/model.js';
+import { getLlmRuntimeDisplayStatus } from '../../services/llm/runtimeStatus.js';
 const LEFT_PANEL_MAX_WIDTH = 50;
 function GateOverridesWarning() {
     return null;
@@ -167,10 +170,12 @@ export function LogoV2() {
     }
     useEffect(t7, t8);
     const model = useMainLoopModel();
-    const fullModelDisplayName = renderModelSetting(model);
+    const llmStatus = getLlmRuntimeDisplayStatus();
+    const fullModelDisplayName = llmStatus.providerId === 'anthropic' ? renderModelSetting(model) : llmStatus.modelCatalogEntry.displayName;
     const { version, cwd, billingType, agentName: agentNameFromSettings } = getLogoDisplayData();
     const agentName = typeof agent === 'string' ? agent : agentNameFromSettings;
-    const effortSuffix = getEffortSuffix(model, effortValue);
+    const displayBillingType = llmStatus.providerId === 'anthropic' ? billingType : llmStatus.providerDisplayName;
+    const effortSuffix = llmStatus.providerId === 'anthropic' ? getEffortSuffix(model, effortValue) : '';
     const t9 = fullModelDisplayName + effortSuffix;
     let t10;
     if ($[13] !== t9) {
@@ -258,8 +263,8 @@ export function LogoV2() {
     }
     const layoutMode = getLayoutMode(columns);
     const userTheme = resolveThemeSetting(getGlobalConfig().theme);
-    const borderTitle = ` ${color("claude", userTheme)("Claude Code")} ${color("inactive", userTheme)(`v${version}`)} `;
-    const compactBorderTitle = color("claude", userTheme)(" Claude Code ");
+    const borderTitle = ` ${color("claude", userTheme)("CCR")} ${color("inactive", userTheme)(`v${version}`)} `;
+    const compactBorderTitle = color("claude", userTheme)(" CCR ");
     if (layoutMode === "compact") {
         let welcomeMessage = formatWelcomeMessage(username);
         if (stringWidth(welcomeMessage) > columns - 4) {
@@ -343,10 +348,10 @@ export function LogoV2() {
             t18 = $[42];
             t19 = $[43];
         }
-        return _jsxs(_Fragment, { children: [_jsx(OffscreenFreeze, { children: _jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "claude", borderText: t11, paddingX: 1, paddingY: 1, alignItems: "center", width: columns, children: [_jsx(Text, { bold: true, children: welcomeMessage }), t12, t13, _jsx(Text, { dimColor: true, children: billingType }), _jsx(Text, { dimColor: true, children: agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd })] }) }), t14, t15, t16, t17, t18, t19] });
+        return _jsxs(_Fragment, { children: [_jsx(OffscreenFreeze, { children: _jsxs(Box, { flexDirection: "column", borderStyle: "round", borderColor: "claude", borderText: t11, paddingX: 1, paddingY: 1, alignItems: "center", width: columns, children: [_jsx(Text, { bold: true, children: welcomeMessage }), t12, t13, _jsx(Text, { dimColor: true, children: displayBillingType }), _jsx(Text, { dimColor: true, children: agentName ? `@${agentName} · ${truncatedCwd}` : truncatedCwd })] }) }), t14, t15, t16, t17, t18, t19] });
     }
     const welcomeMessage_0 = formatWelcomeMessage(username);
-    const modelLine = !process.env.IS_DEMO && config.oauthAccount?.organizationName ? `${modelDisplayName} · ${billingType} · ${config.oauthAccount.organizationName}` : `${modelDisplayName} · ${billingType}`;
+    const modelLine = !process.env.IS_DEMO && config.oauthAccount?.organizationName && llmStatus.providerId === 'anthropic' ? `${modelDisplayName} · ${displayBillingType} · ${config.oauthAccount.organizationName}` : `${modelDisplayName} · ${displayBillingType}`;
     const cwdAvailableWidth_0 = agentName ? LEFT_PANEL_MAX_WIDTH - 1 - stringWidth(agentName) - 3 : LEFT_PANEL_MAX_WIDTH;
     const truncatedCwd_0 = truncatePath(cwd, Math.max(cwdAvailableWidth_0, 10));
     const cwdLine = agentName ? `@${agentName} · ${truncatedCwd_0}` : truncatedCwd_0;

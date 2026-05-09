@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import { writeFile } from 'fs/promises'
+import { createRequire } from 'node:module'
 import { z } from 'zod/v4'
 import {
   getAllowedChannels,
@@ -47,6 +48,8 @@ import {
   renderToolUseMessage,
   renderToolUseRejectedMessage,
 } from './UI.js'
+
+const require = createRequire(import.meta.url)
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')

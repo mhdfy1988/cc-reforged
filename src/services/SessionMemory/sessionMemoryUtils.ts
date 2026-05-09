@@ -195,6 +195,37 @@ export function getToolCallsBetweenUpdates(): number {
   return sessionMemoryConfig.toolCallsBetweenUpdates
 }
 
+export function getSessionMemoryStateSnapshot(): {
+  config: SessionMemoryConfig
+  initialized: boolean
+  lastSummarizedMessageId: string | undefined
+  extraction: {
+    inProgress: boolean
+    startedAt: string | undefined
+    ageMs: number | undefined
+  }
+  tokensAtLastExtraction: number
+} {
+  const now = Date.now()
+  return {
+    config: getSessionMemoryConfig(),
+    initialized: sessionMemoryInitialized,
+    lastSummarizedMessageId,
+    extraction: {
+      inProgress: extractionStartedAt !== undefined,
+      startedAt:
+        extractionStartedAt !== undefined
+          ? new Date(extractionStartedAt).toISOString()
+          : undefined,
+      ageMs:
+        extractionStartedAt !== undefined
+          ? Math.max(0, now - extractionStartedAt)
+          : undefined,
+    },
+    tokensAtLastExtraction,
+  }
+}
+
 /**
  * Reset session memory state (useful for testing)
  */

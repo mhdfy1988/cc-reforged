@@ -11,12 +11,16 @@ const packageJson = JSON.parse(
 const packageLock = JSON.parse(
   readFileSync(resolve(repoRoot, 'package-lock.json'), 'utf8'),
 );
+const packageFiles = packageJson.files ?? [];
+const hasDistPublishEntry = packageFiles.some(
+  file => file === 'dist/' || file.startsWith('dist/'),
+);
 
 assert.equal(packageJson.dependencies?.['@anthropic-ai/claude-agent-sdk'], undefined);
 assert.equal(packageJson.scripts?.prepare, undefined);
 assert.ok(packageJson.scripts?.prepublishOnly);
-assert.ok(packageJson.files?.includes('dist/'));
-assert.ok(!packageJson.files?.includes('src/'));
+assert.ok(hasDistPublishEntry, 'package files must include a dist publish entry');
+assert.ok(!packageFiles.includes('src/'));
 assert.equal(packageJson.dependencies?.zod, '^3.25.76');
 
 const lockPackages = Object.keys(packageLock.packages ?? {});
@@ -30,6 +34,21 @@ assert.ok(existsSync(shimPath), 'third-party shim file is missing');
 const shimText = readFileSync(shimPath, 'utf8');
 const declareModuleCount = [...shimText.matchAll(/declare module /g)].length;
 assert.ok(declareModuleCount > 0, 'third-party shim file has no declare module blocks');
+
+const auditRuntimeTargets = spawnSync(process.execPath, [
+  resolve(repoRoot, 'scripts', 'audit-runtime-targets.mjs'),
+], {
+  cwd: repoRoot,
+  encoding: 'utf8',
+  shell: false,
+});
+if (auditRuntimeTargets.error) {
+  throw auditRuntimeTargets.error;
+}
+assert.equal(auditRuntimeTargets.status, 0, auditRuntimeTargets.stderr);
+const runtimeTargets = JSON.parse(auditRuntimeTargets.stdout);
+assert.equal(runtimeTargets.summary?.missingLocalCount, 25);
+assert.equal(runtimeTargets.summary?.specialExternalCount, 3);
 
 const packCommand =
   process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : 'npm';
@@ -70,6 +89,7 @@ console.log(
         path: shimPath,
         declareModuleCount,
       },
+      runtimeTargets: runtimeTargets.summary,
       pack: {
         fileCount: packedFiles.length,
         includesDist: packedFiles.some(file => file.startsWith('dist/')),
