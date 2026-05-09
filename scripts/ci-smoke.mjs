@@ -44,6 +44,7 @@ run(process.execPath, ['cli.js', '--help']);
 runNpm(['run', 'smoke:app-server']);
 runNpm(['run', 'smoke:app-server-context']);
 runNpm(['run', 'smoke:app-server-client']);
+runNpm(['run', 'smoke:system-identity']);
 runNpm(['run', 'smoke:runtime']);
 runNpm(['run', 'smoke:permissions']);
 runNpm(['run', 'smoke:deps']);

@@ -90,6 +90,8 @@ for (const method of [
 
 for (const expected of [
   '自动更新',
+  '已是最新版本',
+  '线上最新',
   '检查更新',
   '下载',
   '重启安装',

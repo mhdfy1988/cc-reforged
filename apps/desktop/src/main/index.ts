@@ -45,6 +45,7 @@ type DesktopRuntimeMode = 'development' | 'packaged'
 type DesktopRuntime = {
   mode: DesktopRuntimeMode
   root: string
+  cwd: string
   command: string
   commandArgs: string[]
   env: NodeJS.ProcessEnv
@@ -151,6 +152,7 @@ function resolveDesktopRuntime(): DesktopRuntime {
     return {
       mode: 'development',
       root: resolve(configuredRoot),
+      cwd: resolve(configuredRoot),
       command: process.env.CCR_DESKTOP_NODE_COMMAND ?? 'node',
       commandArgs: ['cli.js'],
       env: process.env,
@@ -158,11 +160,15 @@ function resolveDesktopRuntime(): DesktopRuntime {
   }
 
   if (app.isPackaged) {
+    const resourcesRoot = process.resourcesPath
+    const appArchiveRoot = join(resourcesRoot, 'app.asar')
+
     return {
       mode: 'packaged',
-      root: join(process.resourcesPath, 'app.asar.unpacked'),
+      root: appArchiveRoot,
+      cwd: resourcesRoot,
       command: process.execPath,
-      commandArgs: ['cli.js'],
+      commandArgs: [join(appArchiveRoot, 'cli.js')],
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: '1',
@@ -173,6 +179,7 @@ function resolveDesktopRuntime(): DesktopRuntime {
   return {
     mode: 'development',
     root: resolve(process.cwd()),
+    cwd: resolve(process.cwd()),
     command: process.env.CCR_DESKTOP_NODE_COMMAND ?? 'node',
     commandArgs: ['cli.js'],
     env: process.env,
@@ -329,7 +336,7 @@ async function bootstrapAppServer(): Promise<void> {
     process: {
       command: runtime.command,
       args: [...runtime.commandArgs, 'app-server', '--listen', 'stdio'],
-      cwd: runtime.root,
+      cwd: runtime.cwd,
       env: runtime.env,
     },
   })

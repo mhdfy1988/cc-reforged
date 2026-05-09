@@ -91,6 +91,7 @@
 4. 如果从高层 helper 切到低层 `stream/complete` 等 API，必须逐字段对照入参名称、默认值、传输方式和错误降级行为，并补 smoke 断言防止口径漂移。
 5. 真实登录凭据、token、refresh token 和 credential JSON 绝不打印、不贴回复、不写入文档；验证只输出脱敏状态和路径。
 6. 这类接入验证失败时，先回到资料对照和实际 payload/transport 差异排查，不得优先猜测网络、代理或环境问题。
+7. 模型可见的系统身份、产品说明和归因头必须按 provider 隔离：官方 Anthropic / Bedrock / Vertex / Foundry 链路可保留 Claude Code 兼容信息；`codex-oauth`、BigModel、OpenAI-compatible 或其他 Anthropic-compatible 代理不得注入 `cc_version`、`x-anthropic-billing-header` 或 “You are Claude Code” 这类会被模型复述的身份信息。
 
 ## 10. 已有能力与成熟方案复用护栏
 

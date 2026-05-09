@@ -23,18 +23,29 @@ export function getUpdateStatusText(
     return '初始化中'
   }
   if (!updateStatus.enabled) {
-    return '开发态已禁用'
+    return '自动更新已禁用'
   }
-  if (updateStatus.status === 'available') {
-    return `发现 ${updateStatus.availableUpdate?.version ?? '新版本'}`
+
+  switch (updateStatus.status) {
+    case 'idle':
+      return '等待检查'
+    case 'disabled':
+      return '自动更新已禁用'
+    case 'checking':
+      return '正在检查更新'
+    case 'available':
+      return `发现 ${updateStatus.availableUpdate?.version ?? '新版本'}`
+    case 'not-available':
+      return '已是最新版本'
+    case 'downloading':
+      return `下载中 ${updateStatus.progress?.percent ?? 0}%`
+    case 'downloaded':
+      return '更新已下载'
+    case 'installing':
+      return '正在安装更新'
+    case 'error':
+      return '更新失败'
   }
-  if (updateStatus.status === 'downloaded') {
-    return '更新已下载'
-  }
-  if (updateStatus.status === 'downloading') {
-    return `下载中 ${updateStatus.progress?.percent ?? 0}%`
-  }
-  return updateStatus.status
 }
 
 export function getUpdateDetailText(
@@ -49,8 +60,17 @@ export function getUpdateDetailText(
   if (updateStatus.lastError) {
     return updateStatus.lastError
   }
+  if (updateStatus.status === 'available' && updateStatus.availableUpdate?.version) {
+    return `当前 ${updateStatus.currentVersion}，可更新到 ${updateStatus.availableUpdate.version}`
+  }
+  if (updateStatus.status === 'not-available') {
+    if (updateStatus.availableUpdate?.version) {
+      return `当前 ${updateStatus.currentVersion}，线上最新 ${updateStatus.availableUpdate.version}`
+    }
+    return `当前 ${updateStatus.currentVersion}，没有可用更新`
+  }
   if (updateStatus.availableUpdate?.version) {
-    return `当前 ${updateStatus.currentVersion}，可用 ${updateStatus.availableUpdate.version}`
+    return `当前 ${updateStatus.currentVersion}，目标版本 ${updateStatus.availableUpdate.version}`
   }
   return `当前 ${updateStatus.currentVersion} · ${updateStatus.source}`
 }
@@ -94,7 +114,7 @@ export function getTopbarUpdateSubtitle(
     return updateStatus.lastError
   }
   if (updateStatus.availableUpdate?.version) {
-    return `当前 ${updateStatus.currentVersion} -> ${updateStatus.availableUpdate.version}`
+    return `当前 ${updateStatus.currentVersion}，目标 ${updateStatus.availableUpdate.version}`
   }
   return `当前 ${updateStatus.currentVersion}`
 }

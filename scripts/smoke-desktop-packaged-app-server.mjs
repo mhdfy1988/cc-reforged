@@ -5,7 +5,9 @@ import { join } from 'node:path'
 
 const root = process.cwd()
 const packagedRoot = join(root, 'release', 'desktop', 'win-unpacked')
-const runtimeRoot = join(packagedRoot, 'resources', 'app.asar.unpacked')
+const resourcesRoot = join(packagedRoot, 'resources')
+const appArchiveRoot = join(resourcesRoot, 'app.asar')
+const runtimeEntry = join(appArchiveRoot, 'cli.js')
 const executable =
   process.platform === 'win32'
     ? join(packagedRoot, 'CCR Desktop.exe')
@@ -16,7 +18,7 @@ if (process.platform !== 'win32') {
   process.exit(0)
 }
 
-for (const requiredPath of [executable, runtimeRoot]) {
+for (const requiredPath of [executable, appArchiveRoot]) {
   if (!existsSync(requiredPath)) {
     console.error(`Missing packaged desktop artifact: ${requiredPath}`)
     console.error('Run npm.cmd run desktop:pack first.')
@@ -24,8 +26,8 @@ for (const requiredPath of [executable, runtimeRoot]) {
   }
 }
 
-const child = spawn(executable, ['cli.js', 'app-server', '--listen', 'stdio'], {
-  cwd: runtimeRoot,
+const child = spawn(executable, [runtimeEntry, 'app-server', '--listen', 'stdio'], {
+  cwd: resourcesRoot,
   env: {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
@@ -120,7 +122,8 @@ child.on('exit', code => {
       {
         ok: true,
         executable,
-        runtimeRoot,
+        resourcesRoot,
+        runtimeEntry,
         coreVersion: initialize.result.serverInfo.coreVersion,
         serverVersion: initialize.result.serverVersion,
         configSchemaVersion: initialize.result.schemaVersions.config,
