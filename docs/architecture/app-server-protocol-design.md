@@ -241,7 +241,7 @@ stdout:
 }
 ```
 
-第一版 notification 只做占位和少量状态事件，不做 turn 流。
+当前 notification 已用于 turn 流、工具事件、权限请求和状态事件；协议原则仍是不在 notification 中泄露 token、refresh token、完整 credential 或未脱敏环境变量。
 
 ---
 
@@ -388,13 +388,16 @@ scripts/generate-app-server-schema.mjs
   "models": true,
   "mcp": true,
   "workspace": true,
-  "threads": false,
-  "turns": false,
-  "permissions": false
+  "threads": true,
+  "turns": true,
+  "permissions": true,
+  "context": true,
+  "compact": true,
+  "memory": true
 }
 ```
 
-第一版 `threads / turns / permissions` 返回 `false`。
+当前 `threads / turns / permissions / context / compact / memory` 已返回 `true`，表示 App Server 已具备会话、turn 事件流、权限响应、上下文状态、压缩状态和 SessionMemory 状态协议。具体事件字段仍以 [CCR Desktop 与 App Server 事件字段契约](./desktop-app-server-event-contract.md) 为准。
 
 ---
 
@@ -456,9 +459,9 @@ Result:
     "models": true,
     "mcp": true,
     "workspace": true,
-    "threads": false,
-    "turns": false,
-    "permissions": false
+    "threads": true,
+    "turns": true,
+    "permissions": true
   }
 }
 ```
@@ -977,9 +980,9 @@ Result:
 
 ---
 
-## 12. 后续会话协议占位
+## 12. 会话协议摘要
 
-P1 只设计占位，P6 再展开。
+详细设计见 [CCR App Server 会话 API 设计](./app-server-session-api-design.md)。这里保留协议级摘要，方便客户端先判断能力边界。
 
 未来核心对象：
 
@@ -994,7 +997,7 @@ Item
   turn 内的消息、工具、权限、delta、结果
 ```
 
-未来方法：
+当前核心方法：
 
 - `thread/start`
 - `thread/resume`
@@ -1002,8 +1005,13 @@ Item
 - `turn/start`
 - `turn/interrupt`
 - `permission/respond`
+- `context/status`
+- `context/analyze`
+- `compact/status`
+- `compact/run`
+- `memory/session/status`
 
-未来通知：
+当前核心通知：
 
 - `thread/started`
 - `turn/started`
@@ -1014,18 +1022,62 @@ Item
 - `permission/cancelled`
 - `turn/completed`
 - `turn/failed`
+- `context/compacted`
 
-第一版 `initialize` 中必须声明：
+当前 `initialize` 中声明：
 
 ```json
 {
-  "threads": false,
-  "turns": false,
-  "permissions": false
+  "threads": true,
+  "turns": true,
+  "permissions": true,
+  "context": true,
+  "compact": true,
+  "memory": true
 }
 ```
 
-避免客户端误以为完整聊天能力已经可用。
+注意：这代表会话、turn 和权限协议可用，不代表已经支持 websocket、多客户端共享、active turn 跨进程恢复或完整历史会话管理。
+
+## 12.1 上下文、压缩与记忆方法
+
+P26 开始，App Server 将 Claude Code 原生上下文治理能力桥接给 Desktop。这里的原则是“只暴露安全状态和控制入口，不复制原生实现”：
+
+- `context/status`：读取当前 thread 的消息数量、最近消息类型、`readFileState` 大小、compact boundary 数量、当前模型、粗略 token 估算、sessionStorage 状态、memory attachment 计数和 tool result replacement 计数。
+- `context/analyze`：复用原生 `/context` 背后的分析链路，但只返回聚合 token、分类、计数和用量，不返回 memory 文件正文、系统提示正文、完整路径或大段 prompt。
+- `compact/status`：读取 auto compact 开关、有效上下文窗口、自动压缩阈值、距离自动压缩的 token 差值、context collapse 状态和最近 compact boundary。
+- `compact/run`：由 Core 将当前 thread 的 `Message[]`、`ToolUseContext`、`readFileState` 映射到原生 `compact.ts` 的 `call` 流程；Desktop 点击按钮或输入 `/compact` 都必须走这个同一接口。
+- `memory/session/status`：读取 SessionMemory hook、gate、初始化、抽取状态、summary 文件脱敏路径、内容长度和 sessionStorage 状态；Desktop 不直接读正文。
+
+P26 新增通知：
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "context/compacted",
+  "params": {
+    "threadId": "thread_xxx",
+    "compactedAt": "2026-05-04T00:00:00.000Z",
+    "metadata": {
+      "messageCount": 3,
+      "compactBoundaryCount": 1,
+      "readFileStateSize": 1
+    },
+    "result": {
+      "trigger": "auto",
+      "preTokens": 120000,
+      "messagesSummarized": 42
+    }
+  }
+}
+```
+
+安全要求：
+
+- `context/analyze` 默认只返回聚合字段，不能返回 `memoryFiles[].path`、系统提示正文、memory 正文或 tool result 原文。
+- `memory/session/status.memoryPath` 和 `sessionStoragePath` 必须返回 `projects/...` 这类状态目录相对路径；如果路径不在 CCR project state 下，只能返回占位而不是绝对路径。
+- `compact/run` 不能绕过 active turn 锁；有运行中 turn 时必须返回结构化 `operation_in_progress`。
+- 自动 compact 仍由原生 `query()` 触发；Desktop 不主动判断是否该自动压缩，只消费 `context/compacted` 轻量事件。
 
 ---
 

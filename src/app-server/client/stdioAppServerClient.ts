@@ -1,23 +1,38 @@
 import type {
   AuthStatusParams,
   AuthStatusResult,
+  CompactRunParams,
+  CompactRunResult,
+  CompactStatusResult,
   ConfigGetResult,
+  ContextAnalyzeParams,
+  ContextAnalyzeResult,
+  ContextStatusResult,
   InitializeParams,
   InitializeResult,
   McpListParams,
   McpListResult,
+  MemorySessionStatusResult,
   ModelListParams,
   ModelListResult,
   PermissionRespondParams,
   PermissionRespondResult,
+  PermissionSettingsGetResult,
+  PermissionSettingsUpdateParams,
+  PermissionSettingsUpdateResult,
+  SessionHistoryListParams,
+  SessionHistoryListResult,
   ShutdownResult,
   ThreadListResult,
+  ThreadResumeParams,
+  ThreadResumeResult,
   ThreadStartParams,
   ThreadStartResult,
   TurnInterruptParams,
   TurnInterruptResult,
   TurnStartParams,
   TurnStartResult,
+  ThreadScopedStatusParams,
   WorkspaceOpenParams,
   WorkspaceOpenResult,
 } from '../protocol.js'
@@ -97,6 +112,20 @@ export class StdioAppServerClient {
     return this.rpc.request('thread/list', {}, options)
   }
 
+  listSessionHistory(
+    params: SessionHistoryListParams = {},
+    options?: RequestOptions,
+  ): Promise<SessionHistoryListResult> {
+    return this.rpc.request('session/history/list', params, options)
+  }
+
+  resumeThread(
+    params: ThreadResumeParams,
+    options?: RequestOptions,
+  ): Promise<ThreadResumeResult> {
+    return this.rpc.request('thread/resume', params, options)
+  }
+
   startTurn(
     params: TurnStartParams,
     options?: RequestOptions,
@@ -116,6 +145,54 @@ export class StdioAppServerClient {
     options?: RequestOptions,
   ): Promise<PermissionRespondResult> {
     return this.rpc.request('permission/respond', params, options)
+  }
+
+  getPermissionSettings(
+    options?: RequestOptions,
+  ): Promise<PermissionSettingsGetResult> {
+    return this.rpc.request('permission/settings/get', {}, options)
+  }
+
+  updatePermissionSettings(
+    params: PermissionSettingsUpdateParams,
+    options?: RequestOptions,
+  ): Promise<PermissionSettingsUpdateResult> {
+    return this.rpc.request('permission/settings/update', params, options)
+  }
+
+  getContextStatus(
+    params: ThreadScopedStatusParams = {},
+    options?: RequestOptions,
+  ): Promise<ContextStatusResult> {
+    return this.rpc.request('context/status', params, options)
+  }
+
+  analyzeContext(
+    params: ContextAnalyzeParams = {},
+    options?: RequestOptions,
+  ): Promise<ContextAnalyzeResult> {
+    return this.rpc.request('context/analyze', params, options)
+  }
+
+  getCompactStatus(
+    params: ThreadScopedStatusParams = {},
+    options?: RequestOptions,
+  ): Promise<CompactStatusResult> {
+    return this.rpc.request('compact/status', params, options)
+  }
+
+  runCompact(
+    params: CompactRunParams,
+    options?: RequestOptions,
+  ): Promise<CompactRunResult> {
+    return this.rpc.request('compact/run', params, options)
+  }
+
+  getMemorySessionStatus(
+    params: ThreadScopedStatusParams = {},
+    options?: RequestOptions,
+  ): Promise<MemorySessionStatusResult> {
+    return this.rpc.request('memory/session/status', params, options)
   }
 
   onNotification(listener: JsonRpcNotificationListener): Unsubscribe {

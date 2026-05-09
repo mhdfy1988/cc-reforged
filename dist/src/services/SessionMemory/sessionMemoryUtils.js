@@ -145,6 +145,24 @@ export function hasMetUpdateThreshold(currentTokenCount) {
 export function getToolCallsBetweenUpdates() {
     return sessionMemoryConfig.toolCallsBetweenUpdates;
 }
+export function getSessionMemoryStateSnapshot() {
+    const now = Date.now();
+    return {
+        config: getSessionMemoryConfig(),
+        initialized: sessionMemoryInitialized,
+        lastSummarizedMessageId,
+        extraction: {
+            inProgress: extractionStartedAt !== undefined,
+            startedAt: extractionStartedAt !== undefined
+                ? new Date(extractionStartedAt).toISOString()
+                : undefined,
+            ageMs: extractionStartedAt !== undefined
+                ? Math.max(0, now - extractionStartedAt)
+                : undefined,
+        },
+        tokensAtLastExtraction,
+    };
+}
 /**
  * Reset session memory state (useful for testing)
  */

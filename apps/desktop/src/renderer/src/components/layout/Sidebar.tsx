@@ -1,7 +1,6 @@
 import type { PageId } from '../../domain/displayTypes.js'
 
 export function Sidebar(props: {
-  appServerStatus: string | undefined
   page: PageId
   onChangePage: (page: PageId) => void
 }) {
@@ -21,22 +20,20 @@ export function Sidebar(props: {
           MCP
         </button>
         <button
-          className={`nav-item ${props.page === 'settings' ? 'active' : ''}`}
-          onClick={() => props.onChangePage('settings')}
-        >
-          设置
-        </button>
-        <button
           className={`nav-item ${props.page === 'logs' ? 'active' : ''}`}
           onClick={() => props.onChangePage('logs')}
         >
           日志
         </button>
       </nav>
-      <div className="core-pill">
-        <span className={props.appServerStatus === 'ready' ? 'dot ok' : 'dot warn'} />
-        {props.appServerStatus ?? 'starting'}
-      </div>
+      <nav className="nav sidebar-footer" aria-label="设置">
+        <button
+          className={`nav-item ${props.page === 'settings' ? 'active' : ''}`}
+          onClick={() => props.onChangePage('settings')}
+        >
+          设置
+        </button>
+      </nav>
     </aside>
   )
 }

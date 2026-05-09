@@ -1,4 +1,114 @@
 {
+  "fixtureSchemaVersion": 1,
+  "expectedCards": [
+    {
+      "source": "event",
+      "fixtureId": "fixture-tool-call-1",
+      "cardType": "tool",
+      "eventType": "tool_call",
+      "toolName": "Bash",
+      "category": "shell",
+      "status": "completed"
+    },
+    {
+      "source": "event",
+      "fixtureId": "fixture-tool-call-2",
+      "cardType": "tool",
+      "eventType": "tool_call",
+      "toolName": "Bash",
+      "category": "shell",
+      "status": "failed"
+    },
+    {
+      "source": "event",
+      "fixtureId": "fixture-tool-call-write",
+      "cardType": "file_tool",
+      "eventType": "tool_call",
+      "toolName": "Write",
+      "operation": "write",
+      "status": "completed"
+    },
+    {
+      "source": "event",
+      "fixtureId": "fixture-ask-user-question-1",
+      "cardType": "control_tool_hidden",
+      "eventType": "tool_call",
+      "toolName": "AskUserQuestion",
+      "hidden": true
+    },
+    {
+      "source": "permission",
+      "fixtureKey": "askUserQuestionPermission",
+      "cardType": "ask_user_question",
+      "toolName": "AskUserQuestion",
+      "interactionKind": "ask_user_question",
+      "status": "pending"
+    },
+    {
+      "source": "permission",
+      "fixtureKey": "planApprovalPermission",
+      "cardType": "plan_approval",
+      "toolName": "ExitPlanMode",
+      "interactionKind": "plan_approval",
+      "status": "pending"
+    },
+    {
+      "source": "permission",
+      "fixtureKey": "enterPlanModePermission",
+      "cardType": "enter_plan_mode",
+      "toolName": "EnterPlanMode",
+      "interactionKind": "enter_plan_mode",
+      "status": "pending"
+    },
+    {
+      "source": "permission",
+      "fixtureKey": "permission",
+      "cardType": "shell_permission",
+      "toolName": "Bash",
+      "interactionKind": "shell_permission",
+      "status": "pending"
+    },
+    {
+      "source": "permission",
+      "fixtureKey": "webFetchPermission",
+      "cardType": "web_fetch",
+      "toolName": "WebFetch",
+      "interactionKind": "web_fetch",
+      "status": "pending"
+    },
+    {
+      "source": "permission",
+      "fixtureKey": "skillPermission",
+      "cardType": "skill",
+      "toolName": "Skill",
+      "interactionKind": "skill",
+      "status": "pending"
+    },
+    {
+      "source": "permission",
+      "fixtureKey": "reviewArtifactPermission",
+      "cardType": "long_tail_fallback",
+      "toolName": "ReviewArtifactTool",
+      "interactionKind": "review_artifact",
+      "status": "pending"
+    },
+    {
+      "source": "permission",
+      "fixtureKey": "workflowPermission",
+      "cardType": "long_tail_fallback",
+      "toolName": "WorkflowTool",
+      "interactionKind": "workflow",
+      "status": "pending"
+    },
+    {
+      "source": "permission",
+      "fixtureKey": "monitorPermission",
+      "cardType": "long_tail_fallback",
+      "toolName": "MonitorTool",
+      "interactionKind": "monitor",
+      "status": "pending"
+    }
+  ],
   "events": [
     {
       "id": "fixture-user-1",
@@ -82,7 +192,433 @@
         "result": "No suitable shell found. Claude CLI requires a Posix shell environment.",
         "errorClass": "shell_unavailable",
         "errorMessage": "No suitable shell found. Claude CLI requires a Posix shell environment.",
-        "actionableHint": "当前环境没有可用 POSIX shell。Windows 下应优先使用 PowerShell、CMD、Node 原生文件能力或高层文件工具。"
+        "actionableHint": "当前环境没有可用 POSIX shell。Windows 下不需要为了 ls 强行安装 Bash，应优先使用 PowerShell、CMD、Node 原生文件能力或高层文件工具。"
+      }
+    },
+    {
+      "id": "fixture-tool-call-write",
+      "type": "tool_call",
+      "text": "写入文件：docs/generated.md",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-tool-call-write",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_write_card",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-tool-call-write",
+        "kind": "call",
+        "name": "Write",
+        "displayName": "写入文件",
+        "category": "file",
+        "status": "completed",
+        "statusLabel": "成功",
+        "summary": "写入文件：docs/generated.md",
+        "target": "docs/generated.md",
+        "input": {
+          "file_path": "docs/generated.md",
+          "content": "# generated"
+        },
+        "result": {
+          "filePath": "docs/generated.md",
+          "type": "create"
+        }
+      },
+      "fileToolSnapshot": {
+        "id": "fixture-tool-call-write:file-tool",
+        "source": "Write",
+        "operation": "write",
+        "status": "completed",
+        "summary": "写入文件：docs/generated.md",
+        "path": "docs/generated.md",
+        "workspaceRelativePath": "docs/generated.md",
+        "safety": "workspace",
+        "actions": ["open", "copyPath", "reveal"],
+        "toolUseId": "toolu_fixture_write_card"
+      },
+      "fileSnapshot": {
+        "id": "fixture-tool-call-write:file:docs_generated.md",
+        "source": "Write",
+        "kind": "generated_file",
+        "path": "docs/generated.md",
+        "workspaceRelativePath": "docs/generated.md",
+        "safety": "workspace",
+        "toolUseId": "toolu_fixture_write_card"
+      }
+    },
+    {
+      "id": "fixture-tool-call-write-second",
+      "type": "tool_call",
+      "text": "写入文件：docs/todo.md",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-tool-call-write-second",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 1,
+        "toolUseId": "toolu_fixture_write_card_2",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-tool-call-write-second",
+        "kind": "call",
+        "name": "Write",
+        "displayName": "写入文件",
+        "category": "file",
+        "status": "completed",
+        "statusLabel": "成功",
+        "summary": "写入文件：docs/todo.md",
+        "target": "docs/todo.md",
+        "input": {
+          "file_path": "docs/todo.md",
+          "content": "# todo"
+        },
+        "result": {
+          "filePath": "docs/todo.md",
+          "type": "create"
+        }
+      },
+      "fileToolSnapshot": {
+        "id": "fixture-tool-call-write-second:file-tool",
+        "source": "Write",
+        "operation": "write",
+        "status": "completed",
+        "summary": "写入文件：docs/todo.md",
+        "path": "docs/todo.md",
+        "workspaceRelativePath": "docs/todo.md",
+        "safety": "workspace",
+        "actions": ["open", "copyPath", "reveal"],
+        "toolUseId": "toolu_fixture_write_card_2"
+      },
+      "fileSnapshot": {
+        "id": "fixture-tool-call-write-second:file:docs_todo.md",
+        "source": "Write",
+        "kind": "generated_file",
+        "path": "docs/todo.md",
+        "workspaceRelativePath": "docs/todo.md",
+        "safety": "workspace",
+        "toolUseId": "toolu_fixture_write_card_2"
+      }
+    },
+    {
+      "id": "fixture-tool-call-read",
+      "type": "tool_call",
+      "text": "读取文件：memory/feedback_utf8_execution.md",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-tool-call-read",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_read_card",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-tool-call-read",
+        "kind": "call",
+        "name": "Read",
+        "displayName": "读取文件",
+        "category": "file",
+        "status": "completed",
+        "statusLabel": "成功",
+        "summary": "读取文件：memory/feedback_utf8_execution.md",
+        "target": "memory/feedback_utf8_execution.md",
+        "input": {
+          "file_path": "memory/feedback_utf8_execution.md"
+        },
+        "result": {
+          "filePath": "memory/feedback_utf8_execution.md",
+          "startLine": 1,
+          "numLines": 10
+        }
+      },
+      "fileToolSnapshot": {
+        "id": "fixture-tool-call-read:file-tool",
+        "source": "Read",
+        "operation": "read",
+        "status": "completed",
+        "summary": "读取文件：memory/feedback_utf8_execution.md",
+        "path": "memory/feedback_utf8_execution.md",
+        "workspaceRelativePath": "memory/feedback_utf8_execution.md",
+        "safety": "workspace",
+        "range": {
+          "startLine": 1,
+          "endLine": 10
+        },
+        "actions": ["open", "copyPath", "reveal"],
+        "toolUseId": "toolu_fixture_read_card"
+      },
+      "fileSnapshot": {
+        "id": "fixture-tool-call-read:file:memory_feedback_utf8_execution.md",
+        "source": "Read",
+        "kind": "read_file",
+        "path": "memory/feedback_utf8_execution.md",
+        "workspaceRelativePath": "memory/feedback_utf8_execution.md",
+        "safety": "workspace",
+        "toolUseId": "toolu_fixture_read_card"
+      }
+    },
+    {
+      "id": "fixture-tool-call-read-failed",
+      "type": "tool_call",
+      "text": "读取文件失败：memory/MEMORY.md",
+      "status": "failed",
+      "identity": {
+        "itemId": "fixture-tool-call-read-failed",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_read_failed",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-tool-call-read-failed",
+        "kind": "call",
+        "name": "Read",
+        "displayName": "读取文件",
+        "category": "file",
+        "status": "failed",
+        "statusLabel": "失败",
+        "summary": "读取文件失败：memory/MEMORY.md",
+        "target": "memory/MEMORY.md",
+        "input": {
+          "file_path": "memory/MEMORY.md"
+        },
+        "result": "File does not exist. Note: your current working directory is D:\\learn_code.",
+        "errorClass": "path_not_found",
+        "errorMessage": "File does not exist. Note: your current working directory is D:\\learn_code.",
+        "actionableHint": "目标路径不存在。请先确认工作区、相对路径和目录是否正确。"
+      },
+      "fileToolSnapshot": {
+        "id": "fixture-tool-call-read-failed:file-tool",
+        "source": "Read",
+        "operation": "read",
+        "status": "failed",
+        "summary": "读取文件失败：memory/MEMORY.md",
+        "path": "memory/MEMORY.md",
+        "workspaceRelativePath": "memory/MEMORY.md",
+        "safety": "workspace",
+        "resultText": "File does not exist. Note: your current working directory is D:\\learn_code.",
+        "errorClass": "path_not_found",
+        "actions": ["open", "copyPath", "reveal"],
+        "toolUseId": "toolu_fixture_read_failed"
+      },
+      "fileSnapshot": {
+        "id": "fixture-tool-call-read-failed:file:memory_MEMORY.md",
+        "source": "Read",
+        "kind": "read_file",
+        "path": "memory/MEMORY.md",
+        "workspaceRelativePath": "memory/MEMORY.md",
+        "safety": "workspace",
+        "toolUseId": "toolu_fixture_read_failed"
+      }
+    },
+    {
+      "id": "fixture-tool-call-write-failed",
+      "type": "tool_call",
+      "text": "写入文件失败：readonly/output.md",
+      "status": "failed",
+      "identity": {
+        "itemId": "fixture-tool-call-write-failed",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_write_failed",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-tool-call-write-failed",
+        "kind": "call",
+        "name": "Write",
+        "displayName": "写入文件",
+        "category": "file",
+        "status": "failed",
+        "statusLabel": "失败",
+        "summary": "写入文件失败：readonly/output.md",
+        "target": "readonly/output.md",
+        "input": {
+          "file_path": "readonly/output.md",
+          "content": "# denied"
+        },
+        "result": "Permission denied: readonly/output.md",
+        "errorClass": "permission_denied",
+        "errorMessage": "Permission denied: readonly/output.md",
+        "actionableHint": "该操作被权限系统拒绝，请确认是否需要重新发起授权。"
+      },
+      "fileToolSnapshot": {
+        "id": "fixture-tool-call-write-failed:file-tool",
+        "source": "Write",
+        "operation": "write",
+        "status": "failed",
+        "summary": "写入文件失败：readonly/output.md",
+        "path": "readonly/output.md",
+        "workspaceRelativePath": "readonly/output.md",
+        "safety": "workspace",
+        "resultText": "Permission denied: readonly/output.md",
+        "errorClass": "permission_denied",
+        "actions": ["open", "copyPath", "reveal"],
+        "toolUseId": "toolu_fixture_write_failed"
+      },
+      "fileSnapshot": {
+        "id": "fixture-tool-call-write-failed:file:readonly_output.md",
+        "source": "Write",
+        "kind": "generated_file",
+        "path": "readonly/output.md",
+        "workspaceRelativePath": "readonly/output.md",
+        "safety": "workspace",
+        "toolUseId": "toolu_fixture_write_failed"
+      }
+    },
+    {
+      "id": "fixture-tool-call-edit",
+      "type": "tool_call",
+      "text": "编辑文件：src/core/sessionCore.ts",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-tool-call-edit",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_edit_card",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-tool-call-edit",
+        "kind": "call",
+        "name": "Edit",
+        "displayName": "编辑文件",
+        "category": "file",
+        "status": "completed",
+        "statusLabel": "成功",
+        "summary": "编辑文件：src/core/sessionCore.ts",
+        "target": "src/core/sessionCore.ts",
+        "input": {
+          "file_path": "src/core/sessionCore.ts",
+          "old_string": "tool_result",
+          "new_string": "orphan_tool_result"
+        },
+        "result": {
+          "filePath": "src/core/sessionCore.ts",
+          "type": "update",
+          "diff": "- tool_result\n+ orphan_tool_result"
+        }
+      },
+      "fileToolSnapshot": {
+        "id": "fixture-tool-call-edit:file-tool",
+        "source": "Edit",
+        "operation": "edit",
+        "status": "completed",
+        "summary": "编辑文件：src/core/sessionCore.ts",
+        "path": "src/core/sessionCore.ts",
+        "workspaceRelativePath": "src/core/sessionCore.ts",
+        "safety": "workspace",
+        "diff": {
+          "diff": "- tool_result\n+ orphan_tool_result"
+        },
+        "actions": ["open", "copyPath", "reveal"],
+        "toolUseId": "toolu_fixture_edit_card"
+      },
+      "fileSnapshot": {
+        "id": "fixture-tool-call-edit:file:src_core_sessionCore.ts",
+        "source": "Edit",
+        "kind": "edited_file",
+        "path": "src/core/sessionCore.ts",
+        "workspaceRelativePath": "src/core/sessionCore.ts",
+        "safety": "workspace",
+        "toolUseId": "toolu_fixture_edit_card"
+      }
+    },
+    {
+      "id": "fixture-tool-call-grep",
+      "type": "tool_call",
+      "text": "搜索内容：recordThreadMessage",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-tool-call-grep",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_grep_card",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-tool-call-grep",
+        "kind": "call",
+        "name": "Grep",
+        "displayName": "搜索内容",
+        "category": "file",
+        "status": "completed",
+        "statusLabel": "成功",
+        "summary": "搜索内容：recordThreadMessage",
+        "target": "src/core",
+        "input": {
+          "pattern": "recordThreadMessage",
+          "path": "src/core"
+        },
+        "result": {
+          "filenames": [
+            "src/core/sessionCore.ts"
+          ],
+          "numMatches": 1
+        }
+      },
+      "fileToolSnapshot": {
+        "id": "fixture-tool-call-grep:file-tool",
+        "source": "Grep",
+        "operation": "search",
+        "status": "completed",
+        "summary": "搜索文件：src/core/sessionCore.ts",
+        "path": "src/core/sessionCore.ts",
+        "workspaceRelativePath": "src/core/sessionCore.ts",
+        "safety": "workspace",
+        "actions": ["open", "copyPath", "reveal", "copyReference"],
+        "toolUseId": "toolu_fixture_grep_card"
+      },
+      "referenceSnapshot": {
+        "id": "fixture-tool-call-grep:reference:src_core_sessionCore.ts",
+        "source": "Grep",
+        "kind": "search_match",
+        "label": "recordThreadMessage",
+        "path": "src/core/sessionCore.ts",
+        "workspaceRelativePath": "src/core/sessionCore.ts",
+        "safety": "workspace",
+        "toolUseId": "toolu_fixture_grep_card"
+      }
+    },
+    {
+      "id": "fixture-orphan-tool-result",
+      "type": "tool_result",
+      "text": "孤立工具结果：缺少 tool_use_id / parent_tool_use_id，无法安全合并到工具卡",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-orphan-tool-result",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 2,
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-orphan-tool-result",
+        "kind": "result",
+        "name": "工具结果",
+        "displayName": "孤立工具结果",
+        "category": "unknown",
+        "status": "completed",
+        "statusLabel": "成功",
+        "summary": "孤立工具结果：缺少 tool_use_id / parent_tool_use_id，无法安全合并到工具卡",
+        "result": "File created successfully at: D:\\learn_code\\gomoku\\todo.md",
+        "actionableHint": "没有找到对应的工具调用，已保留原始结果供排查；不会按文件路径或最近卡片盲目合并。"
       }
     },
     {
@@ -123,6 +659,81 @@
       }
     },
     {
+      "id": "fixture-file-change-1",
+      "type": "file_change",
+      "text": "生成文件：docs/output.md",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-file-change-1",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_write",
+        "missingFields": [],
+        "raw": {}
+      },
+      "fileSnapshot": {
+        "id": "file_fixture_output",
+        "source": "Write",
+        "kind": "generated_file",
+        "path": "docs/output.md",
+        "absolutePath": "D:\\agent_project\\claude-code-reforged\\docs\\output.md",
+        "workspaceRelativePath": "docs/output.md",
+        "safety": "workspace",
+        "mimeType": "text/markdown",
+        "toolUseId": "toolu_fixture_write"
+      }
+    },
+    {
+      "id": "fixture-reference-1",
+      "type": "file_reference",
+      "text": "引用：src/core/sessionCore.ts:120",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-reference-1",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_grep",
+        "missingFields": [],
+        "raw": {}
+      },
+      "referenceSnapshot": {
+        "id": "reference_fixture_session",
+        "source": "Grep",
+        "kind": "code_range",
+        "label": "sessionCore.ts",
+        "path": "src/core/sessionCore.ts",
+        "absolutePath": "D:\\agent_project\\claude-code-reforged\\src\\core\\sessionCore.ts",
+        "workspaceRelativePath": "src/core/sessionCore.ts",
+        "safety": "workspace",
+        "range": {
+          "startLine": 120,
+          "startColumn": 1
+        },
+        "excerpt": "recordThreadMessage(...)",
+        "toolUseId": "toolu_fixture_grep"
+      }
+    },
+    {
+      "id": "fixture-attachment-1",
+      "type": "attachment",
+      "text": "附件：wireframe.png",
+      "status": "ready",
+      "attachmentSnapshot": {
+        "id": "attachment_fixture_wireframe",
+        "source": "UserUpload",
+        "status": "ready",
+        "name": "wireframe.png",
+        "path": "wireframe.png",
+        "workspaceRelativePath": "assets/wireframe.png",
+        "safety": "workspace",
+        "mimeType": "image/png",
+        "sizeBytes": 2048,
+        "previewKind": "image"
+      }
+    },
+    {
       "id": "fixture-ask-user-question-1",
       "type": "tool_call",
       "text": "调用工具：AskUserQuestion",
@@ -158,13 +769,197 @@
       "text": "App Server 返回了可解释错误。"
     }
   ],
+  "hiddenContentBlocks": [
+    {
+      "type": "attachment",
+      "attachment": {
+        "type": "todo_reminder",
+        "content": [],
+        "itemCount": 0
+      }
+    }
+  ],
   "permission": {
     "permissionRequestId": "perm_fixture_1",
     "toolUseId": "toolu_fixture_bash",
     "toolName": "Bash",
+    "displayName": "Bash",
+    "description": "Build the Desktop renderer",
+    "interactionKind": "shell_permission",
     "status": "pending",
     "input": {
       "command": "npm.cmd run desktop:build"
+    },
+    "permissionSuggestions": [
+      {
+        "type": "addRules",
+        "rules": [
+          {
+            "toolName": "Bash",
+            "ruleContent": "npm.cmd run desktop:*"
+          }
+        ],
+        "behavior": "allow",
+        "destination": "session"
+      }
+    ]
+  },
+  "askUserQuestionPermission": {
+    "permissionRequestId": "perm_fixture_question",
+    "threadId": "thread_fixture",
+    "turnId": "turn_fixture",
+    "toolUseId": "toolu_fixture_question",
+    "toolName": "AskUserQuestion",
+    "interactionKind": "ask_user_question",
+    "status": "pending",
+    "input": {
+      "questions": [
+        {
+          "header": "方向",
+          "question": "下一步优先做哪一项？",
+          "options": [
+            {
+              "label": "先修 UI",
+              "description": "优先处理用户正在看到的交互问题。"
+            },
+            {
+              "label": "先补测试",
+              "description": "优先增加回归样例和 smoke。"
+            }
+          ],
+          "multiSelect": false
+        }
+      ]
+    }
+  },
+  "planApprovalPermission": {
+    "permissionRequestId": "perm_fixture_plan_exit",
+    "threadId": "thread_fixture",
+    "turnId": "turn_fixture",
+    "toolUseId": "toolu_fixture_exit_plan",
+    "toolName": "ExitPlanMode",
+    "interactionKind": "plan_approval",
+    "status": "pending",
+    "description": "模型已准备好执行计划",
+    "input": {
+      "plan": "## 实施计划\n\n1. 先补 Desktop 计划确认卡。\n2. 再补权限响应回传。\n3. 最后运行 smoke 验证。",
+      "planFilePath": "D:\\agent_project\\claude-code-reforged\\.ccr\\plans\\plan.md",
+      "allowedPrompts": [
+        {
+          "tool": "Bash",
+          "prompt": "运行 Desktop smoke 和 build 验证"
+        }
+      ]
+    }
+  },
+  "enterPlanModePermission": {
+    "permissionRequestId": "perm_fixture_plan_enter",
+    "threadId": "thread_fixture",
+    "turnId": "turn_fixture",
+    "toolUseId": "toolu_fixture_enter_plan",
+    "toolName": "EnterPlanMode",
+    "interactionKind": "enter_plan_mode",
+    "status": "pending",
+    "description": "模型想先进入计划模式",
+    "input": {}
+  },
+  "webFetchPermission": {
+    "permissionRequestId": "perm_fixture_web_fetch",
+    "threadId": "thread_fixture",
+    "turnId": "turn_fixture",
+    "toolUseId": "toolu_fixture_web_fetch",
+    "toolName": "WebFetch",
+    "displayName": "Fetch",
+    "description": "模型准备读取网页并总结主要内容",
+    "interactionKind": "web_fetch",
+    "status": "pending",
+    "input": {
+      "url": "https://example.com/docs",
+      "prompt": "总结页面的核心内容"
+    },
+    "permissionSuggestions": [
+      {
+        "type": "addRules",
+        "rules": [
+          {
+            "toolName": "WebFetch",
+            "ruleContent": "domain:example.com"
+          }
+        ],
+        "behavior": "allow",
+        "destination": "localSettings"
+      }
+    ]
+  },
+  "skillPermission": {
+    "permissionRequestId": "perm_fixture_skill",
+    "threadId": "thread_fixture",
+    "turnId": "turn_fixture",
+    "toolUseId": "toolu_fixture_skill",
+    "toolName": "Skill",
+    "displayName": "Skill",
+    "description": "准备启用源码阅读 Skill",
+    "interactionKind": "skill",
+    "status": "pending",
+    "input": {
+      "skill": "repo-source-reader",
+      "args": "architecture overview"
+    },
+    "permissionSuggestions": [
+      {
+        "type": "addRules",
+        "rules": [
+          {
+            "toolName": "Skill",
+            "ruleContent": "repo-source-reader"
+          }
+        ],
+        "behavior": "allow",
+        "destination": "localSettings"
+      }
+    ]
+  },
+  "reviewArtifactPermission": {
+    "permissionRequestId": "perm_fixture_review_artifact",
+    "threadId": "thread_fixture",
+    "turnId": "turn_fixture",
+    "toolUseId": "toolu_fixture_review_artifact",
+    "toolName": "ReviewArtifactTool",
+    "displayName": "ReviewArtifact",
+    "description": "评审生成产物",
+    "interactionKind": "review_artifact",
+    "status": "pending",
+    "input": {
+      "artifactPath": "docs/design.md",
+      "action": "review"
+    }
+  },
+  "workflowPermission": {
+    "permissionRequestId": "perm_fixture_workflow",
+    "threadId": "thread_fixture",
+    "turnId": "turn_fixture",
+    "toolUseId": "toolu_fixture_workflow",
+    "toolName": "WorkflowTool",
+    "displayName": "Workflow",
+    "description": "准备运行工作流",
+    "interactionKind": "workflow",
+    "status": "pending",
+    "input": {
+      "workflow": "desktop-smoke"
+    }
+  },
+  "monitorPermission": {
+    "permissionRequestId": "perm_fixture_monitor",
+    "threadId": "thread_fixture",
+    "turnId": "turn_fixture",
+    "toolUseId": "toolu_fixture_monitor",
+    "toolName": "MonitorTool",
+    "displayName": "Monitor",
+    "description": "准备创建持续监控",
+    "interactionKind": "monitor",
+    "status": "pending",
+    "input": {
+      "name": "desktop-runtime-watch"
     }
   }
 }

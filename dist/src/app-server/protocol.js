@@ -103,6 +103,25 @@ export const ThreadStartParamsSchema = z
     .strict()
     .default({});
 export const ThreadListParamsSchema = z.object({}).strict().default({});
+export const ThreadResumeParamsSchema = z
+    .object({
+    sessionId: z.string().min(1),
+    title: z.string().min(1).optional(),
+    transcriptPath: z.string().min(1).optional(),
+    projectPath: z.string().min(1).optional(),
+    metadata: JsonRpcParamsSchema.optional(),
+})
+    .strict();
+export const SessionHistoryListParamsSchema = z
+    .object({
+    scope: z.enum(['sameRepo', 'allProjects']).optional().default('sameRepo'),
+    query: z.string().optional(),
+    limit: z.number().int().positive().max(200).optional(),
+    cursor: z.string().optional(),
+    includeCurrent: z.boolean().optional(),
+})
+    .strict()
+    .default({});
 export const TurnStartParamsSchema = z
     .object({
     threadId: z.string().min(1),
@@ -134,11 +153,50 @@ export const PermissionRespondParamsSchema = z
     updatedInput: JsonRpcParamsSchema.optional(),
     updatedPermissions: z.array(z.unknown()).optional(),
     message: z.string().optional(),
+    acceptFeedback: z.string().optional(),
     interrupt: z.boolean().optional(),
     toolUseID: z.string().optional(),
     decisionClassification: z
         .enum(['user_temporary', 'user_permanent', 'user_reject'])
         .optional(),
+})
+    .strict();
+export const PermissionSettingsGetParamsSchema = z.object({}).strict().default({});
+export const PermissionSettingsUpdateParamsSchema = z
+    .object({
+    source: z.enum(['localSettings', 'projectSettings', 'userSettings']),
+    permissions: z
+        .object({
+        allow: z.array(z.string()).optional(),
+        deny: z.array(z.string()).optional(),
+        ask: z.array(z.string()).optional(),
+        defaultMode: z
+            .enum([
+            'acceptEdits',
+            'bypassPermissions',
+            'default',
+            'dontAsk',
+            'plan',
+        ])
+            .nullable()
+            .optional(),
+        disableBypassPermissionsMode: z.boolean().nullable().optional(),
+        additionalDirectories: z.array(z.string()).optional(),
+    })
+        .strict(),
+})
+    .strict();
+export const ThreadScopedStatusParamsSchema = z
+    .object({
+    threadId: z.string().min(1).optional(),
+})
+    .strict()
+    .default({});
+export const ContextAnalyzeParamsSchema = ThreadScopedStatusParamsSchema;
+export const CompactRunParamsSchema = z
+    .object({
+    threadId: z.string().min(1),
+    instruction: z.string().optional(),
 })
     .strict();
 export const DEFAULT_SERVER_CAPABILITIES = {
@@ -150,6 +208,9 @@ export const DEFAULT_SERVER_CAPABILITIES = {
     threads: true,
     turns: true,
     permissions: true,
+    context: true,
+    compact: true,
+    memory: true,
 };
 export function successResponse(id, result) {
     return {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
@@ -7,7 +7,7 @@ const packageJson = readJson('package.json')
 const files = {
   main: readText('apps/desktop/src/main/index.ts'),
   preload: readText('apps/desktop/src/preload/index.ts'),
-  renderer: readText('apps/desktop/src/renderer/src/main.tsx'),
+  renderer: readRendererSources('apps/desktop/src/renderer/src'),
   updateService: readText('apps/desktop/src/main/updateService.ts'),
   updateState: readText('apps/desktop/src/main/updateState.ts'),
 }
@@ -106,14 +106,14 @@ for (const expected of [
   '停止',
   'WindowTitlebar',
   'window-titlebar',
-  "notification.method === 'item/started'",
+  "case 'item/started'",
   'upsertCompletedItemMessage',
   'upsertThinkingDelta',
-  "delta.type === 'thinking'",
+  'getThinkingSummaryDelta',
   'formatCompletedItemText',
   'thinking-event',
   'tool-event',
-  'setPermissions([])',
+  'clear-permissions',
 ]) {
   assertText(files.renderer, expected, 'renderer is missing update UI affordance')
 }
@@ -156,6 +156,33 @@ function readText(relativePath) {
     fail('required file is missing', { path })
   }
   return readFileSync(path, 'utf8')
+}
+
+function readRendererSources(relativePath) {
+  const basePath = join(root, relativePath)
+  if (!existsSync(basePath)) {
+    fail('required renderer source directory is missing', { path: basePath })
+  }
+
+  const sourceFiles = []
+  collectSourceFiles(basePath, sourceFiles)
+  return sourceFiles
+    .sort()
+    .map(path => readFileSync(path, 'utf8'))
+    .join('\n')
+}
+
+function collectSourceFiles(directory, sourceFiles) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = join(directory, entry.name)
+    if (entry.isDirectory()) {
+      collectSourceFiles(fullPath, sourceFiles)
+      continue
+    }
+    if (/\.(css|ts|tsx)$/.test(entry.name)) {
+      sourceFiles.push(fullPath)
+    }
+  }
 }
 
 function assertText(text, expected, message) {

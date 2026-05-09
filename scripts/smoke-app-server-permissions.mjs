@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 
 const notifications = []
+const { enableConfigs } = await import('../dist/src/utils/config.js')
+enableConfigs()
 const { createAppServerContext, handleJsonRpcMessage } = await import(
   '../dist/src/app-server/router.js'
 )

@@ -10,6 +10,12 @@ import {
 } from '../utils/permissions/PermissionPromptToolResultSchema.js'
 import { hasPermissionsToUseTool } from '../utils/permissions/permissions.js'
 import { CoreError } from './errors.js'
+import {
+  getCorePermissionSettingsSnapshot,
+  updateCorePermissionSettings,
+  type CorePermissionSettingsSnapshot,
+  type CorePermissionSettingsUpdateInput,
+} from './permissionSettingsCore.js'
 import type {
   CoreEventEmitter,
   CoreJsonObject,
@@ -204,6 +210,16 @@ export class CorePermissionService {
     return Array.from(this.#requests.values())
       .filter(request => request.status === 'pending')
       .map(request => request.request)
+  }
+
+  getSettingsSnapshot(): CorePermissionSettingsSnapshot {
+    return getCorePermissionSettingsSnapshot()
+  }
+
+  updateSettings(
+    input: CorePermissionSettingsUpdateInput,
+  ): CorePermissionSettingsSnapshot {
+    return updateCorePermissionSettings(input)
   }
 
   private cancelPermissionRequest(

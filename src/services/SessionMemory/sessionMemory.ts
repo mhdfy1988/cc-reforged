@@ -7,6 +7,7 @@
 import { writeFile } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
+import { isMainThreadQuerySource } from '../../constants/querySource.js'
 import { getSystemPrompt } from '../../constants/prompts.js'
 import { getSystemContext, getUserContext } from '../../context.js'
 import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
@@ -97,6 +98,7 @@ function getSessionMemoryRemoteConfig(): Partial<SessionMemoryConfig> {
 // ============================================================================
 
 let lastMemoryMessageUuid: string | undefined
+let sessionMemoryHookRegistered = false
 
 /**
  * Reset the last memory message UUID (for testing)
@@ -275,8 +277,9 @@ const extractSessionMemory = sequential(async function (
 ): Promise<void> {
   const { messages, toolUseContext, querySource } = context
 
-  // Only run session memory on main REPL thread
-  if (querySource !== 'repl_main_thread') {
+  // Only run session memory on the main conversation thread. App Server uses
+  // a main-thread querySource suffix, so it can reuse the native hook path.
+  if (!isMainThreadQuerySource(querySource)) {
     // Don't log this - it's expected for subagents, teammates, etc.
     return
   }
@@ -357,6 +360,7 @@ const extractSessionMemory = sequential(async function (
  */
 export function initSessionMemory(): void {
   if (getIsRemoteMode()) return
+  if (sessionMemoryHookRegistered) return
   // Session memory is used for compaction, so respect auto-compact settings
   const autoCompactEnabled = isAutoCompactEnabled()
 
@@ -373,6 +377,21 @@ export function initSessionMemory(): void {
 
   // Register hook unconditionally - gate check happens lazily when hook runs
   registerPostSamplingHook(extractSessionMemory)
+  sessionMemoryHookRegistered = true
+}
+
+export function getSessionMemoryRuntimeStatus(): {
+  hookRegistered: boolean
+  autoCompactEnabled: boolean
+  gateEnabled: boolean
+  remoteMode: boolean
+} {
+  return {
+    hookRegistered: sessionMemoryHookRegistered,
+    autoCompactEnabled: isAutoCompactEnabled(),
+    gateEnabled: isSessionMemoryGateEnabled(),
+    remoteMode: getIsRemoteMode(),
+  }
 }
 
 export type ManualExtractionResult = {

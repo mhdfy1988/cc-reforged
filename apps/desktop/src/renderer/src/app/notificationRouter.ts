@@ -1,12 +1,20 @@
 import type { SessionAction } from './sessionState.js'
-import { createErrorDisplayEvent } from '../domain/displayEvents.js'
+import {
+  createErrorDisplayEvent,
+  createSystemNoticeEvent,
+} from '../domain/displayEvents.js'
 import type {
   JsonObject,
   NotificationPayload,
+  PermissionInteractionKind,
   TurnRuntimeMetadata,
   TurnUsage,
 } from '../domain/displayTypes.js'
-import { createCompletedItemContractContext } from '../domain/eventContract.js'
+import { normalizeContentBlocks } from '../domain/contentBlocks.js'
+import {
+  createCompletedItemContractContext,
+  withContentBlock,
+} from '../domain/eventContract.js'
 import type { CcrDesktopEvent } from '../global.js'
 
 export type RoutedDesktopEvent = {
@@ -53,17 +61,23 @@ export function routeDesktopEvent(
       return routeItemCompleted(params, itemMetadata)
 
     case 'turn/completed':
+      return {
+        sessionActions: [
+          {
+            type: 'merge-turn-metadata',
+            metadata: getTurnMetadataFromParams(params, 'completed'),
+          },
+          { type: 'set-active-turn', turnId: null },
+          { type: 'clear-noninteractive-permissions' },
+        ],
+      }
+
     case 'turn/cancelled':
       return {
         sessionActions: [
           {
             type: 'merge-turn-metadata',
-            metadata: getTurnMetadataFromParams(
-              params,
-              notification.method === 'turn/completed'
-                ? 'completed'
-                : 'cancelled',
-            ),
+            metadata: getTurnMetadataFromParams(params, 'cancelled'),
           },
           { type: 'set-active-turn', turnId: null },
           { type: 'clear-permissions' },
@@ -89,23 +103,63 @@ export function routeDesktopEvent(
         ],
       }
 
-    case 'permission/requested':
+    case 'context/compacted':
+      return {
+        sessionActions: [
+          {
+            type: 'append-display-event',
+            event: createSystemNoticeEvent(
+              `${event.at}-context-compacted`,
+              formatCompactNotification(params),
+            ),
+          },
+        ],
+      }
+
+    case 'permission/requested': {
+      const toolName = getToolName(params)
+      const tool = getObjectRecord(params.tool)
+      const permissionRequestId =
+        getString(params.permissionRequestId) ?? `${event.at}-permission`
       return {
         sessionActions: [
           {
             type: 'add-permission',
             permission: {
-              permissionRequestId: String(params.permissionRequestId),
+              permissionRequestId,
+              threadId: getString(params.threadId),
+              turnId: getString(params.turnId),
               toolUseId: getString(
                 params.toolUseId ?? params.toolUseID ?? params.tool_use_id,
               ),
-              toolName: getToolName(params),
+              toolName,
+              displayName: getString(
+                params.displayName ??
+                  params.display_name ??
+                  params.title ??
+                  tool?.displayName ??
+                  tool?.display_name,
+              ),
+              description: getString(
+                params.description ?? params.message ?? tool?.description,
+              ),
               input: (params.input ?? {}) as JsonObject,
+              permissionSuggestions: getArray(
+                params.permissionSuggestions ?? params.permission_suggestions,
+              ),
+              blockedPath: getString(params.blockedPath ?? params.blocked_path),
+              decisionReason: getString(
+                params.decisionReason ?? params.decision_reason,
+              ),
+              agentId: getString(params.agentId ?? params.agent_id),
+              createdAt: getString(params.createdAt),
+              interactionKind: derivePermissionInteractionKind(toolName),
               status: 'pending',
             },
           },
         ],
       }
+    }
 
     case 'permission/cancelled':
       return {
@@ -125,6 +179,19 @@ export function routeDesktopEvent(
     default:
       return { sessionActions: [] }
   }
+}
+
+function formatCompactNotification(params: JsonObject): string {
+  const metadata = getObjectRecord(params.metadata)
+  const result = getObjectRecord(params.result)
+  const messageCount = getNumber(metadata?.messageCount ?? result?.messageCount)
+  const compactBoundaryCount = getNumber(
+    metadata?.compactBoundaryCount ?? result?.compactBoundaryCount,
+  )
+  if (messageCount !== undefined) {
+    return `已压缩上下文：当前保留 ${messageCount} 条消息，压缩边界 ${compactBoundaryCount ?? 0} 个。`
+  }
+  return '已压缩上下文，运行状态已刷新。'
 }
 
 function routeNonNotificationEvent(event: CcrDesktopEvent): RoutedDesktopEvent {
@@ -238,6 +305,26 @@ function routeItemCompleted(
       : metadata && 'content' in metadata
         ? metadata.content
         : undefined
+  const statusText = String(params.status ?? 'completed')
+  const context = createCompletedItemContractContext({
+    itemId,
+    params,
+    item: metadata,
+  })
+  const blocks = normalizeContentBlocks(content)
+
+  if (shouldSplitCompletedItemBlocks(blocks)) {
+    return {
+      sessionActions: blocks.map((block, contentIndex) => ({
+        type: 'upsert-completed-item-message',
+        itemId: createSplitCompletedItemId(itemId, block, contentIndex),
+        kind,
+        content: [block],
+        statusText,
+        context: withContentBlock(context, block, contentIndex),
+      })),
+    }
+  }
 
   return {
     sessionActions: [
@@ -246,15 +333,44 @@ function routeItemCompleted(
         itemId,
         kind,
         content,
-        statusText: String(params.status ?? 'completed'),
-        context: createCompletedItemContractContext({
-          itemId,
-          params,
-          item: metadata,
-        }),
+        statusText,
+        context,
       },
     ],
   }
+}
+
+function shouldSplitCompletedItemBlocks(blocks: JsonObject[]): boolean {
+  return blocks.length > 1 && blocks.some(isToolLifecycleBlock)
+}
+
+function isToolLifecycleBlock(block: JsonObject): boolean {
+  const type = typeof block.type === 'string' ? block.type : ''
+  return type === 'tool_use' || type === 'tool_result' || type === 'progress'
+}
+
+function createSplitCompletedItemId(
+  itemId: string,
+  block: JsonObject,
+  contentIndex: number,
+): string {
+  const lifecycleId = getString(
+    block.id ??
+      block.toolUseId ??
+      block.toolUseID ??
+      block.tool_use_id ??
+      block.parentToolUseId ??
+      block.parentToolUseID ??
+      block.parent_tool_use_id,
+  )
+  const suffix = lifecycleId
+    ? sanitizeItemIdPart(lifecycleId)
+    : String(contentIndex)
+  return `${itemId}:${contentIndex}:${suffix}`
+}
+
+function sanitizeItemIdPart(value: string): string {
+  return value.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 80)
 }
 
 function getToolName(params: JsonObject): string {
@@ -262,7 +378,48 @@ function getToolName(params: JsonObject): string {
   if (tool && typeof tool === 'object' && 'name' in tool) {
     return String((tool as JsonObject).name)
   }
-  return '未知工具'
+  return (
+    getString(params.toolName ?? params.tool_name ?? params.name) ?? '未知工具'
+  )
+}
+
+function derivePermissionInteractionKind(
+  toolName: string,
+): PermissionInteractionKind {
+  switch (toolName) {
+    case 'AskUserQuestion':
+      return 'ask_user_question'
+    case 'ExitPlanMode':
+    case 'ExitPlanModeV2':
+      return 'plan_approval'
+    case 'EnterPlanMode':
+      return 'enter_plan_mode'
+    case 'Bash':
+    case 'PowerShell':
+      return 'shell_permission'
+    case 'FileEdit':
+    case 'FileWrite':
+    case 'FileRead':
+    case 'Glob':
+    case 'Grep':
+    case 'NotebookEdit':
+      return 'file_permission'
+    case 'WebFetch':
+      return 'web_fetch'
+    case 'Skill':
+      return 'skill'
+    case 'ReviewArtifact':
+    case 'ReviewArtifactTool':
+      return 'review_artifact'
+    case 'Workflow':
+    case 'WorkflowTool':
+      return 'workflow'
+    case 'Monitor':
+    case 'MonitorTool':
+      return 'monitor'
+    default:
+      return 'fallback'
+  }
 }
 
 function getTurnMetadataFromParams(
@@ -309,6 +466,10 @@ function getObjectRecord(value: unknown): JsonObject | null {
 
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+function getArray(value: unknown): unknown[] | undefined {
+  return Array.isArray(value) ? value : undefined
 }
 
 function getNullableString(value: unknown): string | null | undefined {

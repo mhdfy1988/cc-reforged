@@ -117,7 +117,7 @@ App Server 对外只说 Thread / Turn / Item。
 | `archived` | 已归档，第一版只设计 |
 | `closed` | 已关闭，第一版只设计 |
 
-第一版 Thread 保存在内存中。后续再决定是否映射到现有 session id / transcript。
+当前 Thread 运行态保存在 Core 进程内；每个 thread 同时映射到独立原生 `sessionId` / transcript 路径，用于 `thread/resume` 恢复消息和 `readFileState`。Desktop 历史列表仍可分阶段做产品化，不在本设计里直接暴露完整 transcript 浏览能力。
 
 ## 4.2 Turn
 
@@ -295,34 +295,53 @@ Result:
 
 ## 5.3 `thread/resume`
 
-第一版只设计，不实现。
+用途：
 
-原因：
+```text
+根据明确的 sessionId 恢复一个历史 thread。
+```
 
-- 现有 session/transcript 持久化结构需要单独梳理。
-- active turn 跨进程恢复会牵涉工具状态、权限状态、AbortController 和 pending request。
-
-第一版如果客户端调用，返回：
+Request:
 
 ```json
 {
-  "code": -32601,
-  "data": {
-    "kind": "method_not_found"
+  "jsonrpc": "2.0",
+  "id": 12,
+  "method": "thread/resume",
+  "params": {
+    "sessionId": "session_01H...",
+    "title": "继续上次任务",
+    "metadata": {
+      "source": "desktop"
+    }
   }
 }
 ```
 
-或在 P7 后改成：
+Result:
 
 ```json
 {
-  "code": -32004,
-  "data": {
-    "kind": "unsupported_capability"
+  "thread": {
+    "threadId": "thread_01H...",
+    "workspacePath": "D:/agent_project/claude-code-reforged",
+    "title": "继续上次任务",
+    "status": "active",
+    "activeTurnId": null,
+    "metadata": {
+      "sessionId": "session_01H...",
+      "sessionStorageStatus": "active"
+    }
   }
 }
 ```
+
+实现边界：
+
+- `sessionId` 必须由客户端显式传入，不隐式恢复最近会话。
+- 底层复用原生 `loadConversationForResume()` 加载消息。
+- 底层复用 `extractReadFilesFromMessages()` 重建 `readFileState`。
+- 不恢复 active turn、pending permission、AbortController 或正在运行的工具；这些仍属于后续跨进程运行态恢复问题。
 
 ## 5.4 `turn/start`
 

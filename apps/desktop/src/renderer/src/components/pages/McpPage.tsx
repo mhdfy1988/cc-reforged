@@ -14,7 +14,17 @@ export function McpPage(props: {
           刷新 MCP
         </button>
       </div>
-      <pre>{JSON.stringify(props.mcp ?? { servers: [], errors: [] }, null, 2)}</pre>
+      <pre className="mcp-raw-config">
+        {formatMcpConfig(props.mcp ?? { servers: [], errors: [] })}
+      </pre>
     </section>
   )
+}
+
+function formatMcpConfig(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
 }

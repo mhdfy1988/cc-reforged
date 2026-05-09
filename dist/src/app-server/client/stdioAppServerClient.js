@@ -32,6 +32,12 @@ export class StdioAppServerClient {
     listThreads(options) {
         return this.rpc.request('thread/list', {}, options);
     }
+    listSessionHistory(params = {}, options) {
+        return this.rpc.request('session/history/list', params, options);
+    }
+    resumeThread(params, options) {
+        return this.rpc.request('thread/resume', params, options);
+    }
     startTurn(params, options) {
         return this.rpc.request('turn/start', params, options);
     }
@@ -40,6 +46,27 @@ export class StdioAppServerClient {
     }
     respondPermission(params, options) {
         return this.rpc.request('permission/respond', params, options);
+    }
+    getPermissionSettings(options) {
+        return this.rpc.request('permission/settings/get', {}, options);
+    }
+    updatePermissionSettings(params, options) {
+        return this.rpc.request('permission/settings/update', params, options);
+    }
+    getContextStatus(params = {}, options) {
+        return this.rpc.request('context/status', params, options);
+    }
+    analyzeContext(params = {}, options) {
+        return this.rpc.request('context/analyze', params, options);
+    }
+    getCompactStatus(params = {}, options) {
+        return this.rpc.request('compact/status', params, options);
+    }
+    runCompact(params, options) {
+        return this.rpc.request('compact/run', params, options);
+    }
+    getMemorySessionStatus(params = {}, options) {
+        return this.rpc.request('memory/session/status', params, options);
     }
     onNotification(listener) {
         return this.rpc.onNotification(listener);

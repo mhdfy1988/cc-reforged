@@ -1,5 +1,17 @@
 import type { Attachment } from 'src/utils/attachments.js'
 import type { Message, NormalizedMessage } from '../../types/message.js'
+import {
+  isNullRenderingAttachmentType,
+  NULL_RENDERING_ATTACHMENT_TYPES,
+  type NullRenderingAttachmentType,
+} from 'src/utils/nullRenderingAttachmentTypes.js'
+
+export type { NullRenderingAttachmentType } from 'src/utils/nullRenderingAttachmentTypes.js'
+
+type Assert<T extends true> = T
+type _NullRenderingTypesAreAttachmentTypes = Assert<
+  NullRenderingAttachmentType extends Attachment['type'] ? true : false
+>
 
 /**
  * Attachment types that AttachmentMessage renders as `null` unconditionally
@@ -11,45 +23,6 @@ import type { Message, NormalizedMessage } from '../../types/message.js'
  * asserts `attachment.type satisfies NullRenderingAttachmentType`. Adding a new
  * Attachment type without either a case or an entry here will fail typecheck.
  */
-const NULL_RENDERING_TYPES = [
-  'hook_success',
-  'hook_additional_context',
-  'hook_cancelled',
-  'command_permissions',
-  'agent_mention',
-  'budget_usd',
-  'critical_system_reminder',
-  'edited_image_file',
-  'edited_text_file',
-  'opened_file_in_ide',
-  'output_style',
-  'plan_mode',
-  'plan_mode_exit',
-  'plan_mode_reentry',
-  'structured_output',
-  'team_context',
-  'todo_reminder',
-  'context_efficiency',
-  'deferred_tools_delta',
-  'mcp_instructions_delta',
-  'companion_intro',
-  'token_usage',
-  'ultrathink_effort',
-  'max_turns_reached',
-  'task_reminder',
-  'auto_mode',
-  'auto_mode_exit',
-  'output_token_usage',
-  'verify_plan_reminder',
-  'current_session_memory',
-  'compaction_reminder',
-  'date_change',
-] as const satisfies readonly Attachment['type'][]
-
-export type NullRenderingAttachmentType = (typeof NULL_RENDERING_TYPES)[number]
-
-const NULL_RENDERING_ATTACHMENT_TYPES: ReadonlySet<Attachment['type']> =
-  new Set(NULL_RENDERING_TYPES)
 
 /**
  * True when this message is an attachment that AttachmentMessage renders as
@@ -63,6 +36,6 @@ export function isNullRenderingAttachment(
 ): boolean {
   return (
     msg.type === 'attachment' &&
-    NULL_RENDERING_ATTACHMENT_TYPES.has(msg.attachment.type)
+    isNullRenderingAttachmentType(msg.attachment.type)
   )
 }

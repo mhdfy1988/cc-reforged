@@ -1,5 +1,9 @@
 import { stat } from 'node:fs/promises'
 import { isAbsolute, resolve } from 'node:path'
+import { setOriginalCwd, setProjectRoot } from '../bootstrap/state.js'
+import { getSystemContext, getUserContext } from '../context.js'
+import { resetGetMemoryFilesCache } from '../utils/claudemd.js'
+import { setCwd } from '../utils/Shell.js'
 import { CoreError } from './errors.js'
 import type { CoreWorkspace } from './types.js'
 
@@ -40,6 +44,12 @@ export class CoreWorkspaceService {
       path: workspacePath,
       trusted: input.trust === 'trusted',
     }
+    setOriginalCwd(workspacePath)
+    setProjectRoot(workspacePath)
+    setCwd(workspacePath)
+    getUserContext.cache.clear?.()
+    getSystemContext.cache.clear?.()
+    resetGetMemoryFilesCache('session_start')
     return this.#workspace
   }
 }

@@ -8,6 +8,13 @@ import {
   type DisplayEventContractContext,
   type DisplayEventIdentity,
 } from './eventContract.js'
+import type {
+  AttachmentSnapshot,
+  FileSnapshot,
+  FileToolSnapshot,
+  ReferenceSnapshot,
+} from './fileEvents.js'
+import { extractFileDisplaySnapshotsFromToolSnapshot } from './fileEvents.js'
 import {
   extractTodoOverlaySnapshotFromBlocks,
   type TodoOverlaySnapshot,
@@ -27,6 +34,8 @@ export type DisplayEventType =
   | 'permission_request'
   | 'todo_list'
   | 'file_change'
+  | 'file_reference'
+  | 'attachment'
   | 'error'
   | 'system_notice'
 
@@ -40,6 +49,10 @@ export type DisplayEvent = {
   identity?: DisplayEventIdentity
   todoSnapshot?: TodoOverlaySnapshot
   toolSnapshot?: ToolSnapshot
+  fileToolSnapshot?: FileToolSnapshot
+  fileSnapshot?: FileSnapshot
+  attachmentSnapshot?: AttachmentSnapshot
+  referenceSnapshot?: ReferenceSnapshot
 }
 
 export function createUserDisplayEvent(id: string, text: string): DisplayEvent {
@@ -103,6 +116,8 @@ export function createDisplayEventFromCompletedItem(
     context,
   )
   if (toolSnapshot) {
+    const fileDisplaySnapshots =
+      extractFileDisplaySnapshotsFromToolSnapshot(toolSnapshot)
     return {
       id: itemId,
       type: toolSnapshot.kind === 'call' ? 'tool_call' : 'tool_result',
@@ -112,6 +127,7 @@ export function createDisplayEventFromCompletedItem(
       timelineHidden: shouldHideToolFromTimeline(toolSnapshot),
       identity,
       toolSnapshot,
+      ...fileDisplaySnapshots,
     }
   }
 
@@ -199,7 +215,9 @@ function getChatKind(event: DisplayEvent): string | undefined {
     event.type === 'tool_call' ||
     event.type === 'tool_result' ||
     event.type === 'todo_list' ||
-    event.type === 'file_change'
+    event.type === 'file_change' ||
+    event.type === 'file_reference' ||
+    event.type === 'attachment'
   ) {
     return 'tool-event'
   }

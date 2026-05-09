@@ -1,7 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   AppServerClientError,
@@ -12,10 +12,21 @@ import { DesktopUpdateService } from './updateService.js'
 import type { DesktopUpdateState, DesktopUpdateStatus } from './updateState.js'
 import type {
   AuthStatusResult,
+  CompactStatusResult,
   ConfigGetResult,
+  ContextStatusResult,
   InitializeResult,
   JsonRpcNotification,
   McpListResult,
+  MemorySessionStatusResult,
+  PermissionRespondParams,
+  PermissionSettingsGetResult,
+  PermissionSettingsUpdateParams,
+  SessionHistoryListParams,
+  SessionHistoryListResult,
+  ThreadListResult,
+  ThreadResumeParams,
+  ThreadResumeResult,
   ThreadStartResult,
   TurnInterruptResult,
   TurnStartResult,
@@ -50,6 +61,10 @@ type DesktopStatus = {
   config: ConfigGetResult | null
   auth: AuthStatusResult | null
   mcp: McpListResult | null
+  context: ContextStatusResult | null
+  compact: CompactStatusResult | null
+  memory: MemorySessionStatusResult | null
+  permissionSettings: PermissionSettingsGetResult | null
   thread: ThreadStartResult['thread'] | null
   lastTurn: TurnStartResult['turn'] | null
   updates: DesktopUpdateState | null
@@ -100,6 +115,10 @@ const status: DesktopStatus = {
   config: null,
   auth: null,
   mcp: null,
+  context: null,
+  compact: null,
+  memory: null,
+  permissionSettings: null,
   thread: null,
   lastTurn: null,
   updates: null,
@@ -107,6 +126,7 @@ const status: DesktopStatus = {
 }
 
 const SUPPORTED_APP_SERVER_PROTOCOL = '0.1'
+const COMPACT_RUN_TIMEOUT_MS = 5 * 60_000
 
 function evaluateProtocolCompatibility(protocolVersion: string): ProtocolCompatibility {
   if (protocolVersion === SUPPORTED_APP_SERVER_PROTOCOL) {
@@ -373,8 +393,10 @@ async function bootstrapAppServer(): Promise<void> {
       throw new Error(status.protocolCompatibility.reason)
     }
     status.config = await managedClient.client.getConfig()
+    status.permissionSettings = await managedClient.client.getPermissionSettings()
     status.auth = await managedClient.client.getAuthStatus()
     status.mcp = await managedClient.client.listMcp({ includeDisabled: true })
+    await refreshRuntimeSnapshots()
     status.appServer = 'ready'
     broadcast('state', { message: 'app server ready' })
   } catch (error) {
@@ -466,6 +488,7 @@ function updateTurnFinishedState(
       ),
     }
   }
+  refreshRuntimeSnapshotsAfterTurn(nextStatus, threadId, turnId)
 }
 
 function getTurnMetadataFromParams(
@@ -500,6 +523,152 @@ function getNestedObject(value: unknown): Record<string, unknown> {
     : {}
 }
 
+async function refreshRuntimeSnapshots(): Promise<void> {
+  const client = managedClient
+  if (!client) {
+    return
+  }
+  const params = status.thread?.threadId
+    ? { threadId: status.thread.threadId }
+    : {}
+  const [contextStatus, compactStatus, memoryStatus] = await Promise.all([
+    client.client.getContextStatus(params),
+    client.client.getCompactStatus(params),
+    client.client.getMemorySessionStatus(params),
+  ])
+  if (client !== managedClient) {
+    return
+  }
+  status.context = contextStatus
+  status.compact = compactStatus
+  status.memory = memoryStatus
+}
+
+async function refreshPermissionSettingsSnapshot(): Promise<void> {
+  const client = managedClient
+  if (!client) {
+    return
+  }
+  status.permissionSettings = await client.client.getPermissionSettings()
+}
+
+async function getPermissionSettings(): Promise<PermissionSettingsGetResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+
+  status.permissionSettings = await managedClient.client.getPermissionSettings()
+  return status.permissionSettings
+}
+
+async function updatePermissionSettings(
+  params: PermissionSettingsUpdateParams,
+): Promise<PermissionSettingsGetResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+
+  status.permissionSettings =
+    await managedClient.client.updatePermissionSettings(params)
+  broadcast('state', {
+    message: 'permission settings updated',
+    permissionSettings: status.permissionSettings,
+  })
+  return status.permissionSettings
+}
+
+function refreshRuntimeSnapshotsAfterTurn(
+  reason: NonNullable<DesktopStatus['lastTurn']>['status'],
+  threadId: string,
+  turnId: string,
+): void {
+  void (async () => {
+    try {
+      await refreshRuntimeSnapshots()
+      await appendDesktopLog('main.log', {
+        type: 'runtime-snapshots-refreshed',
+        reason,
+        threadId,
+        turnId,
+        context: summarizeContextStatus(status.context),
+        compact: summarizeCompactStatus(status.compact),
+        memory: summarizeMemoryStatus(status.memory),
+      })
+      broadcast('state', {
+        message: 'runtime snapshots refreshed',
+        reason,
+        threadId,
+        turnId,
+        context: status.context,
+        compact: status.compact,
+        memory: status.memory,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await appendDesktopLog('client-error.log', {
+        kind: 'runtime_snapshots_refresh_failed',
+        message,
+        threadId,
+        turnId,
+        reason,
+      })
+      broadcast('state', {
+        message: 'runtime snapshots refresh failed',
+        reason,
+        threadId,
+        turnId,
+        error: message,
+      })
+    }
+  })()
+}
+
+function summarizeContextStatus(
+  context: ContextStatusResult | null,
+): Record<string, unknown> | null {
+  if (!context) {
+    return null
+  }
+  return {
+    threadId: context['threadId'],
+    messageCount: context['messageCount'],
+    estimatedTokens: context['estimatedTokens'],
+    compactBoundaryCount: context['compactBoundaryCount'],
+    readFileStateSize: context['readFileStateSize'],
+  }
+}
+
+function summarizeCompactStatus(
+  compact: CompactStatusResult | null,
+): Record<string, unknown> | null {
+  if (!compact) {
+    return null
+  }
+  return {
+    threadId: compact['threadId'],
+    estimatedTokens: compact['estimatedTokens'],
+    autoCompactThreshold: compact['autoCompactThreshold'],
+    distanceToAutoCompact: compact['distanceToAutoCompact'],
+    compactBoundaryCount: compact['compactBoundaryCount'],
+  }
+}
+
+function summarizeMemoryStatus(
+  memory: MemorySessionStatusResult | null,
+): Record<string, unknown> | null {
+  if (!memory) {
+    return null
+  }
+  return {
+    threadId: memory['threadId'],
+    hookRegistered: memory['hookRegistered'],
+    initialized: memory['initialized'],
+    contentLength: memory['contentLength'],
+  }
+}
+
 async function closeManagedClient(): Promise<void> {
   const current = managedClient
   managedClient = null
@@ -526,6 +695,8 @@ async function openWorkspace(path: string): Promise<WorkspaceOpenResult> {
     trust: 'trusted',
   })
   status.workspacePath = result.workspace.path
+  await refreshPermissionSettingsSnapshot()
+  await refreshRuntimeSnapshots()
   broadcast('state', { message: 'workspace opened', workspace: result.workspace })
   return result
 }
@@ -542,7 +713,64 @@ async function startThread(title = 'CCR Desktop 会话'): Promise<ThreadStartRes
 
   const result = await managedClient.client.startThread({ title })
   status.thread = result.thread
+  status.lastTurn = null
+  status.lastError = null
+  await refreshRuntimeSnapshots()
   broadcast('state', { message: 'thread started', thread: result.thread })
+  return result
+}
+
+async function listThreads(): Promise<ThreadListResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+
+  return managedClient.client.listThreads()
+}
+
+async function listSessionHistory(
+  params: SessionHistoryListParams = {},
+): Promise<SessionHistoryListResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+
+  if (!status.workspacePath) {
+    await openWorkspace(defaultWorkspacePath)
+  }
+
+  return managedClient.client.listSessionHistory(params)
+}
+
+async function resumeThread(params: ThreadResumeParams): Promise<ThreadResumeResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+
+  if (
+    params.projectPath &&
+    (!status.workspacePath || !pathsEqual(status.workspacePath, params.projectPath))
+  ) {
+    await openWorkspace(params.projectPath)
+  } else if (!status.workspacePath) {
+    await openWorkspace(defaultWorkspacePath)
+  }
+
+  const result = await managedClient.client.resumeThread({
+    sessionId: params.sessionId,
+    ...(params.title ? { title: params.title } : {}),
+    ...(params.transcriptPath ? { transcriptPath: params.transcriptPath } : {}),
+    ...(params.projectPath ? { projectPath: params.projectPath } : {}),
+    ...(params.metadata ? { metadata: params.metadata } : {}),
+  })
+  status.thread = result.thread
+  status.lastTurn = null
+  status.lastError = null
+  await refreshRuntimeSnapshots()
+  broadcast('state', { message: 'thread resumed', thread: result.thread })
   return result
 }
 
@@ -572,6 +800,7 @@ async function startTurn(text: string): Promise<TurnStartResult> {
       updatedAt: new Date().toISOString(),
     }
   }
+  await refreshRuntimeSnapshots()
   broadcast('state', { message: 'turn queued', turn: result.turn })
   return result
 }
@@ -617,6 +846,83 @@ function isTurnNotActiveError(error: unknown): boolean {
     )
   }
   return error instanceof Error && error.message.includes('Turn is not active')
+}
+
+function resolveWorkspacePath(targetPath: string): string {
+  const trimmedPath = targetPath.trim()
+  if (!trimmedPath) {
+    throw new Error('Path is required.')
+  }
+  if (/^https?:\/\//i.test(trimmedPath)) {
+    throw new Error('Remote URL cannot be opened as a local file path.')
+  }
+
+  const workspacePath = status.workspacePath ?? defaultWorkspacePath
+  return isAbsolute(trimmedPath)
+    ? resolve(trimmedPath)
+    : resolve(workspacePath, trimmedPath)
+}
+
+function isInsideWorkspace(targetPath: string): boolean {
+  const workspacePath = resolve(status.workspacePath ?? defaultWorkspacePath)
+  const nestedRelativePath = relative(workspacePath, targetPath)
+  return (
+    nestedRelativePath === '' ||
+    (!nestedRelativePath.startsWith('..') && !isAbsolute(nestedRelativePath))
+  )
+}
+
+function pathsEqual(left: string, right: string): boolean {
+  const resolvedLeft = resolve(left)
+  const resolvedRight = resolve(right)
+  return process.platform === 'win32'
+    ? resolvedLeft.toLowerCase() === resolvedRight.toLowerCase()
+    : resolvedLeft === resolvedRight
+}
+
+async function confirmOutsideWorkspaceAccess(
+  action: 'open' | 'reveal',
+  targetPath: string,
+): Promise<boolean> {
+  if (isInsideWorkspace(targetPath)) {
+    return true
+  }
+
+  const result = await dialog.showMessageBox(mainWindow ?? undefined, {
+    type: 'warning',
+    buttons: ['取消', action === 'open' ? '仍然打开' : '仍然定位'],
+    defaultId: 0,
+    cancelId: 0,
+    title: '路径位于工作区外',
+    message: '该路径不在当前 CCR 工作区内。',
+    detail: targetPath,
+  })
+  return result.response === 1
+}
+
+async function openLocalPath(targetPath: string): Promise<{ opened: boolean }> {
+  const resolvedPath = resolveWorkspacePath(targetPath)
+  if (!(await confirmOutsideWorkspaceAccess('open', resolvedPath))) {
+    return { opened: false }
+  }
+
+  const errorMessage = await shell.openPath(resolvedPath)
+  if (errorMessage) {
+    throw new Error(errorMessage)
+  }
+  return { opened: true }
+}
+
+async function showLocalPathInFolder(
+  targetPath: string,
+): Promise<{ revealed: boolean }> {
+  const resolvedPath = resolveWorkspacePath(targetPath)
+  if (!(await confirmOutsideWorkspaceAccess('reveal', resolvedPath))) {
+    return { revealed: false }
+  }
+
+  shell.showItemInFolder(resolvedPath)
+  return { revealed: true }
 }
 
 function createWindow(): void {
@@ -807,6 +1113,30 @@ ipcMain.handle('ccr:start-thread', async (_event, title?: string) => {
   return startThread(title)
 })
 
+ipcMain.handle('ccr:list-threads', async () => {
+  return listThreads()
+})
+
+ipcMain.handle(
+  'ccr:list-session-history',
+  async (_event, params?: SessionHistoryListParams) => {
+    return listSessionHistory(params ?? {})
+  },
+)
+
+ipcMain.handle(
+  'ccr:resume-thread',
+  async (_event, params: ThreadResumeParams | string, title?: string) => {
+    if (typeof params === 'string') {
+      return resumeThread({
+        sessionId: params,
+        ...(title ? { title } : {}),
+      })
+    }
+    return resumeThread(params)
+  },
+)
+
 ipcMain.handle('ccr:refresh-mcp', async () => {
   await ensureAppServer()
   if (!managedClient) {
@@ -815,6 +1145,54 @@ ipcMain.handle('ccr:refresh-mcp', async () => {
   status.mcp = await managedClient.client.listMcp({ includeDisabled: true })
   broadcast('state', { message: 'mcp refreshed', mcp: status.mcp })
   return status.mcp
+})
+
+ipcMain.handle('ccr:refresh-runtime', async () => {
+  await ensureAppServer()
+  await refreshRuntimeSnapshots()
+  broadcast('state', {
+    message: 'runtime snapshots refreshed',
+    context: status.context,
+    compact: status.compact,
+    memory: status.memory,
+  })
+  return {
+    context: status.context,
+    compact: status.compact,
+    memory: status.memory,
+  }
+})
+
+ipcMain.handle('ccr:get-permission-settings', async () => {
+  return getPermissionSettings()
+})
+
+ipcMain.handle(
+  'ccr:update-permission-settings',
+  async (_event, params: PermissionSettingsUpdateParams) => {
+    return updatePermissionSettings(params)
+  },
+)
+
+ipcMain.handle('ccr:compact-run', async (_event, instruction?: string) => {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  const threadId = status.thread?.threadId
+  if (!threadId) {
+    throw new Error('No active thread to compact.')
+  }
+  const result = await managedClient.client.runCompact(
+    {
+      threadId,
+      ...(instruction ? { instruction } : {}),
+    },
+    { timeoutMs: COMPACT_RUN_TIMEOUT_MS },
+  )
+  await refreshRuntimeSnapshots()
+  broadcast('state', { message: 'compact completed', compact: result })
+  return result
 })
 
 ipcMain.handle('ccr:get-logs', async () => {
@@ -849,15 +1227,24 @@ ipcMain.handle('ccr:turn-interrupt', async () => {
   return interruptTurn()
 })
 
+ipcMain.handle('ccr:open-path', async (_event, path: string) => {
+  return openLocalPath(path)
+})
+
+ipcMain.handle('ccr:show-item-in-folder', async (_event, path: string) => {
+  return showLocalPathInFolder(path)
+})
+
+ipcMain.handle('ccr:copy-text', async (_event, text: string) => {
+  clipboard.writeText(String(text ?? ''))
+  return { copied: true }
+})
+
 ipcMain.handle(
   'ccr:permission-respond',
   async (
     _event,
-    input: {
-      permissionRequestId: string
-      behavior: 'allow' | 'deny'
-      message?: string
-    },
+    input: PermissionRespondParams,
   ) => {
     await ensureAppServer()
     if (!managedClient) {

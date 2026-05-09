@@ -6,6 +6,7 @@
 import { writeFile } from 'fs/promises';
 import memoize from 'lodash-es/memoize.js';
 import { getIsRemoteMode } from '../../bootstrap/state.js';
+import { isMainThreadQuerySource } from '../../constants/querySource.js';
 import { getSystemPrompt } from '../../constants/prompts.js';
 import { getSystemContext, getUserContext } from '../../context.js';
 import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js';
@@ -48,6 +49,7 @@ function getSessionMemoryRemoteConfig() {
 // Module State
 // ============================================================================
 let lastMemoryMessageUuid;
+let sessionMemoryHookRegistered = false;
 /**
  * Reset the last memory message UUID (for testing)
  */
@@ -184,8 +186,9 @@ const initSessionMemoryConfigIfNeeded = memoize(() => {
 let hasLoggedGateFailure = false;
 const extractSessionMemory = sequential(async function (context) {
     const { messages, toolUseContext, querySource } = context;
-    // Only run session memory on main REPL thread
-    if (querySource !== 'repl_main_thread') {
+    // Only run session memory on the main conversation thread. App Server uses
+    // a main-thread querySource suffix, so it can reuse the native hook path.
+    if (!isMainThreadQuerySource(querySource)) {
         // Don't log this - it's expected for subagents, teammates, etc.
         return;
     }
@@ -249,6 +252,8 @@ const extractSessionMemory = sequential(async function (context) {
 export function initSessionMemory() {
     if (getIsRemoteMode())
         return;
+    if (sessionMemoryHookRegistered)
+        return;
     // Session memory is used for compaction, so respect auto-compact settings
     const autoCompactEnabled = isAutoCompactEnabled();
     // Log initialization state (ant-only to avoid noise in external logs)
@@ -262,6 +267,15 @@ export function initSessionMemory() {
     }
     // Register hook unconditionally - gate check happens lazily when hook runs
     registerPostSamplingHook(extractSessionMemory);
+    sessionMemoryHookRegistered = true;
+}
+export function getSessionMemoryRuntimeStatus() {
+    return {
+        hookRegistered: sessionMemoryHookRegistered,
+        autoCompactEnabled: isAutoCompactEnabled(),
+        gateEnabled: isSessionMemoryGateEnabled(),
+        remoteMode: getIsRemoteMode(),
+    };
 }
 /**
  * Manually trigger session memory extraction, bypassing threshold checks.

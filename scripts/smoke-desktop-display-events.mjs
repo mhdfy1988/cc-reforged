@@ -18,8 +18,20 @@ const fixturePath = join(
 const fixture = JSON.parse(await readFile(fixturePath, 'utf8'))
 const events = fixture.events
 
+assert(
+  fixture.fixtureSchemaVersion === 1,
+  'fixture must declare fixtureSchemaVersion 1',
+)
 assert(Array.isArray(events), 'fixture.events must be an array')
 assert(events.length >= 6, 'fixture should cover multiple display event kinds')
+assert(
+  Array.isArray(fixture.expectedCards) && fixture.expectedCards.length >= 10,
+  'fixture.expectedCards must describe expected rendered card coverage',
+)
+
+for (const expectedCard of fixture.expectedCards) {
+  assertExpectedCard(expectedCard)
+}
 
 const eventTypes = new Set(events.map(event => event.type))
 for (const type of [
@@ -28,14 +40,26 @@ for (const type of [
   'thinking_summary',
   'tool_call',
   'todo_list',
+  'file_change',
+  'file_reference',
+  'attachment',
   'error',
 ]) {
   assert(eventTypes.has(type), `fixture is missing ${type}`)
 }
 
+const orphanToolResults = events.filter(event => event.type === 'tool_result')
 assert(
-  !events.some(event => event.type === 'tool_result'),
-  'tool_result should be merged into the original tool_call card in fixtures',
+  orphanToolResults.every(
+    event => event.toolSnapshot?.displayName === '孤立工具结果',
+  ),
+  'only orphan tool_result fallback cards may remain standalone in fixtures',
+)
+assert(
+  orphanToolResults.some(event =>
+    event.text.includes('缺少 tool_use_id / parent_tool_use_id'),
+  ),
+  'orphan tool_result fallback must explain why it was not merged',
 )
 
 const visibleTimelineEvents = events.filter(
@@ -48,17 +72,33 @@ assert(
   'AskUserQuestion should be hidden from the main timeline',
 )
 
+assert(
+  Array.isArray(fixture.hiddenContentBlocks) &&
+    fixture.hiddenContentBlocks.some(
+      block => block?.attachment?.type === 'todo_reminder',
+    ),
+  'fixture must include a todo_reminder hidden content block regression case',
+)
+
+assert(
+  !events.some(event => event.text?.includes('todo_reminder')),
+  'todo_reminder must not be rendered as a visible attachment event',
+)
+
 for (const event of events) {
   assert(typeof event.id === 'string' && event.id, 'event.id is required')
   assert(typeof event.text === 'string', `event.text is required for ${event.id}`)
 
   if (event.toolSnapshot) {
+    const isOrphanToolResult =
+      event.type === 'tool_result' &&
+      event.toolSnapshot.displayName === '孤立工具结果'
     assert(
       event.identity?.turnId,
       `tool event ${event.id} must preserve turnId`,
     )
     assert(
-      event.identity?.toolUseId,
+      isOrphanToolResult || event.identity?.toolUseId,
       `tool event ${event.id} must preserve toolUseId`,
     )
     assert(
@@ -87,6 +127,100 @@ for (const event of events) {
       `todo event ${event.id} must contain todo items`,
     )
   }
+
+  if (event.fileSnapshot) {
+    assert(
+      typeof event.fileSnapshot.path === 'string' &&
+        event.fileSnapshot.path,
+      `file event ${event.id} must expose a path`,
+    )
+    assert(
+      typeof event.fileSnapshot.source === 'string' &&
+        event.fileSnapshot.source,
+      `file event ${event.id} must expose source`,
+    )
+    assert(
+      typeof event.fileSnapshot.kind === 'string' &&
+        event.fileSnapshot.kind,
+      `file event ${event.id} must expose kind`,
+    )
+    assert(
+      typeof event.fileSnapshot.safety === 'string' &&
+        event.fileSnapshot.safety,
+      `file event ${event.id} must expose safety`,
+    )
+  }
+
+  if (event.fileToolSnapshot) {
+    assert(
+      typeof event.fileToolSnapshot.id === 'string' &&
+        event.fileToolSnapshot.id,
+      `file tool event ${event.id} must expose snapshot id`,
+    )
+    assert(
+      typeof event.fileToolSnapshot.operation === 'string' &&
+        event.fileToolSnapshot.operation,
+      `file tool event ${event.id} must expose operation`,
+    )
+    assert(
+      typeof event.fileToolSnapshot.status === 'string' &&
+        event.fileToolSnapshot.status,
+      `file tool event ${event.id} must expose status`,
+    )
+    assert(
+      typeof event.fileToolSnapshot.summary === 'string' &&
+        event.fileToolSnapshot.summary,
+      `file tool event ${event.id} must expose summary`,
+    )
+    assert(
+      typeof event.fileToolSnapshot.safety === 'string' &&
+        event.fileToolSnapshot.safety,
+      `file tool event ${event.id} must expose safety`,
+    )
+    assert(
+      Array.isArray(event.fileToolSnapshot.actions),
+      `file tool event ${event.id} must expose actions`,
+    )
+    assert(
+      event.fileToolSnapshot.toolUseId === event.identity?.toolUseId,
+      `file tool event ${event.id} must keep toolUseId aligned with identity`,
+    )
+  }
+
+  if (event.attachmentSnapshot) {
+    assert(
+      typeof event.attachmentSnapshot.name === 'string' &&
+        event.attachmentSnapshot.name,
+      `attachment event ${event.id} must expose name`,
+    )
+    assert(
+      typeof event.attachmentSnapshot.status === 'string' &&
+        event.attachmentSnapshot.status,
+      `attachment event ${event.id} must expose status`,
+    )
+    assert(
+      typeof event.attachmentSnapshot.safety === 'string' &&
+        event.attachmentSnapshot.safety,
+      `attachment event ${event.id} must expose safety`,
+    )
+  }
+
+  if (event.referenceSnapshot) {
+    assert(
+      typeof event.referenceSnapshot.kind === 'string' &&
+        event.referenceSnapshot.kind,
+      `reference event ${event.id} must expose kind`,
+    )
+    assert(
+      Boolean(event.referenceSnapshot.path || event.referenceSnapshot.url),
+      `reference event ${event.id} must expose path or url`,
+    )
+    assert(
+      typeof event.referenceSnapshot.safety === 'string' &&
+        event.referenceSnapshot.safety,
+      `reference event ${event.id} must expose safety`,
+    )
+  }
 }
 
 const shellError = events.find(
@@ -96,12 +230,161 @@ assert(
   shellError?.toolSnapshot?.actionableHint,
   'shell unavailable errors must include an actionable hint',
 )
+assert(
+  shellError?.toolSnapshot?.actionableHint?.includes('PowerShell') &&
+    shellError.toolSnapshot.actionableHint.includes('不需要为了 ls 强行安装 Bash'),
+  'shell unavailable hint should guide Windows users to PowerShell/CMD/file tools',
+)
+
+assert(
+  events.some(event => event.toolSnapshot?.name === 'Write' && event.fileSnapshot),
+  'Write tool events should carry a normalized file snapshot',
+)
+assert(
+  events.some(
+    event =>
+      event.toolSnapshot?.name === 'Write' &&
+      event.fileToolSnapshot?.operation === 'write',
+  ),
+  'Write tool events should carry a normalized file tool snapshot',
+)
+
+assert(
+  events.some(event => event.toolSnapshot?.name === 'Read' && event.fileSnapshot),
+  'Read tool events should carry a normalized file snapshot',
+)
+assert(
+  events.some(
+    event =>
+      event.toolSnapshot?.name === 'Read' &&
+      event.fileToolSnapshot?.operation === 'read',
+  ),
+  'Read tool events should carry a normalized file tool snapshot',
+)
+
+const writeToolEvents = events.filter(
+  event => event.toolSnapshot?.name === 'Write' && event.type === 'tool_call',
+)
+const writeToolUseIds = new Set(
+  writeToolEvents.map(event => event.identity?.toolUseId).filter(Boolean),
+)
+assert(
+  writeToolEvents.length >= 2 && writeToolUseIds.size >= 2,
+  'multiple Write calls must remain separate tool cards with distinct toolUseId values',
+)
+assert(
+  writeToolEvents.every(
+    event => event.fileToolSnapshot?.toolUseId === event.identity?.toolUseId,
+  ),
+  'multiple Write file tool snapshots must stay bound by toolUseId, not by path',
+)
+
+assert(
+  events.some(
+    event => event.toolSnapshot?.name === 'Grep' && event.referenceSnapshot,
+  ),
+  'Grep tool events should carry a normalized reference snapshot',
+)
+assert(
+  events.some(
+    event =>
+      event.toolSnapshot?.name === 'Grep' &&
+      event.fileToolSnapshot?.operation === 'search',
+  ),
+  'Grep tool events should carry a normalized search file tool snapshot',
+)
 
 assert(
   fixture.permission?.permissionRequestId,
   'permission fixture must include permissionRequestId',
 )
 assert(fixture.permission?.toolUseId, 'permission fixture must include toolUseId')
+assert(
+  fixture.permission?.interactionKind === 'shell_permission',
+  'Bash permission fixture must be classified as shell_permission',
+)
+assert(
+  typeof fixture.permission?.input?.command === 'string' &&
+    fixture.permission.input.command.includes('desktop:build'),
+  'Bash permission fixture must include a command',
+)
+assert(
+  Array.isArray(fixture.permission?.permissionSuggestions) &&
+    fixture.permission.permissionSuggestions.length > 0,
+  'Bash permission fixture should include permission suggestions',
+)
+
+assert(
+  fixture.askUserQuestionPermission?.interactionKind === 'ask_user_question',
+  'AskUserQuestion permission fixture must be classified as ask_user_question',
+)
+assert(
+  Array.isArray(fixture.askUserQuestionPermission?.input?.questions) &&
+    fixture.askUserQuestionPermission.input.questions.length > 0,
+  'AskUserQuestion permission fixture must include questions',
+)
+
+assert(
+  fixture.planApprovalPermission?.interactionKind === 'plan_approval',
+  'ExitPlanMode permission fixture must be classified as plan_approval',
+)
+assert(
+  typeof fixture.planApprovalPermission?.input?.plan === 'string' &&
+    fixture.planApprovalPermission.input.plan.includes('实施计划'),
+  'ExitPlanMode permission fixture must include plan content',
+)
+assert(
+  Array.isArray(fixture.planApprovalPermission?.input?.allowedPrompts),
+  'ExitPlanMode permission fixture should preserve allowedPrompts',
+)
+assert(
+  fixture.enterPlanModePermission?.interactionKind === 'enter_plan_mode',
+  'EnterPlanMode permission fixture must be classified as enter_plan_mode',
+)
+
+assert(
+  fixture.webFetchPermission?.interactionKind === 'web_fetch',
+  'WebFetch permission fixture must be classified as web_fetch',
+)
+assert(
+  typeof fixture.webFetchPermission?.input?.url === 'string' &&
+    fixture.webFetchPermission.input.url.includes('example.com'),
+  'WebFetch permission fixture must include target url',
+)
+assert(
+  Array.isArray(fixture.webFetchPermission?.permissionSuggestions) &&
+    fixture.webFetchPermission.permissionSuggestions.some(suggestion =>
+      suggestion?.rules?.some(rule => rule?.ruleContent === 'domain:example.com'),
+    ),
+  'WebFetch permission fixture should preserve domain allow suggestion',
+)
+
+assert(
+  fixture.skillPermission?.interactionKind === 'skill',
+  'Skill permission fixture must be classified as skill',
+)
+assert(
+  fixture.skillPermission?.input?.skill === 'repo-source-reader',
+  'Skill permission fixture must include skill name',
+)
+assert(
+  Array.isArray(fixture.skillPermission?.permissionSuggestions) &&
+    fixture.skillPermission.permissionSuggestions.length > 0,
+  'Skill permission fixture should include permission suggestions',
+)
+
+assert(
+  fixture.reviewArtifactPermission?.interactionKind === 'review_artifact',
+  'ReviewArtifact permission fixture must be classified as review_artifact',
+)
+assert(
+  fixture.workflowPermission?.interactionKind === 'workflow',
+  'Workflow permission fixture must be classified as workflow',
+)
+assert(
+  fixture.monitorPermission?.interactionKind === 'monitor',
+  'Monitor permission fixture must be classified as monitor',
+)
 
 console.log('smoke-desktop-display-events: ok')
 
@@ -109,4 +392,82 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(message)
   }
+}
+
+function assertExpectedCard(expectedCard) {
+  assert(
+    typeof expectedCard.cardType === 'string' && expectedCard.cardType,
+    'expected card must include cardType',
+  )
+
+  if (expectedCard.source === 'event') {
+    const event = events.find(item => item.id === expectedCard.fixtureId)
+    assert(event, `expected event card missing fixture ${expectedCard.fixtureId}`)
+    if (expectedCard.eventType) {
+      assert(
+        event.type === expectedCard.eventType,
+        `event ${expectedCard.fixtureId} should render as ${expectedCard.eventType}`,
+      )
+    }
+    if (expectedCard.toolName) {
+      assert(
+        event.toolSnapshot?.name === expectedCard.toolName,
+        `event ${expectedCard.fixtureId} should use tool ${expectedCard.toolName}`,
+      )
+    }
+    if (expectedCard.category) {
+      assert(
+        event.toolSnapshot?.category === expectedCard.category,
+        `event ${expectedCard.fixtureId} should classify as ${expectedCard.category}`,
+      )
+    }
+    if (expectedCard.operation) {
+      assert(
+        event.fileToolSnapshot?.operation === expectedCard.operation,
+        `event ${expectedCard.fixtureId} should expose operation ${expectedCard.operation}`,
+      )
+    }
+    if (expectedCard.status) {
+      assert(
+        (event.toolSnapshot?.status ?? event.status) === expectedCard.status,
+        `event ${expectedCard.fixtureId} should expose status ${expectedCard.status}`,
+      )
+    }
+    if (expectedCard.hidden === true) {
+      assert(
+        event.timelineHidden === true,
+        `event ${expectedCard.fixtureId} should be hidden from main timeline`,
+      )
+    }
+    return
+  }
+
+  if (expectedCard.source === 'permission') {
+    const permission = fixture[expectedCard.fixtureKey]
+    assert(
+      permission,
+      `expected permission card missing fixture ${expectedCard.fixtureKey}`,
+    )
+    if (expectedCard.toolName) {
+      assert(
+        permission.toolName === expectedCard.toolName,
+        `permission ${expectedCard.fixtureKey} should use tool ${expectedCard.toolName}`,
+      )
+    }
+    if (expectedCard.interactionKind) {
+      assert(
+        permission.interactionKind === expectedCard.interactionKind,
+        `permission ${expectedCard.fixtureKey} should classify as ${expectedCard.interactionKind}`,
+      )
+    }
+    if (expectedCard.status) {
+      assert(
+        permission.status === expectedCard.status,
+        `permission ${expectedCard.fixtureKey} should expose status ${expectedCard.status}`,
+      )
+    }
+    return
+  }
+
+  throw new Error(`unknown expected card source: ${expectedCard.source}`)
 }

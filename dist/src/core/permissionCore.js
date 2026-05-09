@@ -3,6 +3,7 @@ import { errorMessage } from '../utils/errors.js';
 import { outputSchema as permissionPromptOutputSchema, permissionPromptToolResultToPermissionDecision, } from '../utils/permissions/PermissionPromptToolResultSchema.js';
 import { hasPermissionsToUseTool } from '../utils/permissions/permissions.js';
 import { CoreError } from './errors.js';
+import { getCorePermissionSettingsSnapshot, updateCorePermissionSettings, } from './permissionSettingsCore.js';
 export class CorePermissionService {
     options;
     #requests = new Map();
@@ -106,6 +107,12 @@ export class CorePermissionService {
         return Array.from(this.#requests.values())
             .filter(request => request.status === 'pending')
             .map(request => request.request);
+    }
+    getSettingsSnapshot() {
+        return getCorePermissionSettingsSnapshot();
+    }
+    updateSettings(input) {
+        return updateCorePermissionSettings(input);
     }
     cancelPermissionRequest(permissionRequestId, reason) {
         const pending = this.#requests.get(permissionRequestId);

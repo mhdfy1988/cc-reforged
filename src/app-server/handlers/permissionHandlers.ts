@@ -1,4 +1,8 @@
-import { PermissionRespondParamsSchema } from '../protocol.js'
+import {
+  PermissionRespondParamsSchema,
+  PermissionSettingsGetParamsSchema,
+  PermissionSettingsUpdateParamsSchema,
+} from '../protocol.js'
 import type { AppServerContext } from '../router.js'
 
 export function handlePermissionRespond(
@@ -15,6 +19,9 @@ export function handlePermissionRespond(
             updatedInput: parsedParams.updatedInput ?? {},
             ...(parsedParams.updatedPermissions
               ? { updatedPermissions: parsedParams.updatedPermissions }
+              : {}),
+            ...(parsedParams.acceptFeedback
+              ? { acceptFeedback: parsedParams.acceptFeedback }
               : {}),
             ...(parsedParams.toolUseID
               ? { toolUseID: parsedParams.toolUseID }
@@ -35,6 +42,28 @@ export function handlePermissionRespond(
             ...(parsedParams.decisionClassification
               ? { decisionClassification: parsedParams.decisionClassification }
               : {}),
-          },
+      },
+  })
+}
+
+export function handlePermissionSettingsGet(
+  context: AppServerContext,
+  params: unknown,
+): Record<string, unknown> {
+  PermissionSettingsGetParamsSchema.parse(params ?? {})
+  return context.core.permission.getSettingsSnapshot()
+}
+
+export function handlePermissionSettingsUpdate(
+  context: AppServerContext,
+  params: unknown,
+): Record<string, unknown> {
+  const parsedParams = PermissionSettingsUpdateParamsSchema.parse(params)
+  if (!parsedParams.source || !parsedParams.permissions) {
+    throw new Error('Permission settings update requires source and permissions.')
+  }
+  return context.core.permission.updateSettings({
+    source: parsedParams.source,
+    permissions: parsedParams.permissions,
   })
 }

@@ -1,10 +1,36 @@
+.chat-timeline-frame {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .chat {
+  height: 100%;
   min-height: 0;
   overflow: auto;
   border: 0;
   border-radius: 0;
   background: transparent;
   padding: 0 6px 0 0;
+}
+
+.chat-content {
+  min-height: 100%;
+}
+
+.chat-scroll-bottom {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  z-index: 15;
+  border: 1px solid rgba(12, 143, 114, 0.18);
+  border-radius: 999px;
+  color: #0a715c;
+  background: rgba(235, 255, 247, 0.94);
+  box-shadow: 0 12px 32px rgba(12, 143, 114, 0.14);
+  font-size: 12px;
+  font-weight: 900;
+  padding: 8px 12px;
 }
 
 .message,

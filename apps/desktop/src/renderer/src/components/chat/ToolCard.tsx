@@ -1,29 +1,69 @@
 import { MessageFrame } from './MessageFrame.js'
+import { FileSnapshotPanel } from './FileCard.js'
+import { ShellPermissionInlinePanel } from './ShellPermissionCard.js'
+import { ToolPermissionInlinePanel } from './ToolPermissionInlinePanel.js'
 import type { DisplayEvent } from '../../domain/displayEvents.js'
+import type {
+  PermissionCard,
+  PermissionRespondPayload,
+} from '../../domain/displayTypes.js'
 
-export function ToolCard(props: { event: DisplayEvent }) {
+type ToolDetailBlockView = {
+  title: string
+  value: unknown
+}
+
+export function ToolCard(props: {
+  event: DisplayEvent
+  permission?: PermissionCard
+  onRespondPermission?: (
+    permissionRequestId: string,
+    behavior: 'allow' | 'deny',
+    payload?: PermissionRespondPayload,
+  ) => Promise<void>
+}) {
   const snapshot = props.event.toolSnapshot
   if (!snapshot) {
     return <MessageFrame label="i" event={props.event} />
   }
 
-  const hasDetail =
-    snapshot.input !== undefined ||
-    snapshot.result !== undefined ||
-    snapshot.errorMessage !== undefined
-  const metaItems = getToolMetaItems(snapshot)
+  const hasFileSnapshot = Boolean(
+    props.event.fileSnapshot ||
+      props.event.referenceSnapshot ||
+      props.event.attachmentSnapshot,
+  )
+  const useCompactFileLayout = snapshot.category === 'file' && hasFileSnapshot
+  const detailBlocks = createToolDetailBlocks(snapshot, props.event)
+  const hasDetail = detailBlocks.length > 0
+  const metaItems = getToolMetaItems(snapshot, {
+    hideTarget: useCompactFileLayout,
+  })
+  const hints = getToolHints(snapshot)
+  const inlinePermission =
+    props.permission && props.onRespondPermission
+      ? props.permission
+      : undefined
+  const showToolStatus = !inlinePermission
 
   return (
-    <div className="message system tool-event tool-card">
+    <div
+      className={`message system tool-event tool-card ${
+        useCompactFileLayout ? 'tool-card-file-compact' : ''
+      }`}
+    >
       <b>i</b>
       <div className="tool-card-body">
         <div className="tool-card-head">
           <strong>{snapshot.displayName ?? snapshot.name}</strong>
-          <span>{getCategoryText(snapshot.category)}</span>
+          {useCompactFileLayout ? null : (
+            <span>{getCategoryText(snapshot.category)}</span>
+          )}
         </div>
-        <p className="tool-card-summary" title={snapshot.summary}>
-          {snapshot.summary}
-        </p>
+        {useCompactFileLayout ? null : (
+          <p className="tool-card-summary" title={snapshot.summary}>
+            {snapshot.summary}
+          </p>
+        )}
         {metaItems.length ? (
           <div className="tool-card-meta">
             {metaItems.map(item => (
@@ -33,38 +73,139 @@ export function ToolCard(props: { event: DisplayEvent }) {
             ))}
           </div>
         ) : null}
-        {snapshot.actionableHint ? (
-          <p className="tool-card-hint">{snapshot.actionableHint}</p>
+        {hints.map(hint => (
+          <p className="tool-card-hint" key={hint}>
+            {hint}
+          </p>
+        ))}
+        {inlinePermission ? (
+          isShellPermission(inlinePermission) ? (
+            <ShellPermissionInlinePanel
+              compact
+              permission={inlinePermission}
+              onRespond={props.onRespondPermission}
+            />
+          ) : (
+            <ToolPermissionInlinePanel
+              permission={inlinePermission}
+              onRespond={props.onRespondPermission}
+            />
+          )
+        ) : null}
+        {props.event.fileSnapshot ||
+        props.event.referenceSnapshot ||
+        props.event.attachmentSnapshot ? (
+          <FileSnapshotPanel
+            event={props.event}
+            variant={useCompactFileLayout ? 'compact' : 'default'}
+          />
         ) : null}
         {hasDetail ? (
           <details>
             <summary>查看详情</summary>
-            {snapshot.input === undefined ? null : (
-              <ToolDetailBlock title="调用参数" value={snapshot.input} />
-            )}
-            {snapshot.result === undefined ? null : (
-              <ToolDetailBlock title="执行结果" value={snapshot.result} />
-            )}
-            {snapshot.errorMessage === undefined ? null : (
-              <ToolDetailBlock title="错误详情" value={snapshot.errorMessage} />
-            )}
+            {detailBlocks.map(block => (
+              <ToolDetailBlock key={getToolDetailBlockKey(block)} block={block} />
+            ))}
           </details>
         ) : null}
-        <div className="tool-card-status-row">
-          <StatusBadge label={snapshot.statusLabel} status={snapshot.status} />
-        </div>
+        {showToolStatus ? (
+          <div className="tool-card-status-row">
+            <StatusBadge label={snapshot.statusLabel} status={snapshot.status} />
+          </div>
+        ) : null}
       </div>
     </div>
   )
 }
 
-function ToolDetailBlock(props: { title: string; value: unknown }) {
+function isShellPermission(permission: PermissionCard): boolean {
+  return (
+    permission.interactionKind === 'shell_permission' ||
+    permission.toolName === 'Bash' ||
+    permission.toolName === 'PowerShell'
+  )
+}
+
+function createToolDetailBlocks(
+  snapshot: NonNullable<DisplayEvent['toolSnapshot']>,
+  event: DisplayEvent,
+): ToolDetailBlockView[] {
+  const blocks: ToolDetailBlockView[] = []
+  const resultText =
+    snapshot.result === undefined ? null : formatToolDetail(snapshot.result)
+  const errorText =
+    snapshot.errorMessage === undefined
+      ? null
+      : formatToolDetail(snapshot.errorMessage)
+
+  if (snapshot.input !== undefined) {
+    blocks.push({ title: '调用参数', value: snapshot.input })
+  }
+
+  if (event.fileToolSnapshot) {
+    blocks.push({ title: '文件工具信息', value: event.fileToolSnapshot })
+  }
+
+  if (event.fileSnapshot) {
+    blocks.push({ title: '文件信息', value: event.fileSnapshot })
+  }
+
+  if (event.referenceSnapshot) {
+    blocks.push({ title: '引用信息', value: event.referenceSnapshot })
+  }
+
+  if (event.attachmentSnapshot) {
+    blocks.push({ title: '附件信息', value: event.attachmentSnapshot })
+  }
+
+  if (snapshot.result !== undefined) {
+    blocks.push({ title: '执行结果', value: snapshot.result })
+  }
+
+  if (
+    snapshot.errorMessage !== undefined &&
+    !isDuplicateErrorDetail(resultText, errorText)
+  ) {
+    blocks.push({ title: '错误详情', value: snapshot.errorMessage })
+  }
+
+  return blocks
+}
+
+function isDuplicateErrorDetail(
+  resultText: string | null,
+  errorText: string | null,
+): boolean {
+  const normalizedError = normalizeDetailText(errorText)
+  if (!normalizedError) {
+    return true
+  }
+
+  const normalizedResult = normalizeDetailText(resultText)
+  if (!normalizedResult) {
+    return false
+  }
+
+  if (normalizedResult === normalizedError) {
+    return true
+  }
+
+  const resultLines = new Set(normalizedResult.split('\n'))
+  const errorLines = normalizedError.split('\n')
+  return errorLines.every(line => resultLines.has(line))
+}
+
+function ToolDetailBlock(props: { block: ToolDetailBlockView }) {
   return (
     <section className="tool-card-detail-block">
-      <h4>{props.title}</h4>
-      <pre>{formatToolDetail(props.value)}</pre>
+      <h4>{props.block.title}</h4>
+      <pre>{formatToolDetail(props.block.value)}</pre>
     </section>
   )
+}
+
+function getToolDetailBlockKey(block: ToolDetailBlockView): string {
+  return block.title
 }
 
 function StatusBadge(props: { label?: string; status: string }) {
@@ -149,19 +290,70 @@ function getCategoryText(category: string): string {
   }
 }
 
-function getToolMetaItems(snapshot: NonNullable<DisplayEvent['toolSnapshot']>) {
+function getToolMetaItems(
+  snapshot: NonNullable<DisplayEvent['toolSnapshot']>,
+  options: { hideTarget?: boolean } = {},
+) {
   return [
     shouldShowCommandMeta(snapshot)
       ? { label: '命令', value: snapshot.command }
       : null,
-    snapshot.target && snapshot.target !== snapshot.command
+    !options.hideTarget && snapshot.target && snapshot.target !== snapshot.command
       ? { label: '目标', value: snapshot.target }
       : null,
     snapshot.cwd ? { label: '工作目录', value: snapshot.cwd } : null,
-    snapshot.shell ? { label: 'Shell', value: snapshot.shell } : null,
     snapshot.risk ? { label: '风险', value: snapshot.risk } : null,
     snapshot.errorClass ? { label: '错误类型', value: snapshot.errorClass } : null,
   ].filter(Boolean) as Array<{ label: string; value: string }>
+}
+
+function getToolHints(
+  snapshot: NonNullable<DisplayEvent['toolSnapshot']>,
+): string[] {
+  const hints = [
+    snapshot.actionableHint,
+    getShellDialectHint(snapshot),
+  ].filter(Boolean) as string[]
+  return Array.from(new Set(hints))
+}
+
+function getShellDialectHint(
+  snapshot: NonNullable<DisplayEvent['toolSnapshot']>,
+): string | undefined {
+  if (snapshot.category !== 'shell') {
+    return undefined
+  }
+
+  const shell = (snapshot.shell ?? '').toLowerCase()
+  const toolName = snapshot.name.toLowerCase()
+  const command = snapshot.command ?? ''
+  const isBashLike =
+    toolName === 'bash' || shell.includes('bash') || shell.includes('posix')
+
+  if (!isBashLike) {
+    return undefined
+  }
+
+  if (looksLikePowerShellCommand(command)) {
+    return '这条命令看起来像 PowerShell，但当前工具是 Bash/POSIX。Windows 下应改用 PowerShell、CMD、Node 原生文件能力或高层文件工具。'
+  }
+
+  if (snapshot.errorClass === 'shell_unavailable') {
+    return undefined
+  }
+
+  return '当前工具是 Bash/POSIX。Windows 本机如果没有 Bash，不需要为了 ls 强行安装 Bash，应优先改用 PowerShell、CMD、Node 原生文件能力或高层文件工具。'
+}
+
+function looksLikePowerShellCommand(command: string): boolean {
+  const normalized = command.trim()
+  return (
+    /^(Get|Set|New|Remove|Test|Select|Where|ForEach)-[A-Z]/.test(normalized) ||
+    normalized.includes('ForEach-Object') ||
+    normalized.includes('Select-Object') ||
+    normalized.includes('$_.') ||
+    normalized.startsWith('$')
+  )
 }
 
 function shouldShowCommandMeta(
@@ -182,4 +374,18 @@ function formatToolDetail(detail: unknown): string {
   } catch {
     return String(detail)
   }
+}
+
+function normalizeDetailText(value: string | null): string {
+  if (!value) {
+    return ''
+  }
+
+  return value
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .join('\n')
 }

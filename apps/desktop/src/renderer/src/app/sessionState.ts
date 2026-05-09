@@ -14,6 +14,7 @@ import {
   createDisplayEventIdentity,
   type DisplayEventContractContext,
 } from '../domain/eventContract.js'
+import { extractFileDisplaySnapshotsFromToolSnapshot } from '../domain/fileEvents.js'
 import type { TodoOverlaySnapshot } from '../domain/todoEvents.js'
 import {
   getActionableHint,
@@ -31,6 +32,13 @@ export type SessionState = {
 }
 
 export type SessionAction =
+  | { type: 'reset-session'; notice?: string; noticeId?: string }
+  | {
+      type: 'replace-messages'
+      messages: ChatMessage[]
+      notice?: string
+      noticeId?: string
+    }
   | { type: 'append-display-event'; event: DisplayEvent }
   | { type: 'append-message'; message: ChatMessage }
   | {
@@ -56,6 +64,7 @@ export type SessionAction =
   | { type: 'set-active-turn'; turnId: string | null }
   | { type: 'merge-turn-metadata'; metadata: TurnRuntimeMetadata }
   | { type: 'clear-permissions' }
+  | { type: 'clear-noninteractive-permissions' }
   | { type: 'add-permission'; permission: PermissionCard }
   | { type: 'remove-permission'; permissionRequestId: string }
   | {
@@ -101,7 +110,7 @@ export function selectTodoOverlay(
     }
 
     const turnId = snapshot.identity?.turnId ?? event.identity?.turnId
-    if (!turnId || turnId === state.activeTurnId) {
+    if (turnId === state.activeTurnId) {
       return snapshot
     }
   }
@@ -113,6 +122,16 @@ export function sessionReducer(
   action: SessionAction,
 ): SessionState {
   switch (action.type) {
+    case 'reset-session':
+      return createResetSessionState(action.notice, action.noticeId)
+
+    case 'replace-messages':
+      return createReplacedMessageState(
+        action.messages,
+        action.notice,
+        action.noticeId,
+      )
+
     case 'append-display-event':
       return {
         ...state,
@@ -153,13 +172,16 @@ export function sessionReducer(
     case 'upsert-completed-item-message':
       return {
         ...state,
-        displayEvents: upsertCompletedItemMessage(
-          state.displayEvents,
-          action.itemId,
-          action.kind,
-          action.content,
-          action.statusText,
-          action.context,
+        displayEvents: markPendingPermissionsOnEvents(
+          upsertCompletedItemMessage(
+            state.displayEvents,
+            action.itemId,
+            action.kind,
+            action.content,
+            action.statusText,
+            action.context,
+          ),
+          state.permissions,
         ),
       }
 
@@ -186,6 +208,12 @@ export function sessionReducer(
       return {
         ...state,
         permissions: [],
+      }
+
+    case 'clear-noninteractive-permissions':
+      return {
+        ...state,
+        permissions: state.permissions.filter(shouldKeepAfterTurnCompleted),
       }
 
     case 'add-permission':
@@ -225,6 +253,71 @@ export function sessionReducer(
     default:
       return state
   }
+}
+
+function createResetSessionState(
+  notice?: string,
+  noticeId?: string,
+): SessionState {
+  if (!notice) {
+    return {
+      displayEvents: [],
+      permissions: [],
+      activeTurnId: null,
+      turnMetadata: null,
+    }
+  }
+
+  return {
+    displayEvents: [
+      createSystemNoticeEvent(
+        noticeId ?? `session-reset-${Date.now()}`,
+        notice,
+      ),
+    ],
+    permissions: [],
+    activeTurnId: null,
+    turnMetadata: null,
+  }
+}
+
+function createReplacedMessageState(
+  messages: ChatMessage[],
+  notice?: string,
+  noticeId?: string,
+): SessionState {
+  return {
+    displayEvents: [
+      ...(notice
+        ? [
+            createSystemNoticeEvent(
+              noticeId ?? `session-replaced-${Date.now()}`,
+              notice,
+            ),
+          ]
+        : []),
+      ...messages.map(message => chatMessageToDisplayEvent(message)),
+    ],
+    permissions: [],
+    activeTurnId: null,
+    turnMetadata: null,
+  }
+}
+
+function shouldKeepAfterTurnCompleted(permission: PermissionCard): boolean {
+  if (permission.status !== 'pending') {
+    return false
+  }
+
+  return (
+    permission.interactionKind === 'ask_user_question' ||
+    permission.interactionKind === 'plan_approval' ||
+    permission.interactionKind === 'enter_plan_mode' ||
+    permission.toolName === 'AskUserQuestion' ||
+    permission.toolName === 'ExitPlanMode' ||
+    permission.toolName === 'ExitPlanModeV2' ||
+    permission.toolName === 'EnterPlanMode'
+  )
 }
 
 function upsertAssistantDelta(
@@ -341,6 +434,10 @@ function upsertCompletedItemMessage(
     return events
   }
 
+  if (isOrphanToolResult(nextEvent)) {
+    return [...events, createOrphanToolResultEvent(nextEvent)]
+  }
+
   return [...events, nextEvent]
 }
 
@@ -356,6 +453,13 @@ function mergeCompletedDisplayEvent(
     identity: nextEvent.identity ?? currentEvent.identity,
     todoSnapshot: nextEvent.todoSnapshot,
     toolSnapshot: nextEvent.toolSnapshot,
+    fileToolSnapshot:
+      nextEvent.fileToolSnapshot ?? currentEvent.fileToolSnapshot,
+    fileSnapshot: nextEvent.fileSnapshot ?? currentEvent.fileSnapshot,
+    attachmentSnapshot:
+      nextEvent.attachmentSnapshot ?? currentEvent.attachmentSnapshot,
+    referenceSnapshot:
+      nextEvent.referenceSnapshot ?? currentEvent.referenceSnapshot,
     status: statusText,
     text:
       nextEvent.type === 'assistant_message' && currentEvent.text.trim()
@@ -371,16 +475,30 @@ function findMatchingToolLifecycleEventIndex(
   const nextToolUseId = getToolLifecycleMatchId(nextEvent)
   const nextSnapshot = nextEvent.toolSnapshot
   if (
-    !nextToolUseId ||
     !nextSnapshot ||
     (nextSnapshot.kind !== 'result' && nextSnapshot.kind !== 'progress')
   ) {
     return -1
   }
 
+  if (nextToolUseId) {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index]
+      if (isMatchingToolLifecycleTarget(event, nextToolUseId)) {
+        return index
+      }
+    }
+    return -1
+  }
+
+  const nextFallbackKey = getToolLifecycleFallbackKey(nextEvent)
+  if (!nextFallbackKey) {
+    return -1
+  }
+
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
-    if (isMatchingToolLifecycleTarget(event, nextToolUseId)) {
+    if (isMatchingToolLifecycleFallbackTarget(event, nextFallbackKey)) {
       return index
     }
   }
@@ -412,13 +530,18 @@ function mergeToolLifecycleDisplayEvent(
   const status =
     nextSnapshot.status === 'failed' ? 'failed' : nextSnapshot.status || statusText
 
+  const mergedSnapshot = mergeToolSnapshots(currentSnapshot, nextSnapshot, status)
+  const fileDisplaySnapshots =
+    extractFileDisplaySnapshotsFromToolSnapshot(mergedSnapshot)
+
   return {
     ...currentEvent,
     type: 'tool_call',
     status,
     timelineHidden: currentEvent.timelineHidden,
     identity: currentEvent.identity ?? nextEvent.identity,
-    toolSnapshot: mergeToolSnapshots(currentSnapshot, nextSnapshot, status),
+    toolSnapshot: mergedSnapshot,
+    ...fileDisplaySnapshots,
   }
 }
 
@@ -475,6 +598,19 @@ function markToolPermissionRequested(
   })
 }
 
+function markPendingPermissionsOnEvents(
+  events: DisplayEvent[],
+  permissions: PermissionCard[],
+): DisplayEvent[] {
+  return permissions
+    .filter(permission => permission.status === 'pending')
+    .reduce(
+      (currentEvents, permission) =>
+        markToolPermissionRequested(currentEvents, permission),
+      events,
+    )
+}
+
 function markToolPermissionStatus(
   events: DisplayEvent[],
   permissionRequestId: string,
@@ -523,7 +659,30 @@ function getToolStatusFromPermissionStatus(
 }
 
 function getToolUseId(event: DisplayEvent): string | undefined {
-  return event.toolSnapshot?.identity?.toolUseId ?? event.identity?.toolUseId
+  return (
+    event.toolSnapshot?.identity?.toolUseId ??
+    getRawToolUseId(event.toolSnapshot?.raw) ??
+    event.fileToolSnapshot?.toolUseId ??
+    event.fileToolSnapshot?.identity?.toolUseId ??
+    event.fileSnapshot?.toolUseId ??
+    event.fileSnapshot?.identity?.toolUseId ??
+    event.referenceSnapshot?.toolUseId ??
+    event.referenceSnapshot?.identity?.toolUseId ??
+    event.identity?.toolUseId
+  )
+}
+
+function getRawToolUseId(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+  const object = value as Record<string, unknown>
+  const id =
+    object.id ??
+    object.toolUseId ??
+    object.toolUseID ??
+    object.tool_use_id
+  return typeof id === 'string' && id.trim() ? id : undefined
 }
 
 function getParentToolUseId(event: DisplayEvent): string | undefined {
@@ -535,6 +694,23 @@ function getParentToolUseId(event: DisplayEvent): string | undefined {
 
 function getToolLifecycleMatchId(event: DisplayEvent): string | undefined {
   return getParentToolUseId(event) ?? getToolUseId(event)
+}
+
+function getToolLifecycleFallbackKey(event: DisplayEvent): string | undefined {
+  const identity = event.toolSnapshot?.identity ?? event.identity
+  if (
+    !identity?.turnId ||
+    !identity.itemId ||
+    identity.contentIndex === undefined
+  ) {
+    return undefined
+  }
+  return [
+    identity.threadId ?? '',
+    identity.turnId,
+    identity.itemId,
+    String(identity.contentIndex),
+  ].join(':')
 }
 
 function isMatchingToolLifecycleTarget(
@@ -552,6 +728,16 @@ function isMatchingToolLifecycleTarget(
   return event.toolSnapshot?.kind === 'call'
 }
 
+function isMatchingToolLifecycleFallbackTarget(
+  event: DisplayEvent,
+  fallbackKey: string,
+): boolean {
+  return (
+    event.toolSnapshot?.kind === 'call' &&
+    getToolLifecycleFallbackKey(event) === fallbackKey
+  )
+}
+
 function shouldDropOrphanControlToolResult(event: DisplayEvent): boolean {
   const snapshot = event.toolSnapshot
   return (
@@ -564,4 +750,36 @@ function shouldDropOrphanControlToolResult(event: DisplayEvent): boolean {
 
 function shouldDropOrphanProgress(event: DisplayEvent): boolean {
   return event.toolSnapshot?.kind === 'progress'
+}
+
+function isOrphanToolResult(event: DisplayEvent): boolean {
+  return event.type === 'tool_result' && event.toolSnapshot?.kind === 'result'
+}
+
+function createOrphanToolResultEvent(event: DisplayEvent): DisplayEvent {
+  const snapshot = event.toolSnapshot
+  if (!snapshot) {
+    return event
+  }
+
+  const reason = getOrphanToolResultReason(event)
+  return {
+    ...event,
+    text: reason,
+    toolSnapshot: {
+      ...snapshot,
+      displayName: '孤立工具结果',
+      summary: reason,
+      actionableHint:
+        '没有找到对应的工具调用，已保留原始结果供排查；不会按文件路径或最近卡片盲目合并。',
+    },
+  }
+}
+
+function getOrphanToolResultReason(event: DisplayEvent): string {
+  const lifecycleId = getToolLifecycleMatchId(event)
+  if (lifecycleId) {
+    return `孤立工具结果：未找到对应 tool_use（${lifecycleId}）`
+  }
+  return '孤立工具结果：缺少 tool_use_id / parent_tool_use_id，无法安全合并到工具卡'
 }

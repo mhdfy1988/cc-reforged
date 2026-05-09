@@ -119,7 +119,7 @@ export class CodexOAuthSession {
         }
         try {
             const raw = await readFile(this.#credentialFilePath, 'utf8');
-            const payload = JSON.parse(raw);
+            const payload = JSON.parse(stripJsonBom(raw));
             if (!payload.access || typeof payload.access !== 'string') {
                 return null;
             }
@@ -392,6 +392,9 @@ function loadCredentialFromEnv() {
 }
 function credentialSourceFromEnv() {
     return Boolean(process.env.CCR_CODEX_OAUTH_ACCESS_TOKEN?.trim());
+}
+function stripJsonBom(value) {
+    return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
 }
 function extractAccountId(accessToken, jwtClaimPath) {
     try {

@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from 'react'
+import { isNullRenderingAttachmentType } from '../../../../../../src/utils/nullRenderingAttachmentTypes.js'
 import type { ChatMessage, JsonObject } from './displayTypes.js'
 
 export function createMessageFromCompletedItem(
@@ -190,6 +191,10 @@ function formatCompletedItemText(
 function formatContentBlock(block: JsonObject): string {
   const type = typeof block.type === 'string' ? block.type : 'json'
 
+  if (isNullRenderingContentBlock(block, type)) {
+    return ''
+  }
+
   if (type === 'text') {
     return typeof block.text === 'string' ? block.text : ''
   }
@@ -230,6 +235,26 @@ function formatContentBlock(block: JsonObject): string {
   }
 
   return formatJsonBlock(block)
+}
+
+export function isNullRenderingContentBlock(
+  block: JsonObject,
+  type = typeof block.type === 'string' ? block.type : 'json',
+): boolean {
+  if (isNullRenderingAttachmentType(type)) {
+    return true
+  }
+
+  if (type !== 'attachment') {
+    return false
+  }
+
+  const attachment = block.attachment
+  if (!attachment || typeof attachment !== 'object') {
+    return false
+  }
+
+  return isNullRenderingAttachmentType((attachment as JsonObject).type)
 }
 
 function formatToolResultContent(content: unknown): string {

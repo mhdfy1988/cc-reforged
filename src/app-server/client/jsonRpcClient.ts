@@ -26,12 +26,20 @@ type PendingRequest = {
   timer?: ReturnType<typeof setTimeout>
 }
 
+type TimedOutRequest = {
+  method: string
+  timeoutMs: number
+  cleanupTimer: ReturnType<typeof setTimeout>
+}
+
 const DEFAULT_TIMEOUT_MS = 30_000
+const LATE_RESPONSE_RETENTION_MS = 10 * 60_000
 
 export class JsonRpcClient {
   private nextId = 1
   private closed = false
   private readonly pending = new Map<JsonRpcId, PendingRequest>()
+  private readonly timedOutRequests = new Map<JsonRpcId, TimedOutRequest>()
   private readonly notifications = new Set<JsonRpcNotificationListener>()
   private readonly errors = new Set<JsonRpcErrorListener>()
   private readonly disposers: Unsubscribe[]
@@ -86,6 +94,7 @@ export class JsonRpcClient {
       if (timeoutMs > 0) {
         pending.timer = setTimeout(() => {
           this.pending.delete(id)
+          this.trackTimedOutRequest(id, method, timeoutMs)
           reject(
             new AppServerClientError(
               'request_timeout',
@@ -140,6 +149,7 @@ export class JsonRpcClient {
     this.closed = true
     this.disposers.forEach(dispose => dispose())
     this.rejectAll(new AppServerClientError('closed', 'App Server client is closed.'))
+    this.clearTimedOutRequests()
     this.transport.close()
   }
 
@@ -197,6 +207,11 @@ export class JsonRpcClient {
 
     const pending = this.pending.get(response.id)
     if (!pending) {
+      if (this.timedOutRequests.has(response.id)) {
+        this.clearTimedOutRequest(response.id)
+        return
+      }
+
       this.emitError(
         new AppServerClientError(
           'protocol_error',
@@ -242,5 +257,34 @@ export class JsonRpcClient {
     if (pending.timer) {
       clearTimeout(pending.timer)
     }
+  }
+
+  private trackTimedOutRequest(
+    id: JsonRpcId,
+    method: string,
+    timeoutMs: number,
+  ): void {
+    this.clearTimedOutRequest(id)
+    const cleanupTimer = setTimeout(() => {
+      this.timedOutRequests.delete(id)
+    }, LATE_RESPONSE_RETENTION_MS)
+    this.timedOutRequests.set(id, { method, timeoutMs, cleanupTimer })
+  }
+
+  private clearTimedOutRequest(id: JsonRpcId): void {
+    const request = this.timedOutRequests.get(id)
+    if (!request) {
+      return
+    }
+
+    clearTimeout(request.cleanupTimer)
+    this.timedOutRequests.delete(id)
+  }
+
+  private clearTimedOutRequests(): void {
+    for (const request of this.timedOutRequests.values()) {
+      clearTimeout(request.cleanupTimer)
+    }
+    this.timedOutRequests.clear()
   }
 }

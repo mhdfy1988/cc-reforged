@@ -8,6 +8,7 @@ export type CoreErrorKind =
   | 'turn_not_active'
   | 'permission_not_found'
   | 'permission_not_pending'
+  | 'compact_failed'
   | 'internal_error'
 
 export class CoreError extends Error {

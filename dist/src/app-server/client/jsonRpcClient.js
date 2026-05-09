@@ -1,11 +1,13 @@
 import { JsonRpcNotificationSchema, JsonRpcResponseSchema, } from '../protocol.js';
 import { AppServerClientError, jsonRpcErrorToClientError, } from './errors.js';
 const DEFAULT_TIMEOUT_MS = 30_000;
+const LATE_RESPONSE_RETENTION_MS = 10 * 60_000;
 export class JsonRpcClient {
     transport;
     nextId = 1;
     closed = false;
     pending = new Map();
+    timedOutRequests = new Map();
     notifications = new Set();
     errors = new Set();
     disposers;
@@ -41,6 +43,7 @@ export class JsonRpcClient {
             if (timeoutMs > 0) {
                 pending.timer = setTimeout(() => {
                     this.pending.delete(id);
+                    this.trackTimedOutRequest(id, method, timeoutMs);
                     reject(new AppServerClientError('request_timeout', `App Server request timed out: ${method}`, { method, timeoutMs }));
                 }, timeoutMs);
             }
@@ -80,6 +83,7 @@ export class JsonRpcClient {
         this.closed = true;
         this.disposers.forEach(dispose => dispose());
         this.rejectAll(new AppServerClientError('closed', 'App Server client is closed.'));
+        this.clearTimedOutRequests();
         this.transport.close();
     }
     handleLine(line) {
@@ -117,6 +121,10 @@ export class JsonRpcClient {
         }
         const pending = this.pending.get(response.id);
         if (!pending) {
+            if (this.timedOutRequests.has(response.id)) {
+                this.clearTimedOutRequest(response.id);
+                return;
+            }
             this.emitError(new AppServerClientError('protocol_error', 'App Server returned a response for an unknown request.', response));
             return;
         }
@@ -149,6 +157,27 @@ export class JsonRpcClient {
         if (pending.timer) {
             clearTimeout(pending.timer);
         }
+    }
+    trackTimedOutRequest(id, method, timeoutMs) {
+        this.clearTimedOutRequest(id);
+        const cleanupTimer = setTimeout(() => {
+            this.timedOutRequests.delete(id);
+        }, LATE_RESPONSE_RETENTION_MS);
+        this.timedOutRequests.set(id, { method, timeoutMs, cleanupTimer });
+    }
+    clearTimedOutRequest(id) {
+        const request = this.timedOutRequests.get(id);
+        if (!request) {
+            return;
+        }
+        clearTimeout(request.cleanupTimer);
+        this.timedOutRequests.delete(id);
+    }
+    clearTimedOutRequests() {
+        for (const request of this.timedOutRequests.values()) {
+            clearTimeout(request.cleanupTimer);
+        }
+        this.timedOutRequests.clear();
     }
 }
 //# sourceMappingURL=jsonRpcClient.js.map

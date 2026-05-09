@@ -63,8 +63,9 @@ export function extractToolSnapshotFromBlocks(
 ): ToolSnapshot | null {
   for (const [contentIndex, block] of blocks.entries()) {
     const type = typeof block.type === 'string' ? block.type : ''
+    const effectiveContentIndex = context?.contentIndex ?? contentIndex
     const identity = createDisplayEventIdentity(
-      withContentBlock(context ?? { itemId: id }, block, contentIndex),
+      withContentBlock(context ?? { itemId: id }, block, effectiveContentIndex),
     )
 
     if (type === 'tool_use') {
@@ -517,7 +518,7 @@ function classifyToolError(
 export function getActionableHint(errorClass?: ToolErrorClass): string | undefined {
   switch (errorClass) {
     case 'shell_unavailable':
-      return '当前环境没有可用 POSIX shell。Windows 下应优先使用 PowerShell、CMD、Node 原生文件能力或高层文件工具。'
+      return '当前环境没有可用 POSIX shell。Windows 下不需要为了 ls 强行安装 Bash，应优先使用 PowerShell、CMD、Node 原生文件能力或高层文件工具。'
     case 'command_not_found':
       return '命令不存在或不在 PATH 中。请切换为当前平台可用命令，或改用更高层工具。'
     case 'path_not_found':

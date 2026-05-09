@@ -84,6 +84,17 @@ export function coreEventToJsonRpcNotification(
           ...(event.metadata ? { metadata: event.metadata } : {}),
         },
       }
+    case 'context_compacted':
+      return {
+        jsonrpc: '2.0',
+        method: 'context/compacted',
+        params: {
+          threadId: event.threadId,
+          compactedAt: event.compactedAt,
+          result: event.result,
+          ...(event.metadata ? { metadata: event.metadata } : {}),
+        },
+      }
     case 'permission_requested':
       return {
         jsonrpc: '2.0',

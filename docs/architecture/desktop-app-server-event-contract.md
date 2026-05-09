@@ -48,7 +48,11 @@ Desktop 允许做展示归一化，但不允许重新判断权限、不允许执
 | `latencyMs` | turn 耗时 | Core 用 `startedAt/completedAt` 计算 | P19 已补到 turn metadata；单工具耗时继续等待 Core 字段 |
 | `usage` | token、上下文、计费粗略信息 | provider response / Core run summary | P19 已补到 turn metadata，provider 不支持时允许缺失 |
 | `requestId` | provider 请求排障 | LLM runtime / App Server | P19 已补到 turn metadata，provider 不返回时显示 `未返回` |
-| `fileChange` | 写文件、patch、diff 预览 | 工具结果结构化事件 | 暂缺，进入 P21 后补 |
+| `contextCompacted` | 手动或自动压缩事件 | Core `context_compacted` -> App Server `context/compacted` | P26 已补轻量系统事件，Desktop 只展示摘要，不展示原始 compact JSON |
+| `contextStatus` | 当前上下文用量与 memory/compact 状态 | App Server `context/status`、`compact/status`、`memory/session/status` | P26 已补顶部状态条和运行详情入口 |
+| `fileChange` | 写文件、patch、diff 预览 | 工具输入 / 工具结果结构化事件 | P21-2 已补 `FileSnapshot`；P21-3 已从 `Write/Read/Edit` 归一化 |
+| `fileReference` | 文件引用、代码行引用、搜索命中 | 工具输入 / 工具结果结构化事件 / 引用归一化 | P21-2 已补 `ReferenceSnapshot`；P21-3 已从 `Glob/Grep` 归一化；P21-5 再补交互 |
+| `attachment` | 用户上传文件、工具返回附件、多模态占位 | 用户选择 / 工具结果 / MCP 资源 | P21-2 已补 `AttachmentSnapshot` 展示模型；P21-6 再补输入框入口 |
 | `structuredOutput` | JSON / schema / 表格 | 模型输出或工具结果 schema | 暂缺，进入 P22 后补 |
 | `media` | 图片、截图、附件 | 工具结果 / 多模态 block | 暂缺，进入 P23 后补 |
 
@@ -74,10 +78,11 @@ Desktop renderer 第一版只做三件事：
 
 1. P19 已补 turn 状态、usage、stop reason、request id 的控制信息面板，字段来源见 [CCR Desktop 运行元数据字段来源表](./desktop-runtime-metadata-field-map.md)。
 2. P20 已补工具卡字段第一版，包括工具分类、工作目录、shell/provider、权限关联、结果详情和错误分类；完整工具耗时等待 Core 字段。
-3. P21 补文件、附件和引用字段，不从普通 stdout 里硬解析文件路径。
+3. P21 已先补文件、附件和引用展示模型；后续继续补工具归一化、文件卡片和安全 preload 能力，不从普通 stdout 里硬解析文件路径。
 4. P22 补结构化输出 schema，不把 JSON 只当长文本。
 5. P23 补多模态媒体 block。
 6. P24 补错误分类、限流、模型拒答和安全拦截。
+7. P26 已补原生上下文、压缩和 SessionMemory 状态桥接；后续若继续扩展，只能增加脱敏 metadata，不把 memory 正文或系统提示正文推给 renderer。
 
 ## 6. 验收方式
 

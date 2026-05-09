@@ -184,7 +184,7 @@ export class CodexOAuthSession {
 
     try {
       const raw = await readFile(this.#credentialFilePath, 'utf8')
-      const payload = JSON.parse(raw) as {
+      const payload = JSON.parse(stripJsonBom(raw)) as {
         access?: string
         refresh?: string
         expires?: number
@@ -535,6 +535,10 @@ function loadCredentialFromEnv(): CodexOAuthCredential | null {
 
 function credentialSourceFromEnv(): boolean {
   return Boolean(process.env.CCR_CODEX_OAUTH_ACCESS_TOKEN?.trim())
+}
+
+function stripJsonBom(value: string): string {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value
 }
 
 function extractAccountId(

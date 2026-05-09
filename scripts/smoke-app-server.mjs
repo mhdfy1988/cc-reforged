@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -49,6 +50,9 @@ try {
   assert.equal(responses[2].result.schemaVersions.config, '0.1');
   assert.equal(responses[2].result.capabilities.threads, true);
   assert.equal(responses[2].result.capabilities.turns, true);
+  assert.equal(responses[2].result.capabilities.context, true);
+  assert.equal(responses[2].result.capabilities.compact, true);
+  assert.equal(responses[2].result.capabilities.memory, true);
 
   assert.equal(responses[3].id, 3);
   assert.equal(responses[3].result.llm.provider, 'codex-oauth');
@@ -96,18 +100,73 @@ try {
   const sessionResponses = sessionMessages.filter(message => 'id' in message);
   const sessionNotifications = sessionMessages.filter(message => !('id' in message));
 
-  assert.equal(sessionResponses[0].result.protocolVersion, '0.1');
-  assert.equal(sessionResponses[0].result.serverVersion, '0.1');
-  assert.equal(sessionResponses[1].result.workspace.trusted, true);
-  const thread = sessionResponses[2].result.thread;
+  const initializeResponse = getResponseById(sessionResponses, 1);
+  const workspaceResponse = getResponseById(sessionResponses, 2);
+  const threadResponse = getResponseById(sessionResponses, 3);
+  const threadListResponse = getResponseById(sessionResponses, 4);
+  const contextStatusResponse = getResponseById(sessionResponses, 5);
+  const compactStatusResponse = getResponseById(sessionResponses, 6);
+  const memoryStatusResponse = getResponseById(sessionResponses, 7);
+  const turnStartResponse = getResponseById(sessionResponses, 8);
+  const sessionHistoryResponse = getResponseById(sessionResponses, 9);
+  const threadResumeResponse = getResponseById(sessionResponses, 10);
+
+  assert.equal(initializeResponse.result.protocolVersion, '0.1');
+  assert.equal(initializeResponse.result.serverVersion, '0.1');
+  assert.equal(workspaceResponse.result.workspace.trusted, true);
+  const thread = threadResponse.result.thread;
   assert.equal(thread.title, 'Smoke thread');
-  assert.equal(sessionResponses[3].result.threads.length, 1);
-  assert.equal(sessionResponses[3].result.threads[0].threadId, thread.threadId);
-  assert.equal(sessionResponses[4].result.turn.threadId, thread.threadId);
-  assert.equal(sessionResponses[4].result.turn.status, 'queued');
-  assert.equal(sessionResponses[4].result.turn.metadata.provider, 'codex-oauth');
-  assert.equal(sessionResponses[4].result.turn.metadata.model, 'gpt-5.4');
-  assert.equal(sessionResponses[4].result.turn.metadata.contextWindow, 200000);
+  assert.equal(threadListResponse.result.threads.length, 1);
+  assert.equal(threadListResponse.result.threads[0].threadId, thread.threadId);
+  assert.equal(contextStatusResponse.result.available, true);
+  assert.equal(contextStatusResponse.result.threadId, thread.threadId);
+  assert.equal(typeof contextStatusResponse.result.messageCount, 'number');
+  assert.equal(typeof contextStatusResponse.result.readFileStateSize, 'number');
+  assert.equal(typeof contextStatusResponse.result.compactBoundaryCount, 'number');
+  assert.equal(compactStatusResponse.result.available, true);
+  assert.equal(compactStatusResponse.result.threadId, thread.threadId);
+  assert.equal(typeof compactStatusResponse.result.autoCompactEnabled, 'boolean');
+  assert.equal(typeof compactStatusResponse.result.autoCompactThreshold, 'number');
+  assert.equal(typeof compactStatusResponse.result.effectiveContextWindow, 'number');
+  assert.equal(memoryStatusResponse.result.available, true);
+  assert.equal(typeof memoryStatusResponse.result.hookRegistered, 'boolean');
+  assertNoSecretKeys(memoryStatusResponse.result);
+  assert.equal(turnStartResponse.result.turn.threadId, thread.threadId);
+  assert.equal(turnStartResponse.result.turn.status, 'queued');
+  assert.equal(turnStartResponse.result.turn.metadata.provider, 'codex-oauth');
+  assert.equal(turnStartResponse.result.turn.metadata.model, 'gpt-5.4');
+  assert.equal(turnStartResponse.result.turn.metadata.contextWindow, 200000);
+  assert.equal(Array.isArray(sessionHistoryResponse.result.groups), true);
+  for (const group of sessionHistoryResponse.result.groups) {
+    assert.equal(typeof group.workspacePath, 'string');
+    assert.equal(typeof group.workspaceName, 'string');
+    assert.equal(typeof group.isCurrentWorkspace, 'boolean');
+    assert.equal(Array.isArray(group.sessions), true);
+    for (const session of group.sessions) {
+      assert.equal(typeof session.sessionId, 'string');
+      assert.equal(typeof session.title, 'string');
+      assert.equal(typeof session.projectPath, 'string');
+      assert.equal(typeof session.transcriptPath, 'string');
+      assert.equal(session.sessionId === thread.threadId, false);
+    }
+  }
+  assertNoSecretKeys(sessionHistoryResponse.result);
+  assert.equal(Array.isArray(threadResumeResponse.result.messages), true);
+  assert.ok(
+    threadResumeResponse.result.messages.some(
+      message =>
+        message.role === 'user' &&
+        message.text.includes('hello from smoke transcript'),
+    ),
+  );
+  assert.ok(
+    threadResumeResponse.result.messages.some(
+      message =>
+        message.role === 'assistant' &&
+        message.text.includes('assistant reply from smoke transcript'),
+    ),
+  );
+  assertNoSecretKeys(threadResumeResponse.result);
   assert.ok(
     sessionNotifications.some(
       notification => notification.method === 'thread/started',
@@ -159,6 +218,11 @@ try {
           'unsupported_transport',
           'thread/start',
           'thread/list',
+          'session/history/list',
+          'thread/resume_history_messages',
+          'context/status',
+          'compact/status',
+          'memory/session/status',
           'turn/start_auth_required_failure',
           'permission/requested',
           'permission/respond_allow',
@@ -282,24 +346,122 @@ async function runInteractiveSessionSmoke() {
   send({
     jsonrpc: '2.0',
     id: 5,
+    method: 'context/status',
+    params: { threadId },
+  });
+  await waitForMessage(messages, waiters, message => message.id === 5);
+
+  send({
+    jsonrpc: '2.0',
+    id: 6,
+    method: 'compact/status',
+    params: { threadId },
+  });
+  await waitForMessage(messages, waiters, message => message.id === 6);
+
+  send({
+    jsonrpc: '2.0',
+    id: 7,
+    method: 'memory/session/status',
+    params: { threadId },
+  });
+  await waitForMessage(messages, waiters, message => message.id === 7);
+
+  send({
+    jsonrpc: '2.0',
+    id: 8,
     method: 'turn/start',
     params: {
       threadId,
       input: { type: 'text', text: 'hello' },
     },
   });
-  await waitForMessage(messages, waiters, message => message.id === 5);
+  await waitForMessage(messages, waiters, message => message.id === 8);
   await waitForMessage(
     messages,
     waiters,
     message => message.method === 'turn/failed',
   );
 
+  send({
+    jsonrpc: '2.0',
+    id: 9,
+    method: 'session/history/list',
+    params: { scope: 'sameRepo', limit: 10, includeCurrent: false },
+  });
+  await waitForMessage(messages, waiters, message => message.id === 9);
+
+  const smokeTranscript = writeSmokeTranscript();
+  send({
+    jsonrpc: '2.0',
+    id: 10,
+    method: 'thread/resume',
+    params: {
+      sessionId: smokeTranscript.sessionId,
+      transcriptPath: smokeTranscript.transcriptPath,
+      projectPath: repoRoot,
+    },
+  });
+  await waitForMessage(messages, waiters, message => message.id === 10);
+
   child.stdin.end();
   const status = await waitForExit(child);
   assert.equal(status, 0, stderr);
   assert.equal(stderr, '');
   return messages;
+}
+
+function writeSmokeTranscript() {
+  const sessionId = randomUUID();
+  const userUuid = randomUUID();
+  const assistantUuid = randomUUID();
+  const timestamp = new Date().toISOString();
+  const transcriptPath = join(tempDir, `${sessionId}.jsonl`);
+  const entries = [
+    {
+      type: 'user',
+      uuid: userUuid,
+      parentUuid: null,
+      isSidechain: false,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      message: {
+        role: 'user',
+        content: 'hello from smoke transcript',
+      },
+    },
+    {
+      type: 'assistant',
+      uuid: assistantUuid,
+      parentUuid: userUuid,
+      isSidechain: false,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      message: {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: 'assistant reply from smoke transcript',
+          },
+        ],
+      },
+    },
+  ];
+  writeFileSync(
+    transcriptPath,
+    `${entries.map(entry => JSON.stringify(entry)).join('\n')}\n`,
+    'utf8',
+  );
+  return { sessionId, transcriptPath };
 }
 
 function waitForMessage(messages, waiters, predicate) {
@@ -326,6 +488,12 @@ function waitForMessage(messages, waiters, predicate) {
 
     waiters.push(waiter);
   });
+}
+
+function getResponseById(responses, id) {
+  const response = responses.find(message => message.id === id);
+  assert.ok(response, `Missing JSON-RPC response ${id}`);
+  return response;
 }
 
 function resolveWaiters(messages, waiters) {

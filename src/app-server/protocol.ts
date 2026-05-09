@@ -123,6 +123,27 @@ export const ThreadStartParamsSchema = z
 
 export const ThreadListParamsSchema = z.object({}).strict().default({})
 
+export const ThreadResumeParamsSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    title: z.string().min(1).optional(),
+    transcriptPath: z.string().min(1).optional(),
+    projectPath: z.string().min(1).optional(),
+    metadata: JsonRpcParamsSchema.optional(),
+  })
+  .strict()
+
+export const SessionHistoryListParamsSchema = z
+  .object({
+    scope: z.enum(['sameRepo', 'allProjects']).optional().default('sameRepo'),
+    query: z.string().optional(),
+    limit: z.number().int().positive().max(200).optional(),
+    cursor: z.string().optional(),
+    includeCurrent: z.boolean().optional(),
+  })
+  .strict()
+  .default({})
+
 export const TurnStartParamsSchema = z
   .object({
     threadId: z.string().min(1),
@@ -156,11 +177,55 @@ export const PermissionRespondParamsSchema = z
     updatedInput: JsonRpcParamsSchema.optional(),
     updatedPermissions: z.array(z.unknown()).optional(),
     message: z.string().optional(),
+    acceptFeedback: z.string().optional(),
     interrupt: z.boolean().optional(),
     toolUseID: z.string().optional(),
     decisionClassification: z
       .enum(['user_temporary', 'user_permanent', 'user_reject'])
       .optional(),
+  })
+  .strict()
+
+export const PermissionSettingsGetParamsSchema = z.object({}).strict().default({})
+
+export const PermissionSettingsUpdateParamsSchema = z
+  .object({
+    source: z.enum(['localSettings', 'projectSettings', 'userSettings']),
+    permissions: z
+      .object({
+        allow: z.array(z.string()).optional(),
+        deny: z.array(z.string()).optional(),
+        ask: z.array(z.string()).optional(),
+        defaultMode: z
+          .enum([
+            'acceptEdits',
+            'bypassPermissions',
+            'default',
+            'dontAsk',
+            'plan',
+          ])
+          .nullable()
+          .optional(),
+        disableBypassPermissionsMode: z.boolean().nullable().optional(),
+        additionalDirectories: z.array(z.string()).optional(),
+      })
+      .strict(),
+  })
+  .strict()
+
+export const ThreadScopedStatusParamsSchema = z
+  .object({
+    threadId: z.string().min(1).optional(),
+  })
+  .strict()
+  .default({})
+
+export const ContextAnalyzeParamsSchema = ThreadScopedStatusParamsSchema
+
+export const CompactRunParamsSchema = z
+  .object({
+    threadId: z.string().min(1),
+    instruction: z.string().optional(),
   })
   .strict()
 
@@ -176,11 +241,26 @@ export type ModelListParams = z.infer<typeof ModelListParamsSchema>
 export type McpListParams = z.infer<typeof McpListParamsSchema>
 export type WorkspaceOpenParams = z.infer<typeof WorkspaceOpenParamsSchema>
 export type ThreadStartParams = z.infer<typeof ThreadStartParamsSchema>
+export type ThreadResumeParams = z.infer<typeof ThreadResumeParamsSchema>
+export type SessionHistoryListParams = z.infer<
+  typeof SessionHistoryListParamsSchema
+>
 export type TurnInterruptParams = z.infer<typeof TurnInterruptParamsSchema>
 export type TurnStartParams = z.infer<typeof TurnStartParamsSchema>
 export type PermissionRespondParams = z.infer<
   typeof PermissionRespondParamsSchema
 >
+export type PermissionSettingsGetParams = z.infer<
+  typeof PermissionSettingsGetParamsSchema
+>
+export type PermissionSettingsUpdateParams = z.infer<
+  typeof PermissionSettingsUpdateParamsSchema
+>
+export type ThreadScopedStatusParams = z.infer<
+  typeof ThreadScopedStatusParamsSchema
+>
+export type ContextAnalyzeParams = z.infer<typeof ContextAnalyzeParamsSchema>
+export type CompactRunParams = z.infer<typeof CompactRunParamsSchema>
 
 export type ServerCapabilities = {
   config: boolean
@@ -191,6 +271,9 @@ export type ServerCapabilities = {
   threads: boolean
   turns: boolean
   permissions: boolean
+  context: boolean
+  compact: boolean
+  memory: boolean
 }
 
 export type JsonRpcSuccessResponse = {
@@ -294,12 +377,66 @@ export type AppServerTurn = {
   metadata?: Record<string, unknown>
 }
 
+export type AppServerThreadMessage = {
+  id: string
+  role: 'user' | 'assistant' | 'system' | 'error'
+  text: string
+  status?: string
+  kind?: string
+  createdAt?: string
+  sourceType?: string
+  content?: unknown
+}
+
 export type ThreadStartResult = {
   thread: AppServerThread
 }
 
+export type ThreadResumeResult = {
+  thread: AppServerThread
+  messages: AppServerThreadMessage[]
+}
+
 export type ThreadListResult = {
   threads: AppServerThread[]
+}
+
+export type SessionHistoryTitleSource =
+  | 'customTitle'
+  | 'aiTitle'
+  | 'lastPrompt'
+  | 'firstPrompt'
+  | 'fallback'
+
+export type SessionHistoryItem = {
+  sessionId: string
+  threadId: string
+  title: string
+  titleSource: SessionHistoryTitleSource
+  firstPrompt?: string
+  lastPrompt?: string
+  summary?: string
+  createdAt: string
+  updatedAt: string
+  messageCount: number
+  projectPath?: string
+  transcriptPath?: string
+  isCurrentSession: boolean
+  status: 'closed' | 'current'
+}
+
+export type SessionHistoryWorkspaceGroup = {
+  workspacePath: string
+  workspaceName: string
+  isCurrentWorkspace: boolean
+  updatedAt: string
+  sessionCount: number
+  sessions: SessionHistoryItem[]
+}
+
+export type SessionHistoryListResult = {
+  groups: SessionHistoryWorkspaceGroup[]
+  nextCursor?: string
 }
 
 export type TurnStartResult = {
@@ -314,6 +451,20 @@ export type PermissionRespondResult = {
   accepted: boolean
 }
 
+export type PermissionSettingsGetResult = Record<string, unknown>
+
+export type PermissionSettingsUpdateResult = Record<string, unknown>
+
+export type ContextStatusResult = Record<string, unknown>
+
+export type ContextAnalyzeResult = Record<string, unknown>
+
+export type CompactStatusResult = Record<string, unknown>
+
+export type CompactRunResult = Record<string, unknown>
+
+export type MemorySessionStatusResult = Record<string, unknown>
+
 export const DEFAULT_SERVER_CAPABILITIES: ServerCapabilities = {
   config: true,
   auth: true,
@@ -323,6 +474,9 @@ export const DEFAULT_SERVER_CAPABILITIES: ServerCapabilities = {
   threads: true,
   turns: true,
   permissions: true,
+  context: true,
+  compact: true,
+  memory: true,
 }
 
 export function successResponse(

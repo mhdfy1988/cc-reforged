@@ -1,18 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { getSystemPrompt } from '../constants/prompts.js';
+import { APP_SERVER_QUERY_SOURCE } from '../constants/querySource.js';
 import { getSystemContext, getUserContext } from '../context.js';
 import { query } from '../query.js';
 import { getLlmRuntimeAuthStatus } from '../services/llm/runtimeStatus.js';
 import { getDefaultAppState } from '../state/AppStateStore.js';
 import { assembleToolPool } from '../tools.js';
-import { createFileStateCacheWithSizeLimit } from '../utils/fileStateCache.js';
 import { createUserMessage } from '../utils/messages.js';
+import { initialPermissionModeFromCLI, initializeToolPermissionContext, } from '../utils/permissions/permissionSetup.js';
 import { setCwd } from '../utils/Shell.js';
 import { asSystemPrompt } from '../utils/systemPromptType.js';
 import { shouldEnableThinkingByDefault } from '../utils/thinking.js';
 import { CoreError } from './errors.js';
-export async function runCoreQueryTurn(input) {
-    const { turn, workspace, signal, emit, createCanUseTool } = input;
+export const runCoreQueryTurn = async (input) => {
+    const { turn, workspace, signal, emit, createCanUseTool, historyMessages, recordMessage, } = input;
     const runtimeMetadata = {};
     const authStatus = await getLlmRuntimeAuthStatus();
     if (!authStatus.available) {
@@ -20,6 +21,8 @@ export async function runCoreQueryTurn(input) {
     }
     setCwd(workspace.path);
     const userMessage = createUserMessage({ content: turn.input.text });
+    const messagesForQuery = [...historyMessages, userMessage];
+    await recordMessage(userMessage);
     emitCompletedItem(emit, {
         itemId: createItemId(),
         threadId: turn.threadId,
@@ -29,6 +32,10 @@ export async function runCoreQueryTurn(input) {
     });
     const runtime = createCoreQueryRuntime({
         turn,
+        messages: messagesForQuery,
+        readFileState: input.readFileState,
+        runtimeState: input.runtimeState,
+        toolPermissionContext: await createAppServerToolPermissionContext(),
     });
     const defaultSystemPrompt = await getSystemPrompt(runtime.toolUseContext.options.tools, turn.model, Array.from(runtime.getAppState().toolPermissionContext.additionalWorkingDirectories.keys()), runtime.toolUseContext.options.mcpClients);
     const systemPrompt = asSystemPrompt([
@@ -51,7 +58,7 @@ export async function runCoreQueryTurn(input) {
     }
     try {
         for await (const event of query({
-            messages: [userMessage],
+            messages: messagesForQuery,
             systemPrompt,
             userContext: await getUserContext(),
             systemContext: await getSystemContext(),
@@ -60,7 +67,7 @@ export async function runCoreQueryTurn(input) {
                 turnId: turn.turnId,
             }),
             toolUseContext: runtime.toolUseContext,
-            querySource: 'app-server',
+            querySource: APP_SERVER_QUERY_SOURCE,
         })) {
             if (signal.aborted) {
                 throw new CoreError('turn_not_active', 'Turn was interrupted.');
@@ -76,6 +83,9 @@ export async function runCoreQueryTurn(input) {
                 assistantStream = handledStream.stream;
                 hasStreamedAssistantContent ||= handledStream.streamed;
                 continue;
+            }
+            if (isCoreHistoryMessage(event)) {
+                await recordMessage(event);
             }
             if (event.type === 'assistant' && event.isApiErrorMessage) {
                 collectAssistantMetadata(runtimeMetadata, event);
@@ -141,7 +151,7 @@ export async function runCoreQueryTurn(input) {
         signal.removeEventListener('abort', abortRuntime);
     }
     return runtimeMetadata;
-}
+};
 function collectStreamEventMetadata(metadata, event) {
     if (typeof event.ttftMs === 'number') {
         metadata.timeToFirstTokenMs = event.ttftMs;
@@ -237,9 +247,14 @@ function getString(value) {
 function getNumber(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
-function createCoreQueryRuntime(input) {
+export function createCoreQueryRuntime(input) {
     enableAppServerPlatformToolDefaults();
-    let appState = getDefaultAppState();
+    let appState = {
+        ...getDefaultAppState(),
+        ...(input.toolPermissionContext
+            ? { toolPermissionContext: input.toolPermissionContext }
+            : {}),
+    };
     const getAppState = () => appState;
     const setAppState = (updater) => {
         appState = updater(appState);
@@ -262,12 +277,18 @@ function createCoreQueryRuntime(input) {
             mcpResources: appState.mcp.resources,
             isNonInteractiveSession: false,
             agentDefinitions: appState.agentDefinitions,
+            querySource: APP_SERVER_QUERY_SOURCE,
             refreshTools: computeTools,
         },
         getAppState,
         setAppState,
-        messages: [],
-        readFileState: createFileStateCacheWithSizeLimit(100),
+        messages: [...input.messages],
+        readFileState: input.readFileState,
+        nestedMemoryAttachmentTriggers: input.runtimeState?.nestedMemoryAttachmentTriggers,
+        loadedNestedMemoryPaths: input.runtimeState?.loadedNestedMemoryPaths,
+        dynamicSkillDirTriggers: input.runtimeState?.dynamicSkillDirTriggers,
+        discoveredSkillNames: input.runtimeState?.discoveredSkillNames,
+        contentReplacementState: input.runtimeState?.contentReplacementState,
         setInProgressToolUseIDs: updater => {
             inProgressToolUseIDs = updater(inProgressToolUseIDs);
         },
@@ -288,6 +309,20 @@ function createCoreQueryRuntime(input) {
         },
     };
     return { toolUseContext, getAppState };
+}
+async function createAppServerToolPermissionContext() {
+    const { mode } = initialPermissionModeFromCLI({
+        permissionModeCli: undefined,
+        dangerouslySkipPermissions: false,
+    });
+    const { toolPermissionContext } = await initializeToolPermissionContext({
+        allowedToolsCli: [],
+        disallowedToolsCli: [],
+        permissionMode: mode,
+        allowDangerouslySkipPermissions: false,
+        addDirs: [],
+    });
+    return toolPermissionContext;
 }
 function getAppServerLanguageInstructions(userText) {
     if (!/[\u3400-\u9fff]/u.test(userText)) {
@@ -479,6 +514,9 @@ function isCoreRenderableMessage(event) {
         event.type !== 'stream_event' &&
         event.type !== 'stream_request_start' &&
         event.type !== 'tombstone');
+}
+function isCoreHistoryMessage(event) {
+    return isCoreRenderableMessage(event);
 }
 function messageKind(message) {
     switch (message.type) {

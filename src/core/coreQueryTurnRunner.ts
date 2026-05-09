@@ -1,18 +1,24 @@
 import { randomUUID } from 'node:crypto'
 import { getSystemPrompt } from '../constants/prompts.js'
+import { APP_SERVER_QUERY_SOURCE } from '../constants/querySource.js'
 import { getSystemContext, getUserContext } from '../context.js'
 import { query } from '../query.js'
 import { getLlmRuntimeAuthStatus } from '../services/llm/runtimeStatus.js'
 import { getDefaultAppState, type AppState } from '../state/AppStateStore.js'
-import type { ToolUseContext, Tools } from '../Tool.js'
+import type { ToolPermissionContext, ToolUseContext, Tools } from '../Tool.js'
 import { assembleToolPool } from '../tools.js'
 import type { AttributionState } from '../utils/commitAttribution.js'
-import { createFileStateCacheWithSizeLimit } from '../utils/fileStateCache.js'
+import type { FileStateCache } from '../utils/fileStateCache.js'
 import type { FileHistoryState } from '../utils/fileHistory.js'
 import { createUserMessage } from '../utils/messages.js'
+import {
+  initialPermissionModeFromCLI,
+  initializeToolPermissionContext,
+} from '../utils/permissions/permissionSetup.js'
 import { setCwd } from '../utils/Shell.js'
 import { asSystemPrompt } from '../utils/systemPromptType.js'
 import { shouldEnableThinkingByDefault } from '../utils/thinking.js'
+import type { ContentReplacementState } from '../utils/toolResultStorage.js'
 import { CoreError } from './errors.js'
 import type {
   CoreEventEmitter,
@@ -36,17 +42,43 @@ type AssistantStream = {
   blockType: 'text' | 'thinking' | 'redacted_thinking'
 }
 
-export async function runCoreQueryTurn(input: {
+export type CoreQueryTurnRunnerInput = {
   turn: CoreTurn
   workspace: CoreWorkspace
   signal: AbortSignal
   emit: CoreEventEmitter
+  historyMessages: readonly Message[]
+  readFileState: FileStateCache
+  recordMessage: (message: Message) => void | Promise<void>
   createCanUseTool: (input: {
     threadId: string
     turnId: string
   }) => CanUseToolFn
-}): Promise<CoreTurnMetadata> {
-  const { turn, workspace, signal, emit, createCanUseTool } = input
+  runtimeState?: CoreQueryRuntimeState
+}
+
+export type CoreQueryTurnRunner = (
+  input: CoreQueryTurnRunnerInput,
+) => Promise<CoreTurnMetadata>
+
+export type CoreQueryRuntimeState = {
+  nestedMemoryAttachmentTriggers: Set<string>
+  loadedNestedMemoryPaths: Set<string>
+  dynamicSkillDirTriggers: Set<string>
+  discoveredSkillNames: Set<string>
+  contentReplacementState?: ContentReplacementState
+}
+
+export const runCoreQueryTurn: CoreQueryTurnRunner = async input => {
+  const {
+    turn,
+    workspace,
+    signal,
+    emit,
+    createCanUseTool,
+    historyMessages,
+    recordMessage,
+  } = input
   const runtimeMetadata: CoreTurnMetadata = {}
   const authStatus = await getLlmRuntimeAuthStatus()
   if (!authStatus.available) {
@@ -56,6 +88,8 @@ export async function runCoreQueryTurn(input: {
   setCwd(workspace.path)
 
   const userMessage = createUserMessage({ content: turn.input.text })
+  const messagesForQuery = [...historyMessages, userMessage]
+  await recordMessage(userMessage)
   emitCompletedItem(emit, {
     itemId: createItemId(),
     threadId: turn.threadId,
@@ -66,6 +100,10 @@ export async function runCoreQueryTurn(input: {
 
   const runtime = createCoreQueryRuntime({
     turn,
+    messages: messagesForQuery,
+    readFileState: input.readFileState,
+    runtimeState: input.runtimeState,
+    toolPermissionContext: await createAppServerToolPermissionContext(),
   })
 
   const defaultSystemPrompt = await getSystemPrompt(
@@ -100,7 +138,7 @@ export async function runCoreQueryTurn(input: {
 
   try {
     for await (const event of query({
-      messages: [userMessage],
+      messages: messagesForQuery,
       systemPrompt,
       userContext: await getUserContext(),
       systemContext: await getSystemContext(),
@@ -109,7 +147,7 @@ export async function runCoreQueryTurn(input: {
         turnId: turn.turnId,
       }),
       toolUseContext: runtime.toolUseContext,
-      querySource: 'app-server',
+      querySource: APP_SERVER_QUERY_SOURCE,
     })) {
       if (signal.aborted) {
         throw new CoreError('turn_not_active', 'Turn was interrupted.')
@@ -126,6 +164,10 @@ export async function runCoreQueryTurn(input: {
         assistantStream = handledStream.stream
         hasStreamedAssistantContent ||= handledStream.streamed
         continue
+      }
+
+      if (isCoreHistoryMessage(event)) {
+        await recordMessage(event)
       }
 
       if (event.type === 'assistant' && event.isApiErrorMessage) {
@@ -324,14 +366,23 @@ function getNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-function createCoreQueryRuntime(input: {
+export function createCoreQueryRuntime(input: {
   turn: CoreTurn
+  messages: readonly Message[]
+  readFileState: FileStateCache
+  runtimeState?: CoreQueryRuntimeState
+  toolPermissionContext?: ToolPermissionContext
 }): {
   toolUseContext: ToolUseContext
   getAppState: () => AppState
 } {
   enableAppServerPlatformToolDefaults()
-  let appState = getDefaultAppState()
+  let appState = {
+    ...getDefaultAppState(),
+    ...(input.toolPermissionContext
+      ? { toolPermissionContext: input.toolPermissionContext }
+      : {}),
+  }
   const getAppState = () => appState
   const setAppState = (updater: (prev: AppState) => AppState) => {
     appState = updater(appState)
@@ -361,12 +412,18 @@ function createCoreQueryRuntime(input: {
       mcpResources: appState.mcp.resources,
       isNonInteractiveSession: false,
       agentDefinitions: appState.agentDefinitions,
+      querySource: APP_SERVER_QUERY_SOURCE,
       refreshTools: computeTools,
     },
     getAppState,
     setAppState,
-    messages: [],
-    readFileState: createFileStateCacheWithSizeLimit(100),
+    messages: [...input.messages],
+    readFileState: input.readFileState,
+    nestedMemoryAttachmentTriggers: input.runtimeState?.nestedMemoryAttachmentTriggers,
+    loadedNestedMemoryPaths: input.runtimeState?.loadedNestedMemoryPaths,
+    dynamicSkillDirTriggers: input.runtimeState?.dynamicSkillDirTriggers,
+    discoveredSkillNames: input.runtimeState?.discoveredSkillNames,
+    contentReplacementState: input.runtimeState?.contentReplacementState,
     setInProgressToolUseIDs: updater => {
       inProgressToolUseIDs = updater(inProgressToolUseIDs)
     },
@@ -388,6 +445,21 @@ function createCoreQueryRuntime(input: {
   }
 
   return { toolUseContext, getAppState }
+}
+
+async function createAppServerToolPermissionContext(): Promise<ToolPermissionContext> {
+  const { mode } = initialPermissionModeFromCLI({
+    permissionModeCli: undefined,
+    dangerouslySkipPermissions: false,
+  })
+  const { toolPermissionContext } = await initializeToolPermissionContext({
+    allowedToolsCli: [],
+    disallowedToolsCli: [],
+    permissionMode: mode,
+    allowDangerouslySkipPermissions: false,
+    addDirs: [],
+  })
+  return toolPermissionContext
 }
 
 function getAppServerLanguageInstructions(userText: string): string[] {
@@ -629,6 +701,10 @@ function isCoreRenderableMessage(event: unknown): event is Message {
       event.type !== 'stream_request_start' &&
       event.type !== 'tombstone',
   )
+}
+
+function isCoreHistoryMessage(event: unknown): event is Message {
+  return isCoreRenderableMessage(event)
 }
 
 function messageKind(message: Message): string {

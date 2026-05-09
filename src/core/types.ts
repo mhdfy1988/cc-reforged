@@ -29,6 +29,15 @@ export type CoreTurnMetadata = {
   provider?: string
   model?: string
   contextWindow?: number
+  messageCount?: number
+  lastMessageTypes?: string[]
+  compactBoundaryCount?: number
+  readFileStateSize?: number
+  sessionId?: string
+  sessionStoragePath?: string
+  sessionStorageStatus?: string
+  derivedTitle?: string
+  firstUserMessagePreview?: string
   usage?: CoreTurnUsage
   stopReason?: string
   requestId?: string
@@ -144,6 +153,13 @@ export type CoreTurnEvent =
       turnId: string
       reason: string
       metadata?: CoreTurnMetadata
+    }
+  | {
+      type: 'context_compacted'
+      threadId: string
+      compactedAt: string
+      metadata?: CoreTurnMetadata
+      result: CoreJsonObject
     }
   | {
       type: 'permission_requested'
