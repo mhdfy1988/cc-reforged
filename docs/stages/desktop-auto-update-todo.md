@@ -8,13 +8,13 @@
 - [x] U3 自动更新 smoke 与文档索引
 - [x] U4 验证与下一阶段决策
 - [x] U5 开发态更新状态模拟入口
-- [ ] U6 真实打包更新联调
+- [x] U6 真实打包更新联调与远端 feed smoke
 
 ## 当前指针
 
-- 进行中：U6 真实打包更新联调
-- 当前正在做：开发态模拟入口已完成；下一步准备用真实 draft release metadata 验证打包态更新链路。
-- 完成后下一项：Desktop 自动更新第一版收口
+- 进行中：无
+- 当前正在做：0.4.1 已完成真实自动更新人工验证，并补充远端 feed smoke。
+- 完成后下一项：后续只在下载 / 安装阶段需要自动化时继续增强。
 
 ## U0 自动更新方案边界与成熟库选择
 
@@ -166,27 +166,28 @@
 - 已新增开发态 renderer 诊断日志，记录 preload、console、页面挂载快照；打包态默认关闭，可用 `CCR_DESKTOP_RENDERER_DIAGNOSTICS=1` 临时开启。
 - 已验证 `npm.cmd run typecheck:desktop`、`npm.cmd run smoke:desktop-auto-update` 和 `npm.cmd run desktop:build` 通过；本阶段早前已跑过 `npm.cmd run ci:smoke`。
 
-## U6 真实打包更新联调
+## U6 真实打包更新联调与远端 feed smoke
 
-状态：待开始。
+状态：已完成。
 
 目标：
 
-- 用真实打包产物和 draft release metadata 验证 `electron-updater` 能发现新版本。
+- 用真实打包产物和 GitHub Release metadata 验证 `electron-updater` 能发现新版本。
 - 确认顶栏、设置页、下载、下载完成、重启安装这些状态在打包态可用。
 - 保持提示式更新，不做静默下载和静默安装。
+- 用脚本验证公开 release 的 `latest.yml`、安装器和 `.blockmap` 可达。
 
 完成标准：
 
-- 生成一个低版本本地安装包作为“当前版本”。
-- 生成一个更高版本 draft release 作为“可更新版本”。
-- 打包态客户端能从 `idle -> checking -> available`。
-- 点击下载后能进入 `downloading -> downloaded`。
-- 安装动作前 App Server 收尾逻辑正常。
+- 已完成一次旧版本到 0.4.1 的人工自动更新验证。
+- `npm.cmd run smoke:desktop-auto-update-feed` 可验证远端 `latest.yml` 和资产可达。
+- 可设置 `CCR_DESKTOP_UPDATE_FROM_VERSION=<old-version>` 模拟旧版本升级判断。
 
 当前进展：
 
-- 尚未开始；需要下一轮做真实打包更新联调。
+- 用户已完成 0.4.1 自动更新人工验证。
+- 已新增 `scripts/smoke-desktop-auto-update-feed.mjs` 和 `smoke:desktop-auto-update-feed`。
+- GitHub Actions public release 路径会在发布后运行远端 feed smoke。
 
 ## 后续记录（追加）
 
@@ -197,11 +198,12 @@
 - 第 4 轮：补充开发态模拟入口。设置页只在 `runtimeMode=development` 时显示“开发态模拟”，可切换 `发现更新 / 下载中 / 已下载 / 失败 / 关闭模拟`，方便肉眼验收顶栏状态；打包态仍只走真实 `electron-updater`。
 - 第 5 轮：修复开发态空白页。实际产物里 preload 是 `out/preload/index.mjs`，主进程原来写成 `index.js` 导致 `window.ccr` 未注入，renderer 初始化直接失败；已改为 `index.mjs`，并让 smoke 固化该检查。
 - 第 6 轮：继续修复开发态空白页。preload 修复后页面仍空白，renderer 诊断日志显示真正的前端启动错误是 React 与 React DOM 版本不一致；已锁定 `react` / `react-dom` 到同一精确版本 `19.2.4`，重启后日志确认 `rootChildren=1` 且页面文本已渲染。
+- 第 7 轮：0.4.1 真实自动更新已人工验证；补充 `smoke:desktop-auto-update-feed`，从 GitHub Release 下载真实 `latest.yml` 并探测安装器 / blockmap 资产，支持用 `CCR_DESKTOP_UPDATE_FROM_VERSION` 模拟旧版本升级。
 
 ## 备注
 
-- 当前状态：active
-- 下一步需要：真实打包更新联调。
+- 当前状态：done
+- 下一步需要：后续如果要覆盖下载和安装阶段，可再做专门的端到端升级沙箱。
 - 当前仓库：`D:\agent_project\claude-code-reforged`
 - 当前主线：Desktop 自动更新状态机。
-- 当前非目标：不真实下载更新、不真实安装更新、不静默强制更新、不做 Core runtime 独立热更新、不做 VS Code 插件。
+- 当前非目标：不静默强制更新、不做 Core runtime 独立热更新、不做 VS Code 插件。

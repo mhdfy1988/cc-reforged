@@ -49,15 +49,15 @@ npm.cmd run smoke:desktop-release-artifacts
 
 ## 3.1 代码签名预检
 
-当前默认安装器是未签名本机验证包。正式签名前先运行：
+当前默认安装器是 unsigned 包，这是短期有意策略，不要求购买代码签名证书。每次发布前仍运行：
 
 ```powershell
 npm.cmd run smoke:desktop-signing-readiness
 ```
 
-它会检查证书环境变量是否成对出现，并在 Windows 下读取安装器 Authenticode 状态。
+它会检查证书环境变量是否成对出现，并在 Windows 下读取安装器 Authenticode 状态。默认情况下，`NotSigned` 不会让发布失败。
 
-正式发布前需要强制签名时：
+未来如果已经有真实签名证书，并且某次发布需要强制签名时：
 
 ```powershell
 $env:CCR_REQUIRE_SIGNED = '1'
@@ -80,7 +80,7 @@ npm.cmd run release:desktop:check
 npm.cmd run release:desktop:dry-run
 ```
 
-真正创建 GitHub Release 草稿时才运行：
+真正创建或恢复 GitHub Release 草稿时才运行：
 
 ```powershell
 npm.cmd run release:desktop:draft
@@ -91,6 +91,26 @@ npm.cmd run release:desktop:draft
 - 本机已安装并登录 GitHub CLI。
 - 本地存在 `v<package.json version>` tag。
 - 工作区干净，除非显式设置 `CCR_ALLOW_DIRTY_RELEASE=1`。
+- 如果 release 已经部分创建，会复用已有 release 并逐个补齐缺失资产。
+
+正式公开发布：
+
+```powershell
+npm.cmd run release:desktop:public
+```
+
+公开发布后验证自动更新 feed：
+
+```powershell
+npm.cmd run smoke:desktop-auto-update-feed
+```
+
+如果要模拟旧版本升级，例如从 `0.4.0` 升到当前版本：
+
+```powershell
+$env:CCR_DESKTOP_UPDATE_FROM_VERSION = '0.4.0'
+npm.cmd run smoke:desktop-auto-update-feed
+```
 
 正式发布优先走 GitHub Actions：
 
@@ -181,14 +201,23 @@ Get-Process | Where-Object { $_.ProcessName -like '*CCR*' }
 
 - 正式图标 `.ico / .png / .icns`。
 - `smoke:desktop-branding` 通过。
-- Windows 代码签名证书。
-- `smoke:desktop-signing-readiness` 在 `CCR_REQUIRE_SIGNED=1` 下通过。
+- `smoke:desktop-signing-readiness` 通过；短期允许 unsigned。
 - GitHub Release artifact。
 - `release:desktop:check` 通过。
-- SHA256 或 SHA512 校验记录。
+- SHA256 或 SHA512 校验记录；unsigned 发布必须在 release note 中保留 SHA256。
 - release note。
 - 自动更新 metadata 验证。
 - 安装、卸载、回滚人工验收记录。
+
+## 7.1 unsigned 发布验收口径
+
+短期不购买代码签名证书，所以验收口径是：
+
+- 安装器可以是 `NotSigned`。
+- Release 说明必须列出安装器、`.blockmap`、`latest.yml` 的 SHA256。
+- 用户如果遇到 Windows 未知发布者 / SmartScreen 提示，应以 GitHub Release 地址和 SHA256 校验确认来源。
+- `package.json` 中 `verifyUpdateCodeSignature: false` 保持不变；自动更新依赖 GitHub Release HTTPS 和 `latest.yml` sha512。
+- 只有显式设置 `CCR_REQUIRE_SIGNED=1` 时，未签名才算失败。
 
 ## 8. 当前已知边界
 
@@ -201,8 +230,5 @@ Get-Process | Where-Object { $_.ProcessName -like '*CCR*' }
 
 当前还没有完成的是：
 
-- 正式图标。
-- 正式代码签名。
-- 自动更新 UI 和状态机。
-- GitHub Release 发布流程。
+- 付费代码签名。
 - VS Code 插件接入。

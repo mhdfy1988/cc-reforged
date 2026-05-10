@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const root = process.cwd()
+const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const packagedRoot = join(root, 'release', 'desktop', 'win-unpacked')
 const resourcesRoot = join(packagedRoot, 'resources')
 const appArchiveRoot = join(resourcesRoot, 'app.asar')
@@ -97,6 +98,15 @@ child.on('exit', code => {
 
   if (!initialize?.result?.serverInfo?.coreVersion) {
     fail('initialize response did not include coreVersion', { responses, stderr })
+  }
+
+  if (initialize.result.serverInfo.coreVersion !== packageJson.version) {
+    fail('initialize response coreVersion does not match package.json version', {
+      expectedCoreVersion: packageJson.version,
+      actualCoreVersion: initialize.result.serverInfo.coreVersion,
+      responses,
+      stderr,
+    })
   }
 
   if (initialize.result.serverVersion !== '0.1') {

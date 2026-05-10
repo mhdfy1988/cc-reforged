@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const packageJson = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), 'utf8'));
 const tempDir = mkdtempSync(join(tmpdir(), 'ccr-app-server-smoke-'));
 
 try {
@@ -47,6 +48,7 @@ try {
   assert.equal(responses[2].result.serverVersion, '0.1');
   assert.equal(responses[2].result.serverInfo.name, 'ccr-app-server');
   assert.equal(responses[2].result.serverInfo.serverVersion, '0.1');
+  assert.equal(responses[2].result.serverInfo.coreVersion, packageJson.version);
   assert.equal(responses[2].result.schemaVersions.config, '0.1');
   assert.equal(responses[2].result.capabilities.threads, true);
   assert.equal(responses[2].result.capabilities.turns, true);

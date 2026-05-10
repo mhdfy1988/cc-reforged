@@ -91,3 +91,9 @@ jobs:
             $releaseArgs += '--public'
           }
           node ./scripts/prepare-desktop-github-release.mjs @releaseArgs
+
+      - name: Verify public auto-update feed
+        if: ${{ !inputs.draft }}
+        env:
+          CCR_DESKTOP_UPDATE_RELEASE_TAG: ${{ inputs.tag }}
+        run: npm.cmd run smoke:desktop-auto-update-feed

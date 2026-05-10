@@ -52,6 +52,8 @@ assertText(workflowText, 'fetch-depth: 0', 'workflow must fetch tags')
 assertText(workflowText, 'contents: write', 'workflow must be able to write releases')
 assertText(workflowText, 'GH_TOKEN: ${{ github.token }}', 'workflow must provide GH_TOKEN to gh')
 assertText(workflowText, 'CCR_DESKTOP_RELEASE_TAG: ${{ inputs.tag }}', 'workflow must pass the selected tag to the release script')
+assertText(workflowText, 'CCR_DESKTOP_UPDATE_RELEASE_TAG: ${{ inputs.tag }}', 'workflow must pass the selected tag to the update feed smoke')
+assertText(workflowText, 'if: ${{ !inputs.draft }}', 'workflow must only validate the public update feed for public releases')
 assertText(workflowText, 'secrets.WIN_CSC_LINK', 'workflow must support Windows signing secrets')
 assertText(workflowText, 'secrets.WIN_CSC_KEY_PASSWORD', 'workflow must support Windows signing password secret')
 
@@ -64,6 +66,7 @@ for (const expectedCommand of [
   'npm.cmd run smoke:desktop-signing-readiness',
   'npm.cmd run release:desktop:check',
   'node ./scripts/prepare-desktop-github-release.mjs @releaseArgs',
+  'npm.cmd run smoke:desktop-auto-update-feed',
 ]) {
   assertText(runCommands, expectedCommand, 'workflow is missing an expected command')
 }
@@ -79,6 +82,7 @@ for (const expectedStep of [
   'Verify Desktop signing readiness',
   'Prepare Desktop release summary',
   'Create GitHub Release',
+  'Verify public auto-update feed',
 ]) {
   if (!stepNames.includes(expectedStep)) {
     fail('workflow is missing an expected step', { expectedStep, stepNames })
@@ -103,6 +107,7 @@ console.log(
         'artifact_smoke',
         'signing_smoke',
         'release_script',
+        'public_update_feed_smoke',
         'GH_TOKEN',
       ],
     },

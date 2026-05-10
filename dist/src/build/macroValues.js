@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs';
 const defaultBuildTime = new Date().toISOString();
+const defaultPackageVersion = readPackageVersion();
 export const RECOVERY_MACRO_VALUES = Object.freeze({
-    VERSION: process.env.CC_REFORGED_VERSION ?? '0.4',
+    VERSION: process.env.CC_REFORGED_VERSION ?? defaultPackageVersion,
     BUILD_TIME: process.env.CC_REFORGED_BUILD_TIME ?? defaultBuildTime,
     PACKAGE_URL: process.env.CC_REFORGED_PACKAGE_URL ?? 'ccr-cli',
     NATIVE_PACKAGE_URL: process.env.CC_REFORGED_NATIVE_PACKAGE_URL ?? 'ccr-cli',
@@ -9,6 +11,21 @@ export const RECOVERY_MACRO_VALUES = Object.freeze({
         'open an issue against the recovery build maintainers',
     VERSION_CHANGELOG: process.env.CC_REFORGED_VERSION_CHANGELOG ?? '',
 });
+function readPackageVersion() {
+    for (const relativePackageUrl of ['../../package.json', '../../../package.json']) {
+        try {
+            const packageJson = JSON.parse(readFileSync(new URL(relativePackageUrl, import.meta.url), 'utf8'));
+            if (typeof packageJson.version === 'string' && packageJson.version.trim()) {
+                return packageJson.version.trim();
+            }
+        }
+        catch {
+            // Try the next candidate. Source runs from src/build; built code runs
+            // from dist/src/build or app.asar/dist/src/build.
+        }
+    }
+    return '0.0.0-dev';
+}
 export function installRecoveryMacroGlobals(target = globalThis) {
     if (!target.MACRO) {
         Object.defineProperty(target, 'MACRO', {

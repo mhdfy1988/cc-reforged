@@ -61,7 +61,7 @@ npm.cmd run release:desktop:check
 npm.cmd run release:desktop:dry-run
 ```
 
-创建 GitHub Release 草稿：
+创建或恢复 GitHub Release 草稿：
 
 ```powershell
 npm.cmd run release:desktop:draft
@@ -70,7 +70,16 @@ npm.cmd run release:desktop:draft
 `release:desktop:draft` 会调用：
 
 ```text
-gh release create <tag> <assets...> --repo mhdfy1988/cc-reforged --draft --title ... --notes-file ... --verify-tag
+gh release create <tag> --repo mhdfy1988/cc-reforged --draft --title ... --notes-file ... --verify-tag
+gh release upload <tag> <asset> --repo mhdfy1988/cc-reforged --clobber
+```
+
+脚本现在是可恢复发布流程：如果 release 已存在，会复用现有 release；如果某个资产已经上传且大小 / sha256 匹配，会跳过；如果资产缺失或不匹配，会逐个补传。这样即使 100MB 以上安装包上传超时，重新运行同一命令也会从缺失资产继续。
+
+正式公开发布：
+
+```powershell
+npm.cmd run release:desktop:public
 ```
 
 正式发布流水线见 [CCR Desktop GitHub Actions 发布流水线](./desktop-github-actions-release-workflow.md)。
@@ -90,6 +99,7 @@ gh release create <tag> <assets...> --repo mhdfy1988/cc-reforged --draft --title
 - `tmp/desktop-release/release-notes-v<version>.md`。
 - dry-run JSON，包括 tag、title、assets、sha256、GitHub CLI 命令。
 - 可选的 GitHub Release 草稿。
+- 公开发布后可用 `npm.cmd run smoke:desktop-auto-update-feed` 验证远端 `latest.yml` 和安装包资产。
 
 ## 5. 状态变化
 
@@ -102,15 +112,15 @@ gh release create <tag> <assets...> --repo mhdfy1988/cc-reforged --draft --title
 -> 不触网、不创建 release
 ```
 
-正式草稿发布：
+正式草稿发布或公开发布：
 
 ```text
 本机产物存在
 -> 工作区干净
 -> 本地 tag 存在
 -> gh 可用
--> release:desktop:draft
--> GitHub Release draft
+-> release:desktop:draft 或 release:desktop:public
+-> GitHub Release draft 或 public release
 ```
 
 如果没有安装 GitHub CLI，`release:desktop:check` 仍然可以输出清单；只有 `release:desktop:draft` 会失败。
@@ -121,9 +131,11 @@ gh release create <tag> <assets...> --repo mhdfy1988/cc-reforged --draft --title
 - 不自动创建 git tag，避免把未确认 commit 绑定到 release。
 - 不自动推送 tag。
 - 不自动公开发布，默认只创建 draft。
+- 真实执行时先创建 draft，再逐个上传资产；公开发布只发生在资产全部匹配之后。
 - 工作区脏时不允许执行真实发布，除非显式设置 `CCR_ALLOW_DIRTY_RELEASE=1`。
 - 证书、token、GitHub 凭据不写入仓库。
-- 当前不处理 auto-update 检查 UI，这属于下一阶段。
+- 当前默认允许 unsigned 发布；只有显式设置 `CCR_REQUIRE_SIGNED=1` 才把未签名视为失败。
+- unsigned 发布依赖 GitHub Release HTTPS、`latest.yml` 的 sha512 和 release note 中的 SHA256 做来源校验。
 
 ## 7. 版本和 tag
 
@@ -164,7 +176,14 @@ git push origin v0.2.0
 npm.cmd run release:desktop:draft
 ```
 
-如果已经有真实签名证书，应在正式发布前执行：
+如果要公开发布并验证自动更新 feed：
+
+```powershell
+npm.cmd run release:desktop:public
+npm.cmd run smoke:desktop-auto-update-feed
+```
+
+如果未来已经有真实签名证书，再在正式发布前执行：
 
 ```powershell
 $env:CCR_REQUIRE_SIGNED = '1'
@@ -173,6 +192,6 @@ npm.cmd run smoke:desktop-signing-readiness
 
 ## 9. 当前限制
 
-- 当前本机未安装 `gh`，所以只能完成 check / dry-run，不能由脚本直接创建 GitHub Release 草稿。
-- 当前安装器仍是未签名状态，正式公开发布前必须用真实证书跑一轮 `desktop:dist:signed`。
-- 当前 release note 是第一版模板，后续可以接入 changelog 或提交摘要生成。
+- 当前安装器默认未签名，这是有意策略；短期不购买代码签名证书。
+- Windows 可能提示未知发布者，release note 必须保留 SHA256 校验值。
+- 当前 release note 是基础模板，后续可以接入 changelog 或提交摘要生成。

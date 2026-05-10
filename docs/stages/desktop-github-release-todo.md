@@ -6,12 +6,13 @@
 - [x] R1 发布清单与 dry-run 脚本
 - [x] R2 发布 Runbook 与文档入口
 - [x] R3 验证与下一阶段决策
+- [x] R4 发布恢复与 unsigned 策略加固
 
 ## 当前指针
 
-- 进行中：R3 验证与下一阶段决策
-- 当前正在做：Desktop GitHub Release 发布流程准备已完成；等待进入自动更新状态机设计与实现。
-- 完成后下一项：自动更新状态机设计与实现
+- 进行中：无
+- 当前正在做：Desktop GitHub Release 发布流程已完成 0.4.1 真实发布，并补齐上传恢复、public 发布和 unsigned 发布策略。
+- 完成后下一项：后续只在版本发布体验继续暴露问题时迭代。
 
 ## R0 发布流程边界与安全约束
 
@@ -110,17 +111,42 @@
 - 已验证 `npm.cmd run release:desktop:draft` 在本机缺少 GitHub CLI 时按预期失败，且未触网发布。
 - 已验证 `npm.cmd run smoke:desktop-release-artifacts` 通过。
 - 已验证 `npm.cmd run smoke:desktop-signing-readiness` 通过，当前安装器仍是 `NotSigned`。
-- 下一阶段建议进入自动更新状态机设计与实现；如果要正式公开发布，则先补真实代码签名证书和 `gh` 登录。
+- 已完成 0.4.1 真实公开发布验证；短期不购买代码签名证书，发布策略改为 unsigned + GitHub Release 校验。
+
+## R4 发布恢复与 unsigned 策略加固
+
+状态：已完成。
+
+目标：
+
+- release 脚本支持大安装包上传超时后的恢复。
+- 本地脚本支持正式公开发布入口。
+- unsigned 发布说明和校验策略落到 release note / runbook。
+
+完成标准：
+
+- 已存在 release 时可复用 release。
+- 已匹配资产可跳过，缺失或不匹配资产逐个补传。
+- 公开发布只在所有资产匹配后执行。
+- 文档明确短期不购买代码签名证书。
+
+当前进展：
+
+- `scripts/prepare-desktop-github-release.mjs` 已改为可恢复发布流程。
+- 新增 `release:desktop:public`。
+- release note 模板已写明 unsigned 发布和 SHA256 校验。
+- 发布 Runbook 已写明 Windows 未知发布者 / SmartScreen 的预期处理口径。
 
 ## 后续记录（追加）
 
 - 初始化：从 Desktop 代码签名准备阶段继续进入 GitHub Release 发布流程准备。当前只做发布清单、dry-run 和 draft 入口，不创建真实 GitHub Release，不做自动更新状态机。
 - 第 1 轮：完成 GitHub Release 发布流程准备。新增 `scripts/prepare-desktop-github-release.mjs`，默认 check / dry-run 只输出发布清单和 `gh release create` 命令，不触网；真实 draft 入口要求显式执行 `release:desktop:draft`，并检查 `gh`、tag 与工作区状态。新增 [CCR Desktop GitHub Release 发布流程](../architecture/desktop-github-release-workflow.md)，并更新发布验收 Runbook 与文档索引。当前 `release:desktop:check`、`release:desktop:dry-run`、`smoke:desktop-release-artifacts`、`smoke:desktop-signing-readiness` 均通过；`release:desktop:draft` 在本机缺少 GitHub CLI 时按预期失败。
+- 第 2 轮：0.4.1 真实发布后补齐发布恢复能力。脚本改为先创建 / 复用 draft release，再逐个上传资产，最后按需公开；已上传且 sha256 / size 匹配的资产会跳过，适合大 exe 上传超时后的重跑恢复。短期明确采用 unsigned 发布策略，不购买代码签名证书。
 
 ## 备注
 
-- 当前状态：active
-- 下一步需要：进入自动更新状态机设计与实现；如果要真实公开发布，需要先补 GitHub CLI 登录和真实代码签名证书。
+- 当前状态：done
+- 下一步需要：后续版本发布时继续验证可恢复上传和 public feed smoke。
 - 当前仓库：`D:\agent_project\claude-code-reforged`
 - 当前主线：Desktop GitHub Release 发布流程准备。
-- 当前非目标：不创建真实 GitHub Release、不申请证书、不公开发布、不做自动更新 UI、不做 VS Code 插件。
+- 当前非目标：不申请付费代码签名证书、不做 VS Code 插件。

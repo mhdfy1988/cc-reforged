@@ -87,11 +87,17 @@ const notesPath = writeReleaseNotes({
   version,
 })
 
-const ghArgs = [
+const assetSummaries = assets.map((assetPath) => ({
+  name: basename(assetPath),
+  file: relative(repoRoot, assetPath),
+  size: statSync(assetPath).size,
+  sha256: sha256(assetPath),
+}))
+
+const releaseCreateArgs = [
   'release',
   'create',
   tag,
-  ...assets.map((assetPath) => relative(repoRoot, assetPath)),
   '--repo',
   repo,
   '--title',
@@ -99,10 +105,30 @@ const ghArgs = [
   '--notes-file',
   relative(repoRoot, notesPath),
   '--verify-tag',
+  '--draft',
 ]
-if (draft) {
-  ghArgs.push('--draft')
-}
+const releaseEditArgs = [
+  'release',
+  'edit',
+  tag,
+  '--repo',
+  repo,
+  '--title',
+  title,
+  '--notes-file',
+  relative(repoRoot, notesPath),
+]
+const releasePublishArgs = ['release', 'edit', tag, '--repo', repo, '--draft=false']
+const uploadCommands = assetSummaries.map((asset) => [
+  'gh',
+  'release',
+  'upload',
+  tag,
+  asset.file,
+  '--repo',
+  repo,
+  '--clobber',
+])
 
 const ghAvailable = commandAvailable('gh')
 const tagExists = gitTagExists(tag)
@@ -119,12 +145,16 @@ const releaseSummary = {
   tagExists,
   dirtyFileCount: dirtyFiles.length,
   notesFile: relative(repoRoot, notesPath),
-  assets: assets.map((assetPath) => ({
-    file: relative(repoRoot, assetPath),
-    size: statSync(assetPath).size,
-    sha256: sha256(assetPath),
-  })),
-  command: ['gh', ...ghArgs],
+  resumable: true,
+  recoveryBehavior:
+    'existing releases are reused; matching assets are skipped; missing or mismatched assets are uploaded one by one',
+  assets: assetSummaries,
+  commands: {
+    createDraftRelease: ['gh', ...releaseCreateArgs],
+    refreshReleaseNotes: ['gh', ...releaseEditArgs],
+    uploadAssets: uploadCommands,
+    publishRelease: draft ? null : ['gh', ...releasePublishArgs],
+  },
 }
 
 if (!execute) {
@@ -152,30 +182,24 @@ if (dirtyFiles.length > 0 && process.env.CCR_ALLOW_DIRTY_RELEASE !== '1') {
   })
 }
 
-const result = spawnSync('gh', ghArgs, {
-  cwd: repoRoot,
-  encoding: 'utf8',
-  stdio: ['ignore', 'pipe', 'pipe'],
+const publishResult = publishReleaseWithRecovery({
+  assets: assetSummaries,
+  draft,
+  releaseCreateArgs,
+  releaseEditArgs,
+  releasePublishArgs,
+  repo,
+  tag,
 })
-
-if (result.status !== 0) {
-  fail('gh release create failed', {
-    status: result.status,
-    stdout: result.stdout?.trim(),
-    stderr: result.stderr?.trim(),
-    command: releaseSummary.command,
-  })
-}
 
 console.log(
   JSON.stringify(
     {
       ...releaseSummary,
-      stdout: result.stdout?.trim(),
-      stderr: result.stderr?.trim(),
+      ...publishResult,
     },
     null,
-    2,
+  2,
   ),
 )
 
@@ -219,7 +243,8 @@ function writeReleaseNotes({ assets, packageJson, repo, tag, title, version }) {
     '- `npm.cmd run desktop:dist` 需要先生成安装器产物。',
     '- `npm.cmd run smoke:desktop-release-artifacts` 需要通过。',
     '- `npm.cmd run smoke:desktop-signing-readiness` 需要通过。',
-    '- 如果是正式公开发布，建议设置 `CCR_REQUIRE_SIGNED=1` 后重新验签。',
+    '- 当前默认允许 unsigned 发布；只有显式设置 `CCR_REQUIRE_SIGNED=1` 时才要求 Authenticode 签名。',
+    '- Windows 可能提示未知发布者。请以 GitHub Release 资产和下方 SHA256 校验值作为安装包来源校验依据。',
     '',
     '## 当前说明',
     '',
@@ -228,6 +253,168 @@ function writeReleaseNotes({ assets, packageJson, repo, tag, title, version }) {
   ]
   writeFileSync(notesPath, `${lines.join('\n')}\n`, 'utf8')
   return notesPath
+}
+
+function publishReleaseWithRecovery({
+  assets,
+  draft,
+  releaseCreateArgs,
+  releaseEditArgs,
+  releasePublishArgs,
+  repo,
+  tag,
+}) {
+  let releaseState = getReleaseState({ repo, tag })
+  const actions = []
+
+  if (!releaseState.exists) {
+    actions.push(runGh(releaseCreateArgs, 'create draft release'))
+  } else {
+    actions.push({
+      action: 'reuse existing release',
+      tag,
+      draft: releaseState.release.isDraft,
+      url: releaseState.release.url,
+    })
+  }
+
+  actions.push(runGh(releaseEditArgs, 'refresh release metadata'))
+  releaseState = getReleaseState({ repo, tag })
+
+  for (const asset of assets) {
+    const remoteAsset = findAsset(releaseState.release, asset.name)
+    if (assetMatches(remoteAsset, asset)) {
+      actions.push({
+        action: 'skip matching asset',
+        asset: asset.name,
+        size: asset.size,
+        sha256: asset.sha256,
+      })
+      continue
+    }
+
+    actions.push(
+      runGh(
+        ['release', 'upload', tag, asset.file, '--repo', repo, '--clobber'],
+        `upload asset ${asset.name}`,
+      ),
+    )
+    releaseState = getReleaseState({ repo, tag })
+  }
+
+  releaseState = getReleaseState({ repo, tag })
+  const missingAssets = assets
+    .filter((asset) => !assetMatches(findAsset(releaseState.release, asset.name), asset))
+    .map((asset) => asset.name)
+  if (missingAssets.length > 0) {
+    fail('release assets are still missing or mismatched after upload', {
+      tag,
+      missingAssets,
+      remoteAssets: releaseState.release.assets?.map((asset) => ({
+        name: asset.name,
+        size: asset.size,
+        digest: asset.digest,
+      })),
+    })
+  }
+
+  if (!draft && releaseState.release.isDraft) {
+    actions.push(runGh(releasePublishArgs, 'publish release'))
+    releaseState = getReleaseState({ repo, tag })
+  }
+
+  return {
+    release: {
+      tagName: releaseState.release.tagName,
+      name: releaseState.release.name,
+      isDraft: releaseState.release.isDraft,
+      isPrerelease: releaseState.release.isPrerelease,
+      url: releaseState.release.url,
+      assetCount: releaseState.release.assets.length,
+    },
+    actions,
+  }
+}
+
+function getReleaseState({ repo, tag }) {
+  const result = spawnSync(
+    'gh',
+    [
+      'release',
+      'view',
+      tag,
+      '--repo',
+      repo,
+      '--json',
+      'tagName,name,isDraft,isPrerelease,url,assets',
+    ],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  )
+
+  if (result.status !== 0) {
+    const stderr = result.stderr?.trim() ?? ''
+    if (/release not found/i.test(stderr)) {
+      return {
+        exists: false,
+        release: null,
+      }
+    }
+    fail('failed to inspect GitHub Release', {
+      tag,
+      status: result.status,
+      stdout: result.stdout?.trim(),
+      stderr,
+    })
+  }
+
+  return {
+    exists: true,
+    release: JSON.parse(result.stdout),
+  }
+}
+
+function findAsset(release, name) {
+  return release?.assets?.find((asset) => asset.name === name) ?? null
+}
+
+function assetMatches(remoteAsset, localAsset) {
+  if (!remoteAsset) {
+    return false
+  }
+  if (remoteAsset.size !== localAsset.size) {
+    return false
+  }
+  const digest = typeof remoteAsset.digest === 'string' ? remoteAsset.digest : ''
+  return digest === '' || digest === `sha256:${localAsset.sha256}`
+}
+
+function runGh(args, action) {
+  const result = spawnSync('gh', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  if (result.status !== 0) {
+    fail(`gh ${action} failed`, {
+      action,
+      status: result.status,
+      stdout: result.stdout?.trim(),
+      stderr: result.stderr?.trim(),
+      command: ['gh', ...args],
+    })
+  }
+
+  return {
+    action,
+    command: ['gh', ...args],
+    stdout: result.stdout?.trim(),
+    stderr: result.stderr?.trim(),
+  }
 }
 
 function commandAvailable(command) {
