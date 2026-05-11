@@ -15,6 +15,8 @@ import type {
 } from '../../domain/displayTypes.js'
 import type { TodoOverlaySnapshot } from '../../domain/todoEvents.js'
 
+type HeadActionIconName = 'details' | 'compact' | 'history' | 'newThread'
+
 export function ChatPage(props: {
   activeTurnId: string | null
   busy: boolean
@@ -66,7 +68,8 @@ export function ChatPage(props: {
                 metadata={props.turnMetadata}
               />
               <button
-                className="head-btn"
+                aria-label="压缩会话"
+                className="head-btn head-icon-btn"
                 disabled={Boolean(compactDisabledReason)}
                 title={
                   compactDisabledReason ??
@@ -74,10 +77,11 @@ export function ChatPage(props: {
                 }
                 onClick={props.onRunCompact}
               >
-                压缩会话
+                <HeadActionIcon name="compact" />
               </button>
               <button
-                className="head-btn"
+                aria-label="历史会话"
+                className="head-btn head-icon-btn"
                 disabled={props.busy || Boolean(props.activeTurnId)}
                 title={
                   props.activeTurnId
@@ -86,14 +90,16 @@ export function ChatPage(props: {
                 }
                 onClick={props.onShowHistory}
               >
-                历史
+                <HeadActionIcon name="history" />
               </button>
               <button
-                className="head-btn"
+                aria-label="新建会话"
+                className="head-btn head-icon-btn"
                 disabled={props.busy}
+                title="新建一个空会话。"
                 onClick={props.onStartThread}
               >
-                新建会话
+                <HeadActionIcon name="newThread" />
               </button>
             </div>
           </div>
@@ -443,7 +449,13 @@ function TurnRuntimeDetails(props: {
 
   return (
     <details className="turn-runtime-details">
-      <summary>运行详情</summary>
+      <summary
+        aria-label="运行详情"
+        className="head-icon-btn"
+        title="运行详情"
+      >
+        <HeadActionIcon name="details" />
+      </summary>
       <div className="turn-runtime-popover">
         <dl>
           <div>
@@ -512,6 +524,56 @@ function TurnRuntimeDetails(props: {
         </dl>
       </div>
     </details>
+  )
+}
+
+function HeadActionIcon(props: { name: HeadActionIconName }) {
+  return (
+    <svg
+      className="head-action-icon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {props.name === 'details' ? (
+        <>
+          <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5Z" />
+          <path d="M8 8h8" />
+          <path d="M8 12h3" />
+          <path d="M14 12h2" />
+          <path d="M8 16h5" />
+        </>
+      ) : null}
+      {props.name === 'compact' ? (
+        <>
+          <path d="M8 4v5H3" />
+          <path d="M16 20v-5h5" />
+          <path d="M3 9l5-5" />
+          <path d="m21 15-5 5" />
+          <path d="M16 4v5h5" />
+          <path d="M8 20v-5H3" />
+          <path d="m21 9-5-5" />
+          <path d="m3 15 5 5" />
+        </>
+      ) : null}
+      {props.name === 'history' ? (
+        <>
+          <path d="M3 12a9 9 0 1 0 3-6.7" />
+          <path d="M3 4.5V9h4.5" />
+          <path d="M12 7.5V12l3 2" />
+        </>
+      ) : null}
+      {props.name === 'newThread' ? (
+        <>
+          <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.9 8.9 0 0 1-3.9-.9L3 21l1.9-5.1a8.4 8.4 0 0 1-.9-3.9A8.5 8.5 0 0 1 12.5 3" />
+          <path d="M18 3v6" />
+          <path d="M15 6h6" />
+        </>
+      ) : null}
+    </svg>
   )
 }
 

@@ -76,6 +76,11 @@ assertText(files.main, "../preload/index.mjs", 'main process must load the emitt
 assertText(files.main, 'CCR_DESKTOP_RENDERER_DIAGNOSTICS', 'main process must support renderer diagnostics')
 assertText(files.main, "titleBarStyle: 'hidden'", 'main process must enable the custom Windows title bar')
 assertText(files.main, 'titleBarOverlay', 'main process must keep native window controls over the custom title bar')
+assertText(files.main, 'window-state.json', 'main process must persist Desktop window state')
+assertText(files.main, 'readWindowState()', 'main process must restore Desktop window state')
+assertText(files.main, 'attachWindowStatePersistence(mainWindow)', 'main process must attach window state persistence')
+assertText(files.main, 'savedWindowState?.maximized ?? true', 'main process must default first launch to maximized')
+assertText(files.main, 'mainWindow.maximize()', 'main process must maximize the first Desktop launch')
 
 for (const method of [
   'getUpdateStatus',
@@ -138,6 +143,7 @@ console.log(
         'turn item event rendering',
         'permission cleanup',
         'custom title bar',
+        'window state persistence',
         'settings UI controls',
         'topbar update download action',
         'development update mock controls',

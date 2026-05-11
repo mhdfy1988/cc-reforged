@@ -230,6 +230,8 @@ function writeReleaseNotes({ assets, packageJson, repo, tag, title, version }) {
     `版本：${version}`,
     `Tag：${tag}`,
     '',
+    ...formatChangelogSection(version),
+    '',
     '## 发布资产',
     '',
     ...assets.flatMap((assetPath) => [
@@ -253,6 +255,64 @@ function writeReleaseNotes({ assets, packageJson, repo, tag, title, version }) {
   ]
   writeFileSync(notesPath, `${lines.join('\n')}\n`, 'utf8')
   return notesPath
+}
+
+function formatChangelogSection(version) {
+  const changelogSection = readChangelogSection(version)
+  if (!changelogSection) {
+    return [
+      '## 更新内容',
+      '',
+      '- 未在 `CHANGELOG.md` 中找到当前版本条目，请发布前补齐。',
+    ]
+  }
+
+  return [
+    '## 更新内容',
+    '',
+    ...changelogSection,
+  ]
+}
+
+function readChangelogSection(version) {
+  const changelogPath = join(repoRoot, 'CHANGELOG.md')
+  if (!existsSync(changelogPath)) {
+    return null
+  }
+
+  const lines = readFileSync(changelogPath, 'utf8').split(/\r?\n/)
+  const headingPattern = new RegExp(`^##\\s+${escapeRegExp(version)}(?:\\s|$)`)
+  const startIndex = lines.findIndex((line) => headingPattern.test(line.trim()))
+  if (startIndex === -1) {
+    return null
+  }
+
+  const sectionLines = []
+  for (const line of lines.slice(startIndex + 1)) {
+    if (/^##\s+/.test(line)) {
+      break
+    }
+    sectionLines.push(line)
+  }
+
+  const trimmed = trimBlankLines(sectionLines)
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function trimBlankLines(lines) {
+  let start = 0
+  let end = lines.length
+  while (start < end && lines[start].trim() === '') {
+    start += 1
+  }
+  while (end > start && lines[end - 1].trim() === '') {
+    end -= 1
+  }
+  return lines.slice(start, end)
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function publishReleaseWithRecovery({

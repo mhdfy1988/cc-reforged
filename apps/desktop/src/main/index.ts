@@ -1,5 +1,5 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, shell } from 'electron'
-import { existsSync } from 'node:fs'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, screen, shell } from 'electron'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -19,6 +19,14 @@ import type {
   JsonRpcNotification,
   McpListResult,
   MemorySessionStatusResult,
+  ModelAvailabilityParams,
+  ModelAvailabilityResult,
+  ModelListParams,
+  ModelListResult,
+  ModelSetParams,
+  ModelSetResult,
+  ModelTestParams,
+  ModelTestResult,
   PermissionRespondParams,
   PermissionSettingsGetResult,
   PermissionSettingsUpdateParams,
@@ -88,6 +96,21 @@ type ProtocolCompatibility = {
   reason?: string
 }
 
+type DesktopWindowState = {
+  width: number
+  height: number
+  x?: number
+  y?: number
+  maximized: boolean
+}
+
+type DesktopWindowBounds = {
+  width: number
+  height: number
+  x?: number
+  y?: number
+}
+
 app.setName('CCR Desktop')
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -128,6 +151,10 @@ const status: DesktopStatus = {
 
 const SUPPORTED_APP_SERVER_PROTOCOL = '0.1'
 const COMPACT_RUN_TIMEOUT_MS = 5 * 60_000
+const DEFAULT_WINDOW_WIDTH = 1280
+const DEFAULT_WINDOW_HEIGHT = 820
+const MIN_WINDOW_WIDTH = 980
+const MIN_WINDOW_HEIGHT = 680
 
 function evaluateProtocolCompatibility(protocolVersion: string): ProtocolCompatibility {
   if (protocolVersion === SUPPORTED_APP_SERVER_PROTOCOL) {
@@ -205,6 +232,139 @@ function getSafeStatus(): DesktopStatus {
 
 function getLogDir(): string {
   return join(app.getPath('userData'), 'logs')
+}
+
+function getWindowStatePath(): string {
+  return join(app.getPath('userData'), 'window-state.json')
+}
+
+function readWindowState(): DesktopWindowState | null {
+  try {
+    const parsed = JSON.parse(readFileSync(getWindowStatePath(), 'utf8')) as unknown
+    return isValidWindowState(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function isValidWindowState(value: unknown): value is DesktopWindowState {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const candidate = value as Partial<DesktopWindowState>
+  if (
+    !isFiniteWindowNumber(candidate.width) ||
+    !isFiniteWindowNumber(candidate.height) ||
+    candidate.width < MIN_WINDOW_WIDTH ||
+    candidate.height < MIN_WINDOW_HEIGHT ||
+    typeof candidate.maximized !== 'boolean'
+  ) {
+    return false
+  }
+
+  if (candidate.x !== undefined && !isFiniteWindowNumber(candidate.x)) {
+    return false
+  }
+  if (candidate.y !== undefined && !isFiniteWindowNumber(candidate.y)) {
+    return false
+  }
+
+  return true
+}
+
+function isFiniteWindowNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function resolveWindowBounds(state: DesktopWindowState | null): DesktopWindowBounds {
+  const width = Math.round(
+    Math.max(MIN_WINDOW_WIDTH, state?.width ?? DEFAULT_WINDOW_WIDTH),
+  )
+  const height = Math.round(
+    Math.max(MIN_WINDOW_HEIGHT, state?.height ?? DEFAULT_WINDOW_HEIGHT),
+  )
+
+  if (state && isFiniteWindowNumber(state.x) && isFiniteWindowNumber(state.y)) {
+    const bounds = {
+      x: Math.round(state.x),
+      y: Math.round(state.y),
+      width,
+      height,
+    }
+
+    if (isWindowBoundsVisible(bounds)) {
+      return bounds
+    }
+  }
+
+  return { width, height }
+}
+
+function isWindowBoundsVisible(bounds: Required<DesktopWindowBounds>): boolean {
+  return screen.getAllDisplays().some(display => {
+    const area = display.workArea
+    const overlapWidth =
+      Math.min(bounds.x + bounds.width, area.x + area.width) - Math.max(bounds.x, area.x)
+    const overlapHeight =
+      Math.min(bounds.y + bounds.height, area.y + area.height) - Math.max(bounds.y, area.y)
+    return overlapWidth >= 80 && overlapHeight >= 80
+  })
+}
+
+function saveWindowState(window: BrowserWindow): void {
+  if (window.isDestroyed()) {
+    return
+  }
+
+  const bounds = window.getNormalBounds()
+  const nextState: DesktopWindowState = {
+    x: bounds.x,
+    y: bounds.y,
+    width: Math.round(Math.max(MIN_WINDOW_WIDTH, bounds.width)),
+    height: Math.round(Math.max(MIN_WINDOW_HEIGHT, bounds.height)),
+    maximized: window.isMaximized(),
+  }
+
+  try {
+    const statePath = getWindowStatePath()
+    mkdirSync(dirname(statePath), { recursive: true })
+    writeFileSync(statePath, `${JSON.stringify(nextState, null, 2)}\n`, 'utf8')
+  } catch (error) {
+    void appendDesktopLog('main.log', {
+      event: 'window-state-save-failed',
+      message: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
+function attachWindowStatePersistence(window: BrowserWindow): void {
+  let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+  const scheduleSave = (): void => {
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+    }
+    saveTimer = setTimeout(() => {
+      saveTimer = null
+      saveWindowState(window)
+    }, 500)
+    if (typeof saveTimer === 'object' && 'unref' in saveTimer) {
+      saveTimer.unref()
+    }
+  }
+
+  window.on('resize', scheduleSave)
+  window.on('move', scheduleSave)
+  window.on('maximize', scheduleSave)
+  window.on('unmaximize', scheduleSave)
+  window.on('close', () => {
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+    }
+    saveWindowState(window)
+  })
 }
 
 async function appendDesktopLog(
@@ -781,6 +941,64 @@ async function resumeThread(params: ThreadResumeParams): Promise<ThreadResumeRes
   return result
 }
 
+async function listModels(
+  params: ModelListParams = {},
+): Promise<ModelListResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  return managedClient.client.listModels(params)
+}
+
+async function getModelAvailability(
+  params: ModelAvailabilityParams = {},
+): Promise<ModelAvailabilityResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  return managedClient.client.getModelAvailability(params)
+}
+
+async function setModel(params: ModelSetParams): Promise<ModelSetResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  if (status.thread?.activeTurnId) {
+    throw new Error('当前任务运行中，完成后可切换模型。')
+  }
+
+  const result = await managedClient.client.setModel(params)
+  status.config = await managedClient.client.getConfig()
+  status.auth = await managedClient.client.getAuthStatus()
+  await refreshRuntimeSnapshots()
+  broadcast('state', {
+    message: 'model updated',
+    model: params.model,
+    config: status.config,
+  })
+  return result
+}
+
+async function testModelConnection(
+  params: ModelTestParams = {},
+): Promise<ModelTestResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  const result = await managedClient.client.testModelConnection(params)
+  broadcast('state', {
+    message: 'model connection tested',
+    provider: params.provider,
+    model: params.model,
+    result,
+  })
+  return result
+}
+
 async function startTurn(text: string): Promise<TurnStartResult> {
   await ensureAppServer()
   if (!managedClient) {
@@ -935,12 +1153,17 @@ async function showLocalPathInFolder(
 function createWindow(): void {
   const windowIcon = resolveDesktopWindowIcon()
   const useCustomTitleBar = process.platform === 'win32'
+  const savedWindowState = readWindowState()
+  const windowBounds = resolveWindowBounds(savedWindowState)
+  const shouldStartMaximized = savedWindowState?.maximized ?? true
 
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 980,
-    minHeight: 680,
+    width: windowBounds.width,
+    height: windowBounds.height,
+    x: windowBounds.x,
+    y: windowBounds.y,
+    minWidth: MIN_WINDOW_WIDTH,
+    minHeight: MIN_WINDOW_HEIGHT,
     title: 'CCR Desktop',
     icon: windowIcon,
     backgroundColor: '#f7efe3',
@@ -964,6 +1187,10 @@ function createWindow(): void {
   })
 
   mainWindow.setMenuBarVisibility(false)
+  attachWindowStatePersistence(mainWindow)
+  if (shouldStartMaximized) {
+    mainWindow.maximize()
+  }
   attachRendererDiagnostics(mainWindow)
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -1122,6 +1349,25 @@ ipcMain.handle('ccr:start-thread', async (_event, title?: string) => {
 
 ipcMain.handle('ccr:list-threads', async () => {
   return listThreads()
+})
+
+ipcMain.handle('ccr:list-models', async (_event, params?: ModelListParams) => {
+  return listModels(params ?? {})
+})
+
+ipcMain.handle(
+  'ccr:model-availability',
+  async (_event, params?: ModelAvailabilityParams) => {
+    return getModelAvailability(params ?? {})
+  },
+)
+
+ipcMain.handle('ccr:set-model', async (_event, params: ModelSetParams) => {
+  return setModel(params)
+})
+
+ipcMain.handle('ccr:model-test', async (_event, params?: ModelTestParams) => {
+  return testModelConnection(params ?? {})
 })
 
 ipcMain.handle(

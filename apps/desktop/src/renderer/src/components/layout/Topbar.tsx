@@ -1,4 +1,8 @@
+import { useMemo, useState } from 'react'
 import type {
+  LlmModelCatalogEntry,
+  LlmModelListState,
+  LlmModelProviderCatalog,
   DesktopUpdateState,
   RuntimeCompactStatus,
   RuntimeContextStatus,
@@ -22,15 +26,23 @@ export function Topbar(props: {
   contextWindow: number | undefined
   memoryStatus: RuntimeMemoryStatus | null | undefined
   model: string
+  modelList: LlmModelListState | null
   provider: string
   turnMetadata: TurnRuntimeMetadata | null
   updateStatus: DesktopUpdateState | null | undefined
   workspacePath: string
   onChooseWorkspace: () => void
+  onSelectModel: (provider: string, model: string) => void
   onUpdateAction: (kind: UpdateActionKind) => void
 }) {
-  const runtimeModel =
-    props.contextStatus?.model ?? props.turnMetadata?.model ?? props.model
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const configuredModel = props.model
+  const runningModel = props.contextStatus?.model ?? props.turnMetadata?.model
+  const modelProviders = useMemo(
+    () => getModelProviders(props.modelList, props.provider),
+    [props.modelList, props.provider],
+  )
+  const modelSwitchDisabled = props.busy || Boolean(props.contextStatus?.activeTurnId)
   const contextWindow =
     props.contextStatus?.contextWindow ??
     props.compactStatus?.effectiveContextWindow ??
@@ -59,7 +71,97 @@ export function Topbar(props: {
           <span>{props.workspacePath ? '当前工作区 · 点击切换' : '点击选择工作区'}</span>
         </div>
       </button>
-      <button className="model-chip">{runtimeModel}</button>
+      <div className="provider-cluster" aria-label="模型和认证状态">
+        <div className="model-switcher">
+          <button
+            aria-expanded={modelMenuOpen}
+            aria-label={`当前模型：${configuredModel}`}
+            className="model-chip"
+            disabled={props.busy}
+            title="切换当前模型，下一轮消息生效"
+            type="button"
+            onClick={() => setModelMenuOpen(open => !open)}
+          >
+            <ModelIcon />
+            <span>{configuredModel}</span>
+            <ChevronDownIcon />
+          </button>
+          {modelMenuOpen ? (
+            <div className="model-menu" role="menu">
+              <div className="model-menu-head">
+                <strong>选择模型</strong>
+                <span>{props.provider} · 下一轮消息生效</span>
+              </div>
+              {runningModel && runningModel !== configuredModel ? (
+                <div className="model-menu-note">
+                  当前会话最近一轮使用：{runningModel}
+                </div>
+              ) : null}
+              {modelSwitchDisabled ? (
+                <div className="model-menu-note">
+                  当前任务运行中，完成后可切换模型。
+                </div>
+              ) : null}
+              <div className="model-menu-list">
+                {modelProviders.length > 0 ? (
+                  modelProviders.map(provider => (
+                    <div
+                      className="model-menu-provider"
+                      key={provider.id}
+                      role="group"
+                      aria-label={getProviderDisplayName(provider)}
+                    >
+                      <div className="model-menu-provider-title">
+                        {getProviderDisplayName(provider)}
+                      </div>
+                      {(provider.models ?? []).map(model => {
+                        const selected =
+                          provider.id === props.provider &&
+                          model.model === configuredModel
+                        return (
+                          <button
+                            key={`${provider.id}:${model.model}`}
+                            className={
+                              selected
+                                ? 'model-menu-item selected'
+                                : 'model-menu-item'
+                            }
+                            disabled={modelSwitchDisabled || selected}
+                            role="menuitem"
+                            type="button"
+                            onClick={() => {
+                              setModelMenuOpen(false)
+                              props.onSelectModel(provider.id, model.model)
+                            }}
+                          >
+                            <span>
+                              <strong>{getModelDisplayName(model)}</strong>
+                              <em>{model.model}</em>
+                            </span>
+                            {selected ? (
+                              <CheckIcon />
+                            ) : (
+                              <span className="model-menu-context">
+                                {formatTokenCount(model.contextWindow ?? 0)}
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))
+                ) : (
+                  <div className="model-menu-empty">模型列表加载中</div>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <div className="health-chip">
+          <span className={props.appServerStatus === 'ready' ? 'dot ok' : 'dot warn'} />
+          {props.provider} · {props.authText}
+        </div>
+      </div>
       <div
         className="context-chip"
         title={getContextTitle(
@@ -71,16 +173,87 @@ export function Topbar(props: {
       >
         上下文 {formatTokenCount(usedTokens)} / {formatTokenCount(contextWindow)}
       </div>
-      <div className="health-chip">
-        <span className={props.appServerStatus === 'ready' ? 'dot ok' : 'dot warn'} />
-        {props.provider} · {props.authText}
-      </div>
       <TopbarUpdateNotice
         busy={props.busy}
         updateStatus={props.updateStatus}
         onAction={props.onUpdateAction}
       />
     </header>
+  )
+}
+
+function getModelProviders(
+  modelList: LlmModelListState | null,
+  provider: string,
+): LlmModelProviderCatalog[] {
+  const providers = modelList?.providers ?? []
+  const currentIndex = providers.findIndex(item => item.id === provider)
+  if (currentIndex <= 0) {
+    return providers
+  }
+  return [
+    providers[currentIndex],
+    ...providers.slice(0, currentIndex),
+    ...providers.slice(currentIndex + 1),
+  ]
+}
+
+function getModelDisplayName(model: LlmModelCatalogEntry): string {
+  return model.displayName?.trim() || model.model
+}
+
+function getProviderDisplayName(provider: LlmModelProviderCatalog): string {
+  return provider.displayName?.trim() || provider.id
+}
+
+function ModelIcon() {
+  return (
+    <svg
+      className="model-chip-icon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 3 4.8 7.1v8.2L12 19.5l7.2-4.2V7.1Z" />
+      <path d="M12 11.3 4.9 7.2" />
+      <path d="m12 11.3 7.1-4.1" />
+      <path d="M12 11.3v8" />
+    </svg>
+  )
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg
+      className="model-chip-chevron"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m7 10 5 5 5-5" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      className="model-menu-check"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m5 12 4 4L19 6" />
+    </svg>
   )
 }
 

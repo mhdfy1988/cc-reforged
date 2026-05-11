@@ -71,8 +71,72 @@ try {
     const codexProvider = modelList.providers.find(
       provider => provider.id === 'codex-oauth',
     );
+    const deepSeekProvider = modelList.providers.find(
+      provider => provider.id === 'deepseek',
+    );
     assert.ok(codexProvider);
+    assert.ok(deepSeekProvider);
+    assert.ok(codexProvider.models.some(model => model.model === 'gpt-5.5'));
     assert.ok(codexProvider.models.some(model => model.model === 'gpt-5.4'));
+    assert.ok(
+      deepSeekProvider.models.some(model => model.model === 'deepseek-v4-flash'),
+    );
+    assert.ok(
+      deepSeekProvider.models.some(model => model.model === 'deepseek-v4-pro'),
+    );
+
+    const deepSeekAvailability = await managed.client.getModelAvailability({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+    });
+    assert.equal(deepSeekAvailability.provider, 'deepseek');
+    assert.equal(deepSeekAvailability.model, 'deepseek-v4-flash');
+    assert.equal(deepSeekAvailability.state, 'needs_auth');
+    assert.equal(deepSeekAvailability.available, false);
+    assert.equal(deepSeekAvailability.testable, false);
+    assert.equal(deepSeekAvailability.networkChecked, false);
+    assert.equal(deepSeekAvailability.auth.configured, false);
+    assertNoSecretKeys(deepSeekAvailability);
+
+    const deepSeekTest = await managed.client.testModelConnection({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+    });
+    assert.equal(deepSeekTest.provider, 'deepseek');
+    assert.equal(deepSeekTest.model, 'deepseek-v4-flash');
+    assert.equal(deepSeekTest.ok, false);
+    assert.equal(deepSeekTest.networkChecked, false);
+    assert.equal(deepSeekTest.error.kind, 'auth_required');
+    assertNoSecretKeys(deepSeekTest);
+
+    const setDeepSeek = await managed.client.setModel({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+    });
+    assert.equal(setDeepSeek.current.provider, 'deepseek');
+    assert.equal(setDeepSeek.current.model, 'deepseek-v4-flash');
+    const deepSeekConfig = await managed.client.getConfig();
+    assert.equal(deepSeekConfig.llm.provider, 'deepseek');
+    assert.equal(deepSeekConfig.llm.model, 'deepseek-v4-flash');
+    assert.equal(deepSeekConfig.llm.apiMode, 'openai-chat');
+    assertNoSecretKeys(deepSeekConfig);
+
+    const setGpt55 = await managed.client.setModel({
+      provider: 'codex-oauth',
+      model: 'gpt-5.5',
+    });
+    assert.equal(setGpt55.current.provider, 'codex-oauth');
+    assert.equal(setGpt55.current.model, 'gpt-5.5');
+    const gpt55Config = await managed.client.getConfig();
+    assert.equal(gpt55Config.llm.model, 'gpt-5.5');
+    assertNoSecretKeys(gpt55Config);
+
+    const setGpt54 = await managed.client.setModel({
+      provider: 'codex-oauth',
+      model: 'gpt-5.4',
+    });
+    assert.equal(setGpt54.current.provider, 'codex-oauth');
+    assert.equal(setGpt54.current.model, 'gpt-5.4');
 
     const mcpList = await managed.client.listMcp({ includeDisabled: true });
     assert.equal(Array.isArray(mcpList.servers), true);
@@ -207,6 +271,9 @@ try {
             'config/get',
             'auth/status',
             'model/list',
+            'model/availability',
+            'model/test_auth_required_no_network',
+            'model/set',
             'mcp/list',
             'workspace/open',
             'thread/start',
@@ -367,6 +434,8 @@ function getSmokeEnv() {
   delete env.CLAUDE_CODE_CODEX_OAUTH_REFRESH_TOKEN;
   delete env.CLAUDE_CODE_CODEX_OAUTH_ACCOUNT_ID;
   delete env.CLAUDE_CODE_CODEX_OAUTH_EXPIRES_AT;
+  delete env.CCR_DEEPSEEK_API_KEY;
+  delete env.DEEPSEEK_API_KEY;
   return env;
 }
 

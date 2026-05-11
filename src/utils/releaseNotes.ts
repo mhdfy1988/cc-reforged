@@ -13,7 +13,7 @@ import { gt } from './semver.js'
 const MAX_RELEASE_NOTES_SHOWN = 5
 
 /**
- * We fetch the changelog from GitHub instead of bundling it with the build.
+ * We fetch the CCR changelog from GitHub instead of bundling it with the build.
  *
  * This is necessary because Ink's static rendering makes it difficult to
  * dynamically update/show components after initial render. By storing the
@@ -23,16 +23,16 @@ const MAX_RELEASE_NOTES_SHOWN = 5
  * The flow is:
  * 1. User updates to a new version
  * 2. We fetch the changelog in the background and store it in config
- * 3. Next time the user starts Claude, the cached changelog is available immediately
+ * 3. Next time the user starts CCR, the cached changelog is available immediately
  */
 export const CHANGELOG_URL =
-  'https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md'
+  'https://github.com/mhdfy1988/cc-reforged/blob/main/CHANGELOG.md'
 const RAW_CHANGELOG_URL =
-  'https://raw.githubusercontent.com/anthropics/claude-code/refs/heads/main/CHANGELOG.md'
+  'https://raw.githubusercontent.com/mhdfy1988/cc-reforged/refs/heads/main/CHANGELOG.md'
 
 /**
  * Get the path for the cached changelog file.
- * The changelog is stored at ~/.claude/cache/changelog.md
+ * The changelog is stored at ~/.ccr/cache/changelog.md by default.
  */
 function getChangelogCachePath(): string {
   return join(getClaudeConfigHomeDir(), 'cache', 'changelog.md')
@@ -175,6 +175,7 @@ export function parseChangelog(content: string): Record<string, string[]> {
       // First part before any dash is the version
       const version = versionLine.split(' - ')[0]?.trim() || ''
       if (!version) continue
+      if (!coerce(version)) continue
 
       // Extract bullet points
       const notes = lines

@@ -112,10 +112,28 @@ const DEFAULT_CODEX_OAUTH_PROVIDER_CONFIG: LlmProviderConfig = {
     getBuiltinLlmProviderDefinition('codex-oauth')!.capabilities.usage,
 }
 
+const DEFAULT_DEEPSEEK_PROVIDER_CONFIG: LlmProviderConfig = {
+  defaultModel: 'deepseek-v4-flash',
+  displayName: getBuiltinLlmProviderDefinition('deepseek')!.displayName,
+  authStrategy: getBuiltinLlmProviderDefinition('deepseek')!.authStrategy,
+  apiMode: getBuiltinLlmProviderDefinition('deepseek')!.apiMode,
+  baseUrl: 'https://api.deepseek.com',
+  reasoningEffort: 'high',
+  supportsStreaming:
+    getBuiltinLlmProviderDefinition('deepseek')!.capabilities.streaming,
+  supportsTools:
+    getBuiltinLlmProviderDefinition('deepseek')!.capabilities.tools,
+  supportsReasoning:
+    getBuiltinLlmProviderDefinition('deepseek')!.capabilities.reasoning,
+  supportsUsage:
+    getBuiltinLlmProviderDefinition('deepseek')!.capabilities.usage,
+}
+
 function getDefaultProviders(): Record<string, LlmProviderConfig> {
   return {
     anthropic: { ...DEFAULT_ANTHROPIC_PROVIDER_CONFIG },
     'codex-oauth': { ...DEFAULT_CODEX_OAUTH_PROVIDER_CONFIG },
+    deepseek: { ...DEFAULT_DEEPSEEK_PROVIDER_CONFIG },
   }
 }
 

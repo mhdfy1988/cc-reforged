@@ -49,6 +49,10 @@ try {
     'oauth_refreshable',
   );
   assert.equal(fileConfig.providers['codex-oauth'].apiMode, 'openai-responses');
+  assert.equal(fileConfig.providers.deepseek.authStrategy, 'api_key');
+  assert.equal(fileConfig.providers.deepseek.apiMode, 'openai-chat');
+  assert.equal(fileConfig.providers.deepseek.defaultModel, 'deepseek-v4-flash');
+  assert.equal(fileConfig.providers.deepseek.baseUrl, 'https://api.deepseek.com');
 
   process.env.CCR_LLM_PROVIDER = 'codex-oauth';
   process.env.CCR_LLM_MODEL = 'gpt-5.4';

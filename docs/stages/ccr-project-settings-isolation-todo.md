@@ -20,6 +20,22 @@
 
 当前下一项：P1 新增项目 settings 命名空间 helper。
 
+## 接下来安排
+
+优先级：先完成项目级 settings 隔离，再回到安装包瘦身收口、多供应商模型接入和 App Server 主线。
+
+- 第一段：完成 P1 到 P3，先把 settings 路径 helper、安全保护和读写切换主链路落地。
+- 第二段：完成 P4，把 App Server、Desktop、TUI 的路径展示和兼容来源展示统一到 `.ccr` 口径。
+- 第三段：完成 P5 到 P6，补 worktree、settings sync、文档、smoke 和旧路径迁移说明。
+
+完成判定：
+
+- `projectSettings` / `localSettings` 新写入走 `.ccr/settings*.json`。
+- 旧 `.claude/settings*.json` 仍可兼容读取，但不再作为 CCR 主写入路径展示。
+- `.ccr/settings*` 与 `.claude/settings*` 都受权限和 sandbox 保护。
+- CLI、TUI、Desktop、App Server 的路径口径一致。
+- `npm.cmd run typecheck -- --pretty false`、相关 settings / permission smoke 通过。
+
 ## P0 扫描现有代码并形成设计文档
 
 状态：已完成。

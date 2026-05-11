@@ -3,6 +3,14 @@ import { getPublicModelDisplayName, renderModelName, } from '../../utils/model/m
 const TEXT_ONLY_MODALITIES = ['text'];
 const TEXT_AND_IMAGE_MODALITIES = ['text', 'image'];
 const CODEX_OAUTH_MODEL_CATALOG = {
+    'gpt-5.5': {
+        displayName: 'GPT-5.5',
+        contextWindow: 200_000,
+        maxOutputTokens: 32_000,
+        supportsReasoning: true,
+        supportsTools: true,
+        inputModalities: TEXT_ONLY_MODALITIES,
+    },
     'gpt-5.4': {
         displayName: 'GPT-5.4',
         contextWindow: 200_000,
@@ -20,6 +28,34 @@ const CODEX_OAUTH_MODEL_CATALOG = {
         inputModalities: TEXT_ONLY_MODALITIES,
     },
 };
+const DEEPSEEK_MODEL_CATALOG = {
+    'deepseek-v4-flash': {
+        displayName: 'DeepSeek V4 Flash',
+        contextWindow: 1_000_000,
+        maxOutputTokens: 384_000,
+        supportsReasoning: true,
+        supportsTools: true,
+        inputModalities: TEXT_ONLY_MODALITIES,
+        metadata: {
+            baseUrl: 'https://api.deepseek.com',
+            thinkingDefault: 'enabled',
+            protocol: 'openai-chat',
+        },
+    },
+    'deepseek-v4-pro': {
+        displayName: 'DeepSeek V4 Pro',
+        contextWindow: 1_000_000,
+        maxOutputTokens: 384_000,
+        supportsReasoning: true,
+        supportsTools: true,
+        inputModalities: TEXT_ONLY_MODALITIES,
+        metadata: {
+            baseUrl: 'https://api.deepseek.com',
+            thinkingDefault: 'enabled',
+            protocol: 'openai-chat',
+        },
+    },
+};
 export function getLlmModelCatalogEntry(input) {
     if (input.providerId === 'anthropic') {
         return getAnthropicModelCatalogEntry(input.model, input.providerDefinition);
@@ -27,11 +63,17 @@ export function getLlmModelCatalogEntry(input) {
     if (input.providerId === 'codex-oauth') {
         return getCodexOAuthModelCatalogEntry(input.model, input.providerDefinition);
     }
+    if (input.providerId === 'deepseek') {
+        return getDeepSeekModelCatalogEntry(input.model, input.providerDefinition);
+    }
     return getFallbackModelCatalogEntry(input);
 }
 export function listKnownLlmModelCatalogEntries(input) {
     if (input.providerId === 'codex-oauth') {
         return Object.keys(CODEX_OAUTH_MODEL_CATALOG).map(model => getCodexOAuthModelCatalogEntry(model, input.providerDefinition));
+    }
+    if (input.providerId === 'deepseek') {
+        return Object.keys(DEEPSEEK_MODEL_CATALOG).map(model => getDeepSeekModelCatalogEntry(model, input.providerDefinition));
     }
     return [
         getLlmModelCatalogEntry({
@@ -72,6 +114,26 @@ function getCodexOAuthModelCatalogEntry(model, providerDefinition) {
         displayName: model,
         contextWindow: 200_000,
         maxOutputTokens: 32_000,
+        supportsReasoning: providerDefinition.capabilities.reasoning,
+        supportsTools: providerDefinition.capabilities.tools,
+        inputModalities: TEXT_ONLY_MODALITIES,
+    };
+}
+function getDeepSeekModelCatalogEntry(model, providerDefinition) {
+    const catalogEntry = DEEPSEEK_MODEL_CATALOG[model];
+    if (catalogEntry) {
+        return {
+            provider: providerDefinition.id,
+            model,
+            ...catalogEntry,
+        };
+    }
+    return {
+        provider: providerDefinition.id,
+        model,
+        displayName: model,
+        contextWindow: 1_000_000,
+        maxOutputTokens: 384_000,
         supportsReasoning: providerDefinition.capabilities.reasoning,
         supportsTools: providerDefinition.capabilities.tools,
         inputModalities: TEXT_ONLY_MODALITIES,

@@ -96,7 +96,7 @@ npm.cmd run release:desktop:public
 
 输出：
 
-- `tmp/desktop-release/release-notes-v<version>.md`。
+- `tmp/desktop-release/release-notes-v<version>.md`，其中会自动带入 `CHANGELOG.md` 里对应版本的更新内容。
 - dry-run JSON，包括 tag、title、assets、sha256、GitHub CLI 命令。
 - 可选的 GitHub Release 草稿。
 - 公开发布后可用 `npm.cmd run smoke:desktop-auto-update-feed` 验证远端 `latest.yml` 和安装包资产。
@@ -194,4 +194,4 @@ npm.cmd run smoke:desktop-signing-readiness
 
 - 当前安装器默认未签名，这是有意策略；短期不购买代码签名证书。
 - Windows 可能提示未知发布者，release note 必须保留 SHA256 校验值。
-- 当前 release note 是基础模板，后续可以接入 changelog 或提交摘要生成。
+- Release note 已接入 `CHANGELOG.md` 对应版本条目；发布前必须确认当前版本更新内容已经补齐。

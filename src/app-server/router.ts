@@ -12,7 +12,10 @@ import {
 import {
   handleAuthStatus,
   handleConfigGet,
+  handleModelAvailability,
   handleModelList,
+  handleModelSet,
+  handleModelTest,
 } from './handlers/llmHandlers.js'
 import { handleMcpList } from './handlers/mcpHandlers.js'
 import {
@@ -111,6 +114,21 @@ export async function handleJsonRpcMessage(
         )
       case 'model/list':
         return successResponse(request.id, handleModelList(context, request.params))
+      case 'model/availability':
+        return successResponse(
+          request.id,
+          handleModelAvailability(context, request.params),
+        )
+      case 'model/set':
+        return successResponse(
+          request.id,
+          await handleModelSet(context, request.params),
+        )
+      case 'model/test':
+        return successResponse(
+          request.id,
+          await handleModelTest(context, request.params),
+        )
       case 'mcp/list':
         return successResponse(
           request.id,

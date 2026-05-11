@@ -2,30 +2,41 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-# CCR v0.2
+# CCR
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
+![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
+![](https://img.shields.io/badge/current-0.4.2-orange?style=flat-square)
 
-CCR 是一个终端编码 Agent 的恢复构建版本。当前 v0.2 里程碑保留了终端优先的交互方式，新增了仓库内置的可插拔 LLM 运行时，已支持 Codex OAuth，并包含 Playwright MCP 接入。
+CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留终端优先的工作方式，同时把配置、LLM 运行时、App Server 和 Desktop 客户端逐步收敛到 CCR 自己的边界内。
 
-仓库或文档里仍然出现的上游产品名、协议名和兼容性引用，只在描述源码来源或外部兼容边界时保留。
+当前主线重点：
 
-<img src="https://github.com/anthropics/claude-code/blob/main/demo.gif?raw=1" />
+- `ccr` CLI / TUI 运行时，支持 Codex OAuth。
+- CCR Desktop Windows 客户端，负责本地 App Server 管理、历史会话、权限设置、自动更新和安装包发布。
+- 内置 LLM Runtime，逐步支持多供应商、多协议和第三方中转。
+- 默认使用 Codex OAuth；DeepSeek 和 OpenAI Compatible 协议链路正在推进中。
+- 项目级 `.ccr` 设置隔离，避免和本机 Claude Code、Codex、OpenClaw 等工具互相污染。
+
+![CCR Desktop](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
 
 ## 当前状态
 
-- 产品命令：`ccr`
-- 产品版本：`CCR v0.2`
 - npm 包名：`cc-reforged`
+- 当前版本：`0.4.2`
+- CLI 命令：`ccr`
+- 桌面应用：`CCR Desktop`
 - 运行时要求：Node.js `>=24.0.0`
 - 默认配置目录：`~/.ccr`
 - 默认 LLM 配置文件：`~/.ccr/data/llm.config.local.json`
 - 默认 Codex OAuth 凭据文件：`~/.ccr/data/codex-oauth.json`
-- 当前运行时方向：优先使用内置 provider runtime；仍保留必要的 Anthropic 兼容边界
+- 发布入口：[`mhdfy1988/cc-reforged` GitHub Releases](https://github.com/mhdfy1988/cc-reforged/releases)
 
-## 从 npm 安装
+主分支可能包含最新版本之后的开发中改动。面向用户的版本变化见 [CHANGELOG.md](CHANGELOG.md)。
 
-首个 npm 版本发布后，可以这样安装：
+## 安装
+
+从 npm 安装 CLI：
 
 ```powershell
 npm.cmd install -g cc-reforged
@@ -33,21 +44,21 @@ ccr --version
 ccr
 ```
 
-## 从源码运行
+桌面端请从 GitHub Releases 下载最新 Windows 安装器：
 
-当前仓库主要面向源码运行或本地链接使用。
+```text
+CCR-Desktop-<version>-win-x64.exe
+```
+
+当前 Windows 安装包暂未购买代码签名证书。如果 Windows 提示未知发布者，请以 GitHub Release 页面和 release note 中的 SHA256 校验值确认来源。
+
+## 从源码运行
 
 ```powershell
 npm.cmd install
 npm.cmd run build
 node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js --version
 node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js
-```
-
-预期版本输出：
-
-```text
-CCR v0.2
 ```
 
 可选的本地全局链接：
@@ -58,11 +69,21 @@ ccr --version
 ccr
 ```
 
-## Codex OAuth
+桌面端开发：
 
-CCR v0.2 可以使用 Codex OAuth 作为当前 LLM provider。
+```powershell
+npm.cmd run desktop:dev
+```
 
-推荐首次使用流程：
+桌面安装包构建：
+
+```powershell
+npm.cmd run desktop:dist
+```
+
+## 模型供应商
+
+Codex OAuth 是当前默认供应商。推荐首次使用流程：
 
 1. 使用 `ccr` 或上面的源码命令启动 CCR。
 2. 在 TUI 里运行 `/login`。
@@ -76,31 +97,48 @@ CCR v0.2 可以使用 Codex OAuth 作为当前 LLM provider。
 node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js auth status --json
 ```
 
-当前 Codex OAuth 默认模型是 `gpt-5.4`。模型和 provider 配置会刻意存放在 `~/.ccr` 下，避免和本机 Claude Code、Codex、OpenClaw 等工具的配置目录冲突。
+模型和供应商配置默认保存在 `~/.ccr` 下。当前多供应商工作已经包含 DeepSeek 官方 API 第一版和 OpenAI Chat Completions 公共协议适配器；完整 Desktop 模型管理页仍在推进中。
+
+## Desktop 能力
+
+- 本地 App Server 生命周期管理。
+- 工作区切换和项目级 settings 隔离。
+- 按工作区分组的历史会话。
+- 顶部当前模型快速切换。
+- 本地 / 项目 / 用户级权限设置页面。
+- 通过 GitHub Releases 检查自动更新。
+- Windows 安装器打包、发布资产校验和 unsigned 发布提示。
 
 ## 开发验证
 
 ```powershell
 npm.cmd run typecheck -- --pretty false
+npm.cmd run typecheck:desktop
 npm.cmd run build -- --pretty false
 npm.cmd run smoke:llm-config
+npm.cmd run smoke:llm-runtime
 npm.cmd run smoke:llm-runtime-status
 npm.cmd run smoke:codex-oauth-session
 npm.cmd run smoke:codex-oauth-provider
+npm.cmd run smoke:app-server
+npm.cmd run smoke:app-server-client
 ```
 
-不要直接用 `node scripts/...` 运行 smoke 脚本，除非确认该脚本不需要项目 loader。大多数 runtime smoke 脚本必须通过 `bun-bundle-loader.mjs` 启动，npm scripts 已经处理好了这一点。
+不要直接用 `node scripts/...` 运行 runtime smoke 脚本，除非确认该脚本不需要项目 loader。npm scripts 已经处理了需要 `bun-bundle-loader.mjs` 的入口。
 
 ## 发布
 
-npm 发布检查清单见 [`docs/release/npm-publish-workflow.md`](docs/release/npm-publish-workflow.md)。
+- 版本更新日志：[CHANGELOG.md](CHANGELOG.md)
+- Desktop 发布验收 Runbook：[docs/architecture/desktop-release-acceptance-runbook.md](docs/architecture/desktop-release-acceptance-runbook.md)
+- GitHub Release 发布流程：[docs/architecture/desktop-github-release-workflow.md](docs/architecture/desktop-github-release-workflow.md)
+- npm 发布流程：[docs/release/npm-publish-workflow.md](docs/release/npm-publish-workflow.md)
 
 ## 重要边界
 
 - CCR 不是 Anthropic 官方源码发布版本。
 - `CLAUDE.md` 在恢复代码的部分流程中仍是兼容文件名。
 - 一些 Anthropic、Claude、Claude Desktop、Chrome extension、GitHub App 和 remote-session 文案可能仍会保留，因为它们指向真实外部服务或协议。
-- 新增或面向用户展示的 CCR 产品身份，应优先使用 `CCR` / `ccr`。
+- 新增或面向用户展示的产品身份，应优先使用 `CCR`、`ccr` 或 `CCR Desktop`。
 
 ## 问题反馈
 

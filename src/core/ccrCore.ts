@@ -1,7 +1,12 @@
 import { getCoreAuthStatus } from './authCore.js'
 import { getCoreConfigSnapshot } from './configCore.js'
 import { listCoreMcpServers } from './mcpCore.js'
-import { listCoreModels } from './modelCore.js'
+import {
+  getCoreModelAvailability,
+  listCoreModels,
+  setCoreModel,
+  testCoreModelConnection,
+} from './modelCore.js'
 import { CorePermissionService } from './permissionCore.js'
 import { CoreSessionService } from './sessionCore.js'
 import type { CoreEventEmitter } from './types.js'
@@ -30,7 +35,10 @@ export function createCcrCore(options: {
       getStatus: getCoreAuthStatus,
     },
     model: {
+      getAvailability: getCoreModelAvailability,
       listModels: listCoreModels,
+      setModel: setCoreModel,
+      testConnection: testCoreModelConnection,
     },
     mcp: {
       listServers: listCoreMcpServers,

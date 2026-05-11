@@ -8,6 +8,7 @@
   "files": [
     "README.md",
     "README.zh-CN.md",
+    "CHANGELOG.md",
     "LICENSE.md",
     "cli.js",
     "bun-bundle-loader.mjs",
@@ -62,6 +63,8 @@
     "smoke:anthropic-provider": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-anthropic-provider.mjs",
     "smoke:codex-oauth-session": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-codex-oauth-session.mjs",
     "smoke:codex-oauth-provider": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-codex-oauth-provider.mjs",
+    "smoke:deepseek-provider": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-deepseek-provider.mjs",
+    "smoke:openai-chat-protocol": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-openai-chat-protocol.mjs",
     "smoke:llm-claude-adapter": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-claude-adapter.mjs",
     "smoke:llm-config": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-config.mjs",
     "smoke:llm-runtime": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-runtime.mjs",

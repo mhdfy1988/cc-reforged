@@ -83,6 +83,27 @@ export const ModelListParamsSchema = z
 })
     .strict()
     .default({});
+export const ModelSetParamsSchema = z
+    .object({
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1),
+})
+    .strict();
+export const ModelAvailabilityParamsSchema = z
+    .object({
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+})
+    .strict()
+    .default({});
+export const ModelTestParamsSchema = z
+    .object({
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    prompt: z.string().min(1).optional(),
+})
+    .strict()
+    .default({});
 export const McpListParamsSchema = z
     .object({
     includeDisabled: z.boolean().optional(),

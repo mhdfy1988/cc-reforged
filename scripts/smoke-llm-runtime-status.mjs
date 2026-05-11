@@ -24,11 +24,14 @@ try {
     'utf8',
   );
 
-  process.env.CLAUDE_CODE_LLM_CONFIG_PATH = configPath;
-  delete process.env.CLAUDE_CODE_LLM_PROVIDER;
-  delete process.env.CLAUDE_CODE_LLM_MODEL;
+  process.env.CCR_LLM_CONFIG_PATH = configPath;
+  delete process.env.CCR_LLM_PROVIDER;
+  delete process.env.CCR_LLM_MODEL;
 
-  const { getLlmRuntimeDisplayStatus } = await import(
+  const {
+    getLlmRuntimeAuthStatusSync,
+    getLlmRuntimeDisplayStatus,
+  } = await import(
     '../dist/src/services/llm/runtimeStatus.js'
   );
 
@@ -42,19 +45,39 @@ try {
   assert.equal(status.modelCatalogEntry.supportsTools, true);
   assert.equal(status.modelCatalogEntry.inputModalities.join(','), 'text');
 
+  process.env.CCR_LLM_PROVIDER = 'deepseek';
+  process.env.CCR_LLM_MODEL = 'deepseek-v4-pro';
+  process.env.CCR_DEEPSEEK_API_KEY = 'sk-test';
+
+  const deepSeekStatus = getLlmRuntimeDisplayStatus();
+  const deepSeekAuth = getLlmRuntimeAuthStatusSync();
+  assert.equal(deepSeekStatus.providerId, 'deepseek');
+  assert.equal(deepSeekStatus.apiMode, 'openai-chat');
+  assert.equal(deepSeekStatus.authStrategy, 'api_key');
+  assert.equal(deepSeekStatus.modelCatalogEntry.displayName, 'DeepSeek V4 Pro');
+  assert.equal(deepSeekStatus.modelCatalogEntry.contextWindow, 1000000);
+  assert.equal(deepSeekStatus.modelCatalogEntry.maxOutputTokens, 384000);
+  assert.equal(deepSeekStatus.modelCatalogEntry.supportsReasoning, true);
+  assert.equal(deepSeekStatus.modelCatalogEntry.supportsTools, true);
+  assert.equal(deepSeekAuth.available, true);
+  assert.equal(deepSeekAuth.source, 'CCR_DEEPSEEK_API_KEY');
+
   console.log(
     JSON.stringify(
       {
         ok: true,
         status,
+        deepSeekStatus,
+        deepSeekAuth,
       },
       null,
       2,
     ),
   );
 } finally {
-  delete process.env.CLAUDE_CODE_LLM_CONFIG_PATH;
-  delete process.env.CLAUDE_CODE_LLM_PROVIDER;
-  delete process.env.CLAUDE_CODE_LLM_MODEL;
+  delete process.env.CCR_LLM_CONFIG_PATH;
+  delete process.env.CCR_LLM_PROVIDER;
+  delete process.env.CCR_LLM_MODEL;
+  delete process.env.CCR_DEEPSEEK_API_KEY;
   rmSync(tempDir, { recursive: true, force: true });
 }

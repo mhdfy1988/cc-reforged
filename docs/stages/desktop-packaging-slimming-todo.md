@@ -17,6 +17,23 @@
 - 当前正在做：P1-P4 已完成代码和自动化验收；真实安装计时不在本轮直接执行，避免覆盖用户当前本机安装态。
 - 完成后下一项：PKG-05 在线安装器 nsis-web 评估
 
+## 接下来安排
+
+这个专项的主链路已经随 0.4.2 发布验证过，PKG-05 到 PKG-07 属于后续方案评估和文档收口，不阻塞当前 Desktop 使用。
+
+整体顺序：项目级 settings 隔离完成后，先收本专项尾巴，再进入多供应商模型接入与多协议适配，最后回到 App Server P23。
+
+- 第一段：完成 PKG-05，评估 `nsis-web` 在线安装器是否值得进入后续版本，不直接替换当前离线安装器。
+- 第二段：完成 PKG-06，评估 JS runtime bundle 兜底方案，只输出边界、收益、风险和是否进入后续版本。
+- 第三段：完成 PKG-07，回写发布、回滚、验收和文档索引，关闭本专项。
+
+完成判定：
+
+- 当前 ASAR 优先包结构保持稳定，`app.asar.unpacked` 不回退成完整 `node_modules`。
+- `nsis-web` 和 runtime bundle 都有明确结论：采用、暂缓或放弃，并说明原因。
+- 发布与回滚文档能解释 0.4.2 当前包结构、unsigned 策略、安装器大小和后续优化边界。
+- `npm.cmd run smoke:desktop-package-layout`、`npm.cmd run smoke:desktop-packaged`、`npm.cmd run smoke:desktop-release-artifacts` 通过。
+
 ## 专项边界
 
 目标：

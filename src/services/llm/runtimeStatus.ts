@@ -71,21 +71,40 @@ export function getLlmProviderDisplayName(
 export function getLlmRuntimeDisplayStatus(
   config: ResolvedLlmConfig = loadLlmConfig(),
 ): LlmRuntimeDisplayStatus {
-  const providerConfig = getLlmProviderConfig(config.provider, config)
+  return getLlmRuntimeDisplayStatusForProvider(
+    {
+      provider: config.provider,
+      model: config.model,
+    },
+    config,
+  )
+}
+
+export function getLlmRuntimeDisplayStatusForProvider(
+  input: {
+    provider: string
+    model?: string
+  },
+  config: ResolvedLlmConfig = loadLlmConfig(),
+): LlmRuntimeDisplayStatus {
+  const provider = input.provider.trim()
+  const model =
+    input.model?.trim() || config.providers[provider]?.defaultModel || config.model
+  const providerConfig = getLlmProviderConfig(provider, config)
   const providerDefinition = getResolvedLlmProviderDefinition(
-    config.provider,
+    provider,
     config,
   )
   return {
-    providerId: config.provider,
+    providerId: provider,
     providerDisplayName: providerDefinition.displayName,
-    model: config.model,
+    model,
     authStrategy: providerDefinition.authStrategy,
     apiMode: providerDefinition.apiMode,
     capabilities: providerDefinition.capabilities,
     modelCatalogEntry: getLlmModelCatalogEntry({
-      providerId: config.provider,
-      model: config.model,
+      providerId: provider,
+      model,
       providerDefinition,
     }),
     ...(providerConfig?.baseUrl ? { baseUrl: providerConfig.baseUrl } : {}),
@@ -138,9 +157,31 @@ export function getResolvedLlmProviderDefinition(
 export function getLlmRuntimeAuthStatusSync(
   config: ResolvedLlmConfig = loadLlmConfig(),
 ): LlmRuntimeAuthStatus {
-  const displayStatus = getLlmRuntimeDisplayStatus(config)
+  return getLlmRuntimeAuthStatusSyncForProvider(
+    {
+      provider: config.provider,
+      model: config.model,
+    },
+    config,
+  )
+}
+
+export function getLlmRuntimeAuthStatusSyncForProvider(
+  input: {
+    provider: string
+    model?: string
+  },
+  config: ResolvedLlmConfig = loadLlmConfig(),
+): LlmRuntimeAuthStatus {
+  const displayStatus = getLlmRuntimeDisplayStatusForProvider(input, config)
   if (displayStatus.providerId === 'codex-oauth') {
     return getCodexAuthStatusSync(config, displayStatus)
+  }
+  if (displayStatus.providerId === 'deepseek') {
+    return getApiKeyAuthStatus(displayStatus, [
+      'CCR_DEEPSEEK_API_KEY',
+      'DEEPSEEK_API_KEY',
+    ])
   }
   return getAnthropicAuthStatus(displayStatus)
 }
@@ -148,7 +189,29 @@ export function getLlmRuntimeAuthStatusSync(
 export async function getLlmRuntimeAuthStatus(
   config: ResolvedLlmConfig = loadLlmConfig(),
 ): Promise<LlmRuntimeAuthStatus> {
-  const displayStatus = getLlmRuntimeDisplayStatus(config)
+  return getLlmRuntimeAuthStatusForProvider(
+    {
+      provider: config.provider,
+      model: config.model,
+    },
+    config,
+  )
+}
+
+export async function getLlmRuntimeAuthStatusForProvider(
+  input: {
+    provider: string
+    model?: string
+  },
+  config: ResolvedLlmConfig = loadLlmConfig(),
+): Promise<LlmRuntimeAuthStatus> {
+  const displayStatus = getLlmRuntimeDisplayStatusForProvider(input, config)
+  if (displayStatus.providerId === 'deepseek') {
+    return getApiKeyAuthStatus(displayStatus, [
+      'CCR_DEEPSEEK_API_KEY',
+      'DEEPSEEK_API_KEY',
+    ])
+  }
   if (displayStatus.providerId !== 'codex-oauth') {
     return getAnthropicAuthStatus(displayStatus)
   }
@@ -301,6 +364,31 @@ function getCodexCredentialSnapshotSync(
 
 function hasCodexCredentialInEnv(): boolean {
   return Boolean(process.env.CLAUDE_CODE_CODEX_OAUTH_ACCESS_TOKEN?.trim())
+}
+
+function getApiKeyAuthStatus(
+  displayStatus: LlmRuntimeDisplayStatus,
+  envNames: readonly string[],
+): LlmRuntimeAuthStatus {
+  const envName = envNames.find(name => process.env[name]?.trim())
+  if (envName) {
+    return {
+      state: 'available',
+      configured: true,
+      available: true,
+      message: `${displayStatus.providerDisplayName} API key is available.`,
+      source: envName,
+      baseUrl: displayStatus.baseUrl,
+    }
+  }
+
+  return {
+    state: 'missing',
+    configured: false,
+    available: false,
+    message: `${displayStatus.providerDisplayName} API key is missing.`,
+    baseUrl: displayStatus.baseUrl,
+  }
 }
 
 function getAnthropicAuthStatus(

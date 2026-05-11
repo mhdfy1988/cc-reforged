@@ -86,10 +86,11 @@ assert.deepEqual(streamedEvents, [
 
 const defaultRuntime = getDefaultLlmRuntime();
 const defaultConfig = loadLlmConfig();
-assert.equal(defaultRuntime.listProviders().length, 2);
-assert.equal(defaultRuntime.listProviderDefinitions().length, 2);
+assert.equal(defaultRuntime.listProviders().length, 3);
+assert.equal(defaultRuntime.listProviderDefinitions().length, 3);
 assert.equal(defaultRuntime.getProvider('anthropic').name, 'anthropic');
 assert.equal(defaultRuntime.getProvider('codex-oauth').name, 'codex-oauth');
+assert.equal(defaultRuntime.getProvider('deepseek').name, 'deepseek');
 assert.equal(
   defaultRuntime.getProviderDefinition('anthropic').apiMode,
   'anthropic-messages',
@@ -97,6 +98,10 @@ assert.equal(
 assert.equal(
   defaultRuntime.getProviderDefinition('codex-oauth').apiMode,
   'openai-responses',
+);
+assert.equal(
+  defaultRuntime.getProviderDefinition('deepseek').apiMode,
+  'openai-chat',
 );
 const [, defaultResolvedRequest] = defaultRuntime.resolveRequest({
   messages: [],

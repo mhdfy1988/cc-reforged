@@ -20,6 +20,15 @@ export class StdioAppServerClient {
     listModels(params = {}, options) {
         return this.rpc.request('model/list', params, options);
     }
+    setModel(params, options) {
+        return this.rpc.request('model/set', params, options);
+    }
+    getModelAvailability(params = {}, options) {
+        return this.rpc.request('model/availability', params, options);
+    }
+    testModelConnection(params = {}, options) {
+        return this.rpc.request('model/test', params, options);
+    }
     listMcp(params = {}, options) {
         return this.rpc.request('mcp/list', params, options);
     }

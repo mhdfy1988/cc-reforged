@@ -23,14 +23,40 @@ try {
     { jsonrpc: '2.0', id: 3, method: 'config/get', params: {} },
     { jsonrpc: '2.0', id: 4, method: 'auth/status', params: {} },
     { jsonrpc: '2.0', id: 5, method: 'model/list', params: {} },
-    { jsonrpc: '2.0', id: 6, method: 'mcp/list', params: { includeDisabled: true } },
     {
       jsonrpc: '2.0',
-      id: 7,
+      id: 6,
+      method: 'model/set',
+      params: { provider: 'codex-oauth', model: 'gpt-5.5' },
+    },
+    { jsonrpc: '2.0', id: 7, method: 'config/get', params: {} },
+    {
+      jsonrpc: '2.0',
+      id: 8,
+      method: 'model/set',
+      params: { provider: 'codex-oauth', model: 'gpt-5.4' },
+    },
+    { jsonrpc: '2.0', id: 9, method: 'config/get', params: {} },
+    { jsonrpc: '2.0', id: 10, method: 'mcp/list', params: { includeDisabled: true } },
+    {
+      jsonrpc: '2.0',
+      id: 11,
       method: 'workspace/open',
       params: { path: repoRoot, trust: 'trusted' },
     },
-    { jsonrpc: '2.0', id: 8, method: 'shutdown', params: {} },
+    {
+      jsonrpc: '2.0',
+      id: 12,
+      method: 'model/availability',
+      params: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 13,
+      method: 'model/test',
+      params: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+    },
+    { jsonrpc: '2.0', id: 14, method: 'shutdown', params: {} },
   ];
 
   const result = runAppServer(messages);
@@ -70,21 +96,68 @@ try {
   const codexProvider = responses[5].result.providers.find(
     provider => provider.id === 'codex-oauth',
   );
+  const deepSeekProvider = responses[5].result.providers.find(
+    provider => provider.id === 'deepseek',
+  );
   assert.ok(codexProvider);
+  assert.ok(deepSeekProvider);
+  assert.ok(codexProvider.models.some(model => model.model === 'gpt-5.5'));
   assert.ok(codexProvider.models.some(model => model.model === 'gpt-5.4'));
   assert.ok(codexProvider.models.some(model => model.model === 'gpt-5.4-mini'));
+  assert.ok(
+    deepSeekProvider.models.some(model => model.model === 'deepseek-v4-flash'),
+  );
+  assert.ok(
+    deepSeekProvider.models.some(model => model.model === 'deepseek-v4-pro'),
+  );
 
   assert.equal(responses[6].id, 6);
-  assert.equal(Array.isArray(responses[6].result.servers), true);
-  assert.equal(Array.isArray(responses[6].result.errors), true);
-  assertNoSecretKeys(responses[6].result);
+  assert.equal(responses[6].result.current.provider, 'codex-oauth');
+  assert.equal(responses[6].result.current.model, 'gpt-5.5');
 
   assert.equal(responses[7].id, 7);
-  assert.equal(responses[7].result.workspace.path, repoRoot);
-  assert.equal(responses[7].result.workspace.trusted, true);
+  assert.equal(responses[7].result.llm.provider, 'codex-oauth');
+  assert.equal(responses[7].result.llm.model, 'gpt-5.5');
+  assertNoSecretKeys(responses[7].result);
 
   assert.equal(responses[8].id, 8);
-  assert.equal(responses[8].result.accepted, true);
+  assert.equal(responses[8].result.current.provider, 'codex-oauth');
+  assert.equal(responses[8].result.current.model, 'gpt-5.4');
+
+  assert.equal(responses[9].id, 9);
+  assert.equal(responses[9].result.llm.provider, 'codex-oauth');
+  assert.equal(responses[9].result.llm.model, 'gpt-5.4');
+  assertNoSecretKeys(responses[9].result);
+
+  assert.equal(responses[10].id, 10);
+  assert.equal(Array.isArray(responses[10].result.servers), true);
+  assert.equal(Array.isArray(responses[10].result.errors), true);
+  assertNoSecretKeys(responses[10].result);
+
+  assert.equal(responses[11].id, 11);
+  assert.equal(responses[11].result.workspace.path, repoRoot);
+  assert.equal(responses[11].result.workspace.trusted, true);
+
+  assert.equal(responses[12].id, 12);
+  assert.equal(responses[12].result.provider, 'deepseek');
+  assert.equal(responses[12].result.model, 'deepseek-v4-flash');
+  assert.equal(responses[12].result.state, 'needs_auth');
+  assert.equal(responses[12].result.available, false);
+  assert.equal(responses[12].result.testable, false);
+  assert.equal(responses[12].result.networkChecked, false);
+  assert.equal(responses[12].result.auth.configured, false);
+  assertNoSecretKeys(responses[12].result);
+
+  assert.equal(responses[13].id, 13);
+  assert.equal(responses[13].result.provider, 'deepseek');
+  assert.equal(responses[13].result.model, 'deepseek-v4-flash');
+  assert.equal(responses[13].result.ok, false);
+  assert.equal(responses[13].result.networkChecked, false);
+  assert.equal(responses[13].result.error.kind, 'auth_required');
+  assertNoSecretKeys(responses[13].result);
+
+  assert.equal(responses[14].id, 14);
+  assert.equal(responses[14].result.accepted, true);
 
   const unsupported = spawnSync(
     process.execPath,
@@ -214,6 +287,9 @@ try {
           'config/get',
           'auth/status',
           'model/list',
+          'model/availability',
+          'model/test_auth_required_no_network',
+          'model/set',
           'mcp/list',
           'workspace/open',
           'shutdown',
@@ -525,6 +601,8 @@ function getSmokeEnv() {
   delete env.CLAUDE_CODE_CODEX_OAUTH_REFRESH_TOKEN;
   delete env.CLAUDE_CODE_CODEX_OAUTH_ACCOUNT_ID;
   delete env.CLAUDE_CODE_CODEX_OAUTH_EXPIRES_AT;
+  delete env.CCR_DEEPSEEK_API_KEY;
+  delete env.DEEPSEEK_API_KEY;
   return env;
 }
 

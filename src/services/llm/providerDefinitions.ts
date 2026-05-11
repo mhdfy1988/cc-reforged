@@ -37,6 +37,18 @@ const BUILTIN_PROVIDER_DEFINITION_MAP: Record<string, LlmProviderDefinition> = {
       usage: true,
     },
   },
+  deepseek: {
+    id: 'deepseek',
+    displayName: 'DeepSeek',
+    apiMode: 'openai-chat',
+    authStrategy: 'api_key',
+    capabilities: {
+      streaming: true,
+      tools: true,
+      reasoning: true,
+      usage: true,
+    },
+  },
 }
 
 function normalizeCapabilities(

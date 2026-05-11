@@ -13,8 +13,14 @@ import type {
   McpListParams,
   McpListResult,
   MemorySessionStatusResult,
+  ModelAvailabilityParams,
+  ModelAvailabilityResult,
   ModelListParams,
   ModelListResult,
+  ModelSetParams,
+  ModelSetResult,
+  ModelTestParams,
+  ModelTestResult,
   PermissionRespondParams,
   PermissionRespondResult,
   PermissionSettingsGetResult,
@@ -85,6 +91,27 @@ export class StdioAppServerClient {
     options?: RequestOptions,
   ): Promise<ModelListResult> {
     return this.rpc.request('model/list', params, options)
+  }
+
+  setModel(
+    params: ModelSetParams,
+    options?: RequestOptions,
+  ): Promise<ModelSetResult> {
+    return this.rpc.request('model/set', params, options)
+  }
+
+  getModelAvailability(
+    params: ModelAvailabilityParams = {},
+    options?: RequestOptions,
+  ): Promise<ModelAvailabilityResult> {
+    return this.rpc.request('model/availability', params, options)
+  }
+
+  testModelConnection(
+    params: ModelTestParams = {},
+    options?: RequestOptions,
+  ): Promise<ModelTestResult> {
+    return this.rpc.request('model/test', params, options)
   }
 
   listMcp(

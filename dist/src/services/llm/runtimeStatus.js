@@ -10,18 +10,26 @@ export function getLlmProviderDisplayName(providerId, config = loadLlmConfig()) 
     return getResolvedLlmProviderDefinition(providerId, config).displayName;
 }
 export function getLlmRuntimeDisplayStatus(config = loadLlmConfig()) {
-    const providerConfig = getLlmProviderConfig(config.provider, config);
-    const providerDefinition = getResolvedLlmProviderDefinition(config.provider, config);
-    return {
-        providerId: config.provider,
-        providerDisplayName: providerDefinition.displayName,
+    return getLlmRuntimeDisplayStatusForProvider({
+        provider: config.provider,
         model: config.model,
+    }, config);
+}
+export function getLlmRuntimeDisplayStatusForProvider(input, config = loadLlmConfig()) {
+    const provider = input.provider.trim();
+    const model = input.model?.trim() || config.providers[provider]?.defaultModel || config.model;
+    const providerConfig = getLlmProviderConfig(provider, config);
+    const providerDefinition = getResolvedLlmProviderDefinition(provider, config);
+    return {
+        providerId: provider,
+        providerDisplayName: providerDefinition.displayName,
+        model,
         authStrategy: providerDefinition.authStrategy,
         apiMode: providerDefinition.apiMode,
         capabilities: providerDefinition.capabilities,
         modelCatalogEntry: getLlmModelCatalogEntry({
-            providerId: config.provider,
-            model: config.model,
+            providerId: provider,
+            model,
             providerDefinition,
         }),
         ...(providerConfig?.baseUrl ? { baseUrl: providerConfig.baseUrl } : {}),
@@ -65,14 +73,38 @@ export function getResolvedLlmProviderDefinition(providerId, config = loadLlmCon
     });
 }
 export function getLlmRuntimeAuthStatusSync(config = loadLlmConfig()) {
-    const displayStatus = getLlmRuntimeDisplayStatus(config);
+    return getLlmRuntimeAuthStatusSyncForProvider({
+        provider: config.provider,
+        model: config.model,
+    }, config);
+}
+export function getLlmRuntimeAuthStatusSyncForProvider(input, config = loadLlmConfig()) {
+    const displayStatus = getLlmRuntimeDisplayStatusForProvider(input, config);
     if (displayStatus.providerId === 'codex-oauth') {
         return getCodexAuthStatusSync(config, displayStatus);
+    }
+    if (displayStatus.providerId === 'deepseek') {
+        return getApiKeyAuthStatus(displayStatus, [
+            'CCR_DEEPSEEK_API_KEY',
+            'DEEPSEEK_API_KEY',
+        ]);
     }
     return getAnthropicAuthStatus(displayStatus);
 }
 export async function getLlmRuntimeAuthStatus(config = loadLlmConfig()) {
-    const displayStatus = getLlmRuntimeDisplayStatus(config);
+    return getLlmRuntimeAuthStatusForProvider({
+        provider: config.provider,
+        model: config.model,
+    }, config);
+}
+export async function getLlmRuntimeAuthStatusForProvider(input, config = loadLlmConfig()) {
+    const displayStatus = getLlmRuntimeDisplayStatusForProvider(input, config);
+    if (displayStatus.providerId === 'deepseek') {
+        return getApiKeyAuthStatus(displayStatus, [
+            'CCR_DEEPSEEK_API_KEY',
+            'DEEPSEEK_API_KEY',
+        ]);
+    }
     if (displayStatus.providerId !== 'codex-oauth') {
         return getAnthropicAuthStatus(displayStatus);
     }
@@ -197,6 +229,26 @@ function getCodexCredentialSnapshotSync(config) {
 }
 function hasCodexCredentialInEnv() {
     return Boolean(process.env.CLAUDE_CODE_CODEX_OAUTH_ACCESS_TOKEN?.trim());
+}
+function getApiKeyAuthStatus(displayStatus, envNames) {
+    const envName = envNames.find(name => process.env[name]?.trim());
+    if (envName) {
+        return {
+            state: 'available',
+            configured: true,
+            available: true,
+            message: `${displayStatus.providerDisplayName} API key is available.`,
+            source: envName,
+            baseUrl: displayStatus.baseUrl,
+        };
+    }
+    return {
+        state: 'missing',
+        configured: false,
+        available: false,
+        message: `${displayStatus.providerDisplayName} API key is missing.`,
+        baseUrl: displayStatus.baseUrl,
+    };
 }
 function getAnthropicAuthStatus(displayStatus) {
     const { source: authTokenSource, hasToken } = getAuthTokenSource();

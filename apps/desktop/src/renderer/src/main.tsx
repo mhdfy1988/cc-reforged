@@ -31,6 +31,7 @@ import type {
   ChatMessage,
   DesktopStatus,
   JsonObject,
+  LlmModelListState,
   LogSnapshot,
   PageId,
   PermissionRespondPayload,
@@ -59,6 +60,7 @@ function App() {
   const [logSnapshot, setLogSnapshot] = useState<LogSnapshot | null>(null)
   const [permissionSettings, setPermissionSettings] =
     useState<PermissionSettingsState | null>(null)
+  const [modelList, setModelList] = useState<LlmModelListState | null>(null)
   const [threadHistory, setThreadHistory] = useState<ThreadHistoryState>({
     status: 'closed',
     scope: 'allProjects',
@@ -74,6 +76,7 @@ function App() {
       setStatus(nextStatus)
       setPermissionSettings(nextStatus.permissionSettings ?? null)
       setWorkspaceInput(nextStatus.workspacePath ?? nextStatus.repoRoot ?? '')
+      void refreshModelList().catch(() => undefined)
     })
     refreshLogs().catch(() => undefined)
 
@@ -129,6 +132,13 @@ function App() {
     } finally {
       setBusy(false)
     }
+  }
+
+  async function refreshModelList(providerId?: string): Promise<void> {
+    const nextModelList = (await window.ccr.listModels(
+      providerId ? { provider: providerId } : {},
+    )) as LlmModelListState
+    setModelList(nextModelList)
   }
 
   function appendDisplayEvent(event: DisplayEvent): void {
@@ -460,6 +470,25 @@ function App() {
     })
   }
 
+  async function switchModel(providerId: string, modelId: string): Promise<void> {
+    try {
+      await runAction(async () => {
+        await window.ccr.setModel({
+          provider: providerId,
+          model: modelId,
+        })
+        await refreshModelList()
+      })
+    } catch (error) {
+      appendDisplayEvent(
+        createErrorDisplayEvent(
+          `${Date.now()}-model-switch-error`,
+          error instanceof Error ? error.message : String(error),
+        ),
+      )
+    }
+  }
+
   function runUpdateAction(kind: UpdateActionKind): void {
     if (kind === 'download') {
       void runAction(() => window.ccr.downloadUpdate())
@@ -536,12 +565,16 @@ function App() {
               contextWindow={contextWindow}
               memoryStatus={status?.memory}
               model={model}
+              modelList={modelList}
               provider={provider}
               turnMetadata={turnMetadata}
               updateStatus={updateStatus}
               workspacePath={workspacePath}
               onChooseWorkspace={() =>
                 void runAction(() => window.ccr.chooseWorkspace())
+              }
+              onSelectModel={(providerId, modelId) =>
+                void switchModel(providerId, modelId)
               }
               onUpdateAction={runUpdateAction}
             />

@@ -29,6 +29,18 @@ const BUILTIN_PROVIDER_DEFINITION_MAP = {
             usage: true,
         },
     },
+    deepseek: {
+        id: 'deepseek',
+        displayName: 'DeepSeek',
+        apiMode: 'openai-chat',
+        authStrategy: 'api_key',
+        capabilities: {
+            streaming: true,
+            tools: true,
+            reasoning: true,
+            usage: true,
+        },
+    },
 };
 function normalizeCapabilities(input) {
     return {

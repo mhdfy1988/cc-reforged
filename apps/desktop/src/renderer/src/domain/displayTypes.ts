@@ -62,6 +62,31 @@ export type TurnUsage = {
   cacheReadInputTokens?: number
 }
 
+export type LlmModelCatalogEntry = {
+  provider: string
+  model: string
+  displayName?: string
+  contextWindow?: number
+  maxOutputTokens?: number
+  supportsReasoning?: boolean
+  supportsTools?: boolean
+  inputModalities?: string[]
+}
+
+export type LlmModelProviderCatalog = {
+  id: string
+  displayName?: string
+  models?: LlmModelCatalogEntry[]
+}
+
+export type LlmModelListState = {
+  current?: {
+    provider?: string
+    model?: string
+  }
+  providers?: LlmModelProviderCatalog[]
+}
+
 export type TurnRuntimeMetadata = {
   turnId?: string
   threadId?: string

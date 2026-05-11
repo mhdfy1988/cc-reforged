@@ -27,6 +27,26 @@ type SessionHistoryListInput = {
   includeCurrent?: boolean
 }
 
+type ModelListInput = {
+  provider?: string
+}
+
+type ModelSetInput = {
+  provider?: string
+  model: string
+}
+
+type ModelAvailabilityInput = {
+  provider?: string
+  model?: string
+}
+
+type ModelTestInput = {
+  provider?: string
+  model?: string
+  prompt?: string
+}
+
 type ResumeThreadInput = {
   sessionId: string
   title?: string
@@ -60,6 +80,14 @@ const api = {
   openWorkspace: (path: string) => ipcRenderer.invoke('ccr:open-workspace', path),
   startThread: (title?: string) => ipcRenderer.invoke('ccr:start-thread', title),
   listThreads: () => ipcRenderer.invoke('ccr:list-threads'),
+  listModels: (input?: ModelListInput) =>
+    ipcRenderer.invoke('ccr:list-models', input ?? {}),
+  setModel: (input: ModelSetInput) =>
+    ipcRenderer.invoke('ccr:set-model', input),
+  getModelAvailability: (input?: ModelAvailabilityInput) =>
+    ipcRenderer.invoke('ccr:model-availability', input ?? {}),
+  testModelConnection: (input?: ModelTestInput) =>
+    ipcRenderer.invoke('ccr:model-test', input ?? {}),
   listSessionHistory: (input?: SessionHistoryListInput) =>
     ipcRenderer.invoke('ccr:list-session-history', input ?? {}),
   resumeThread: (input: ResumeThreadInput | string, title?: string) =>

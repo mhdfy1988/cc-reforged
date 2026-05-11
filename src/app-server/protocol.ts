@@ -99,6 +99,30 @@ export const ModelListParamsSchema = z
   .strict()
   .default({})
 
+export const ModelSetParamsSchema = z
+  .object({
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1),
+  })
+  .strict()
+
+export const ModelAvailabilityParamsSchema = z
+  .object({
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+  })
+  .strict()
+  .default({})
+
+export const ModelTestParamsSchema = z
+  .object({
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    prompt: z.string().min(1).optional(),
+  })
+  .strict()
+  .default({})
+
 export const McpListParamsSchema = z
   .object({
     includeDisabled: z.boolean().optional(),
@@ -238,6 +262,11 @@ export type ClientCapabilities = z.infer<typeof ClientCapabilitiesSchema>
 export type InitializeParams = z.infer<typeof InitializeParamsSchema>
 export type AuthStatusParams = z.infer<typeof AuthStatusParamsSchema>
 export type ModelListParams = z.infer<typeof ModelListParamsSchema>
+export type ModelSetParams = z.infer<typeof ModelSetParamsSchema>
+export type ModelAvailabilityParams = z.infer<
+  typeof ModelAvailabilityParamsSchema
+>
+export type ModelTestParams = z.infer<typeof ModelTestParamsSchema>
 export type McpListParams = z.infer<typeof McpListParamsSchema>
 export type WorkspaceOpenParams = z.infer<typeof WorkspaceOpenParamsSchema>
 export type ThreadStartParams = z.infer<typeof ThreadStartParamsSchema>
@@ -339,6 +368,12 @@ export type ConfigGetResult = Record<string, unknown>
 export type AuthStatusResult = Record<string, unknown>
 
 export type ModelListResult = Record<string, unknown>
+
+export type ModelSetResult = Record<string, unknown>
+
+export type ModelAvailabilityResult = Record<string, unknown>
+
+export type ModelTestResult = Record<string, unknown>
 
 export type McpListResult = Record<string, unknown>
 

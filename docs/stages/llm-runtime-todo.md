@@ -16,7 +16,33 @@
 ## 当前指针
 - 已完成：P0-P10 全部主线任务
 - 当前正在做：进入“稳定可扩展原型”后的真实入口稳定化，优先修复 `codex-oauth` 的默认模型与 transport 口径
-- 完成后下一项：如果继续扩展，优先做 `openai api / openai-compatible / local provider` 中的一个，并把 `/model` 从最小配置切到真实 catalog 驱动
+- 完成后下一项：进入“多供应商模型接入与多协议适配”扩展阶段，先做统一协议适配层，再接官方 OpenAI、OpenAI Compatible / 第三方中转和其他特殊协议。
+
+## 接下来安排
+
+这条主线作为 LLM Runtime 的下一阶段扩展，不和 P23 多模态附件混在一起。P23 关注用户输入、附件、预览和消息映射；本主线关注模型供应商、协议适配、认证配置、模型目录和运行时能力归一化。
+
+详细设计见：[CCR 多供应商模型与协议接入设计](../architecture/multi-provider-model-management-design.md)。
+
+执行 todo 见：[CCR 多供应商模型与协议接入 Todo](./multi-provider-model-management-todo.md)。
+
+建议顺序：
+
+- 第一段：多供应商 / 多协议设计收口。明确 provider、protocol、transport、auth、model catalog、capability 的边界，不再把所有接入都伪装成 Anthropic 或单一 OpenAI 口径。
+- 第二段：新增协议适配层。至少覆盖 `Responses API`、`Chat Completions`、Anthropic Messages、Codex OAuth 特殊 transport，以及后续本地模型 / 自定义 SDK 的扩展入口。
+- 第三段：接入官方 OpenAI provider。支持 API Key、Responses API、Chat Completions 兼容模式、流式输出、工具调用和 usage 归一化。
+- 第四段：接入 OpenAI Compatible / 第三方中转。支持 `baseUrl`、自定义 headers、模型名透传、供应商差异声明、错误与限流归一化。
+- 第五段：补前台与配置入口。Desktop / TUI / CLI 能选择 provider、model、协议模式、baseUrl 和认证方式；敏感信息只落本地配置。
+- 第六段：补 smoke 与真实回归。每类 provider 至少有离线 smoke；官方 OpenAI / 中转路径有可选真实 e2e；不影响现有 `anthropic` 与 `codex-oauth`。
+
+完成判定：
+
+- `provider` 不再只表达供应商名称，还能明确协议族和认证方式。
+- `apiMode` 能区分 `anthropic-messages`、`openai-responses`、`openai-chat-completions`、`openai-compatible`、`codex-oauth`、`custom`。
+- 第三方中转能作为一等配置存在，而不是靠环境变量或伪装 provider 临时绕过。
+- 模型目录能表达上下文窗口、工具支持、流式支持、结构化输出、多模态、reasoning、价格或 usage 口径。
+- 上层 Query / Tool 主循环继续走 CCR 自己的 `LlmRuntime` 和 adapter，不直接依赖某个第三方 SDK。
+- `npm.cmd run typecheck -- --pretty false`、`npm.cmd run build -- --pretty false`、LLM runtime smoke 和 provider smoke 通过。
 
 ## 后续记录（追加）
 - 第 18 轮：修复 TUI 首屏仍显示旧 Claude LLM 状态的问题。根因不是单纯文案，而是多处 UI 仍从旧 `mainLoopModel / billingType / apiKeyStatus` 读状态：`useMainLoopModel()` 在非 Anthropic provider 下仍可能被旧 AppState 默认 `sonnet` 覆盖；`CondensedLogo` 仍直接 `renderModelSetting(model)`；无 LLM 配置时默认 provider 仍是 `anthropic`；欢迎 feed 的 guest pass / overage credit 也属于 Claude 订阅促销。修复方式：把默认 provider 改成 `codex-oauth`，非 Anthropic provider 下 `useMainLoopModel()` 强制返回 LLM 配置模型；`LogoV2` 与 `CondensedLogo` 改为读取 runtime display status，显示 `GPT-5.4 · Codex OAuth`；`Notifications` 改为读取 runtime auth status，Codex OAuth 可用时不再显示 `Not logged in`；非 Anthropic provider 下隐藏 guest pass / overage credit / Opus 1M notice。验证结果：`npm.cmd run typecheck -- --pretty false`、`npm.cmd run build -- --pretty false` 均通过；`auth status --json` 显示当前为 `codex-oauth / gpt-5.4 / available`。

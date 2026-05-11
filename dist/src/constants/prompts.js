@@ -66,6 +66,13 @@ const skillSearchFeatureCheck = feature('EXPERIMENTAL_SKILL_SEARCH')
     : null;
 import { CYBER_RISK_INSTRUCTION } from './cyberRiskInstruction.js';
 export const CLAUDE_CODE_DOCS_MAP_URL = 'https://code.claude.com/docs/en/claude_code_docs_map.md';
+function systemPromptCacheKey(name, ...parts) {
+    const suffix = parts
+        .flatMap(part => (Array.isArray(part) ? part : [part]))
+        .filter((part) => typeof part === 'string' && part !== '')
+        .join('|');
+    return suffix ? `${name}:${suffix}` : name;
+}
 /**
  * Boundary marker separating static (cross-org cacheable) content from dynamic content.
  * Everything BEFORE this marker in the system prompt array can use scope: 'global'.
@@ -405,7 +412,7 @@ ${CYBER_RISK_INSTRUCTION}`,
         systemPromptSection('session_guidance', () => getSessionSpecificGuidanceSection(enabledTools, skillToolCommands)),
         systemPromptSection('memory', () => loadMemoryPrompt()),
         systemPromptSection('ant_model_override', () => getAntModelOverrideSection()),
-        systemPromptSection('env_info_simple', () => computeSimpleEnvInfo(model, additionalWorkingDirectories)),
+        systemPromptSection(systemPromptCacheKey('env_info_simple', model, additionalWorkingDirectories), () => computeSimpleEnvInfo(model, additionalWorkingDirectories)),
         systemPromptSection('language', () => getLanguageSection(settings.language)),
         systemPromptSection('output_style', () => getOutputStyleSection(outputStyleConfig)),
         // When delta enabled, instructions are announced via persisted
@@ -417,7 +424,7 @@ ${CYBER_RISK_INSTRUCTION}`,
             ? null
             : getMcpInstructionsSection(mcpClients), 'MCP servers connect/disconnect between turns'),
         systemPromptSection('scratchpad', () => getScratchpadInstructions()),
-        systemPromptSection('frc', () => getFunctionResultClearingSection(model)),
+        systemPromptSection(systemPromptCacheKey('frc', model), () => getFunctionResultClearingSection(model)),
         systemPromptSection('summarize_tool_results', () => SUMMARIZE_TOOL_RESULTS_SECTION),
         // Numeric length anchors — research shows ~1.2% output token reduction vs
         // qualitative "be concise". Ant-only to measure quality impact first.
