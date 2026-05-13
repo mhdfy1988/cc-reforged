@@ -409,9 +409,11 @@ function normalizeDisplayTitle(value: unknown): string | null {
 function isGenericThreadTitle(title: string): boolean {
   return (
     title === 'CCR Desktop 会话' ||
+    title === 'CCR 会话' ||
     title === 'New thread' ||
     title === 'Resumed thread' ||
-    title.startsWith('CCR Desktop 会话 ')
+    title.startsWith('CCR Desktop 会话 ') ||
+    title.startsWith('CCR 会话 ')
   )
 }
 

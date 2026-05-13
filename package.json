@@ -1,6 +1,6 @@
 {
   "name": "cc-reforged",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "main": "out/main/index.js",
   "bin": {
     "ccr": "cli.js"
@@ -93,7 +93,7 @@
   },
   "build": {
     "appId": "dev.ccr.desktop",
-    "productName": "CCR Desktop",
+    "productName": "CCR",
     "directories": {
       "output": "release/desktop"
     },
@@ -125,7 +125,7 @@
           ]
         }
       ],
-      "artifactName": "CCR-Desktop-${version}-${os}-${arch}.${ext}"
+      "artifactName": "CCR-${version}-${os}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -134,7 +134,7 @@
       "deleteAppDataOnUninstall": false,
       "installerIcon": "apps/desktop/assets/generated/icon.ico",
       "uninstallerIcon": "apps/desktop/assets/generated/icon.ico",
-      "uninstallDisplayName": "CCR Desktop"
+      "uninstallDisplayName": "CCR"
     },
     "publish": [
       {

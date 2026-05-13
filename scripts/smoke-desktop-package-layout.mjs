@@ -33,7 +33,7 @@ if (!existsSync(winUnpackedDir)) {
 }
 
 const packageJson = JSON.parse(await readText(packageJsonPath))
-const expectedInstaller = `CCR-Desktop-${packageJson.version}-win-x64.exe`
+const expectedInstaller = `CCR-${packageJson.version}-win-x64.exe`
 const installerPath = join(releaseDir, expectedInstaller)
 const blockmapPath = `${installerPath}.blockmap`
 

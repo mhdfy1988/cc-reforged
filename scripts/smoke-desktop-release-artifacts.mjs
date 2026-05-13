@@ -21,10 +21,10 @@ const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'))
 const latest = YAML.parse(readFileSync(latestPath, 'utf8'))
 const artifactName = packageJson.build?.win?.artifactName
 
-if (artifactName !== 'CCR-Desktop-${version}-${os}-${arch}.${ext}') {
+if (artifactName !== 'CCR-${version}-${os}-${arch}.${ext}') {
   fail('desktop artifactName must be stable and whitespace-free', {
     artifactName,
-    expected: 'CCR-Desktop-${version}-${os}-${arch}.${ext}',
+    expected: 'CCR-${version}-${os}-${arch}.${ext}',
   })
 }
 

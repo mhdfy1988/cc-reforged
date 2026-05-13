@@ -4,11 +4,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const root = process.cwd()
-const sourceSvg = join(root, 'apps', 'desktop', 'assets', 'ccr-desktop-icon.svg')
+const sourceSvg = join(root, 'apps', 'desktop', 'assets', 'ccr-icon.svg')
 const outputDir = join(root, 'apps', 'desktop', 'assets', 'generated')
+const rendererPublicDir = join(root, 'apps', 'desktop', 'src', 'renderer', 'public')
 const iconSizes = [16, 24, 32, 48, 64, 128, 256]
 
 await mkdir(outputDir, { recursive: true })
+await mkdir(rendererPublicDir, { recursive: true })
 
 const svg = await readFile(sourceSvg)
 const pngBuffers = new Map()
@@ -20,8 +22,10 @@ for (const size of iconSizes) {
 }
 
 const iconPng = await renderPng(svg, 512)
+const rendererIconPng = await renderPng(svg, 256)
 await writeFile(join(outputDir, 'icon.png'), iconPng)
 await writeFile(join(outputDir, 'icon.ico'), buildIco(pngBuffers))
+await writeFile(join(rendererPublicDir, 'ccr-icon.png'), rendererIconPng)
 
 console.log(
   JSON.stringify(
@@ -29,7 +33,13 @@ console.log(
       ok: true,
       source: sourceSvg,
       outputDir,
-      generated: ['icon.png', 'icon.ico', ...iconSizes.map(size => `icon-${size}.png`)],
+      rendererPublicDir,
+      generated: [
+        'icon.png',
+        'icon.ico',
+        'ccr-icon.png',
+        ...iconSizes.map(size => `icon-${size}.png`),
+      ],
     },
     null,
     2,

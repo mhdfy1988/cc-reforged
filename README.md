@@ -6,26 +6,26 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.4.4-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.4.6-orange?style=flat-square)
 
 CCR is a recovery and evolution build of a terminal coding agent. It keeps the original terminal-first workflow, adds a CCR-owned configuration/runtime boundary, and is growing a Desktop client around a stable App Server protocol.
 
 The current main line focuses on:
 
 - `ccr` CLI / TUI runtime with Codex OAuth support.
-- CCR Desktop for Windows, including local App Server orchestration, session history, permission settings, auto-update, and release packaging.
+- CCR for Windows, including local App Server orchestration, session history, permission settings, auto-update, and release packaging.
 - Built-in LLM runtime abstractions for multiple providers, profiles, protocols, and per-turn model metadata.
 - Codex OAuth, DeepSeek official API, MiniMax International / China, and shared OpenAI Chat Completions plus Anthropic Messages protocol adapters.
 - Project-local `.ccr` settings isolation, avoiding conflicts with Claude Code, Codex, or OpenClaw on the same machine.
 
-![CCR Desktop](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
+![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
 
 ## Current Status
 
 - Package: `cc-reforged`
-- Version: `0.4.4`
+- Version: `0.4.6`
 - CLI command: `ccr`
-- Desktop app: `CCR Desktop`
+- Desktop app: `CCR`
 - Runtime requirement: Node.js `>=24.0.0`
 - Default config directory: `~/.ccr`
 - Default LLM config file: `~/.ccr/data/llm.config.local.json`
@@ -47,7 +47,7 @@ ccr
 For Desktop builds, download the latest Windows installer from GitHub Releases:
 
 ```text
-CCR-Desktop-<version>-win-x64.exe
+CCR-<version>-win-x64.exe
 ```
 
 The Windows build is currently unsigned. Verify the installer against the SHA256 values listed in the release note if Windows shows an unknown publisher warning.
@@ -108,7 +108,7 @@ ccr model set gpt-5.5
 ccr model profile codex-oauth-1 gpt-5.4
 ```
 
-CCR Desktop also includes a first-level **Models** page for provider/profile management, API key entry, connection testing, and top-bar model/profile switching. The top bar is intentionally split into two controls: one for the current model and one for the current profile/provider connection. Switching affects the next user message and does not rewrite restored session history.
+CCR also includes a first-level **Models** page for provider/profile management, API key entry, connection testing, and top-bar model/profile switching. The top bar is intentionally split into two controls: one for the current model and one for the current profile/provider connection. Switching affects the next user message and does not rewrite restored session history.
 
 Built-in providers:
 
@@ -164,7 +164,7 @@ Do not run runtime smoke scripts with plain `node scripts/...` unless you know t
 - CCR is not an official Anthropic source release.
 - `CLAUDE.md` remains a compatibility filename in parts of the recovered codebase.
 - Some Anthropic, Claude, Claude Desktop, Chrome extension, GitHub App, and remote-session text may still exist where it names an external service or protocol.
-- New user-facing product identity should use `CCR`, `ccr`, or `CCR Desktop`.
+- New user-facing product identity should use `CCR` or `ccr`.
 
 ## Reporting Bugs
 

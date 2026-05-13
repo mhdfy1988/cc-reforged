@@ -265,7 +265,7 @@ export class DesktopUpdateService {
   private createMockUpdateInfo(): DesktopUpdateInfo {
     return {
       version: '0.3.1-dev',
-      releaseName: 'CCR Desktop dev update mock',
+      releaseName: 'CCR dev update mock',
       releaseDate: this.now(),
     }
   }

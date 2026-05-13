@@ -52,6 +52,14 @@ import type { CcrDesktopEvent } from './global.js'
 type AppPageId = Exclude<PageId, 'settings'>
 type ModelAvailabilityCache = Record<string, LlmModelAvailability>
 
+const BOOT_MIN_VISIBLE_MS = 1400
+const BOOT_INITIAL_STATUS_TIMEOUT_MS = 2800
+const bootStartedAt = performance.now()
+
+type AppProps = {
+  initialStatus?: DesktopStatus | null
+}
+
 function getModelAvailabilityCacheKey(input: {
   provider?: string
   profileId?: string
@@ -67,20 +75,24 @@ function getModelAvailabilityCacheKey(input: {
   return null
 }
 
-function App() {
-  const [status, setStatus] = useState<DesktopStatus | null>(null)
+function App({ initialStatus = null }: AppProps) {
+  const [status, setStatus] = useState<DesktopStatus | null>(initialStatus)
   const [events, setEvents] = useState<CcrDesktopEvent[]>([])
   const [session, dispatchSession] = useReducer(
     sessionReducer,
     initialSessionState,
   )
-  const [workspaceInput, setWorkspaceInput] = useState('')
+  const [workspaceInput, setWorkspaceInput] = useState(
+    initialStatus?.workspacePath ?? initialStatus?.repoRoot ?? '',
+  )
   const [prompt, setPrompt] = useState('')
   const [page, setPage] = useState<PageId>('chat')
   const [returnPage, setReturnPage] = useState<AppPageId>('chat')
   const [logSnapshot, setLogSnapshot] = useState<LogSnapshot | null>(null)
   const [permissionSettings, setPermissionSettings] =
-    useState<PermissionSettingsState | null>(null)
+    useState<PermissionSettingsState | null>(
+      initialStatus?.permissionSettings ?? null,
+    )
   const [modelList, setModelList] = useState<LlmModelListState | null>(null)
   const [modelAvailabilityByKey, setModelAvailabilityByKey] =
     useState<ModelAvailabilityCache>({})
@@ -362,7 +374,7 @@ function App() {
 
   async function startNewThread(): Promise<void> {
     await runAction(async () => {
-      const result = await window.ccr.startThread('CCR Desktop 会话')
+      const result = await window.ccr.startThread('CCR 会话')
       const thread = result?.thread
       itemMetadataRef.current.clear()
       setPrompt('')
@@ -370,7 +382,7 @@ function App() {
       dispatchSession({
         type: 'reset-session',
         notice: thread?.threadId
-          ? `已创建新会话：${thread.title ?? 'CCR Desktop 会话'}（${shortId(thread.threadId)}）。`
+          ? `已创建新会话：${thread.title ?? 'CCR 会话'}（${shortId(thread.threadId)}）。`
           : '已创建新会话。',
         noticeId: thread?.threadId
           ? `thread-started-${thread.threadId}`
@@ -1212,4 +1224,33 @@ function mergeStatusTurnMetadata(
   }
 }
 
-createRoot(document.getElementById('root')!).render(<App />)
+function wait(ms: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, ms))
+}
+
+async function getInitialStatusBeforeRender(): Promise<DesktopStatus | null> {
+  try {
+    const statusPromise = window.ccr.getStatus() as Promise<DesktopStatus>
+    return await Promise.race([
+      statusPromise,
+      wait(BOOT_INITIAL_STATUS_TIMEOUT_MS).then(() => null),
+    ])
+  } catch {
+    return null
+  }
+}
+
+async function startRenderer(): Promise<void> {
+  const elapsed = performance.now() - bootStartedAt
+  const minVisibleDelay = wait(Math.max(0, BOOT_MIN_VISIBLE_MS - elapsed))
+  const [initialStatus] = await Promise.all([
+    getInitialStatusBeforeRender(),
+    minVisibleDelay,
+  ])
+
+  createRoot(document.getElementById('root')!).render(
+    <App initialStatus={initialStatus} />,
+  )
+}
+
+void startRenderer()

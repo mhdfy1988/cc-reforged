@@ -19,7 +19,7 @@ const latestUrl = `${releaseBaseUrl}/latest.yml`
 const latestText = await fetchText(latestUrl)
 const latest = YAML.parse(latestText)
 const artifactName = packageJson.build?.win?.artifactName
-if (artifactName !== 'CCR-Desktop-${version}-${os}-${arch}.${ext}') {
+if (artifactName !== 'CCR-${version}-${os}-${arch}.${ext}') {
   fail('desktop artifactName must stay stable for update metadata', {
     artifactName,
   })

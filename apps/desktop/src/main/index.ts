@@ -121,7 +121,7 @@ type DesktopWindowBounds = {
   y?: number
 }
 
-app.setName('CCR Desktop')
+app.setName('CCR')
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const runtime = resolveDesktopRuntime()
@@ -553,8 +553,8 @@ async function bootstrapAppServer(): Promise<void> {
   try {
     status.initialized = await managedClient.client.initialize({
       clientInfo: {
-        name: 'ccr-desktop',
-        title: 'CCR Desktop',
+        name: 'ccr',
+        title: 'CCR',
         version: '0.1.0',
       },
       capabilities: {
@@ -879,7 +879,7 @@ async function openWorkspace(path: string): Promise<WorkspaceOpenResult> {
   return result
 }
 
-async function startThread(title = 'CCR Desktop 会话'): Promise<ThreadStartResult> {
+async function startThread(title = 'CCR 会话'): Promise<ThreadStartResult> {
   await ensureAppServer()
   if (!managedClient) {
     throw new Error('App Server client is not available.')
@@ -1272,7 +1272,7 @@ function createWindow(): void {
     y: windowBounds.y,
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
-    title: 'CCR Desktop',
+    title: 'CCR',
     icon: windowIcon,
     backgroundColor: '#fbf4e9',
     autoHideMenuBar: true,

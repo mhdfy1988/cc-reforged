@@ -6,26 +6,26 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.4.4-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.4.6-orange?style=flat-square)
 
 CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留终端优先的工作方式，同时把配置、LLM 运行时、App Server 和 Desktop 客户端逐步收敛到 CCR 自己的边界内。
 
 当前主线重点：
 
 - `ccr` CLI / TUI 运行时，支持 Codex OAuth。
-- CCR Desktop Windows 客户端，负责本地 App Server 管理、历史会话、权限设置、自动更新和安装包发布。
+- CCR Windows 客户端，负责本地 App Server 管理、历史会话、权限设置、自动更新和安装包发布。
 - 内置 LLM Runtime，逐步支持多供应商、多连接配置档案、多协议和每轮模型元数据。
 - 默认支持 Codex OAuth、DeepSeek 官方 API、MiniMax 国际版 / 国内版，并抽出 OpenAI Chat Completions 与 Anthropic Messages 两条公共协议适配器。
 - 项目级 `.ccr` 设置隔离，避免和本机 Claude Code、Codex、OpenClaw 等工具互相污染。
 
-![CCR Desktop](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
+![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
 
 ## 当前状态
 
 - npm 包名：`cc-reforged`
-- 当前版本：`0.4.4`
+- 当前版本：`0.4.6`
 - CLI 命令：`ccr`
-- 桌面应用：`CCR Desktop`
+- 桌面应用：`CCR`
 - 运行时要求：Node.js `>=24.0.0`
 - 默认配置目录：`~/.ccr`
 - 默认 LLM 配置文件：`~/.ccr/data/llm.config.local.json`
@@ -47,7 +47,7 @@ ccr
 桌面端请从 GitHub Releases 下载最新 Windows 安装器：
 
 ```text
-CCR-Desktop-<version>-win-x64.exe
+CCR-<version>-win-x64.exe
 ```
 
 当前 Windows 安装包暂未购买代码签名证书。如果 Windows 提示未知发布者，请以 GitHub Release 页面和 release note 中的 SHA256 校验值确认来源。
@@ -108,7 +108,7 @@ ccr model set gpt-5.5
 ccr model profile codex-oauth-1 gpt-5.4
 ```
 
-CCR Desktop 已新增一级“模型”页面，用于管理供应商 / Profile、填写 API Key、测试连接，并配合顶部模型 / 连接配置两个快速切换入口。顶部切换只影响下一轮消息，不会改写或绑定恢复出来的历史会话。
+CCR 已新增一级“模型”页面，用于管理供应商 / Profile、填写 API Key、测试连接，并配合顶部模型 / 连接配置两个快速切换入口。顶部切换只影响下一轮消息，不会改写或绑定恢复出来的历史会话。
 
 当前内置供应商：
 
@@ -164,7 +164,7 @@ npm.cmd run desktop:build
 - CCR 不是 Anthropic 官方源码发布版本。
 - `CLAUDE.md` 在恢复代码的部分流程中仍是兼容文件名。
 - 一些 Anthropic、Claude、Claude Desktop、Chrome extension、GitHub App 和 remote-session 文案可能仍会保留，因为它们指向真实外部服务或协议。
-- 新增或面向用户展示的产品身份，应优先使用 `CCR`、`ccr` 或 `CCR Desktop`。
+- 新增或面向用户展示的产品身份，应统一使用 `CCR` 或 `ccr`。
 
 ## 问题反馈
 

@@ -7,7 +7,7 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CCR Desktop</title>
+    <title>CCR</title>
     <style>
       :root {
         color: #211b16;
@@ -34,133 +34,121 @@
       }
 
       .boot-shell {
-        display: grid;
-        grid-template-columns: 180px minmax(0, 1fr);
-        width: 100vw;
-        height: 100vh;
-        background: #fbf4e9;
-      }
-
-      .boot-sidebar {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        padding: 18px;
-        border-right: 1px solid rgba(216, 190, 162, 0.58);
-        background: linear-gradient(180deg, #fff7eb, #fbf4e9);
-      }
-
-      .boot-nav {
-        height: 42px;
-        border: 1px solid rgba(239, 151, 0, 0.32);
-        border-radius: 14px;
-        background: #fff0d8;
-      }
-
-      .boot-nav:nth-child(2),
-      .boot-nav:nth-child(3) {
-        width: 72%;
-        border-color: transparent;
-        background: rgba(255, 253, 249, 0.72);
-      }
-
-      .boot-main {
-        display: grid;
-        grid-template-rows: 72px minmax(0, 1fr);
-        min-width: 0;
-        min-height: 0;
-      }
-
-      .boot-topbar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 14px 24px;
-        border-bottom: 1px solid rgba(216, 190, 162, 0.52);
-      }
-
-      .boot-workspace {
-        height: 42px;
-        flex: 1;
-        max-width: 680px;
-        border: 1px solid rgba(216, 190, 162, 0.58);
-        border-radius: 14px;
-        background: rgba(255, 253, 249, 0.9);
-      }
-
-      .boot-chip {
-        width: 118px;
-        height: 42px;
-        border: 1px solid rgba(216, 190, 162, 0.58);
-        border-radius: 14px;
-        background: rgba(255, 253, 249, 0.9);
-      }
-
-      .boot-content {
+        position: relative;
         display: grid;
         place-items: center;
-        min-width: 0;
-        min-height: 0;
-        padding: 24px;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 50% 45%, rgba(255, 253, 249, 0.68), transparent 34%),
+          #fbf4e9;
       }
 
-      .boot-card {
-        width: min(360px, 80vw);
-        border: 1px solid rgba(216, 190, 162, 0.58);
-        border-radius: 18px;
-        background: rgba(255, 253, 249, 0.92);
-        box-shadow: 0 24px 72px rgba(76, 49, 20, 0.13);
-        padding: 28px;
-        text-align: center;
+      .boot-shell::before {
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 2;
+        width: 42vw;
+        height: 2px;
+        border-radius: 999px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(239, 151, 0, 0.4),
+          rgba(12, 143, 114, 0.38),
+          transparent
+        );
+        content: '';
+        animation: boot-progress-line 1.75s ease-in-out infinite;
       }
 
       .boot-mark {
+        position: relative;
         display: grid;
-        width: 42px;
-        height: 42px;
-        margin: 0 auto 14px;
+        width: 52px;
+        height: 52px;
         place-items: center;
-        border-radius: 14px;
-        color: #fff;
-        background: linear-gradient(135deg, #ef9700, #0c8f72);
-        font-weight: 900;
+        filter: drop-shadow(0 16px 34px rgba(76, 49, 20, 0.14));
+        animation: boot-logo-breathe 1.8s ease-in-out infinite;
       }
 
-      .boot-title {
-        margin: 0 0 6px;
-        font-size: 18px;
-        font-weight: 800;
+      .boot-mark-image {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
       }
 
-      .boot-status {
-        margin: 0;
-        color: #76695c;
-        font-size: 13px;
+      .boot-mark::after {
+        position: absolute;
+        right: -3px;
+        bottom: -3px;
+        width: 10px;
+        height: 10px;
+        border: 2px solid rgba(255, 253, 249, 0.96);
+        border-radius: 999px;
+        background: #0c8f72;
+        box-shadow: 0 0 0 0 rgba(12, 143, 114, 0.38);
+        content: '';
+        animation: boot-status-pulse 1.35s ease-out infinite;
+      }
+
+      @keyframes boot-progress-line {
+        0% {
+          transform: translateX(-45vw);
+          opacity: 0;
+        }
+        18%,
+        82% {
+          opacity: 1;
+        }
+        100% {
+          transform: translateX(105vw);
+          opacity: 0;
+        }
+      }
+
+      @keyframes boot-logo-breathe {
+        0%,
+        100% {
+          transform: scale(1);
+          filter: brightness(1);
+        }
+        50% {
+          transform: scale(1.045);
+          filter: brightness(1.08);
+        }
+      }
+
+      @keyframes boot-status-pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(12, 143, 114, 0.42);
+          transform: scale(0.92);
+        }
+        70%,
+        100% {
+          box-shadow: 0 0 0 9px rgba(12, 143, 114, 0);
+          transform: scale(1);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-shell::before,
+        .boot-mark,
+        .boot-mark::after {
+          animation: none;
+        }
       }
     </style>
   </head>
   <body>
     <div id="root">
-      <main class="boot-shell">
-        <aside class="boot-sidebar">
-          <div class="boot-nav"></div>
-          <div class="boot-nav"></div>
-          <div class="boot-nav"></div>
-        </aside>
-        <section class="boot-main">
-          <div class="boot-topbar">
-            <div class="boot-workspace"></div>
-            <div class="boot-chip"></div>
-            <div class="boot-chip"></div>
-          </div>
-          <div class="boot-content">
-            <section class="boot-card" aria-label="CCR Desktop 正在启动">
-              <div class="boot-mark">C</div>
-              <h1 class="boot-title">CCR Desktop</h1>
-              <p class="boot-status">正在启动</p>
-            </section>
-          </div>
-        </section>
+      <main class="boot-shell" aria-label="CCR 正在启动">
+        <div class="boot-mark" aria-hidden="true">
+          <img class="boot-mark-image" src="./ccr-icon.png" alt="" />
+        </div>
       </main>
     </div>
     <script type="module" src="/src/main.tsx"></script>

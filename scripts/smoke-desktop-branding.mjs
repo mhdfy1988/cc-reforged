@@ -4,13 +4,41 @@ import { join } from 'node:path'
 
 const root = process.cwd()
 const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-const sourceSvg = join(root, 'apps', 'desktop', 'assets', 'ccr-desktop-icon.svg')
+const sourceSvg = join(root, 'apps', 'desktop', 'assets', 'ccr-icon.svg')
 const generatedDir = join(root, 'apps', 'desktop', 'assets', 'generated')
+const rendererPublicIcon = join(
+  root,
+  'apps',
+  'desktop',
+  'src',
+  'renderer',
+  'public',
+  'ccr-icon.png',
+)
+const rendererIndexHtml = join(root, 'apps', 'desktop', 'src', 'renderer', 'index.html')
+const rendererTitlebar = join(
+  root,
+  'apps',
+  'desktop',
+  'src',
+  'renderer',
+  'src',
+  'components',
+  'layout',
+  'WindowTitlebar.tsx',
+)
 const iconPng = join(generatedDir, 'icon.png')
 const iconIco = join(generatedDir, 'icon.ico')
 const expectedIcon = 'apps/desktop/assets/generated/icon.ico'
 
-for (const requiredPath of [sourceSvg, iconPng, iconIco]) {
+for (const requiredPath of [
+  sourceSvg,
+  iconPng,
+  iconIco,
+  rendererPublicIcon,
+  rendererIndexHtml,
+  rendererTitlebar,
+]) {
   if (!existsSync(requiredPath)) {
     fail('desktop branding asset is missing', { requiredPath })
   }
@@ -21,7 +49,19 @@ if (/placeholder/i.test(svgText)) {
   fail('desktop source SVG still contains placeholder wording', { sourceSvg })
 }
 
+const rendererIndexText = readFileSync(rendererIndexHtml, 'utf8')
+const rendererTitlebarText = readFileSync(rendererTitlebar, 'utf8')
+for (const [file, text] of [
+  [rendererIndexHtml, rendererIndexText],
+  [rendererTitlebar, rendererTitlebarText],
+]) {
+  if (!text.includes('ccr-icon.png')) {
+    fail('desktop renderer must use the generated brand icon', { file })
+  }
+}
+
 assertPng(iconPng)
+assertPng(rendererPublicIcon)
 assertIco(iconIco)
 
 const winConfig = packageJson.build?.win
@@ -42,8 +82,8 @@ if (nsisConfig?.installerIcon !== expectedIcon || nsisConfig?.uninstallerIcon !=
   })
 }
 
-if (packageJson.build?.productName !== 'CCR Desktop') {
-  fail('productName must stay CCR Desktop', { productName: packageJson.build?.productName })
+if (packageJson.build?.productName !== 'CCR') {
+  fail('productName must stay CCR', { productName: packageJson.build?.productName })
 }
 
 console.log(
@@ -55,7 +95,17 @@ console.log(
       installerIcon: nsisConfig.installerIcon,
       iconPngSize: statSync(iconPng).size,
       iconIcoSize: statSync(iconIco).size,
-      checked: ['sourceSvg', 'icon.png', 'icon.ico', 'build.win.icon', 'nsis.icons', 'productName'],
+      rendererPublicIconSize: statSync(rendererPublicIcon).size,
+      checked: [
+        'sourceSvg',
+        'icon.png',
+        'icon.ico',
+        'rendererPublicIcon',
+        'rendererIconReferences',
+        'build.win.icon',
+        'nsis.icons',
+        'productName',
+      ],
     },
     null,
     2,

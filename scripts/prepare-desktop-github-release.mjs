@@ -24,7 +24,7 @@ if (checkOnly && execute) {
 const packageJson = readJson(join(repoRoot, 'package.json'))
 const version = packageJson.version
 const tag = process.env.CCR_DESKTOP_RELEASE_TAG || `v${version}`
-const title = process.env.CCR_DESKTOP_RELEASE_TITLE || `CCR Desktop v${version}`
+const title = process.env.CCR_DESKTOP_RELEASE_TITLE || `CCR v${version}`
 const githubPublish = getGitHubPublishConfig(packageJson)
 const repo = `${githubPublish.owner}/${githubPublish.repo}`
 
@@ -43,10 +43,10 @@ if (latest.version !== version) {
 }
 
 const artifactName = packageJson.build?.win?.artifactName
-if (artifactName !== 'CCR-Desktop-${version}-${os}-${arch}.${ext}') {
+if (artifactName !== 'CCR-${version}-${os}-${arch}.${ext}') {
   fail('desktop artifactName must stay stable for release assets', {
     artifactName,
-    expected: 'CCR-Desktop-${version}-${os}-${arch}.${ext}',
+    expected: 'CCR-${version}-${os}-${arch}.${ext}',
   })
 }
 

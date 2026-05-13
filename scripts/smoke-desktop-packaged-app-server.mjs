@@ -11,8 +11,8 @@ const appArchiveRoot = join(resourcesRoot, 'app.asar')
 const runtimeEntry = join(appArchiveRoot, 'cli.js')
 const executable =
   process.platform === 'win32'
-    ? join(packagedRoot, 'CCR Desktop.exe')
-    : join(packagedRoot, 'CCR Desktop')
+    ? join(packagedRoot, 'CCR.exe')
+    : join(packagedRoot, 'CCR')
 
 if (process.platform !== 'win32') {
   console.log(JSON.stringify({ ok: true, skipped: 'desktop packaged smoke is Windows-only for now' }, null, 2))
