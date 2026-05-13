@@ -10,10 +10,17 @@ import {
   handleMemorySessionStatus,
 } from './handlers/contextHandlers.js'
 import {
+  handleAuthLogin,
   handleAuthStatus,
   handleConfigGet,
   handleModelAvailability,
+  handleModelProfileCopy,
+  handleModelProfileDelete,
+  handleModelCredentialUpdate,
   handleModelList,
+  handleModelProfileList,
+  handleModelProfileSave,
+  handleModelProfileSetCurrent,
   handleModelSet,
   handleModelTest,
 } from './handlers/llmHandlers.js'
@@ -112,8 +119,38 @@ export async function handleJsonRpcMessage(
           request.id,
           await handleAuthStatus(context, request.params),
         )
+      case 'auth/login':
+        return successResponse(
+          request.id,
+          await handleAuthLogin(context, request.params),
+        )
       case 'model/list':
         return successResponse(request.id, handleModelList(context, request.params))
+      case 'model/profile/list':
+        return successResponse(
+          request.id,
+          handleModelProfileList(context, request.params),
+        )
+      case 'model/profile/set-current':
+        return successResponse(
+          request.id,
+          await handleModelProfileSetCurrent(context, request.params),
+        )
+      case 'model/profile/save':
+        return successResponse(
+          request.id,
+          await handleModelProfileSave(context, request.params),
+        )
+      case 'model/profile/copy':
+        return successResponse(
+          request.id,
+          await handleModelProfileCopy(context, request.params),
+        )
+      case 'model/profile/delete':
+        return successResponse(
+          request.id,
+          await handleModelProfileDelete(context, request.params),
+        )
       case 'model/availability':
         return successResponse(
           request.id,
@@ -128,6 +165,11 @@ export async function handleJsonRpcMessage(
         return successResponse(
           request.id,
           await handleModelTest(context, request.params),
+        )
+      case 'model/credential/update':
+        return successResponse(
+          request.id,
+          await handleModelCredentialUpdate(context, request.params),
         )
       case 'mcp/list':
         return successResponse(

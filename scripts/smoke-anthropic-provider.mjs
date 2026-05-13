@@ -1,4 +1,67 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+const tempDir = mkdtempSync(join(tmpdir(), 'ccr-anthropic-provider-'));
+const previousConfigPath = process.env.CCR_LLM_CONFIG_PATH;
+const previousCredentialsPath = process.env.CCR_LLM_CREDENTIALS_PATH;
+const previousAnthropicApiKey = process.env.ANTHROPIC_API_KEY;
+process.env.CCR_LLM_CONFIG_PATH = join(tempDir, 'llm.config.local.json');
+process.env.CCR_LLM_CREDENTIALS_PATH = join(
+  tempDir,
+  'llm.credentials.local.json',
+);
+delete process.env.ANTHROPIC_API_KEY;
+
+writeFileSync(
+  process.env.CCR_LLM_CONFIG_PATH,
+  JSON.stringify(
+    {
+      schemaVersion: 2,
+      current: {
+        profileId: 'anthropic-1',
+        model: 'claude-sonnet-test',
+      },
+      profiles: {
+        'anthropic-1': {
+          name: 'Anthropic Profile Key',
+          providerType: 'anthropic',
+          apiMode: 'anthropic-messages',
+          auth: {
+            strategy: 'api_key',
+          },
+          defaultModel: 'claude-sonnet-test',
+          models: {
+            source: 'custom',
+            default: 'claude-sonnet-test',
+          },
+        },
+      },
+    },
+    null,
+    2,
+  ),
+  'utf8',
+);
+writeFileSync(
+  process.env.CCR_LLM_CREDENTIALS_PATH,
+  JSON.stringify(
+    {
+      schemaVersion: 2,
+      profileCredentials: {
+        'anthropic-1': {
+          type: 'api_key',
+          providerType: 'anthropic',
+          apiKey: 'sk-anthropic-profile',
+        },
+      },
+    },
+    null,
+    2,
+  ),
+  'utf8',
+);
 
 const { AnthropicProvider } = await import(
   '../dist/src/services/llm/providers/AnthropicProvider.js'
@@ -85,6 +148,24 @@ assert.deepEqual(streamResult, {
   request: streamRequest,
 });
 
+await provider.generate({
+  provider: 'anthropic',
+  profileId: 'anthropic-1',
+  model: 'claude-sonnet-test',
+  messages: [
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'hello' }],
+    },
+  ],
+  metadata: {
+    anthropicRequest: createRequest,
+  },
+});
+assert.equal(calls.getClient.length, 3);
+assert.equal(calls.getClient[2].apiKey, 'sk-anthropic-profile');
+assert.equal(calls.getClient[2].source, process.env.CCR_LLM_CREDENTIALS_PATH);
+
 console.log(
   JSON.stringify(
     {
@@ -92,9 +173,29 @@ console.log(
       provider: provider.name,
       createCallCount: calls.create.length,
       streamCallCount: calls.stream.length,
-      clientCalls: calls.getClient,
+      clientCalls: calls.getClient.map(({ apiKey, ...call }) => ({
+        ...call,
+        hasApiKey: Boolean(apiKey),
+      })),
     },
     null,
     2,
   ),
 );
+
+if (previousConfigPath === undefined) {
+  delete process.env.CCR_LLM_CONFIG_PATH;
+} else {
+  process.env.CCR_LLM_CONFIG_PATH = previousConfigPath;
+}
+if (previousCredentialsPath === undefined) {
+  delete process.env.CCR_LLM_CREDENTIALS_PATH;
+} else {
+  process.env.CCR_LLM_CREDENTIALS_PATH = previousCredentialsPath;
+}
+if (previousAnthropicApiKey === undefined) {
+  delete process.env.ANTHROPIC_API_KEY;
+} else {
+  process.env.ANTHROPIC_API_KEY = previousAnthropicApiKey;
+}
+rmSync(tempDir, { recursive: true, force: true });

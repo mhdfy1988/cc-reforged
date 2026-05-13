@@ -27,7 +27,13 @@ export type CoreTurnUsage = {
 
 export type CoreTurnMetadata = {
   provider?: string
+  providerDisplayName?: string
+  profileId?: string
+  profileName?: string
+  apiMode?: string
+  authStrategy?: string
   model?: string
+  requestedModel?: string
   contextWindow?: number
   messageCount?: number
   lastMessageTypes?: string[]

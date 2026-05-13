@@ -6,9 +6,14 @@ export class OpenAiChatCompletionsAdapter {
     #baseUrl;
     #defaultModel;
     #defaultReasoningEffort;
+    #outputTokenParam;
+    #outputTokenLimit;
     #includeStreamUsage;
+    #includeTools;
+    #mergeSystemMessages;
     #missingApiKeyMessage;
     #fetchImpl;
+    #resolveTemperature;
     #resolveThinking;
     constructor(options) {
         this.#providerId = options.providerId;
@@ -18,11 +23,18 @@ export class OpenAiChatCompletionsAdapter {
         this.#defaultModel = options.defaultModel;
         this.#defaultReasoningEffort =
             options.defaultReasoningEffort ?? 'high';
+        this.#outputTokenParam = options.outputTokenParam ?? 'max_tokens';
+        this.#outputTokenLimit = options.outputTokenLimit;
         this.#includeStreamUsage = options.includeStreamUsage ?? true;
+        this.#includeTools = options.includeTools ?? true;
+        this.#mergeSystemMessages = options.mergeSystemMessages ?? false;
         this.#missingApiKeyMessage =
             options.missingApiKeyMessage ??
                 `${options.providerLabel} API key is missing.`;
         this.#fetchImpl = options.fetchImpl || fetch;
+        this.#resolveTemperature =
+            options.resolveTemperature ??
+                (({ request }) => request.temperature);
         this.#resolveThinking = options.resolveThinking ?? (() => undefined);
     }
     async generate(request) {
@@ -198,20 +210,26 @@ export class OpenAiChatCompletionsAdapter {
         if (!apiKey) {
             throw new Error(this.#missingApiKeyMessage);
         }
+        const requestBody = toRequestBody({
+            request,
+            defaultModel: this.#defaultModel,
+            defaultReasoningEffort: this.#defaultReasoningEffort,
+            outputTokenParam: this.#outputTokenParam,
+            outputTokenLimit: this.#outputTokenLimit,
+            includeStreamUsage: this.#includeStreamUsage,
+            includeTools: this.#includeTools,
+            mergeSystemMessages: this.#mergeSystemMessages,
+            resolveTemperature: this.#resolveTemperature,
+            resolveThinking: this.#resolveThinking,
+            stream,
+        });
         const response = await this.#fetchImpl(resolveChatCompletionsUrl(this.#baseUrl), {
             method: 'POST',
             headers: {
                 authorization: `Bearer ${apiKey}`,
                 'content-type': 'application/json',
             },
-            body: JSON.stringify(toRequestBody({
-                request,
-                defaultModel: this.#defaultModel,
-                defaultReasoningEffort: this.#defaultReasoningEffort,
-                includeStreamUsage: this.#includeStreamUsage,
-                resolveThinking: this.#resolveThinking,
-                stream,
-            })),
+            body: JSON.stringify(requestBody),
             signal: request.signal,
         });
         if (!response.ok) {
@@ -226,15 +244,22 @@ function toRequestBody(input) {
         request: input.request,
         model,
     });
+    const outputTokens = resolveOutputTokens(input.request.maxOutputTokens, input.outputTokenLimit);
+    const temperature = input.resolveTemperature({
+        request: input.request,
+        model,
+    });
     return {
         model,
-        messages: toOpenAiChatMessages(input.request.messages),
+        messages: toOpenAiChatMessages(input.request.messages, {
+            mergeSystemMessages: input.mergeSystemMessages,
+        }),
         stream: input.stream,
         ...(input.stream && input.includeStreamUsage
             ? { stream_options: { include_usage: true } }
             : {}),
-        ...(typeof input.request.maxOutputTokens === 'number'
-            ? { max_tokens: input.request.maxOutputTokens }
+        ...(typeof outputTokens === 'number'
+            ? { [input.outputTokenParam]: outputTokens }
             : {}),
         ...(thinking
             ? {
@@ -244,10 +269,10 @@ function toRequestBody(input) {
                 reasoning_effort: resolveReasoningEffort(getMetadataReasoningEffort(input.request.metadata)) ||
                     input.defaultReasoningEffort,
             }
-            : typeof input.request.temperature === 'number'
-                ? { temperature: input.request.temperature }
+            : typeof temperature === 'number'
+                ? { temperature }
                 : {}),
-        ...(input.request.tools && input.request.tools.length > 0
+        ...(input.includeTools && input.request.tools && input.request.tools.length > 0
             ? {
                 tools: toOpenAiChatTools(input.request.tools),
                 tool_choice: 'auto',
@@ -255,8 +280,17 @@ function toRequestBody(input) {
             : {}),
     };
 }
-function toOpenAiChatMessages(messages) {
+function resolveOutputTokens(maxOutputTokens, outputTokenLimit) {
+    if (typeof maxOutputTokens !== 'number') {
+        return undefined;
+    }
+    return typeof outputTokenLimit === 'number'
+        ? Math.min(maxOutputTokens, outputTokenLimit)
+        : maxOutputTokens;
+}
+function toOpenAiChatMessages(messages, options = {}) {
     const mapped = [];
+    const mergedSystemParts = [];
     for (const message of messages) {
         if (message.role === 'tool') {
             for (const part of message.parts) {
@@ -314,10 +348,20 @@ function toOpenAiChatMessages(messages) {
         if (!content) {
             continue;
         }
+        if (message.role === 'system' && options.mergeSystemMessages) {
+            mergedSystemParts.push(content);
+            continue;
+        }
         mapped.push({
             role: message.role,
             content,
             ...(message.name?.trim() ? { name: message.name.trim() } : {}),
+        });
+    }
+    if (mergedSystemParts.length > 0) {
+        mapped.unshift({
+            role: 'system',
+            content: mergedSystemParts.join('\n\n'),
         });
     }
     if (mapped.length === 0) {
@@ -461,7 +505,7 @@ function getMetadataReasoningEffort(metadata) {
     const value = metadata?.reasoningEffort;
     return typeof value === 'string' ? value : undefined;
 }
-async function getProviderErrorMessage(response, providerLabel) {
+async function getProviderErrorMessage(response, providerLabel, options = {}) {
     const text = await response.text().catch(() => '');
     let detail = text.trim();
     try {
@@ -473,6 +517,80 @@ async function getProviderErrorMessage(response, providerLabel) {
     catch {
         // Preserve the raw response text when it is not JSON.
     }
-    return `${providerLabel} API request failed (${response.status} ${response.statusText})${detail ? `: ${detail}` : '.'}`;
+    const message = `${providerLabel} API request failed (${response.status} ${response.statusText})${detail ? `: ${detail}` : '.'}`;
+    if (!options.includeRequestDiagnostics || !options.requestBody) {
+        return message;
+    }
+    return `${message}; requestDiagnostics=${JSON.stringify(toSafeRequestDiagnostics(options.requestBody))}`;
+}
+function toSafeRequestDiagnostics(body) {
+    const messages = Array.isArray(body.messages)
+        ? body.messages.filter((message) => !!message && typeof message === 'object' && !Array.isArray(message))
+        : [];
+    const roleCounts = {};
+    let totalTextChars = 0;
+    let emptyContentCount = 0;
+    let nonStringContentCount = 0;
+    let assistantToolCallCount = 0;
+    let toolMessageCount = 0;
+    let reasoningContentCount = 0;
+    for (const message of messages) {
+        const role = typeof message.role === 'string' ? message.role : 'unknown';
+        roleCounts[role] = (roleCounts[role] || 0) + 1;
+        if (role === 'tool') {
+            toolMessageCount += 1;
+        }
+        if (Array.isArray(message.tool_calls)) {
+            assistantToolCallCount += message.tool_calls.length;
+        }
+        if (typeof message.reasoning_content === 'string') {
+            reasoningContentCount += 1;
+        }
+        if (typeof message.content === 'string') {
+            totalTextChars += message.content.length;
+            if (!message.content.trim()) {
+                emptyContentCount += 1;
+            }
+            continue;
+        }
+        if (message.content === null) {
+            emptyContentCount += 1;
+            continue;
+        }
+        nonStringContentCount += 1;
+    }
+    return {
+        keys: Object.keys(body).sort(),
+        model: body.model,
+        stream: body.stream,
+        max_tokens: body.max_tokens,
+        max_completion_tokens: body.max_completion_tokens,
+        temperature: body.temperature,
+        top_p: body.top_p,
+        hasThinking: hasOwn(body, 'thinking'),
+        reasoning_effort: body.reasoning_effort,
+        hasStreamOptions: hasOwn(body, 'stream_options'),
+        hasToolChoice: hasOwn(body, 'tool_choice'),
+        toolCount: Array.isArray(body.tools) ? body.tools.length : 0,
+        messageCount: messages.length,
+        roleCounts,
+        firstRoles: messages
+            .slice(0, 8)
+            .map(message => message.role)
+            .filter(role => typeof role === 'string'),
+        lastRoles: messages
+            .slice(-8)
+            .map(message => message.role)
+            .filter(role => typeof role === 'string'),
+        totalTextChars,
+        emptyContentCount,
+        nonStringContentCount,
+        assistantToolCallCount,
+        toolMessageCount,
+        reasoningContentCount,
+    };
+}
+function hasOwn(value, key) {
+    return Object.prototype.hasOwnProperty.call(value, key);
 }
 //# sourceMappingURL=openaiChatCompletionsAdapter.js.map

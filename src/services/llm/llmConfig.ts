@@ -31,7 +31,6 @@ const llmProviderConfigSchema = z
     redirectUri: z.string().trim().min(1).optional(),
     scope: z.string().trim().min(1).optional(),
     clientId: z.string().trim().min(1).optional(),
-    credentialFilePath: z.string().trim().min(1).optional(),
     reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
     systemPrompt: z.string().trim().min(1).optional(),
     transport: z.string().trim().min(1).optional(),
@@ -43,21 +42,123 @@ const llmProviderConfigSchema = z
   })
   .strict()
 
+const llmProfileAuthConfigSchema = z
+  .object({
+    strategy: z
+      .enum([
+        'api_key',
+        'oauth_refreshable',
+        'oauth_external',
+        'external_process',
+        'hybrid',
+        'unknown',
+      ])
+      .optional(),
+    accountId: z.string().trim().min(1).optional(),
+  })
+  .strict()
+
+const llmProfileEndpointConfigSchema = z
+  .object({
+    baseUrl: z.string().trim().min(1).optional(),
+  })
+  .strict()
+
+const llmProfileModelsConfigSchema = z.union([
+  z.array(z.string().trim().min(1)),
+  z
+    .object({
+      source: z.enum(['builtin', 'custom', 'remote', 'mixed']).optional(),
+      default: z.string().trim().min(1).optional(),
+      include: z.array(z.string().trim().min(1)).optional(),
+      custom: z.array(z.string().trim().min(1)).optional(),
+    })
+    .strict(),
+])
+
+const llmProfileConfigSchema = z
+  .object({
+    name: z.string().trim().min(1).optional(),
+    providerType: z.string().trim().min(1),
+    apiMode: z
+      .enum(['anthropic-messages', 'openai-responses', 'openai-chat', 'custom'])
+      .optional(),
+    baseUrl: z.string().trim().min(1).optional(),
+    endpoint: llmProfileEndpointConfigSchema.optional(),
+    auth: llmProfileAuthConfigSchema.optional(),
+    defaultModel: z.string().trim().min(1).optional(),
+    models: llmProfileModelsConfigSchema.optional(),
+    supportsStreaming: z.boolean().optional(),
+    supportsTools: z.boolean().optional(),
+    supportsReasoning: z.boolean().optional(),
+    supportsUsage: z.boolean().optional(),
+    availability: z
+      .object({
+        status: z
+          .enum([
+            'not_configured',
+            'needs_auth',
+            'configured',
+            'auth_ready',
+            'verified',
+            'failed',
+          ])
+          .optional(),
+        lastCheckedAt: z.string().trim().min(1).optional(),
+        error: z.string().trim().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .strict()
+
+const llmCurrentConfigSchema = z
+  .object({
+    profileId: z.string().trim().min(1).optional(),
+    model: z.string().trim().min(1).optional(),
+  })
+  .strict()
+
 const llmConfigSchema = z
   .object({
-    provider: z.string().trim().min(1).optional(),
-    model: z.string().trim().min(1).optional(),
-    providers: z.record(llmProviderConfigSchema).optional(),
+    schemaVersion: z.literal(2).optional(),
+    current: llmCurrentConfigSchema.optional(),
+    providerOverrides: z.record(llmProviderConfigSchema).optional(),
+    profiles: z.record(llmProfileConfigSchema).optional(),
   })
   .strict()
 
 export type LlmProviderConfig = z.infer<typeof llmProviderConfigSchema>
+export type LlmProfileConfig = z.infer<typeof llmProfileConfigSchema>
 export type LlmConfigFile = z.infer<typeof llmConfigSchema>
+
+export interface ResolvedLlmProfile {
+  id: string
+  name: string
+  providerType: LlmProviderId
+  apiMode: NonNullable<LlmProviderConfig['apiMode']>
+  authStrategy: NonNullable<LlmProviderConfig['authStrategy']>
+  accountId?: string
+  baseUrl?: string
+  defaultModel: LlmModelId
+  models: LlmModelId[]
+  capabilities: {
+    streaming: boolean
+    tools: boolean
+    reasoning: boolean
+    usage: boolean
+  }
+  availability?: NonNullable<LlmProfileConfig['availability']>
+  source: 'file'
+}
 
 export interface ResolvedLlmConfig {
   provider: LlmProviderId
   model: LlmModelId
   providers: Record<string, LlmProviderConfig>
+  currentProfileId: string
+  profiles: Record<string, ResolvedLlmProfile>
   path: string
   source: 'default' | 'file' | 'env' | 'file+env'
 }
@@ -70,6 +171,13 @@ export interface LlmConfigValidationResult {
 export interface PersistedLlmConfigUpdate {
   provider?: string | null
   model?: string | null
+  currentProfileId?: string | null
+}
+
+export interface PersistedLlmProfileUpdate {
+  profileId: string
+  profile: LlmProfileConfig
+  setCurrent?: boolean
 }
 
 const DEFAULT_ANTHROPIC_PROVIDER_CONFIG: LlmProviderConfig = {
@@ -98,7 +206,6 @@ const DEFAULT_CODEX_OAUTH_PROVIDER_CONFIG: LlmProviderConfig = {
   redirectUri: 'http://localhost:1455/auth/callback',
   scope: 'openid profile email offline_access',
   clientId: 'app_EMoamEEZ73f0CkXaXp7hrann',
-  credentialFilePath: join(getClaudeConfigHomeDir(), 'data', 'codex-oauth.json'),
   reasoningEffort: 'high',
   systemPrompt: 'You are a helpful assistant. Reply clearly and concisely.',
   transport: 'sse',
@@ -129,11 +236,45 @@ const DEFAULT_DEEPSEEK_PROVIDER_CONFIG: LlmProviderConfig = {
     getBuiltinLlmProviderDefinition('deepseek')!.capabilities.usage,
 }
 
+const DEFAULT_MINIMAX_PROVIDER_CONFIG: LlmProviderConfig = {
+  defaultModel: 'MiniMax-M2.7',
+  displayName: getBuiltinLlmProviderDefinition('minimax')!.displayName,
+  authStrategy: getBuiltinLlmProviderDefinition('minimax')!.authStrategy,
+  apiMode: getBuiltinLlmProviderDefinition('minimax')!.apiMode,
+  baseUrl: 'https://api.minimax.io/anthropic',
+  supportsStreaming:
+    getBuiltinLlmProviderDefinition('minimax')!.capabilities.streaming,
+  supportsTools:
+    getBuiltinLlmProviderDefinition('minimax')!.capabilities.tools,
+  supportsReasoning:
+    getBuiltinLlmProviderDefinition('minimax')!.capabilities.reasoning,
+  supportsUsage:
+    getBuiltinLlmProviderDefinition('minimax')!.capabilities.usage,
+}
+
+const DEFAULT_MINIMAX_CN_PROVIDER_CONFIG: LlmProviderConfig = {
+  defaultModel: 'MiniMax-M2.7',
+  displayName: getBuiltinLlmProviderDefinition('minimax-cn')!.displayName,
+  authStrategy: getBuiltinLlmProviderDefinition('minimax-cn')!.authStrategy,
+  apiMode: getBuiltinLlmProviderDefinition('minimax-cn')!.apiMode,
+  baseUrl: 'https://api.minimaxi.com/anthropic',
+  supportsStreaming:
+    getBuiltinLlmProviderDefinition('minimax-cn')!.capabilities.streaming,
+  supportsTools:
+    getBuiltinLlmProviderDefinition('minimax-cn')!.capabilities.tools,
+  supportsReasoning:
+    getBuiltinLlmProviderDefinition('minimax-cn')!.capabilities.reasoning,
+  supportsUsage:
+    getBuiltinLlmProviderDefinition('minimax-cn')!.capabilities.usage,
+}
+
 function getDefaultProviders(): Record<string, LlmProviderConfig> {
   return {
     anthropic: { ...DEFAULT_ANTHROPIC_PROVIDER_CONFIG },
     'codex-oauth': { ...DEFAULT_CODEX_OAUTH_PROVIDER_CONFIG },
     deepseek: { ...DEFAULT_DEEPSEEK_PROVIDER_CONFIG },
+    minimax: { ...DEFAULT_MINIMAX_PROVIDER_CONFIG },
+    'minimax-cn': { ...DEFAULT_MINIMAX_CN_PROVIDER_CONFIG },
   }
 }
 
@@ -152,6 +293,182 @@ function mergeProviderConfigs(
     }
   }
   return merged
+}
+
+function getProviderOverrides(
+  fileConfig: LlmConfigFile | null,
+): Record<string, LlmProviderConfig> | undefined {
+  return fileConfig?.providerOverrides
+}
+
+function getDefaultProfileName(
+  providerId: string,
+  providerConfig: LlmProviderConfig,
+): string {
+  const displayName = providerConfig.displayName?.trim() || providerId
+  if (providerConfig.authStrategy === 'oauth_refreshable') {
+    return `${displayName} 登录配置`
+  }
+  if (providerConfig.authStrategy === 'api_key') {
+    return `${displayName} API Key`
+  }
+  return `${displayName} 默认连接`
+}
+
+function getProviderCapabilities(providerConfig: LlmProviderConfig): {
+  streaming: boolean
+  tools: boolean
+  reasoning: boolean
+  usage: boolean
+} {
+  return {
+    streaming: providerConfig.supportsStreaming ?? false,
+    tools: providerConfig.supportsTools ?? false,
+    reasoning: providerConfig.supportsReasoning ?? false,
+    usage: providerConfig.supportsUsage ?? false,
+  }
+}
+
+function resolveProfileModels(input: {
+  profileModels?: LlmProfileConfig['models']
+  defaultModel: string
+}): LlmModelId[] {
+  const models = getProfileModelIds(input.profileModels)
+  const deduped = Array.from(new Set([input.defaultModel, ...(models ?? [])]))
+  return deduped.length > 0 ? deduped : [input.defaultModel]
+}
+
+function getProfileModelIds(
+  profileModels: LlmProfileConfig['models'] | undefined,
+): string[] | undefined {
+  if (!profileModels) {
+    return undefined
+  }
+  if (Array.isArray(profileModels)) {
+    return profileModels.map(model => model.trim()).filter(Boolean)
+  }
+  return [
+    profileModels.default,
+    ...(profileModels.include ?? []),
+    ...(profileModels.custom ?? []),
+  ]
+    .map(model => model?.trim())
+    .filter((model): model is string => Boolean(model))
+}
+
+function getProfileDefaultModel(
+  profileModels: LlmProfileConfig['models'] | undefined,
+): string | undefined {
+  if (!profileModels || Array.isArray(profileModels)) {
+    return undefined
+  }
+  return profileModels.default?.trim()
+}
+
+function resolveFileProfile(input: {
+  profileId: string
+  profile: LlmProfileConfig
+  providers: Record<string, LlmProviderConfig>
+}): ResolvedLlmProfile {
+  const providerConfig = input.providers[input.profile.providerType] ?? {}
+  const defaultModel =
+    input.profile.defaultModel?.trim() ||
+    getProfileDefaultModel(input.profile.models) ||
+    providerConfig.defaultModel?.trim()
+  if (!defaultModel) {
+    throw new Error(
+      `LLM profile '${input.profileId}' does not define a default model.`,
+    )
+  }
+  const authStrategy =
+    input.profile.auth?.strategy ??
+    providerConfig.authStrategy ??
+    'unknown'
+  const apiMode = input.profile.apiMode ?? providerConfig.apiMode ?? 'custom'
+  return {
+    id: input.profileId,
+    name:
+      input.profile.name?.trim() ||
+      getDefaultProfileName(input.profile.providerType, providerConfig),
+    providerType: input.profile.providerType,
+    apiMode,
+    authStrategy,
+    ...(input.profile.auth?.accountId
+      ? { accountId: input.profile.auth.accountId }
+      : {}),
+    ...(input.profile.endpoint?.baseUrl ?? input.profile.baseUrl ?? providerConfig.baseUrl
+      ? {
+          baseUrl:
+            input.profile.endpoint?.baseUrl ??
+            input.profile.baseUrl ??
+            providerConfig.baseUrl,
+        }
+      : {}),
+    defaultModel,
+    models: resolveProfileModels({
+      profileModels: input.profile.models,
+      defaultModel,
+    }),
+    capabilities: {
+      streaming:
+        input.profile.supportsStreaming ??
+        providerConfig.supportsStreaming ??
+        false,
+      tools:
+        input.profile.supportsTools ?? providerConfig.supportsTools ?? false,
+      reasoning:
+        input.profile.supportsReasoning ??
+        providerConfig.supportsReasoning ??
+        false,
+      usage: input.profile.supportsUsage ?? providerConfig.supportsUsage ?? false,
+    },
+    ...(input.profile.availability
+      ? { availability: input.profile.availability }
+      : {}),
+    source: 'file',
+  }
+}
+
+function resolveProfiles(input: {
+  providers: Record<string, LlmProviderConfig>
+  profiles?: Record<string, LlmProfileConfig>
+}): Record<string, ResolvedLlmProfile> {
+  const profiles: Record<string, ResolvedLlmProfile> = {}
+  for (const [profileId, profile] of Object.entries(input.profiles ?? {})) {
+    profiles[profileId] = resolveFileProfile({
+      profileId,
+      profile,
+      providers: input.providers,
+    })
+  }
+  return profiles
+}
+
+function findProfileForProvider(
+  profiles: Record<string, ResolvedLlmProfile>,
+  provider: string,
+): ResolvedLlmProfile | undefined {
+  return Object.values(profiles).find(profile => profile.providerType === provider)
+}
+
+function resolveCurrentProfile(input: {
+  provider: string
+  explicitProfileId?: string
+  profiles: Record<string, ResolvedLlmProfile>
+}): ResolvedLlmProfile {
+  const explicitProfile = input.explicitProfileId
+    ? input.profiles[input.explicitProfileId]
+    : undefined
+  if (explicitProfile && explicitProfile.providerType === input.provider) {
+    return explicitProfile
+  }
+  const providerProfile = findProfileForProvider(input.profiles, input.provider)
+  if (providerProfile) {
+    return providerProfile
+  }
+  throw new Error(
+    `No LLM profile configured for provider '${input.provider}'. Add a profile or provider default model.`,
+  )
 }
 
 export function getDefaultLlmConfigPath(): string {
@@ -180,7 +497,7 @@ function readLlmConfigFile(filePath: string): LlmConfigFile | null {
   return llmConfigSchema.parse(parsed)
 }
 
-function getEnvironmentOverrides(): LlmConfigFile {
+function getEnvironmentOverrides(): { provider?: string; model?: string } {
   const provider = process.env.CCR_LLM_PROVIDER?.trim()
   const model = process.env.CCR_LLM_MODEL?.trim()
   return {
@@ -205,26 +522,6 @@ function resolveConfigSource(
   return 'default'
 }
 
-function resolveModelForProvider(
-  provider: LlmProviderId,
-  explicitModel: string | undefined,
-  providers: Record<string, LlmProviderConfig>,
-): LlmModelId {
-  if (explicitModel) {
-    return explicitModel
-  }
-  const providerDefault = providers[provider]?.defaultModel?.trim()
-  if (providerDefault) {
-    return providerDefault
-  }
-  if (provider === 'anthropic') {
-    return getDefaultSonnetModel()
-  }
-  throw new Error(
-    `No model configured for provider '${provider}'. Set CCR_LLM_MODEL or add a provider default model.`,
-  )
-}
-
 export function loadLlmConfig(): ResolvedLlmConfig {
   const filePath = getConfiguredLlmConfigPath()
   const fileConfig = readLlmConfigFile(filePath)
@@ -232,25 +529,37 @@ export function loadLlmConfig(): ResolvedLlmConfig {
   const defaultProviders = getDefaultProviders()
   const mergedProviders = mergeProviderConfigs(
     defaultProviders,
-    fileConfig?.providers,
+    getProviderOverrides(fileConfig),
   )
+  const currentProfileId =
+    fileConfig?.current?.profileId?.trim()
+  const profiles = resolveProfiles({
+    providers: mergedProviders,
+    profiles: fileConfig?.profiles,
+  })
+  const currentProfile =
+    currentProfileId && profiles[currentProfileId]
+      ? profiles[currentProfileId]
+      : undefined
 
   const provider = (
     envConfig.provider ??
-    fileConfig?.provider ??
-    'codex-oauth'
+    currentProfile?.providerType ??
+    ''
   ).trim() as LlmProviderId
-
-  const model = resolveModelForProvider(
-    provider,
-    envConfig.model ?? fileConfig?.model,
-    mergedProviders,
-  )
+  const model = (
+    envConfig.model ??
+    fileConfig?.current?.model ??
+    currentProfile?.defaultModel ??
+    ''
+  ).trim() as LlmModelId
 
   return {
     provider,
     model,
     providers: mergedProviders,
+    currentProfileId: currentProfile?.id ?? currentProfileId ?? '',
+    profiles,
     path: filePath,
     source: resolveConfigSource(
       fileConfig !== null,
@@ -288,6 +597,33 @@ export function getLlmProviderConfig(
   return config.providers[providerId]
 }
 
+export function listResolvedLlmProfiles(
+  config: ResolvedLlmConfig = loadLlmConfig(),
+): ResolvedLlmProfile[] {
+  return Object.values(config.profiles)
+}
+
+export function getCurrentLlmProfile(
+  config: ResolvedLlmConfig = loadLlmConfig(),
+): ResolvedLlmProfile {
+  const profile = config.profiles[config.currentProfileId]
+  if (!profile) {
+    throw new Error('No current LLM profile configured.')
+  }
+  return profile
+}
+
+export function getLlmProfileForProvider(
+  providerId: string,
+  config: ResolvedLlmConfig = loadLlmConfig(),
+): ResolvedLlmProfile | undefined {
+  const current = config.profiles[config.currentProfileId]
+  if (current?.providerType === providerId) {
+    return current
+  }
+  return findProfileForProvider(config.profiles, providerId)
+}
+
 export async function updatePersistedLlmConfig(
   update: PersistedLlmConfigUpdate,
 ): Promise<ResolvedLlmConfig> {
@@ -295,21 +631,143 @@ export async function updatePersistedLlmConfig(
   const currentFileConfig = readLlmConfigFile(filePath) ?? {}
   const nextFileConfig: LlmConfigFile = {
     ...currentFileConfig,
+    schemaVersion: 2,
+    current: {
+      ...(currentFileConfig.current ?? {}),
+    },
   }
 
   if (update.provider !== undefined) {
-    if (update.provider === null) {
-      delete nextFileConfig.provider
-    } else {
-      nextFileConfig.provider = update.provider.trim()
-    }
+    // Provider is derived from current.profileId in the v2 config shape.
   }
 
   if (update.model !== undefined) {
     if (update.model === null) {
-      delete nextFileConfig.model
+      delete nextFileConfig.current?.model
     } else {
-      nextFileConfig.model = update.model.trim()
+      const model = update.model.trim()
+      nextFileConfig.current = {
+        ...(nextFileConfig.current ?? {}),
+        model,
+      }
+    }
+  }
+
+  if (update.currentProfileId !== undefined) {
+    if (update.currentProfileId === null) {
+      delete nextFileConfig.current?.profileId
+    } else {
+      const profileId = update.currentProfileId.trim()
+      nextFileConfig.current = {
+        ...(nextFileConfig.current ?? {}),
+        profileId,
+      }
+    }
+  }
+
+  if (
+    nextFileConfig.current &&
+    !nextFileConfig.current.profileId &&
+    !nextFileConfig.current.model
+  ) {
+    delete nextFileConfig.current
+  }
+
+  await mkdir(dirname(filePath), { recursive: true })
+  await writeFile(filePath, JSON.stringify(nextFileConfig, null, 2) + '\n', 'utf8')
+  return loadLlmConfig()
+}
+
+export async function upsertPersistedLlmProfile(
+  update: PersistedLlmProfileUpdate,
+): Promise<ResolvedLlmConfig> {
+  const filePath = getConfiguredLlmConfigPath()
+  const currentFileConfig = readLlmConfigFile(filePath) ?? {}
+  const profileId = update.profileId.trim()
+  const profile = llmProfileConfigSchema.parse(update.profile)
+  const nextFileConfig: LlmConfigFile = {
+    ...currentFileConfig,
+    schemaVersion: 2,
+    profiles: {
+      ...(currentFileConfig.profiles ?? {}),
+      [profileId]: profile,
+    },
+    current: {
+      ...(currentFileConfig.current ?? {}),
+    },
+  }
+
+  if (update.setCurrent) {
+    const model =
+      profile.defaultModel?.trim() ||
+      getProfileDefaultModel(profile.models) ||
+      nextFileConfig.providerOverrides?.[profile.providerType]?.defaultModel?.trim() ||
+      getDefaultProviders()[profile.providerType]?.defaultModel?.trim()
+    nextFileConfig.current = {
+      ...(nextFileConfig.current ?? {}),
+      profileId,
+      ...(model ? { model } : {}),
+    }
+    if (model) {
+      // Current model lives under current.model in the v2 config shape.
+    }
+  }
+
+  await mkdir(dirname(filePath), { recursive: true })
+  await writeFile(filePath, JSON.stringify(nextFileConfig, null, 2) + '\n', 'utf8')
+  return loadLlmConfig()
+}
+
+export async function deletePersistedLlmProfile(
+  profileId: string,
+): Promise<ResolvedLlmConfig> {
+  const filePath = getConfiguredLlmConfigPath()
+  const currentFileConfig = readLlmConfigFile(filePath) ?? {}
+  const normalizedProfileId = profileId.trim()
+  const fileProfile = currentFileConfig.profiles?.[normalizedProfileId]
+  if (!fileProfile) {
+    throw new Error(`LLM profile '${normalizedProfileId}' is not stored in config.`)
+  }
+  const nextProfiles = { ...(currentFileConfig.profiles ?? {}) }
+  delete nextProfiles[normalizedProfileId]
+
+  const nextFileConfig: LlmConfigFile = {
+    ...currentFileConfig,
+    schemaVersion: 2,
+    profiles: nextProfiles,
+    current: {
+      ...(currentFileConfig.current ?? {}),
+    },
+  }
+  if (Object.keys(nextProfiles).length === 0) {
+    delete nextFileConfig.profiles
+  }
+
+  const wasCurrent =
+    currentFileConfig.current?.profileId === normalizedProfileId
+  if (wasCurrent) {
+    const fallbackEntry =
+      Object.entries(nextProfiles).find(
+        ([, profile]) => profile.providerType === fileProfile.providerType,
+      ) ?? Object.entries(nextProfiles)[0]
+    if (fallbackEntry) {
+      const [fallbackProfileId, fallbackProfile] = fallbackEntry
+      const fallbackModel =
+        fallbackProfile.defaultModel?.trim() ||
+        getProfileDefaultModel(fallbackProfile.models)
+      nextFileConfig.current = {
+        ...(nextFileConfig.current ?? {}),
+        profileId: fallbackProfileId,
+        ...(fallbackModel ? { model: fallbackModel } : {}),
+      }
+      if (fallbackModel) {
+        // Current model lives under current.model in the v2 config shape.
+      } else {
+        delete nextFileConfig.current.model
+      }
+    } else {
+      delete nextFileConfig.current?.profileId
+      delete nextFileConfig.current.model
     }
   }
 

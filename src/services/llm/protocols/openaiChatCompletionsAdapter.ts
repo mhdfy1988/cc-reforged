@@ -12,6 +12,9 @@ import type {
 
 export type OpenAiChatThinkingType = 'enabled' | 'disabled'
 export type OpenAiChatReasoningEffort = 'high' | 'max'
+export type OpenAiChatOutputTokenParam =
+  | 'max_tokens'
+  | 'max_completion_tokens'
 
 interface OpenAiChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -88,9 +91,17 @@ export interface OpenAiChatCompletionsAdapterOptions {
   baseUrl: string
   defaultModel: string
   defaultReasoningEffort?: OpenAiChatReasoningEffort
+  outputTokenParam?: OpenAiChatOutputTokenParam
+  outputTokenLimit?: number
   includeStreamUsage?: boolean
+  includeTools?: boolean
+  mergeSystemMessages?: boolean
   missingApiKeyMessage?: string
   fetchImpl?: typeof fetch
+  resolveTemperature?: (input: {
+    request: LlmGenerateRequest
+    model: string
+  }) => number | undefined
   resolveThinking?: (input: {
     request: LlmGenerateRequest
     model: string
@@ -104,9 +115,16 @@ export class OpenAiChatCompletionsAdapter {
   readonly #baseUrl: string
   readonly #defaultModel: string
   readonly #defaultReasoningEffort: OpenAiChatReasoningEffort
+  readonly #outputTokenParam: OpenAiChatOutputTokenParam
+  readonly #outputTokenLimit?: number
   readonly #includeStreamUsage: boolean
+  readonly #includeTools: boolean
+  readonly #mergeSystemMessages: boolean
   readonly #missingApiKeyMessage: string
   readonly #fetchImpl: typeof fetch
+  readonly #resolveTemperature: NonNullable<
+    OpenAiChatCompletionsAdapterOptions['resolveTemperature']
+  >
   readonly #resolveThinking: NonNullable<
     OpenAiChatCompletionsAdapterOptions['resolveThinking']
   >
@@ -119,11 +137,18 @@ export class OpenAiChatCompletionsAdapter {
     this.#defaultModel = options.defaultModel
     this.#defaultReasoningEffort =
       options.defaultReasoningEffort ?? 'high'
+    this.#outputTokenParam = options.outputTokenParam ?? 'max_tokens'
+    this.#outputTokenLimit = options.outputTokenLimit
     this.#includeStreamUsage = options.includeStreamUsage ?? true
+    this.#includeTools = options.includeTools ?? true
+    this.#mergeSystemMessages = options.mergeSystemMessages ?? false
     this.#missingApiKeyMessage =
       options.missingApiKeyMessage ??
       `${options.providerLabel} API key is missing.`
     this.#fetchImpl = options.fetchImpl || fetch
+    this.#resolveTemperature =
+      options.resolveTemperature ??
+      (({ request }) => request.temperature)
     this.#resolveThinking = options.resolveThinking ?? (() => undefined)
   }
 
@@ -321,25 +346,33 @@ export class OpenAiChatCompletionsAdapter {
       throw new Error(this.#missingApiKeyMessage)
     }
 
+    const requestBody = toRequestBody({
+      request,
+      defaultModel: this.#defaultModel,
+      defaultReasoningEffort: this.#defaultReasoningEffort,
+      outputTokenParam: this.#outputTokenParam,
+      outputTokenLimit: this.#outputTokenLimit,
+      includeStreamUsage: this.#includeStreamUsage,
+      includeTools: this.#includeTools,
+      mergeSystemMessages: this.#mergeSystemMessages,
+      resolveTemperature: this.#resolveTemperature,
+      resolveThinking: this.#resolveThinking,
+      stream,
+    })
     const response = await this.#fetchImpl(resolveChatCompletionsUrl(this.#baseUrl), {
       method: 'POST',
       headers: {
         authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
       },
-      body: JSON.stringify(toRequestBody({
-        request,
-        defaultModel: this.#defaultModel,
-        defaultReasoningEffort: this.#defaultReasoningEffort,
-        includeStreamUsage: this.#includeStreamUsage,
-        resolveThinking: this.#resolveThinking,
-        stream,
-      })),
+      body: JSON.stringify(requestBody),
       signal: request.signal,
     })
 
     if (!response.ok) {
-      throw new Error(await getProviderErrorMessage(response, this.#providerLabel))
+      throw new Error(
+        await getProviderErrorMessage(response, this.#providerLabel),
+      )
     }
     return response
   }
@@ -349,7 +382,14 @@ function toRequestBody(input: {
   request: LlmGenerateRequest
   defaultModel: string
   defaultReasoningEffort: OpenAiChatReasoningEffort
+  outputTokenParam: OpenAiChatOutputTokenParam
+  outputTokenLimit?: number
   includeStreamUsage: boolean
+  includeTools: boolean
+  mergeSystemMessages: boolean
+  resolveTemperature: NonNullable<
+    OpenAiChatCompletionsAdapterOptions['resolveTemperature']
+  >
   resolveThinking: NonNullable<
     OpenAiChatCompletionsAdapterOptions['resolveThinking']
   >
@@ -360,15 +400,25 @@ function toRequestBody(input: {
     request: input.request,
     model,
   })
+  const outputTokens = resolveOutputTokens(
+    input.request.maxOutputTokens,
+    input.outputTokenLimit,
+  )
+  const temperature = input.resolveTemperature({
+    request: input.request,
+    model,
+  })
   return {
     model,
-    messages: toOpenAiChatMessages(input.request.messages),
+    messages: toOpenAiChatMessages(input.request.messages, {
+      mergeSystemMessages: input.mergeSystemMessages,
+    }),
     stream: input.stream,
     ...(input.stream && input.includeStreamUsage
       ? { stream_options: { include_usage: true } }
       : {}),
-    ...(typeof input.request.maxOutputTokens === 'number'
-      ? { max_tokens: input.request.maxOutputTokens }
+    ...(typeof outputTokens === 'number'
+      ? { [input.outputTokenParam]: outputTokens }
       : {}),
     ...(thinking
       ? {
@@ -379,10 +429,10 @@ function toRequestBody(input: {
             resolveReasoningEffort(getMetadataReasoningEffort(input.request.metadata)) ||
             input.defaultReasoningEffort,
         }
-      : typeof input.request.temperature === 'number'
-        ? { temperature: input.request.temperature }
+      : typeof temperature === 'number'
+        ? { temperature }
         : {}),
-    ...(input.request.tools && input.request.tools.length > 0
+    ...(input.includeTools && input.request.tools && input.request.tools.length > 0
       ? {
           tools: toOpenAiChatTools(input.request.tools),
           tool_choice: 'auto',
@@ -391,10 +441,26 @@ function toRequestBody(input: {
   }
 }
 
+function resolveOutputTokens(
+  maxOutputTokens: number | undefined,
+  outputTokenLimit: number | undefined,
+): number | undefined {
+  if (typeof maxOutputTokens !== 'number') {
+    return undefined
+  }
+  return typeof outputTokenLimit === 'number'
+    ? Math.min(maxOutputTokens, outputTokenLimit)
+    : maxOutputTokens
+}
+
 function toOpenAiChatMessages(
   messages: readonly LlmMessage[],
+  options: {
+    mergeSystemMessages?: boolean
+  } = {},
 ): OpenAiChatMessage[] {
   const mapped: OpenAiChatMessage[] = []
+  const mergedSystemParts: string[] = []
 
   for (const message of messages) {
     if (message.role === 'tool') {
@@ -457,10 +523,21 @@ function toOpenAiChatMessages(
     if (!content) {
       continue
     }
+    if (message.role === 'system' && options.mergeSystemMessages) {
+      mergedSystemParts.push(content)
+      continue
+    }
     mapped.push({
       role: message.role,
       content,
       ...(message.name?.trim() ? { name: message.name.trim() } : {}),
+    })
+  }
+
+  if (mergedSystemParts.length > 0) {
+    mapped.unshift({
+      role: 'system',
+      content: mergedSystemParts.join('\n\n'),
     })
   }
 
@@ -636,6 +713,10 @@ function getMetadataReasoningEffort(
 async function getProviderErrorMessage(
   response: Response,
   providerLabel: string,
+  options: {
+    requestBody?: Record<string, unknown>
+    includeRequestDiagnostics?: boolean
+  } = {},
 ): Promise<string> {
   const text = await response.text().catch(() => '')
   let detail = text.trim()
@@ -647,7 +728,93 @@ async function getProviderErrorMessage(
   } catch {
     // Preserve the raw response text when it is not JSON.
   }
-  return `${providerLabel} API request failed (${response.status} ${
+  const message = `${providerLabel} API request failed (${response.status} ${
     response.statusText
   })${detail ? `: ${detail}` : '.'}`
+  if (!options.includeRequestDiagnostics || !options.requestBody) {
+    return message
+  }
+  return `${message}; requestDiagnostics=${JSON.stringify(
+    toSafeRequestDiagnostics(options.requestBody),
+  )}`
+}
+
+function toSafeRequestDiagnostics(
+  body: Record<string, unknown>,
+): Record<string, unknown> {
+  const messages = Array.isArray(body.messages)
+    ? body.messages.filter(
+        (message): message is Record<string, unknown> =>
+          !!message && typeof message === 'object' && !Array.isArray(message),
+      )
+    : []
+  const roleCounts: Record<string, number> = {}
+  let totalTextChars = 0
+  let emptyContentCount = 0
+  let nonStringContentCount = 0
+  let assistantToolCallCount = 0
+  let toolMessageCount = 0
+  let reasoningContentCount = 0
+
+  for (const message of messages) {
+    const role =
+      typeof message.role === 'string' ? message.role : 'unknown'
+    roleCounts[role] = (roleCounts[role] || 0) + 1
+    if (role === 'tool') {
+      toolMessageCount += 1
+    }
+    if (Array.isArray(message.tool_calls)) {
+      assistantToolCallCount += message.tool_calls.length
+    }
+    if (typeof message.reasoning_content === 'string') {
+      reasoningContentCount += 1
+    }
+    if (typeof message.content === 'string') {
+      totalTextChars += message.content.length
+      if (!message.content.trim()) {
+        emptyContentCount += 1
+      }
+      continue
+    }
+    if (message.content === null) {
+      emptyContentCount += 1
+      continue
+    }
+    nonStringContentCount += 1
+  }
+
+  return {
+    keys: Object.keys(body).sort(),
+    model: body.model,
+    stream: body.stream,
+    max_tokens: body.max_tokens,
+    max_completion_tokens: body.max_completion_tokens,
+    temperature: body.temperature,
+    top_p: body.top_p,
+    hasThinking: hasOwn(body, 'thinking'),
+    reasoning_effort: body.reasoning_effort,
+    hasStreamOptions: hasOwn(body, 'stream_options'),
+    hasToolChoice: hasOwn(body, 'tool_choice'),
+    toolCount: Array.isArray(body.tools) ? body.tools.length : 0,
+    messageCount: messages.length,
+    roleCounts,
+    firstRoles: messages
+      .slice(0, 8)
+      .map(message => message.role)
+      .filter(role => typeof role === 'string'),
+    lastRoles: messages
+      .slice(-8)
+      .map(message => message.role)
+      .filter(role => typeof role === 'string'),
+    totalTextChars,
+    emptyContentCount,
+    nonStringContentCount,
+    assistantToolCallCount,
+    toolMessageCount,
+    reasoningContentCount,
+  }
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key)
 }

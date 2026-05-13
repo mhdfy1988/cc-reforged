@@ -15,6 +15,7 @@ import { WindowTitlebar } from './components/layout/WindowTitlebar.js'
 import { ChatPage } from './components/pages/ChatPage.js'
 import { LogsPage } from './components/pages/LogsPage.js'
 import { McpPage } from './components/pages/McpPage.js'
+import { ModelsPage } from './components/pages/ModelsPage.js'
 import { SettingsPage } from './components/pages/SettingsPage.js'
 import {
   createErrorDisplayEvent,
@@ -31,7 +32,11 @@ import type {
   ChatMessage,
   DesktopStatus,
   JsonObject,
+  LlmModelAvailability,
+  LlmModelCredentialUpdateResult,
   LlmModelListState,
+  LlmModelProfileMutationResult,
+  LlmModelProfileSaveInput,
   LogSnapshot,
   PageId,
   PermissionRespondPayload,
@@ -45,6 +50,22 @@ import type { UpdateActionKind } from './domain/updateDisplay.js'
 import type { CcrDesktopEvent } from './global.js'
 
 type AppPageId = Exclude<PageId, 'settings'>
+type ModelAvailabilityCache = Record<string, LlmModelAvailability>
+
+function getModelAvailabilityCacheKey(input: {
+  provider?: string
+  profileId?: string
+}): string | null {
+  const profileId = input.profileId?.trim()
+  if (profileId) {
+    return `profile:${profileId}`
+  }
+  const provider = input.provider?.trim()
+  if (provider) {
+    return `provider:${provider}`
+  }
+  return null
+}
 
 function App() {
   const [status, setStatus] = useState<DesktopStatus | null>(null)
@@ -61,6 +82,15 @@ function App() {
   const [permissionSettings, setPermissionSettings] =
     useState<PermissionSettingsState | null>(null)
   const [modelList, setModelList] = useState<LlmModelListState | null>(null)
+  const [modelAvailabilityByKey, setModelAvailabilityByKey] =
+    useState<ModelAvailabilityCache>({})
+  const [modelTestResultByKey, setModelTestResultByKey] =
+    useState<ModelAvailabilityCache>({})
+  const [modelAuthLoginKey, setModelAuthLoginKey] = useState<string | null>(null)
+  const [modelTestConnectionKeys, setModelTestConnectionKeys] = useState<
+    Record<string, true>
+  >({})
+  const [modelPageError, setModelPageError] = useState<string | null>(null)
   const [threadHistory, setThreadHistory] = useState<ThreadHistoryState>({
     status: 'closed',
     scope: 'allProjects',
@@ -70,6 +100,7 @@ function App() {
   })
   const [busy, setBusy] = useState(false)
   const itemMetadataRef = useRef<Map<string, JsonObject>>(new Map())
+  const modelAuthLoginRunRef = useRef(0)
 
   useEffect(() => {
     window.ccr.getStatus().then((nextStatus: DesktopStatus) => {
@@ -139,6 +170,108 @@ function App() {
       providerId ? { provider: providerId } : {},
     )) as LlmModelListState
     setModelList(nextModelList)
+  }
+
+  function rememberModelAvailability(
+    availability: LlmModelAvailability,
+    fallback?: { provider?: string; profileId?: string },
+  ): void {
+    const key = getModelAvailabilityCacheKey({
+      provider: availability.provider ?? fallback?.provider,
+      profileId: availability.profileId ?? fallback?.profileId,
+    })
+    if (!key) {
+      return
+    }
+    setModelAvailabilityByKey(current => ({ ...current, [key]: availability }))
+  }
+
+  function rememberModelTestResult(
+    availability: LlmModelAvailability,
+    fallback?: { provider?: string; profileId?: string },
+  ): void {
+    const key = getModelAvailabilityCacheKey({
+      provider: availability.provider ?? fallback?.provider,
+      profileId: availability.profileId ?? fallback?.profileId,
+    })
+    if (!key) {
+      return
+    }
+    setModelTestResultByKey(current => ({ ...current, [key]: availability }))
+  }
+
+  function clearModelTestResult(
+    providerId?: string,
+    profileId?: string,
+  ): void {
+    const key = getModelAvailabilityCacheKey({
+      provider: providerId,
+      profileId,
+    })
+    if (!key) {
+      return
+    }
+    setModelTestResultByKey(current => {
+      if (!current[key]) {
+        return current
+      }
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
+  }
+
+  function clearModelProfileCaches(
+    providerId?: string,
+    profileId?: string,
+  ): void {
+    const key = getModelAvailabilityCacheKey({
+      provider: providerId,
+      profileId,
+    })
+    if (!key) {
+      return
+    }
+    setModelAvailabilityByKey(current => {
+      if (!current[key]) {
+        return current
+      }
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
+    setModelTestResultByKey(current => {
+      if (!current[key]) {
+        return current
+      }
+      const next = { ...current }
+      delete next[key]
+      return next
+    })
+  }
+
+  async function refreshModelAvailability(
+    providerId?: string,
+    modelId?: string,
+    profileId?: string,
+  ): Promise<void> {
+    if (!providerId) {
+      return
+    }
+    try {
+      setModelPageError(null)
+      const nextAvailability = (await window.ccr.getModelAvailability({
+        ...(profileId ? { profileId } : {}),
+        provider: providerId,
+        ...(modelId ? { model: modelId } : {}),
+      })) as LlmModelAvailability
+      rememberModelAvailability(nextAvailability, {
+        provider: providerId,
+        profileId,
+      })
+    } catch (error) {
+      setModelPageError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   function appendDisplayEvent(event: DisplayEvent): void {
@@ -470,14 +603,20 @@ function App() {
     })
   }
 
-  async function switchModel(providerId: string, modelId: string): Promise<void> {
+  async function switchModel(
+    providerId: string,
+    modelId: string,
+    profileId?: string,
+  ): Promise<void> {
     try {
       await runAction(async () => {
         await window.ccr.setModel({
+          ...(profileId ? { profileId } : {}),
           provider: providerId,
           model: modelId,
         })
         await refreshModelList()
+        await refreshModelAvailability(providerId, modelId, profileId)
       })
     } catch (error) {
       appendDisplayEvent(
@@ -487,6 +626,173 @@ function App() {
         ),
       )
     }
+  }
+
+  async function testModelConnection(
+    providerId: string,
+    modelId?: string,
+    profileId?: string,
+  ): Promise<void> {
+    const testKey = getModelAvailabilityCacheKey({
+      provider: providerId,
+      profileId,
+    })
+    if (testKey) {
+      setModelTestConnectionKeys(current => ({ ...current, [testKey]: true }))
+    }
+    try {
+      setModelPageError(null)
+      const result = (await window.ccr.testModelConnection({
+        ...(profileId ? { profileId } : {}),
+        provider: providerId,
+        ...(modelId ? { model: modelId } : {}),
+      })) as LlmModelAvailability
+      rememberModelTestResult(result, { provider: providerId, profileId })
+      rememberModelAvailability(result, { provider: providerId, profileId })
+    } catch (error) {
+      setModelPageError(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (testKey) {
+        setModelTestConnectionKeys(current => {
+          if (!current[testKey]) {
+            return current
+          }
+          const next = { ...current }
+          delete next[testKey]
+          return next
+        })
+      }
+    }
+  }
+
+  async function saveModelApiKey(
+    providerId: string,
+    apiKey: string | null,
+    modelId?: string,
+    profileId?: string,
+  ): Promise<void> {
+    try {
+      setModelPageError(null)
+      await runAction(async () => {
+        const result = (await window.ccr.updateModelCredential({
+          ...(profileId ? { profileId } : {}),
+          provider: providerId,
+          ...(modelId ? { model: modelId } : {}),
+          apiKey,
+        })) as LlmModelCredentialUpdateResult
+        clearModelTestResult(providerId, profileId)
+        if (result.availability) {
+          rememberModelAvailability(result.availability, {
+            provider: providerId,
+            profileId,
+          })
+        } else {
+          await refreshModelAvailability(providerId, modelId, profileId)
+        }
+        await refreshModelList()
+      })
+    } catch (error) {
+      setModelPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function saveModelProfile(input: LlmModelProfileSaveInput): Promise<void> {
+    try {
+      setModelPageError(null)
+      await runAction(async () => {
+        const result = (await window.ccr.saveModelProfile(
+          input,
+        )) as LlmModelProfileMutationResult
+        clearModelTestResult(input.providerType, result.profile?.id ?? input.profileId)
+        await refreshModelList()
+        const nextProfileId = result.profile?.id ?? input.profileId
+        await refreshModelAvailability(
+          input.providerType,
+          input.defaultModel,
+          nextProfileId,
+        )
+      })
+    } catch (error) {
+      setModelPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function copyModelProfile(profileId: string): Promise<void> {
+    try {
+      setModelPageError(null)
+      await runAction(async () => {
+        const result = (await window.ccr.copyModelProfile({
+          profileId,
+        })) as LlmModelProfileMutationResult
+        clearModelTestResult(result.profile?.providerType, result.profile?.id)
+        await refreshModelList()
+        await refreshModelAvailability(
+          result.profile?.providerType,
+          result.profile?.defaultModel,
+          result.profile?.id,
+        )
+      })
+    } catch (error) {
+      setModelPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function deleteModelProfile(profileId: string): Promise<void> {
+    try {
+      setModelPageError(null)
+      await runAction(async () => {
+        await window.ccr.deleteModelProfile({ profileId })
+        clearModelProfileCaches(undefined, profileId)
+        await refreshModelList()
+      })
+    } catch (error) {
+      setModelPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function loginModelAuth(
+    providerId: string,
+    modelId?: string,
+    profileId?: string,
+  ): Promise<void> {
+    const loginKey = getModelAvailabilityCacheKey({
+      provider: providerId,
+      profileId,
+    })
+    const runId = modelAuthLoginRunRef.current + 1
+    modelAuthLoginRunRef.current = runId
+    setModelAuthLoginKey(loginKey)
+    try {
+      setModelPageError(null)
+      await window.ccr.loginAuth({
+        ...(profileId ? { profileId } : {}),
+        provider: providerId,
+      })
+      if (modelAuthLoginRunRef.current !== runId) {
+        return
+      }
+      clearModelTestResult(providerId, profileId)
+      await refreshModelList()
+      await refreshModelAvailability(providerId, modelId, profileId)
+      const nextStatus = (await window.ccr.getStatus()) as DesktopStatus
+      setStatus(nextStatus)
+      setPermissionSettings(nextStatus.permissionSettings ?? null)
+      setWorkspaceInput(nextStatus.workspacePath ?? nextStatus.repoRoot ?? '')
+    } catch (error) {
+      if (modelAuthLoginRunRef.current !== runId) {
+        return
+      }
+      setModelPageError(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (modelAuthLoginRunRef.current === runId) {
+        setModelAuthLoginKey(null)
+      }
+    }
+  }
+
+  function cancelModelAuthLogin(): void {
+    modelAuthLoginRunRef.current += 1
+    setModelAuthLoginKey(null)
   }
 
   function runUpdateAction(kind: UpdateActionKind): void {
@@ -573,8 +879,8 @@ function App() {
               onChooseWorkspace={() =>
                 void runAction(() => window.ccr.chooseWorkspace())
               }
-              onSelectModel={(providerId, modelId) =>
-                void switchModel(providerId, modelId)
+              onSelectModel={(providerId, modelId, profileId) =>
+                void switchModel(providerId, modelId, profileId)
               }
               onUpdateAction={runUpdateAction}
             />
@@ -617,6 +923,54 @@ function App() {
                 busy={busy}
                 mcp={status?.mcp ?? { servers: [], errors: [] }}
                 onRefresh={() => void runAction(() => window.ccr.refreshMcp())}
+              />
+            ) : null}
+
+            {page === 'models' ? (
+              <ModelsPage
+                availabilityByKey={modelAvailabilityByKey}
+                authLoginKey={modelAuthLoginKey}
+                busy={busy}
+                error={modelPageError}
+                modelList={modelList}
+                status={status}
+                testConnectionKeys={modelTestConnectionKeys}
+                testResultByKey={modelTestResultByKey}
+                onClearApiKey={(providerId, modelId, profileId) =>
+                  void saveModelApiKey(providerId, null, modelId, profileId)
+                }
+                onRefreshAvailability={(providerId, modelId, profileId) =>
+                  void refreshModelAvailability(providerId, modelId, profileId)
+                }
+                onRefreshModels={() =>
+                  void runAction(async () => {
+                    await refreshModelList()
+                    const currentProvider = status?.config?.llm?.provider
+                    if (currentProvider) {
+                      await refreshModelAvailability(
+                        currentProvider,
+                        status?.config?.llm?.model,
+                        status?.config?.llm?.profileId,
+                      )
+                    }
+                  })
+                }
+                onLoginAuth={(providerId, modelId, profileId) =>
+                  void loginModelAuth(providerId, modelId, profileId)
+                }
+                onCancelLogin={cancelModelAuthLogin}
+                onCopyProfile={profileId => void copyModelProfile(profileId)}
+                onDeleteProfile={profileId => void deleteModelProfile(profileId)}
+                onSaveProfile={input => void saveModelProfile(input)}
+                onSaveApiKey={(providerId, apiKey, modelId, profileId) =>
+                  void saveModelApiKey(providerId, apiKey, modelId, profileId)
+                }
+                onSelectModel={(providerId, modelId, profileId) =>
+                  void switchModel(providerId, modelId, profileId)
+                }
+                onTestConnection={(providerId, modelId, profileId) =>
+                  void testModelConnection(providerId, modelId, profileId)
+                }
               />
             ) : null}
 

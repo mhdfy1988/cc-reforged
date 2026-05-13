@@ -77,20 +77,77 @@ export const AuthStatusParamsSchema = z
 })
     .strict()
     .default({});
+export const AuthLoginParamsSchema = z
+    .object({
+    profileId: z.string().min(1).optional(),
+    provider: z.string().min(1).optional(),
+})
+    .strict()
+    .default({});
 export const ModelListParamsSchema = z
     .object({
     provider: z.string().min(1).optional(),
 })
     .strict()
     .default({});
+export const ModelProfileListParamsSchema = z
+    .object({
+    providerType: z.string().min(1).optional(),
+})
+    .strict()
+    .default({});
+export const ModelProfileSetCurrentParamsSchema = z
+    .object({
+    profileId: z.string().min(1),
+    model: z.string().min(1).optional(),
+})
+    .strict();
+export const ModelProfileSaveParamsSchema = z
+    .object({
+    profileId: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
+    providerType: z.string().min(1),
+    apiMode: z
+        .enum(['anthropic-messages', 'openai-responses', 'openai-chat', 'custom'])
+        .optional(),
+    authStrategy: z
+        .enum([
+        'api_key',
+        'oauth_refreshable',
+        'oauth_external',
+        'external_process',
+        'hybrid',
+        'unknown',
+    ])
+        .optional(),
+    accountId: z.string().min(1).optional(),
+    baseUrl: z.string().min(1).optional(),
+    defaultModel: z.string().min(1).optional(),
+    models: z.array(z.string().min(1)).optional(),
+    setCurrent: z.boolean().optional(),
+})
+    .strict();
+export const ModelProfileCopyParamsSchema = z
+    .object({
+    profileId: z.string().min(1),
+    name: z.string().min(1).optional(),
+})
+    .strict();
+export const ModelProfileDeleteParamsSchema = z
+    .object({
+    profileId: z.string().min(1),
+})
+    .strict();
 export const ModelSetParamsSchema = z
     .object({
+    profileId: z.string().min(1).optional(),
     provider: z.string().min(1).optional(),
     model: z.string().min(1),
 })
     .strict();
 export const ModelAvailabilityParamsSchema = z
     .object({
+    profileId: z.string().min(1).optional(),
     provider: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
 })
@@ -98,12 +155,21 @@ export const ModelAvailabilityParamsSchema = z
     .default({});
 export const ModelTestParamsSchema = z
     .object({
+    profileId: z.string().min(1).optional(),
     provider: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
     prompt: z.string().min(1).optional(),
 })
     .strict()
     .default({});
+export const ModelCredentialUpdateParamsSchema = z
+    .object({
+    profileId: z.string().min(1).optional(),
+    provider: z.string().min(1),
+    model: z.string().min(1).optional(),
+    apiKey: z.string().optional().nullable(),
+})
+    .strict();
 export const McpListParamsSchema = z
     .object({
     includeDisabled: z.boolean().optional(),

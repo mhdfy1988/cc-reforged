@@ -92,6 +92,14 @@ export const AuthStatusParamsSchema = z
   .strict()
   .default({})
 
+export const AuthLoginParamsSchema = z
+  .object({
+    profileId: z.string().min(1).optional(),
+    provider: z.string().min(1).optional(),
+  })
+  .strict()
+  .default({})
+
 export const ModelListParamsSchema = z
   .object({
     provider: z.string().min(1).optional(),
@@ -99,8 +107,62 @@ export const ModelListParamsSchema = z
   .strict()
   .default({})
 
+export const ModelProfileListParamsSchema = z
+  .object({
+    providerType: z.string().min(1).optional(),
+  })
+  .strict()
+  .default({})
+
+export const ModelProfileSetCurrentParamsSchema = z
+  .object({
+    profileId: z.string().min(1),
+    model: z.string().min(1).optional(),
+  })
+  .strict()
+
+export const ModelProfileSaveParamsSchema = z
+  .object({
+    profileId: z.string().min(1).optional(),
+    name: z.string().min(1).optional(),
+    providerType: z.string().min(1),
+    apiMode: z
+      .enum(['anthropic-messages', 'openai-responses', 'openai-chat', 'custom'])
+      .optional(),
+    authStrategy: z
+      .enum([
+        'api_key',
+        'oauth_refreshable',
+        'oauth_external',
+        'external_process',
+        'hybrid',
+        'unknown',
+      ])
+      .optional(),
+    accountId: z.string().min(1).optional(),
+    baseUrl: z.string().min(1).optional(),
+    defaultModel: z.string().min(1).optional(),
+    models: z.array(z.string().min(1)).optional(),
+    setCurrent: z.boolean().optional(),
+  })
+  .strict()
+
+export const ModelProfileCopyParamsSchema = z
+  .object({
+    profileId: z.string().min(1),
+    name: z.string().min(1).optional(),
+  })
+  .strict()
+
+export const ModelProfileDeleteParamsSchema = z
+  .object({
+    profileId: z.string().min(1),
+  })
+  .strict()
+
 export const ModelSetParamsSchema = z
   .object({
+    profileId: z.string().min(1).optional(),
     provider: z.string().min(1).optional(),
     model: z.string().min(1),
   })
@@ -108,6 +170,7 @@ export const ModelSetParamsSchema = z
 
 export const ModelAvailabilityParamsSchema = z
   .object({
+    profileId: z.string().min(1).optional(),
     provider: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
   })
@@ -116,12 +179,22 @@ export const ModelAvailabilityParamsSchema = z
 
 export const ModelTestParamsSchema = z
   .object({
+    profileId: z.string().min(1).optional(),
     provider: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
     prompt: z.string().min(1).optional(),
   })
   .strict()
   .default({})
+
+export const ModelCredentialUpdateParamsSchema = z
+  .object({
+    profileId: z.string().min(1).optional(),
+    provider: z.string().min(1),
+    model: z.string().min(1).optional(),
+    apiKey: z.string().optional().nullable(),
+  })
+  .strict()
 
 export const McpListParamsSchema = z
   .object({
@@ -261,12 +334,31 @@ export type ClientInfo = z.infer<typeof ClientInfoSchema>
 export type ClientCapabilities = z.infer<typeof ClientCapabilitiesSchema>
 export type InitializeParams = z.infer<typeof InitializeParamsSchema>
 export type AuthStatusParams = z.infer<typeof AuthStatusParamsSchema>
+export type AuthLoginParams = z.infer<typeof AuthLoginParamsSchema>
 export type ModelListParams = z.infer<typeof ModelListParamsSchema>
+export type ModelProfileListParams = z.infer<
+  typeof ModelProfileListParamsSchema
+>
+export type ModelProfileSetCurrentParams = z.infer<
+  typeof ModelProfileSetCurrentParamsSchema
+>
+export type ModelProfileSaveParams = z.infer<
+  typeof ModelProfileSaveParamsSchema
+>
+export type ModelProfileCopyParams = z.infer<
+  typeof ModelProfileCopyParamsSchema
+>
+export type ModelProfileDeleteParams = z.infer<
+  typeof ModelProfileDeleteParamsSchema
+>
 export type ModelSetParams = z.infer<typeof ModelSetParamsSchema>
 export type ModelAvailabilityParams = z.infer<
   typeof ModelAvailabilityParamsSchema
 >
 export type ModelTestParams = z.infer<typeof ModelTestParamsSchema>
+export type ModelCredentialUpdateParams = z.infer<
+  typeof ModelCredentialUpdateParamsSchema
+>
 export type McpListParams = z.infer<typeof McpListParamsSchema>
 export type WorkspaceOpenParams = z.infer<typeof WorkspaceOpenParamsSchema>
 export type ThreadStartParams = z.infer<typeof ThreadStartParamsSchema>
@@ -367,13 +459,27 @@ export type ConfigGetResult = Record<string, unknown>
 
 export type AuthStatusResult = Record<string, unknown>
 
+export type AuthLoginResult = Record<string, unknown>
+
 export type ModelListResult = Record<string, unknown>
+
+export type ModelProfileListResult = Record<string, unknown>
+
+export type ModelProfileSetCurrentResult = Record<string, unknown>
+
+export type ModelProfileSaveResult = Record<string, unknown>
+
+export type ModelProfileCopyResult = Record<string, unknown>
+
+export type ModelProfileDeleteResult = Record<string, unknown>
 
 export type ModelSetResult = Record<string, unknown>
 
 export type ModelAvailabilityResult = Record<string, unknown>
 
 export type ModelTestResult = Record<string, unknown>
+
+export type ModelCredentialUpdateResult = Record<string, unknown>
 
 export type McpListResult = Record<string, unknown>
 

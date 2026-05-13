@@ -43,6 +43,7 @@ const provider = new CodexOAuthProvider({
     assert.equal(options?.transport, 'sse');
     assert.equal(options?.reasoningEffort, 'high');
     assert.equal(options?.reasoning, undefined);
+    assert.equal(options?.temperature, undefined);
     return {
       role: 'assistant',
       api: 'openai-codex-responses',
@@ -83,6 +84,7 @@ const provider = new CodexOAuthProvider({
     assert.equal(options?.transport, 'sse');
     assert.equal(options?.reasoningEffort, 'high');
     assert.equal(options?.reasoning, undefined);
+    assert.equal(options?.temperature, undefined);
 
     const finalMessage = {
       role: 'assistant',

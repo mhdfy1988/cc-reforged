@@ -1,6 +1,8 @@
 import type {
   AuthStatusParams,
   AuthStatusResult,
+  AuthLoginParams,
+  AuthLoginResult,
   CompactRunParams,
   CompactRunResult,
   CompactStatusResult,
@@ -15,8 +17,20 @@ import type {
   MemorySessionStatusResult,
   ModelAvailabilityParams,
   ModelAvailabilityResult,
+  ModelCredentialUpdateParams,
+  ModelCredentialUpdateResult,
   ModelListParams,
   ModelListResult,
+  ModelProfileListParams,
+  ModelProfileListResult,
+  ModelProfileCopyParams,
+  ModelProfileCopyResult,
+  ModelProfileDeleteParams,
+  ModelProfileDeleteResult,
+  ModelProfileSaveParams,
+  ModelProfileSaveResult,
+  ModelProfileSetCurrentParams,
+  ModelProfileSetCurrentResult,
   ModelSetParams,
   ModelSetResult,
   ModelTestParams,
@@ -86,11 +100,53 @@ export class StdioAppServerClient {
     return this.rpc.request('auth/status', params, options)
   }
 
+  loginAuth(
+    params: AuthLoginParams = {},
+    options?: RequestOptions,
+  ): Promise<AuthLoginResult> {
+    return this.rpc.request('auth/login', params, options)
+  }
+
   listModels(
     params: ModelListParams = {},
     options?: RequestOptions,
   ): Promise<ModelListResult> {
     return this.rpc.request('model/list', params, options)
+  }
+
+  listModelProfiles(
+    params: ModelProfileListParams = {},
+    options?: RequestOptions,
+  ): Promise<ModelProfileListResult> {
+    return this.rpc.request('model/profile/list', params, options)
+  }
+
+  setModelProfile(
+    params: ModelProfileSetCurrentParams,
+    options?: RequestOptions,
+  ): Promise<ModelProfileSetCurrentResult> {
+    return this.rpc.request('model/profile/set-current', params, options)
+  }
+
+  saveModelProfile(
+    params: ModelProfileSaveParams,
+    options?: RequestOptions,
+  ): Promise<ModelProfileSaveResult> {
+    return this.rpc.request('model/profile/save', params, options)
+  }
+
+  copyModelProfile(
+    params: ModelProfileCopyParams,
+    options?: RequestOptions,
+  ): Promise<ModelProfileCopyResult> {
+    return this.rpc.request('model/profile/copy', params, options)
+  }
+
+  deleteModelProfile(
+    params: ModelProfileDeleteParams,
+    options?: RequestOptions,
+  ): Promise<ModelProfileDeleteResult> {
+    return this.rpc.request('model/profile/delete', params, options)
   }
 
   setModel(
@@ -112,6 +168,13 @@ export class StdioAppServerClient {
     options?: RequestOptions,
   ): Promise<ModelTestResult> {
     return this.rpc.request('model/test', params, options)
+  }
+
+  updateModelCredential(
+    params: ModelCredentialUpdateParams,
+    options?: RequestOptions,
+  ): Promise<ModelCredentialUpdateResult> {
+    return this.rpc.request('model/credential/update', params, options)
   }
 
   listMcp(

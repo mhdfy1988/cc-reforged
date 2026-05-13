@@ -108,6 +108,7 @@ export type LlmStopReason =
 export interface LlmGenerateRequest {
   provider: LlmProviderId
   model: LlmModelId
+  profileId?: string
   messages: readonly LlmMessage[]
   tools?: readonly LlmToolDefinition[]
   maxOutputTokens?: number

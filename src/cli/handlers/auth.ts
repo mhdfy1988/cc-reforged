@@ -15,6 +15,7 @@ import {
   getLlmRuntimeDisplayStatus,
 } from '../../services/llm/runtimeStatus.js'
 import {
+  getLlmProfileForProvider,
   getLlmProviderConfig,
   loadLlmConfig,
 } from '../../services/llm/llmConfig.js'
@@ -56,6 +57,7 @@ import {
   buildLlmRuntimeProperties,
 } from '../../utils/status.js'
 import { gracefulShutdown } from '../../utils/gracefulShutdown.js'
+import { saveCoreModelProfile } from '../../core/modelCore.js'
 
 function parseString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
@@ -211,6 +213,21 @@ export async function authLogin({
 
     try {
       logEvent('tengu_codex_oauth_login_start', {})
+      const currentConfig = loadLlmConfig()
+      const existingProfile =
+        currentConfig.provider === 'codex-oauth'
+          ? currentConfig.profiles[currentConfig.currentProfileId]
+          : getLlmProfileForProvider('codex-oauth', currentConfig)
+      if (!existingProfile) {
+        await saveCoreModelProfile({
+          providerType: 'codex-oauth',
+          apiMode: 'openai-responses',
+          authStrategy: 'oauth_refreshable',
+          defaultModel:
+            currentConfig.providers['codex-oauth']?.defaultModel ?? 'gpt-5.4',
+          setCurrent: true,
+        })
+      }
       const session = createDefaultCodexOAuthSession()
       process.stdout.write('Starting Codex OAuth browser login...\n')
       process.stdout.write(

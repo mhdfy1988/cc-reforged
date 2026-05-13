@@ -1,10 +1,12 @@
 import { createHash, randomBytes } from 'crypto'
 import { spawn } from 'child_process'
 import { createServer } from 'http'
-import { mkdir, readFile, rm, writeFile } from 'fs/promises'
 import type { Socket } from 'net'
-import { dirname, join } from 'path'
-import { homedir } from 'os'
+import {
+  getDefaultLlmCredentialsPath,
+  getLlmProfileOAuthCredential,
+  updateLlmProfileOAuthCredential,
+} from '../providerCredentials.js'
 
 const DEFAULT_BASE_URL = 'https://chatgpt.com/backend-api'
 const DEFAULT_AUTHORIZE_URL = 'https://auth.openai.com/oauth/authorize'
@@ -15,12 +17,6 @@ const DEFAULT_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const DEFAULT_JWT_CLAIM_PATH = 'https://api.openai.com/auth'
 const DEFAULT_CALLBACK_HOST = '127.0.0.1'
 const DEFAULT_CALLBACK_PORT = 1455
-const DEFAULT_CREDENTIAL_FILE = join(
-  homedir(),
-  '.ccr',
-  'data',
-  'codex-oauth.json',
-)
 const REFRESH_WINDOW_MS = 60_000
 
 export interface CodexOAuthCredential {
@@ -58,7 +54,7 @@ export interface CodexOAuthSessionOptions {
   jwtClaimPath?: string
   callbackHost?: string
   callbackPort?: number
-  credentialFilePath?: string
+  credentialProfileId?: string
   fetchFn?: typeof fetch
   now?: () => number
   openExternalUrl?: (url: string) => Promise<void> | void
@@ -80,7 +76,7 @@ export class CodexOAuthSession {
   readonly #jwtClaimPath: string
   readonly #callbackHost: string
   readonly #callbackPort: number
-  readonly #credentialFilePath: string
+  readonly #credentialProfileId?: string
   readonly #fetchFn: typeof fetch
   readonly #now: () => number
   readonly #openExternalUrl: (url: string) => Promise<void> | void
@@ -114,10 +110,7 @@ export class CodexOAuthSession {
     this.#jwtClaimPath = options.jwtClaimPath || DEFAULT_JWT_CLAIM_PATH
     this.#callbackHost = options.callbackHost || DEFAULT_CALLBACK_HOST
     this.#callbackPort = options.callbackPort || DEFAULT_CALLBACK_PORT
-    this.#credentialFilePath =
-      options.credentialFilePath ||
-      process.env.CCR_CODEX_OAUTH_CREDENTIAL_FILE ||
-      DEFAULT_CREDENTIAL_FILE
+    this.#credentialProfileId = options.credentialProfileId
     this.#fetchFn = options.fetchFn || fetch
     this.#now = options.now || (() => Date.now())
     this.#openExternalUrl = options.openExternalUrl || openExternalUrl
@@ -128,7 +121,7 @@ export class CodexOAuthSession {
   }
 
   get credentialFilePath(): string {
-    return this.#credentialFilePath
+    return getDefaultLlmCredentialsPath()
   }
 
   async getAvailability(): Promise<CodexOAuthAvailability> {
@@ -142,7 +135,7 @@ export class CodexOAuthSession {
           baseUrl: this.#baseUrl,
           source: credentialSourceFromEnv()
             ? 'env'
-            : this.#credentialFilePath,
+            : this.credentialFilePath,
         },
       }
     }
@@ -156,7 +149,7 @@ export class CodexOAuthSession {
           baseUrl: this.#baseUrl,
           source: credentialSourceFromEnv()
             ? 'env'
-            : this.#credentialFilePath,
+            : this.credentialFilePath,
           ...(credential.accountId ? { accountId: credential.accountId } : {}),
           expiresAt: credential.expires,
         },
@@ -169,7 +162,7 @@ export class CodexOAuthSession {
       reason: 'Codex OAuth 凭据可用。',
       details: {
         baseUrl: this.#baseUrl,
-        source: credentialSourceFromEnv() ? 'env' : this.#credentialFilePath,
+        source: credentialSourceFromEnv() ? 'env' : this.credentialFilePath,
         ...(credential.accountId ? { accountId: credential.accountId } : {}),
         ...(credential.expires ? { expiresAt: credential.expires } : {}),
       },
@@ -182,48 +175,29 @@ export class CodexOAuthSession {
       return fromEnv
     }
 
-    try {
-      const raw = await readFile(this.#credentialFilePath, 'utf8')
-      const payload = JSON.parse(stripJsonBom(raw)) as {
-        access?: string
-        refresh?: string
-        expires?: number
-        accountId?: string
-      }
-      if (!payload.access || typeof payload.access !== 'string') {
-        return null
-      }
-      return {
-        access: payload.access,
-        ...(typeof payload.refresh === 'string'
-          ? { refresh: payload.refresh }
-          : {}),
-        ...(typeof payload.expires === 'number'
-          ? { expires: payload.expires }
-          : {}),
-        ...(typeof payload.accountId === 'string'
-          ? { accountId: payload.accountId }
-          : {}),
-      }
-    } catch (error) {
-      if (isMissingFile(error)) {
-        return null
-      }
-      throw error
-    }
+    return getLlmProfileOAuthCredential(this.#credentialProfileId).credential ?? null
   }
 
   async saveCredential(credential: CodexOAuthCredential): Promise<void> {
-    await mkdir(dirname(this.#credentialFilePath), { recursive: true })
-    await writeFile(
-      this.#credentialFilePath,
-      JSON.stringify(credential, null, 2),
-      'utf8',
-    )
+    if (!this.#credentialProfileId) {
+      throw new Error('Codex OAuth profile id is not configured.')
+    }
+    await updateLlmProfileOAuthCredential({
+      provider: 'codex-oauth',
+      profileId: this.#credentialProfileId,
+      credential,
+    })
   }
 
   async clearCredential(): Promise<void> {
-    await rm(this.#credentialFilePath, { force: true })
+    if (!this.#credentialProfileId) {
+      return
+    }
+    await updateLlmProfileOAuthCredential({
+      provider: 'codex-oauth',
+      profileId: this.#credentialProfileId,
+      credential: null,
+    })
   }
 
   async getValidCredential(): Promise<CodexOAuthCredential> {
@@ -537,10 +511,6 @@ function credentialSourceFromEnv(): boolean {
   return Boolean(process.env.CCR_CODEX_OAUTH_ACCESS_TOKEN?.trim())
 }
 
-function stripJsonBom(value: string): string {
-  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value
-}
-
 function extractAccountId(
   accessToken: string,
   jwtClaimPath: string,
@@ -580,15 +550,6 @@ function needsRefresh(credential: CodexOAuthCredential, now: number): boolean {
 
 function base64urlEncode(value: Uint8Array | Buffer): string {
   return Buffer.from(value).toString('base64url')
-}
-
-function isMissingFile(error: unknown): boolean {
-  return Boolean(
-    error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as { code?: string }).code === 'ENOENT',
-  )
 }
 
 async function openExternalUrl(url: string): Promise<void> {

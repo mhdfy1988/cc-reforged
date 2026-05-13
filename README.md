@@ -14,8 +14,8 @@ The current main line focuses on:
 
 - `ccr` CLI / TUI runtime with Codex OAuth support.
 - CCR Desktop for Windows, including local App Server orchestration, session history, permission settings, auto-update, and release packaging.
-- Built-in LLM runtime abstractions for multiple providers and protocols.
-- Codex OAuth as the default provider, with DeepSeek and OpenAI-compatible protocol work in progress.
+- Built-in LLM runtime abstractions for multiple providers, profiles, protocols, and per-turn model metadata.
+- Codex OAuth, DeepSeek official API, MiniMax International / China, and shared OpenAI Chat Completions plus Anthropic Messages protocol adapters.
 - Project-local `.ccr` settings isolation, avoiding conflicts with Claude Code, Codex, or OpenClaw on the same machine.
 
 ![CCR Desktop](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
@@ -29,7 +29,7 @@ The current main line focuses on:
 - Runtime requirement: Node.js `>=24.0.0`
 - Default config directory: `~/.ccr`
 - Default LLM config file: `~/.ccr/data/llm.config.local.json`
-- Default Codex OAuth credential file: `~/.ccr/data/codex-oauth.json`
+- Default LLM credential file: `~/.ccr/data/llm.credentials.local.json`
 - Release feed: GitHub Releases under [`mhdfy1988/cc-reforged`](https://github.com/mhdfy1988/cc-reforged/releases)
 
 The repository may contain unreleased work after the latest tagged version. See [CHANGELOG.md](CHANGELOG.md) for user-facing changes.
@@ -97,14 +97,35 @@ Runtime status can be checked with:
 node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js auth status --json
 ```
 
-The model/provider configuration is stored under `~/.ccr` by default. The current multi-provider work includes DeepSeek official API support and a shared OpenAI Chat Completions protocol adapter; the full Desktop model management page is still in progress.
+The model/provider configuration is stored under `~/.ccr` by default. Current builds use a profile-first configuration model: `llm.config.local.json` stores `schemaVersion + current + profiles + providerOverrides`, while `llm.credentials.local.json` stores secrets by `profileCredentials[profileId]`. A profile combines provider type, protocol, endpoint, credential slot, available models, and default model.
+
+Model configuration can be inspected and changed from the CLI:
+
+```powershell
+ccr model status
+ccr model list
+ccr model set gpt-5.5
+ccr model profile codex-oauth-1 gpt-5.4
+```
+
+CCR Desktop also includes a first-level **Models** page for provider/profile management, API key entry, connection testing, and top-bar model/profile switching. The top bar is intentionally split into two controls: one for the current model and one for the current profile/provider connection. Switching affects the next user message and does not rewrite restored session history.
+
+Built-in providers:
+
+| Provider | Protocol | Auth |
+| --- | --- | --- |
+| Codex OAuth | OpenAI Responses | OAuth |
+| DeepSeek | OpenAI Chat Completions | API Key |
+| MiniMax International | Anthropic Messages | API Key |
+| MiniMax China | Anthropic Messages | API Key |
 
 ## Desktop Features
 
 - Local App Server lifecycle management.
 - Workspace switching and project-local settings isolation.
 - Session history grouped by workspace.
-- Current model quick switching in the top bar.
+- First-level Models page for provider profiles, credentials, models, and connection testing.
+- Current model and profile quick switching in the top bar.
 - Permission settings UI for local / project / user settings.
 - Automatic update checks through GitHub Releases.
 - Packaged Windows installer with release artifact validation.
@@ -118,10 +139,15 @@ npm.cmd run build -- --pretty false
 npm.cmd run smoke:llm-config
 npm.cmd run smoke:llm-runtime
 npm.cmd run smoke:llm-runtime-status
+npm.cmd run smoke:openai-chat-protocol
 npm.cmd run smoke:codex-oauth-session
 npm.cmd run smoke:codex-oauth-provider
+npm.cmd run smoke:deepseek-provider
+npm.cmd run smoke:minimax-provider
 npm.cmd run smoke:app-server
 npm.cmd run smoke:app-server-client
+npm.cmd run smoke:cli-model
+npm.cmd run desktop:build
 ```
 
 Do not run runtime smoke scripts with plain `node scripts/...` unless you know the script does not need the project loader. The npm scripts already use the correct loader where needed.

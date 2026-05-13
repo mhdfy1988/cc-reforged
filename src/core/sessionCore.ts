@@ -400,8 +400,16 @@ export class CoreSessionService {
       available: true,
       threadId: thread.threadId,
       activeTurnId: thread.activeTurnId,
-      provider: latestTurn?.provider,
-      model: latestTurn?.metadata.model ?? latestTurn?.model,
+      provider: latestTurn?.metadata.provider ?? latestTurn?.provider,
+      providerDisplayName: latestTurn?.metadata.providerDisplayName,
+      profileId: latestTurn?.metadata.profileId,
+      profileName: latestTurn?.metadata.profileName,
+      apiMode: latestTurn?.metadata.apiMode,
+      authStrategy: latestTurn?.metadata.authStrategy,
+      model:
+        latestTurn?.metadata.requestedModel ??
+        latestTurn?.metadata.model ??
+        latestTurn?.model,
       contextWindow: latestTurn?.metadata.contextWindow,
       estimatedTokens,
       usage: latestTurn?.metadata.usage,
@@ -438,7 +446,11 @@ export class CoreSessionService {
 
     const messages = this.getThreadMessages(thread.threadId)
     const latestTurn = this.getLatestTurnForThread(thread.threadId)
-    const model = latestTurn?.metadata.model ?? latestTurn?.model ?? loadLlmConfig().model
+    const model =
+      latestTurn?.metadata.requestedModel ??
+      latestTurn?.metadata.model ??
+      latestTurn?.model ??
+      loadLlmConfig().model
     const estimatedTokens = tokenCountWithEstimation(messages)
     const autoCompactEnabled = isAutoCompactEnabled()
     const autoCompactThreshold = getAutoCompactThreshold(model)
@@ -1012,9 +1024,21 @@ function isTurnCancelled(turn: CoreTurn): boolean {
 function createInitialTurnMetadata(
   config: ResolvedLlmConfig,
 ): CoreTurnMetadata {
+  const profile = config.profiles[config.currentProfileId]
+  const providerConfig = config.providers[config.provider]
+  const builtinProvider = getBuiltinLlmProviderDefinition(config.provider)
   return compactTurnMetadata({
     provider: config.provider,
+    providerDisplayName:
+      builtinProvider?.displayName ??
+      providerConfig?.displayName ??
+      config.provider,
+    profileId: profile?.id ?? config.currentProfileId,
+    profileName: profile?.name,
+    apiMode: profile?.apiMode ?? providerConfig?.apiMode,
+    authStrategy: profile?.authStrategy ?? providerConfig?.authStrategy,
     model: config.model,
+    requestedModel: config.model,
     contextWindow: resolveContextWindow(config),
   })
 }

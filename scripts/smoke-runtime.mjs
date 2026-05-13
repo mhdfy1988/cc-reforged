@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,7 +10,7 @@ mkdirSync(tmpDir, { recursive: true });
 const packageJson = JSON.parse(
   readFileSync(resolve(repoRoot, 'package.json'), 'utf8'),
 );
-const expectedCliVersion = packageJson.version.split('.').slice(0, 2).join('.');
+const expectedCliVersion = packageJson.version;
 
 function runNode(args, options = {}) {
   const result = spawnSync(process.execPath, args, {
@@ -44,6 +44,7 @@ for (const key of [
   'CLAUDE_CODE_USE_BEDROCK',
   'CLAUDE_CODE_USE_VERTEX',
   'CCR_LLM_CONFIG_PATH',
+  'CCR_LLM_CREDENTIALS_PATH',
   'CCR_LLM_PROVIDER',
   'CCR_LLM_MODEL',
   'CCR_CODEX_OAUTH_ACCESS_TOKEN',
@@ -67,12 +68,44 @@ if (!skipHeadlessAuthGate) {
     'data',
     'llm.config.local.json',
   );
-  authGateEnv.CCR_LLM_PROVIDER = 'codex-oauth';
-  authGateEnv.CCR_LLM_MODEL = 'gpt-5.4';
-  authGateEnv.CCR_CODEX_OAUTH_CREDENTIAL_FILE = resolve(
+  authGateEnv.CCR_LLM_CREDENTIALS_PATH = resolve(
     authGateConfigDir,
     'data',
-    'codex-oauth.json',
+    'llm.credentials.local.json',
+  );
+  authGateEnv.CCR_LLM_PROVIDER = 'codex-oauth';
+  authGateEnv.CCR_LLM_MODEL = 'gpt-5.4';
+  mkdirSync(dirname(authGateEnv.CCR_LLM_CONFIG_PATH), { recursive: true });
+  writeFileSync(
+    authGateEnv.CCR_LLM_CONFIG_PATH,
+    JSON.stringify(
+      {
+        schemaVersion: 2,
+        current: {
+          profileId: 'codex-oauth-1',
+          model: 'gpt-5.4',
+        },
+        profiles: {
+          'codex-oauth-1': {
+            name: 'Codex OAuth 登录配置',
+            providerType: 'codex-oauth',
+            apiMode: 'openai-responses',
+            auth: {
+              strategy: 'oauth_refreshable',
+            },
+            defaultModel: 'gpt-5.4',
+            models: {
+              source: 'mixed',
+              default: 'gpt-5.4',
+              include: ['gpt-5.5', 'gpt-5.4-mini'],
+            },
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    'utf8',
   );
 
   const unauthenticatedPrompt = runNode(

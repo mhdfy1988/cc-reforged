@@ -1,11 +1,21 @@
 import { getAnthropicApiKeyWithSource, getAuthTokenSource, isUsing3PServices, } from '../../utils/auth.js';
-import { getFsImplementation } from '../../utils/fsOperations.js';
 import { getAPIProvider } from '../../utils/model/providers.js';
 import { getDefaultLlmRuntime, } from './defaultRuntime.js';
-import { getLlmProviderConfig, loadLlmConfig, } from './llmConfig.js';
+import { getLlmProfileOAuthCredential, getLlmProviderApiKey, } from './providerCredentials.js';
+import { getLlmProfileForProvider, getLlmProviderConfig, loadLlmConfig, } from './llmConfig.js';
 import { getLlmModelCatalogEntry } from './modelCatalog.js';
 import { createFallbackLlmProviderDefinition, getBuiltinLlmProviderDefinition, mergeLlmProviderDefinition, } from './providerDefinitions.js';
-import { getDefaultCodexOAuthSession } from './sessions/defaultCodexOAuthSession.js';
+import { createDefaultCodexOAuthSession } from './sessions/defaultCodexOAuthSession.js';
+const API_KEY_PROVIDER_ENV_NAMES = {
+    deepseek: ['CCR_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY'],
+    minimax: ['CCR_MINIMAX_API_KEY', 'MINIMAX_API_KEY'],
+    'minimax-cn': [
+        'CCR_MINIMAX_CN_API_KEY',
+        'MINIMAX_CN_API_KEY',
+        'CCR_MINIMAXI_API_KEY',
+        'MINIMAXI_API_KEY',
+    ],
+};
 export function getLlmProviderDisplayName(providerId, config = loadLlmConfig()) {
     return getResolvedLlmProviderDefinition(providerId, config).displayName;
 }
@@ -17,8 +27,18 @@ export function getLlmRuntimeDisplayStatus(config = loadLlmConfig()) {
 }
 export function getLlmRuntimeDisplayStatusForProvider(input, config = loadLlmConfig()) {
     const provider = input.provider.trim();
-    const model = input.model?.trim() || config.providers[provider]?.defaultModel || config.model;
+    const selectedProfile = input.profileId
+        ? config.profiles[input.profileId.trim()]
+        : undefined;
     const providerConfig = getLlmProviderConfig(provider, config);
+    const profile = selectedProfile?.providerType === provider
+        ? selectedProfile
+        : getLlmProfileForProvider(provider, config);
+    const model = input.model?.trim() ||
+        (!input.profileId && provider === config.provider ? config.model : undefined) ||
+        profile?.defaultModel ||
+        config.providers[provider]?.defaultModel ||
+        config.model;
     const providerDefinition = getResolvedLlmProviderDefinition(provider, config);
     return {
         providerId: provider,
@@ -32,7 +52,10 @@ export function getLlmRuntimeDisplayStatusForProvider(input, config = loadLlmCon
             model,
             providerDefinition,
         }),
-        ...(providerConfig?.baseUrl ? { baseUrl: providerConfig.baseUrl } : {}),
+        ...(profile ? { profileId: profile.id } : {}),
+        ...(profile?.baseUrl ?? providerConfig?.baseUrl
+            ? { baseUrl: profile?.baseUrl ?? providerConfig?.baseUrl }
+            : {}),
         configPath: config.path,
         configSource: config.source,
     };
@@ -83,11 +106,9 @@ export function getLlmRuntimeAuthStatusSyncForProvider(input, config = loadLlmCo
     if (displayStatus.providerId === 'codex-oauth') {
         return getCodexAuthStatusSync(config, displayStatus);
     }
-    if (displayStatus.providerId === 'deepseek') {
-        return getApiKeyAuthStatus(displayStatus, [
-            'CCR_DEEPSEEK_API_KEY',
-            'DEEPSEEK_API_KEY',
-        ]);
+    const apiKeyEnvNames = getApiKeyEnvNames(displayStatus.providerId);
+    if (apiKeyEnvNames) {
+        return getApiKeyAuthStatus(displayStatus, apiKeyEnvNames);
     }
     return getAnthropicAuthStatus(displayStatus);
 }
@@ -99,16 +120,16 @@ export async function getLlmRuntimeAuthStatus(config = loadLlmConfig()) {
 }
 export async function getLlmRuntimeAuthStatusForProvider(input, config = loadLlmConfig()) {
     const displayStatus = getLlmRuntimeDisplayStatusForProvider(input, config);
-    if (displayStatus.providerId === 'deepseek') {
-        return getApiKeyAuthStatus(displayStatus, [
-            'CCR_DEEPSEEK_API_KEY',
-            'DEEPSEEK_API_KEY',
-        ]);
+    const apiKeyEnvNames = getApiKeyEnvNames(displayStatus.providerId);
+    if (apiKeyEnvNames) {
+        return getApiKeyAuthStatus(displayStatus, apiKeyEnvNames);
     }
     if (displayStatus.providerId !== 'codex-oauth') {
         return getAnthropicAuthStatus(displayStatus);
     }
-    const availability = await getDefaultCodexOAuthSession().getAvailability();
+    const availability = await createDefaultCodexOAuthSession({
+        ...(displayStatus.profileId ? { profileId: displayStatus.profileId } : {}),
+    }).getAvailability();
     if (availability.available) {
         return {
             state: 'available',
@@ -143,7 +164,7 @@ export async function getLlmRuntimeAuthStatusForProvider(input, config = loadLlm
     };
 }
 function getCodexAuthStatusSync(config, displayStatus) {
-    const snapshot = getCodexCredentialSnapshotSync(config);
+    const snapshot = getCodexCredentialSnapshotSync(config, displayStatus);
     if (!snapshot.present) {
         return {
             state: 'missing',
@@ -177,7 +198,7 @@ function getCodexAuthStatusSync(config, displayStatus) {
         baseUrl: displayStatus.baseUrl,
     };
 }
-function getCodexCredentialSnapshotSync(config) {
+function getCodexCredentialSnapshotSync(config, displayStatus) {
     if (hasCodexCredentialInEnv()) {
         const expiresAt = Number.parseInt(process.env.CLAUDE_CODE_CODEX_OAUTH_EXPIRES_AT ?? '', 10);
         return {
@@ -189,56 +210,46 @@ function getCodexCredentialSnapshotSync(config) {
             ...(Number.isFinite(expiresAt) ? { expiresAt } : {}),
         };
     }
-    const credentialFilePath = getLlmProviderConfig('codex-oauth', config)?.credentialFilePath?.trim();
-    if (!credentialFilePath) {
-        return { present: false };
-    }
-    const fs = getFsImplementation();
-    if (!fs.existsSync(credentialFilePath)) {
+    const profileId = displayStatus.profileId ||
+        config.currentProfileId ||
+        getLlmProfileForProvider('codex-oauth', config)?.id;
+    const stored = getLlmProfileOAuthCredential(profileId);
+    if (!stored.credential?.access?.trim()) {
         return {
             present: false,
-            source: credentialFilePath,
+            source: stored.source,
         };
     }
-    try {
-        const raw = fs.readFileSync(credentialFilePath, { encoding: 'utf8' });
-        const parsed = JSON.parse(raw);
-        if (typeof parsed.access !== 'string' || !parsed.access.trim()) {
-            return {
-                present: false,
-                source: credentialFilePath,
-            };
-        }
-        return {
-            present: true,
-            source: credentialFilePath,
-            ...(typeof parsed.accountId === 'string'
-                ? { accountId: parsed.accountId }
-                : {}),
-            ...(typeof parsed.expires === 'number'
-                ? { expiresAt: parsed.expires }
-                : {}),
-        };
-    }
-    catch {
-        return {
-            present: false,
-            source: credentialFilePath,
-        };
-    }
+    return {
+        present: true,
+        source: stored.source,
+        ...(stored.credential.accountId
+            ? { accountId: stored.credential.accountId }
+            : {}),
+        ...(typeof stored.credential.expires === 'number'
+            ? { expiresAt: stored.credential.expires }
+            : {}),
+    };
 }
 function hasCodexCredentialInEnv() {
     return Boolean(process.env.CLAUDE_CODE_CODEX_OAUTH_ACCESS_TOKEN?.trim());
 }
+function getApiKeyEnvNames(providerId) {
+    return API_KEY_PROVIDER_ENV_NAMES[providerId];
+}
 function getApiKeyAuthStatus(displayStatus, envNames) {
-    const envName = envNames.find(name => process.env[name]?.trim());
-    if (envName) {
+    const credential = getLlmProviderApiKey({
+        provider: displayStatus.providerId,
+        profileId: displayStatus.profileId,
+        envNames,
+    });
+    if (credential.apiKey) {
         return {
             state: 'available',
             configured: true,
             available: true,
             message: `${displayStatus.providerDisplayName} API key is available.`,
-            source: envName,
+            source: credential.source,
             baseUrl: displayStatus.baseUrl,
         };
     }
@@ -247,6 +258,7 @@ function getApiKeyAuthStatus(displayStatus, envNames) {
         configured: false,
         available: false,
         message: `${displayStatus.providerDisplayName} API key is missing.`,
+        source: credential.source,
         baseUrl: displayStatus.baseUrl,
     };
 }
@@ -271,6 +283,21 @@ function getAnthropicAuthStatus(displayStatus) {
             available: true,
             message: 'Anthropic OAuth credential is available.',
             source: authTokenSource,
+            baseUrl: displayStatus.baseUrl,
+        };
+    }
+    const profileApiKey = getLlmProviderApiKey({
+        provider: displayStatus.providerId,
+        profileId: displayStatus.profileId,
+        envNames: ['ANTHROPIC_API_KEY'],
+    });
+    if (profileApiKey.apiKey) {
+        return {
+            state: 'available',
+            configured: true,
+            available: true,
+            message: 'Anthropic API key is available.',
+            source: profileApiKey.source,
             baseUrl: displayStatus.baseUrl,
         };
     }

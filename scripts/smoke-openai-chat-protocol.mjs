@@ -69,6 +69,7 @@ const request = {
     },
   ],
   temperature: 0.2,
+  maxOutputTokens: 123,
 };
 
 const response = await adapter.generate(request);
@@ -76,6 +77,8 @@ assert.equal(requests[0].url, 'https://relay.example/v1/chat/completions');
 assert.equal(requests[0].body.model, 'relay-model');
 assert.equal(requests[0].body.stream, false);
 assert.equal(requests[0].body.temperature, 0.2);
+assert.equal(requests[0].body.max_tokens, 123);
+assert.equal('max_completion_tokens' in requests[0].body, false);
 assert.equal('thinking' in requests[0].body, false);
 assert.equal(response.provider, 'compatible');
 assert.equal(response.model, 'relay-model');

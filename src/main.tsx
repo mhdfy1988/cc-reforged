@@ -4104,6 +4104,50 @@ async function run(): Promise<CommanderCommand> {
     await authLogout();
   });
 
+  const modelCmd = program.command('model').description('Manage LLM model profiles and current model').configureHelp(createSortedHelpConfig());
+  modelCmd.option('--json', 'Output as JSON').action(async (opts: {
+    json?: boolean;
+  }) => {
+    const {
+      modelStatusHandler
+    } = await import('./cli/handlers/model.js');
+    await modelStatusHandler(opts);
+  });
+  modelCmd.command('status').description('Show current LLM profile and model').option('--json', 'Output as JSON').action(async (opts: {
+    json?: boolean;
+  }) => {
+    const {
+      modelStatusHandler
+    } = await import('./cli/handlers/model.js');
+    await modelStatusHandler(opts);
+  });
+  modelCmd.command('list').description('List configured LLM profiles and models').option('--json', 'Output as JSON').action(async (opts: {
+    json?: boolean;
+  }) => {
+    const {
+      modelListHandler
+    } = await import('./cli/handlers/model.js');
+    await modelListHandler(opts);
+  });
+  modelCmd.command('set <model>').description('Set the current model, optionally under a profile or provider').option('--profile <profileId>', 'Profile id to switch before setting the model').option('--provider <provider>', 'Provider id to use when no profile is specified').option('--json', 'Output as JSON').action(async (model: string, opts: {
+    profile?: string;
+    provider?: string;
+    json?: boolean;
+  }) => {
+    const {
+      modelSetHandler
+    } = await import('./cli/handlers/model.js');
+    await modelSetHandler(model, opts);
+  });
+  modelCmd.command('profile <profileId> [model]').description('Switch the current profile and optionally override its model').option('--json', 'Output as JSON').action(async (profileId: string, model: string | undefined, opts: {
+    json?: boolean;
+  }) => {
+    const {
+      modelProfileHandler
+    } = await import('./cli/handlers/model.js');
+    await modelProfileHandler(profileId, model, opts);
+  });
+
   /**
    * Helper function to handle marketplace command errors consistently.
    * Logs the error and exits the process with status 1.

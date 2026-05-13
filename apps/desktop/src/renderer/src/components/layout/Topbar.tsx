@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type {
+  LlmModelProfile,
   LlmModelCatalogEntry,
   LlmModelListState,
   LlmModelProviderCatalog,
@@ -17,6 +18,16 @@ import {
   type UpdateActionKind,
 } from '../../domain/updateDisplay.js'
 
+type ModelMenuGroup = {
+  id: string
+  profileId?: string
+  provider: LlmModelProviderCatalog
+  title: string
+  subtitle: string
+  defaultModel?: string
+  models: LlmModelCatalogEntry[]
+}
+
 export function Topbar(props: {
   appServerStatus: string | undefined
   authText: string
@@ -32,16 +43,28 @@ export function Topbar(props: {
   updateStatus: DesktopUpdateState | null | undefined
   workspacePath: string
   onChooseWorkspace: () => void
-  onSelectModel: (provider: string, model: string) => void
+  onSelectModel: (provider: string, model: string, profileId?: string) => void
   onUpdateAction: (kind: UpdateActionKind) => void
 }) {
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const configuredModel = props.model
   const runningModel = props.contextStatus?.model ?? props.turnMetadata?.model
-  const modelProviders = useMemo(
-    () => getModelProviders(props.modelList, props.provider),
+  const currentProfileId = props.modelList?.current?.profileId
+  const hasCurrentProfile = Boolean(currentProfileId && configuredModel && props.provider)
+  const modelMenuGroups = useMemo(
+    () => getModelMenuGroups(props.modelList, props.provider),
     [props.modelList, props.provider],
   )
+  const currentModelGroup =
+    modelMenuGroups.find(group =>
+      isCurrentProfileGroup(group, currentProfileId, props.provider),
+    ) ?? modelMenuGroups[0]
+  const modelMenuDisplayGroups = currentModelGroup ? [currentModelGroup] : []
+  const currentProfileName =
+    hasCurrentProfile
+      ? currentModelGroup?.title ?? props.provider
+      : '未配置模型'
   const modelSwitchDisabled = props.busy || Boolean(props.contextStatus?.activeTurnId)
   const contextWindow =
     props.contextStatus?.contextWindow ??
@@ -72,94 +95,184 @@ export function Topbar(props: {
         </div>
       </button>
       <div className="provider-cluster" aria-label="模型和认证状态">
-        <div className="model-switcher">
-          <button
-            aria-expanded={modelMenuOpen}
-            aria-label={`当前模型：${configuredModel}`}
-            className="model-chip"
-            disabled={props.busy}
-            title="切换当前模型，下一轮消息生效"
-            type="button"
-            onClick={() => setModelMenuOpen(open => !open)}
-          >
-            <ModelIcon />
-            <span>{configuredModel}</span>
-            <ChevronDownIcon />
-          </button>
-          {modelMenuOpen ? (
-            <div className="model-menu" role="menu">
-              <div className="model-menu-head">
-                <strong>选择模型</strong>
-                <span>{props.provider} · 下一轮消息生效</span>
-              </div>
-              {runningModel && runningModel !== configuredModel ? (
-                <div className="model-menu-note">
-                  当前会话最近一轮使用：{runningModel}
-                </div>
-              ) : null}
-              {modelSwitchDisabled ? (
-                <div className="model-menu-note">
-                  当前任务运行中，完成后可切换模型。
-                </div>
-              ) : null}
-              <div className="model-menu-list">
-                {modelProviders.length > 0 ? (
-                  modelProviders.map(provider => (
-                    <div
-                      className="model-menu-provider"
-                      key={provider.id}
-                      role="group"
-                      aria-label={getProviderDisplayName(provider)}
-                    >
-                      <div className="model-menu-provider-title">
-                        {getProviderDisplayName(provider)}
-                      </div>
-                      {(provider.models ?? []).map(model => {
-                        const selected =
-                          provider.id === props.provider &&
-                          model.model === configuredModel
-                        return (
-                          <button
-                            key={`${provider.id}:${model.model}`}
-                            className={
-                              selected
-                                ? 'model-menu-item selected'
-                                : 'model-menu-item'
-                            }
-                            disabled={modelSwitchDisabled || selected}
-                            role="menuitem"
-                            type="button"
-                            onClick={() => {
-                              setModelMenuOpen(false)
-                              props.onSelectModel(provider.id, model.model)
-                            }}
-                          >
-                            <span>
-                              <strong>{getModelDisplayName(model)}</strong>
-                              <em>{model.model}</em>
-                            </span>
-                            {selected ? (
-                              <CheckIcon />
-                            ) : (
+        {hasCurrentProfile ? (
+          <div className="model-switcher">
+            <button
+              aria-expanded={modelMenuOpen}
+              aria-label={`当前模型：${configuredModel}`}
+              className="model-chip"
+              disabled={props.busy}
+              title="切换当前模型"
+              type="button"
+              onClick={() => {
+                setModelMenuOpen(open => !open)
+                setProfileMenuOpen(false)
+              }}
+            >
+              <ModelIcon />
+              <span>{configuredModel}</span>
+              <ChevronDownIcon />
+            </button>
+            {modelMenuOpen ? (
+                <div className="model-menu" role="menu">
+                  <div className="model-menu-head">
+                    <strong>选择模型</strong>
+                  </div>
+                {runningModel && runningModel !== configuredModel ? (
+                  <div className="model-menu-note">
+                    当前会话最近一轮使用：{runningModel}
+                  </div>
+                ) : null}
+                {modelSwitchDisabled ? (
+                  <div className="model-menu-note">
+                    当前任务运行中，完成后可切换模型。
+                  </div>
+                ) : null}
+                <div className="model-menu-list">
+                  {modelMenuDisplayGroups.length > 0 ? (
+                    modelMenuDisplayGroups.map(group => (
+                        <div
+                          className="model-menu-provider"
+                          key={group.id}
+                          role="group"
+                          aria-label={group.title}
+                        >
+                        {group.models.map(model => {
+                          const selected =
+                            isCurrentProfileGroup(group, currentProfileId, props.provider) &&
+                            model.model === configuredModel
+                          const displayName = getModelDisplayName(model)
+                          return (
+                            <button
+                              key={`${group.id}:${model.model}`}
+                              className={
+                                selected
+                                  ? 'model-menu-item selected'
+                                  : 'model-menu-item'
+                              }
+                              disabled={modelSwitchDisabled || selected}
+                              role="menuitem"
+                              type="button"
+                              onClick={() => {
+                                setModelMenuOpen(false)
+                                props.onSelectModel(
+                                  group.provider.id,
+                                  model.model,
+                                  group.profileId,
+                                )
+                              }}
+                            >
+                              <span>
+                                <strong>{displayName}</strong>
+                                {shouldShowModelIdentifier(model) ? (
+                                  <em>{model.model}</em>
+                                ) : null}
+                              </span>
                               <span className="model-menu-context">
                                 {formatTokenCount(model.contextWindow ?? 0)}
                               </span>
-                            )}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  ))
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="model-menu-empty">模型列表加载中</div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="profile-switcher">
+          <button
+            aria-expanded={profileMenuOpen}
+            aria-label={`当前连接配置：${currentProfileName}`}
+            className="health-chip profile-chip"
+            disabled={props.busy}
+            title={
+              hasCurrentProfile
+                ? '切换连接配置'
+                : '到左侧模型页新增连接配置'
+            }
+            type="button"
+            onClick={() => {
+              if (modelMenuGroups.length > 0) {
+                setProfileMenuOpen(open => !open)
+              }
+              setModelMenuOpen(false)
+            }}
+          >
+            <span
+              className={
+                props.appServerStatus === 'ready' && hasCurrentProfile
+                  ? 'dot ok'
+                  : 'dot warn'
+              }
+            />
+            <span>
+              {hasCurrentProfile
+                ? `${currentProfileName} · ${props.authText}`
+                : '未配置模型 · 到模型页新增'}
+            </span>
+            {modelMenuGroups.length > 0 ? <ChevronDownIcon /> : null}
+          </button>
+          {profileMenuOpen ? (
+            <div className="model-menu profile-menu" role="menu">
+              <div className="model-menu-head">
+                <strong>选择连接配置</strong>
+              </div>
+              {modelSwitchDisabled ? (
+                <div className="model-menu-note">
+                  当前任务运行中，完成后可切换连接配置。
+                </div>
+              ) : null}
+              <div className="model-menu-list">
+                {modelMenuGroups.length > 0 ? (
+                  modelMenuGroups.map(group => {
+                    const selected = isCurrentProfileGroup(
+                      group,
+                      currentProfileId,
+                      props.provider,
+                    )
+                    const defaultModel = getGroupDefaultModel(group, configuredModel)
+                    return (
+                      <button
+                        className={
+                          selected ? 'model-menu-item selected' : 'model-menu-item'
+                        }
+                        disabled={modelSwitchDisabled || selected || !defaultModel}
+                        key={group.id}
+                        role="menuitem"
+                        type="button"
+                        onClick={() => {
+                          if (!defaultModel) {
+                            return
+                          }
+                          setProfileMenuOpen(false)
+                          props.onSelectModel(
+                            group.provider.id,
+                            defaultModel,
+                            group.profileId,
+                          )
+                        }}
+                      >
+                        <span>
+                          <strong>{group.title}</strong>
+                          <em>{group.subtitle}</em>
+                        </span>
+                        <span className="model-menu-context">
+                          {defaultModel ?? '无模型'}
+                        </span>
+                      </button>
+                    )
+                  })
                 ) : (
-                  <div className="model-menu-empty">模型列表加载中</div>
+                  <div className="model-menu-empty">暂无连接配置，请到模型页新增。</div>
                 )}
               </div>
             </div>
           ) : null}
-        </div>
-        <div className="health-chip">
-          <span className={props.appServerStatus === 'ready' ? 'dot ok' : 'dot warn'} />
-          {props.provider} · {props.authText}
         </div>
       </div>
       <div
@@ -182,24 +295,117 @@ export function Topbar(props: {
   )
 }
 
-function getModelProviders(
+function getModelMenuGroups(
   modelList: LlmModelListState | null,
   provider: string,
-): LlmModelProviderCatalog[] {
+): ModelMenuGroup[] {
   const providers = modelList?.providers ?? []
-  const currentIndex = providers.findIndex(item => item.id === provider)
-  if (currentIndex <= 0) {
-    return providers
+  const providerById = new Map(providers.map(item => [item.id, item]))
+  const profiles = modelList?.profiles ?? []
+  const currentProfileId = modelList?.current?.profileId
+
+  return profiles
+    .map((profile): ModelMenuGroup | null => {
+      const profileProvider = providerById.get(profile.providerType)
+      if (!profileProvider) {
+        return null
+      }
+      const models = getProfileModelEntries(profile, profileProvider)
+      if (models.length === 0) {
+        return null
+      }
+      return {
+        id: `profile:${profile.id}`,
+        profileId: profile.id,
+        provider: profileProvider,
+        title: profile.name?.trim() || getProviderDisplayName(profileProvider),
+        subtitle: `${getProviderDisplayName(profileProvider)} · ${models.length} 个模型`,
+        defaultModel: profile.defaultModel,
+        models,
+      } satisfies ModelMenuGroup
+    })
+    .filter((group): group is ModelMenuGroup => Boolean(group))
+    .sort((left, right) => {
+      const leftCurrent = left.profileId === currentProfileId ? 0 : 1
+      const rightCurrent = right.profileId === currentProfileId ? 0 : 1
+      if (leftCurrent !== rightCurrent) {
+        return leftCurrent - rightCurrent
+      }
+      const leftProvider = left.provider.id === provider ? 0 : 1
+      const rightProvider = right.provider.id === provider ? 0 : 1
+      if (leftProvider !== rightProvider) {
+        return leftProvider - rightProvider
+      }
+      return left.title.localeCompare(right.title)
+    })
+}
+
+function getProfileModelEntries(
+  profile: LlmModelProfile,
+  provider: LlmModelProviderCatalog,
+): LlmModelCatalogEntry[] {
+  const providerModels = provider.models ?? []
+  if (!profile.models?.length) {
+    return providerModels
   }
-  return [
-    providers[currentIndex],
-    ...providers.slice(0, currentIndex),
-    ...providers.slice(currentIndex + 1),
-  ]
+
+  const providerModelById = new Map(
+    providerModels.map(model => [model.model, model]),
+  )
+  return profile.models.map(modelId => {
+    const knownModel = providerModelById.get(modelId)
+    if (knownModel) {
+      return knownModel
+    }
+    return {
+      provider: provider.id,
+      model: modelId,
+      displayName: modelId,
+    }
+  })
+}
+
+function isCurrentProfileGroup(
+  group: ModelMenuGroup,
+  currentProfileId: string | undefined,
+  currentProvider: string,
+): boolean {
+  if (currentProfileId) {
+    return group.profileId === currentProfileId
+  }
+  return group.provider.id === currentProvider
+}
+
+function getGroupDefaultModel(
+  group: ModelMenuGroup,
+  configuredModel: string,
+): string | undefined {
+  if (group.models.some(model => model.model === configuredModel)) {
+    return configuredModel
+  }
+  if (
+    group.defaultModel &&
+    group.models.some(model => model.model === group.defaultModel)
+  ) {
+    return group.defaultModel
+  }
+  return group.models[0]?.model
 }
 
 function getModelDisplayName(model: LlmModelCatalogEntry): string {
   return model.displayName?.trim() || model.model
+}
+
+function shouldShowModelIdentifier(model: LlmModelCatalogEntry): boolean {
+  const displayName = model.displayName?.trim()
+  if (!displayName) {
+    return false
+  }
+  return normalizeModelLabel(displayName) !== normalizeModelLabel(model.model)
+}
+
+function normalizeModelLabel(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
 function getProviderDisplayName(provider: LlmModelProviderCatalog): string {
@@ -241,22 +447,6 @@ function ChevronDownIcon() {
   )
 }
 
-function CheckIcon() {
-  return (
-    <svg
-      className="model-menu-check"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="m5 12 4 4L19 6" />
-    </svg>
-  )
-}
-
 function formatTokenCount(tokens: number): string {
   if (!Number.isFinite(tokens) || tokens <= 0) {
     return '0K'
@@ -275,6 +465,23 @@ function getContextTitle(
 ): string {
   const parts = [
     contextStatus?.available === false ? '上下文状态：尚未开始会话' : null,
+    metadata?.profileName ?? contextStatus?.profileName
+      ? `连接配置：${metadata?.profileName ?? contextStatus?.profileName}`
+      : null,
+    metadata?.providerDisplayName ?? contextStatus?.providerDisplayName
+      ? `供应商：${metadata?.providerDisplayName ?? contextStatus?.providerDisplayName}`
+      : null,
+    metadata?.apiMode ?? contextStatus?.apiMode
+      ? `协议：${metadata?.apiMode ?? contextStatus?.apiMode}`
+      : null,
+    metadata?.authStrategy ?? contextStatus?.authStrategy
+      ? `认证：${metadata?.authStrategy ?? contextStatus?.authStrategy}`
+      : null,
+    metadata?.requestedModel &&
+    metadata.model &&
+    metadata.requestedModel !== metadata.model
+      ? `请求模型：${metadata.requestedModel}`
+      : null,
     contextStatus?.messageCount !== undefined
       ? `消息数：${contextStatus.messageCount}`
       : null,

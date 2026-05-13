@@ -5,9 +5,25 @@ import { loadLlmConfig } from '../services/llm/llmConfig.js';
 import { redactUrl } from './redaction.js';
 export function getCoreConfigSnapshot() {
     const config = loadLlmConfig();
+    if (!config.provider || !config.model) {
+        return {
+            llm: {
+                profileId: config.currentProfileId || undefined,
+                provider: config.provider,
+                model: config.model,
+                configPath: config.path,
+                configSource: config.source,
+            },
+            paths: {
+                ccrHome: getClaudeConfigHomeDir(),
+                mcpConfig: getUserMcpFilePath(),
+            },
+        };
+    }
     const status = getLlmRuntimeDisplayStatus(config);
     return {
         llm: {
+            profileId: status.profileId,
             provider: status.providerId,
             providerDisplayName: status.providerDisplayName,
             model: status.model,

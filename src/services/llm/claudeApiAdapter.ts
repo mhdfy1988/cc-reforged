@@ -60,6 +60,7 @@ export function buildLlmQueryRequest(
   return {
     provider: config.provider,
     model: resolveRuntimeRequestModel(params.model, config),
+    ...(config.currentProfileId ? { profileId: config.currentProfileId } : {}),
     messages: [
       ...toSystemMessages(params.systemPrompt),
       ...params.messages.flatMap(message => toLlmMessages(message)),

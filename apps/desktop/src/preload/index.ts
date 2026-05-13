@@ -31,20 +31,63 @@ type ModelListInput = {
   provider?: string
 }
 
+type AuthLoginInput = {
+  profileId?: string
+  provider?: string
+}
+
 type ModelSetInput = {
+  profileId?: string
   provider?: string
   model: string
 }
 
 type ModelAvailabilityInput = {
+  profileId?: string
   provider?: string
   model?: string
 }
 
 type ModelTestInput = {
+  profileId?: string
   provider?: string
   model?: string
   prompt?: string
+}
+
+type ModelCredentialUpdateInput = {
+  profileId?: string
+  provider: string
+  model?: string
+  apiKey?: string | null
+}
+
+type ModelProfileSaveInput = {
+  profileId?: string
+  name?: string
+  providerType: string
+  apiMode?: 'anthropic-messages' | 'openai-responses' | 'openai-chat' | 'custom'
+  authStrategy?:
+    | 'api_key'
+    | 'oauth_refreshable'
+    | 'oauth_external'
+    | 'external_process'
+    | 'hybrid'
+    | 'unknown'
+  accountId?: string
+  baseUrl?: string
+  defaultModel?: string
+  models?: string[]
+  setCurrent?: boolean
+}
+
+type ModelProfileCopyInput = {
+  profileId: string
+  name?: string
+}
+
+type ModelProfileDeleteInput = {
+  profileId: string
 }
 
 type ResumeThreadInput = {
@@ -80,6 +123,8 @@ const api = {
   openWorkspace: (path: string) => ipcRenderer.invoke('ccr:open-workspace', path),
   startThread: (title?: string) => ipcRenderer.invoke('ccr:start-thread', title),
   listThreads: () => ipcRenderer.invoke('ccr:list-threads'),
+  loginAuth: (input?: AuthLoginInput) =>
+    ipcRenderer.invoke('ccr:auth-login', input ?? {}),
   listModels: (input?: ModelListInput) =>
     ipcRenderer.invoke('ccr:list-models', input ?? {}),
   setModel: (input: ModelSetInput) =>
@@ -88,6 +133,14 @@ const api = {
     ipcRenderer.invoke('ccr:model-availability', input ?? {}),
   testModelConnection: (input?: ModelTestInput) =>
     ipcRenderer.invoke('ccr:model-test', input ?? {}),
+  saveModelProfile: (input: ModelProfileSaveInput) =>
+    ipcRenderer.invoke('ccr:model-profile-save', input),
+  copyModelProfile: (input: ModelProfileCopyInput) =>
+    ipcRenderer.invoke('ccr:model-profile-copy', input),
+  deleteModelProfile: (input: ModelProfileDeleteInput) =>
+    ipcRenderer.invoke('ccr:model-profile-delete', input),
+  updateModelCredential: (input: ModelCredentialUpdateInput) =>
+    ipcRenderer.invoke('ccr:model-credential-update', input),
   listSessionHistory: (input?: SessionHistoryListInput) =>
     ipcRenderer.invoke('ccr:list-session-history', input ?? {}),
   resumeThread: (input: ResumeThreadInput | string, title?: string) =>

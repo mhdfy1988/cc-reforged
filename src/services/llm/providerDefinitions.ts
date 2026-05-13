@@ -49,6 +49,30 @@ const BUILTIN_PROVIDER_DEFINITION_MAP: Record<string, LlmProviderDefinition> = {
       usage: true,
     },
   },
+  minimax: {
+    id: 'minimax',
+    displayName: 'MiniMax 国际版',
+    apiMode: 'anthropic-messages',
+    authStrategy: 'api_key',
+    capabilities: {
+      streaming: true,
+      tools: true,
+      reasoning: true,
+      usage: true,
+    },
+  },
+  'minimax-cn': {
+    id: 'minimax-cn',
+    displayName: 'MiniMax 国内版',
+    apiMode: 'anthropic-messages',
+    authStrategy: 'api_key',
+    capabilities: {
+      streaming: true,
+      tools: true,
+      reasoning: true,
+      usage: true,
+    },
+  },
 }
 
 function normalizeCapabilities(

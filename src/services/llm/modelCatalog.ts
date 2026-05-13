@@ -70,6 +70,31 @@ const DEEPSEEK_MODEL_CATALOG: Record<string, Omit<LlmModelCatalogEntry, 'provide
   },
 }
 
+const MINIMAX_MODEL_CATALOG: Record<string, Omit<LlmModelCatalogEntry, 'provider' | 'model'>> = {
+  'MiniMax-M2.7': {
+    displayName: 'MiniMax M2.7',
+    contextWindow: 200_000,
+    maxOutputTokens: 32_000,
+    supportsReasoning: true,
+    supportsTools: true,
+    inputModalities: TEXT_ONLY_MODALITIES,
+    metadata: {
+      protocol: 'anthropic-compatible',
+    },
+  },
+  'MiniMax-M2.7-highspeed': {
+    displayName: 'MiniMax M2.7 Highspeed',
+    contextWindow: 200_000,
+    maxOutputTokens: 32_000,
+    supportsReasoning: true,
+    supportsTools: true,
+    inputModalities: TEXT_ONLY_MODALITIES,
+    metadata: {
+      protocol: 'anthropic-compatible',
+    },
+  },
+}
+
 export function getLlmModelCatalogEntry(input: {
   providerId: LlmProviderId
   model: LlmModelId
@@ -83,6 +108,9 @@ export function getLlmModelCatalogEntry(input: {
   }
   if (input.providerId === 'deepseek') {
     return getDeepSeekModelCatalogEntry(input.model, input.providerDefinition)
+  }
+  if (input.providerId === 'minimax' || input.providerId === 'minimax-cn') {
+    return getMiniMaxModelCatalogEntry(input)
   }
   return getFallbackModelCatalogEntry(input)
 }
@@ -100,6 +128,15 @@ export function listKnownLlmModelCatalogEntries(input: {
   if (input.providerId === 'deepseek') {
     return Object.keys(DEEPSEEK_MODEL_CATALOG).map(model =>
       getDeepSeekModelCatalogEntry(model, input.providerDefinition),
+    )
+  }
+  if (input.providerId === 'minimax' || input.providerId === 'minimax-cn') {
+    return Object.keys(MINIMAX_MODEL_CATALOG).map(model =>
+      getMiniMaxModelCatalogEntry({
+        providerId: input.providerId,
+        model,
+        providerDefinition: input.providerDefinition,
+      }),
     )
   }
 
@@ -176,6 +213,38 @@ function getDeepSeekModelCatalogEntry(
     maxOutputTokens: 384_000,
     supportsReasoning: providerDefinition.capabilities.reasoning,
     supportsTools: providerDefinition.capabilities.tools,
+    inputModalities: TEXT_ONLY_MODALITIES,
+  }
+}
+
+function getMiniMaxModelCatalogEntry(input: {
+  providerId: LlmProviderId
+  model: LlmModelId
+  providerDefinition: LlmProviderDefinition
+}): LlmModelCatalogEntry {
+  const catalogEntry = MINIMAX_MODEL_CATALOG[input.model]
+  if (catalogEntry) {
+    return {
+      provider: input.providerDefinition.id,
+      model: input.model,
+      ...catalogEntry,
+      metadata: {
+        ...catalogEntry.metadata,
+        baseUrl:
+          input.providerId === 'minimax-cn'
+            ? 'https://api.minimaxi.com/anthropic'
+            : 'https://api.minimax.io/anthropic',
+      },
+    }
+  }
+  return {
+    provider: input.providerDefinition.id,
+    model: input.model,
+    displayName: input.model,
+    contextWindow: 200_000,
+    maxOutputTokens: 32_000,
+    supportsReasoning: input.providerDefinition.capabilities.reasoning,
+    supportsTools: input.providerDefinition.capabilities.tools,
     inputModalities: TEXT_ONLY_MODALITIES,
   }
 }

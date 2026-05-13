@@ -17,8 +17,26 @@ export class StdioAppServerClient {
     getAuthStatus(params = {}, options) {
         return this.rpc.request('auth/status', params, options);
     }
+    loginAuth(params = {}, options) {
+        return this.rpc.request('auth/login', params, options);
+    }
     listModels(params = {}, options) {
         return this.rpc.request('model/list', params, options);
+    }
+    listModelProfiles(params = {}, options) {
+        return this.rpc.request('model/profile/list', params, options);
+    }
+    setModelProfile(params, options) {
+        return this.rpc.request('model/profile/set-current', params, options);
+    }
+    saveModelProfile(params, options) {
+        return this.rpc.request('model/profile/save', params, options);
+    }
+    copyModelProfile(params, options) {
+        return this.rpc.request('model/profile/copy', params, options);
+    }
+    deleteModelProfile(params, options) {
+        return this.rpc.request('model/profile/delete', params, options);
     }
     setModel(params, options) {
         return this.rpc.request('model/set', params, options);
@@ -28,6 +46,9 @@ export class StdioAppServerClient {
     }
     testModelConnection(params = {}, options) {
         return this.rpc.request('model/test', params, options);
+    }
+    updateModelCredential(params, options) {
+        return this.rpc.request('model/credential/update', params, options);
     }
     listMcp(params = {}, options) {
         return this.rpc.request('mcp/list', params, options);

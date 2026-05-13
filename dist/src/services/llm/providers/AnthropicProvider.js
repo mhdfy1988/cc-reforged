@@ -1,5 +1,6 @@
 import Anthropic, {} from '@anthropic-ai/sdk';
 import { getAnthropicClient } from '../../api/client.js';
+import { getLlmProviderApiKey } from '../providerCredentials.js';
 import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js';
 function getTransitionMetadata(request) {
     const metadata = request.metadata;
@@ -11,12 +12,17 @@ function getTransitionMetadata(request) {
 function getClientOptionsForTransition(request) {
     const metadata = getTransitionMetadata(request);
     const clientOptions = metadata.anthropicClientOptions ?? {};
+    const profileCredential = getLlmProviderApiKey({
+        provider: 'anthropic',
+        profileId: request.profileId,
+        envNames: ['ANTHROPIC_API_KEY'],
+    });
     return {
-        apiKey: clientOptions.apiKey,
+        apiKey: clientOptions.apiKey || profileCredential.apiKey,
         maxRetries: clientOptions.maxRetries ?? 0,
         model: request.model,
         fetchOverride: clientOptions.fetchOverride,
-        source: clientOptions.source,
+        source: clientOptions.source || profileCredential.source,
     };
 }
 export class AnthropicProvider {

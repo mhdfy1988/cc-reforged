@@ -4,7 +4,7 @@ import { logEvent, } from '../../services/analytics/index.js';
 import { getSSLErrorHint } from '../../services/api/errorUtils.js';
 import { fetchAndStoreClaudeCodeFirstTokenDate } from '../../services/api/firstTokenDate.js';
 import { getLlmRuntimeAuthStatus, getLlmRuntimeDisplayStatus, } from '../../services/llm/runtimeStatus.js';
-import { getLlmProviderConfig, loadLlmConfig, } from '../../services/llm/llmConfig.js';
+import { getLlmProfileForProvider, getLlmProviderConfig, loadLlmConfig, } from '../../services/llm/llmConfig.js';
 import { createDefaultCodexOAuthSession, resetDefaultCodexOAuthSession, } from '../../services/llm/sessions/defaultCodexOAuthSession.js';
 import { createAndStoreApiKey, fetchAndStoreUserRoles, refreshOAuthToken, shouldUseClaudeAIAuth, storeOAuthAccountInfo, } from '../../services/oauth/client.js';
 import { getOauthProfileFromOauthToken } from '../../services/oauth/getOauthProfile.js';
@@ -20,6 +20,7 @@ import { getInitialSettings } from '../../utils/settings/settings.js';
 import { jsonStringify } from '../../utils/slowOperations.js';
 import { buildAccountProperties, buildAPIProviderProperties, buildLlmRuntimeProperties, } from '../../utils/status.js';
 import { gracefulShutdown } from '../../utils/gracefulShutdown.js';
+import { saveCoreModelProfile } from '../../core/modelCore.js';
 function parseString(value) {
     return typeof value === 'string' ? value : undefined;
 }
@@ -129,6 +130,19 @@ export async function authLogin({ provider, email, sso, console: useConsole, cla
         }
         try {
             logEvent('tengu_codex_oauth_login_start', {});
+            const currentConfig = loadLlmConfig();
+            const existingProfile = currentConfig.provider === 'codex-oauth'
+                ? currentConfig.profiles[currentConfig.currentProfileId]
+                : getLlmProfileForProvider('codex-oauth', currentConfig);
+            if (!existingProfile) {
+                await saveCoreModelProfile({
+                    providerType: 'codex-oauth',
+                    apiMode: 'openai-responses',
+                    authStrategy: 'oauth_refreshable',
+                    defaultModel: currentConfig.providers['codex-oauth']?.defaultModel ?? 'gpt-5.4',
+                    setCurrent: true,
+                });
+            }
             const session = createDefaultCodexOAuthSession();
             process.stdout.write('Starting Codex OAuth browser login...\n');
             process.stdout.write(`A browser window will open. If it does not, use the printed URL manually.\n`);

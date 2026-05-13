@@ -4,14 +4,21 @@
 
 ## Unreleased
 
-- 新增 DeepSeek 官方 API provider 第一版，默认模型为 `deepseek-v4-flash`，并支持 `deepseek-v4-pro`。
-- 抽出 OpenAI Chat Completions 公共协议适配器，供 DeepSeek 和后续 OpenAI Compatible / 第三方中转复用。
-- 新增模型可用性状态与手动测试连接的 Core / App Server / SDK 第一版。
-- Desktop 顶部模型胶囊支持在当前供应商内快速切换模型。
-- Desktop 侧边栏引入更明确的图标和悬浮态，后续会继续演进轻量会话侧栏。
+- 暂无。
 
 ## 0.4.2 - 2026-05
 
+- 新增一级“模型”页面，按“供应商类型 / 连接配置 / 详情”管理 Profile、凭据、模型和连接测试。
+- 新增 Profile 优先的 LLM 配置结构：当前选择写入 `current.profileId/current.model`，敏感凭据按 `profileCredentials[profileId]` 存储。
+- 新增 `ccr model status/list/set/profile`，TUI `/model` 同步支持 Profile 和模型切换。
+- 新增 DeepSeek 官方 API provider，默认模型为 `deepseek-v4-flash`，并支持 `deepseek-v4-pro`。
+- 新增 MiniMax 国际版 / 国内版 provider，走 Anthropic Messages 兼容协议，支持 `MiniMax-M2.7` 和 `MiniMax-M2.7-highspeed`。
+- 抽出 OpenAI Chat Completions 公共协议适配器，供 DeepSeek 和后续 OpenAI Compatible / 第三方中转复用。
+- 抽出 Anthropic Messages 兼容协议适配器，供 MiniMax 和后续 Anthropic-compatible provider 复用。
+- 新增模型可用性状态与手动测试连接的 Core / App Server / SDK / Desktop 链路。
+- Desktop 顶部拆成“模型切换”和“连接配置切换”两个入口，切换只影响下一轮消息，不自动改写历史会话。
+- 每轮消息记录实际使用的 `profileId/provider/apiMode/model/contextWindow` 等元数据，便于审计和排查。
+- Desktop 侧边栏引入更明确的图标和悬浮态，后续会继续演进轻量会话侧栏。
 - 修复 Desktop GitHub Release 上传超时后的恢复逻辑，重新执行发布脚本会复用已有 release 并补齐缺失资产。
 - 强化自动更新发布链路，确保 `latest.yml`、安装器和 `.blockmap` 能稳定对应。
 - 统一 Desktop 安装包命名为 `CCR-Desktop-<version>-win-x64.exe`，避免自动更新 metadata 指向不存在的文件。

@@ -4,8 +4,9 @@ import * as React from 'react';
 import { ModelPicker } from '../../components/ModelPicker.js';
 import { COMMON_HELP_ARGS, COMMON_INFO_ARGS } from '../../constants/xml.js';
 import { logEvent, } from '../../services/analytics/index.js';
+import { setCoreModel, setCoreModelProfile } from '../../core/modelCore.js';
 import { resetDefaultLlmRuntime } from '../../services/llm/defaultRuntime.js';
-import { updatePersistedLlmConfig } from '../../services/llm/llmConfig.js';
+import { loadLlmConfig } from '../../services/llm/llmConfig.js';
 import { getLlmRuntimeDisplayStatus, getLlmProviderDisplayName, } from '../../services/llm/runtimeStatus.js';
 import { resetDefaultCodexOAuthSession } from '../../services/llm/sessions/defaultCodexOAuthSession.js';
 import { useAppState, useSetAppState } from '../../state/AppState.js';
@@ -177,17 +178,21 @@ function SetConfiguredProviderModelAndClose({ args, onDone, }) {
                 }
                 const providerStatus = getActiveProviderStatus();
                 const nextModel = args === 'default' ? null : args.trim();
-                const resolvedConfig = await updatePersistedLlmConfig({
-                    model: nextModel,
-                });
+                const result = nextModel
+                    ? await setCoreModel({
+                        provider: providerStatus.providerId,
+                        model: nextModel,
+                    })
+                    : await setCoreModelProfile({
+                        profileId: loadLlmConfig().currentProfileId,
+                    });
                 resetDefaultLlmRuntime();
                 resetDefaultCodexOAuthSession();
-                const defaultModel = resolvedConfig.providers[providerStatus.providerId]?.defaultModel ||
-                    resolvedConfig.model;
-                const selectedModel = nextModel ?? defaultModel;
+                const current = result.current;
+                const selectedModel = current?.model ?? nextModel;
                 onDone(nextModel === null
-                    ? `Reset configured model for ${providerStatus.providerDisplayName} to ${chalk.bold(selectedModel)} (default).`
-                    : `Set configured model for ${providerStatus.providerDisplayName} to ${chalk.bold(selectedModel)}.`);
+                    ? `Reset current profile to its default model ${chalk.bold(selectedModel ?? 'default')}.`
+                    : `Set configured model for ${providerStatus.providerDisplayName} to ${chalk.bold(selectedModel ?? nextModel)}.`);
             }
             catch (error) {
                 onDone(`Failed to update configured model: ${error.message}`, {
@@ -197,6 +202,39 @@ function SetConfiguredProviderModelAndClose({ args, onDone, }) {
         }
         void updateConfiguredModel();
     }, [args, onDone]);
+    return null;
+}
+function SetConfiguredProfileAndClose({ profileId, model, onDone, }) {
+    React.useEffect(() => {
+        async function updateConfiguredProfile() {
+            try {
+                if (process.env.CCR_LLM_PROVIDER?.trim()) {
+                    onDone('LLM provider is currently forced by CCR_LLM_PROVIDER. Update or unset that environment variable before using /model profile.', { display: 'system' });
+                    return;
+                }
+                if (process.env.CCR_LLM_MODEL?.trim()) {
+                    onDone('LLM model is currently forced by CCR_LLM_MODEL. Update or unset that environment variable before using /model profile.', { display: 'system' });
+                    return;
+                }
+                const result = await setCoreModelProfile({
+                    profileId,
+                    ...(model?.trim() && model.trim() !== 'default'
+                        ? { model: model.trim() }
+                        : {}),
+                });
+                resetDefaultLlmRuntime();
+                resetDefaultCodexOAuthSession();
+                const current = result.current;
+                onDone(`Set profile to ${chalk.bold(current?.profileId ?? profileId)} · ${chalk.bold(current?.model ?? model ?? 'default')}.`);
+            }
+            catch (error) {
+                onDone(`Failed to update profile: ${error.message}`, {
+                    display: 'system',
+                });
+            }
+        }
+        void updateConfiguredProfile();
+    }, [model, onDone, profileId]);
     return null;
 }
 function isKnownAlias(model) {
@@ -222,10 +260,16 @@ function ShowModelAndClose({ onDone, }) {
     React.useEffect(() => {
         const providerStatus = getActiveProviderStatus();
         if (providerStatus.providerId !== 'anthropic') {
+            const config = loadLlmConfig();
+            const profile = config.profiles[config.currentProfileId];
             const lines = [
                 `Current provider: ${providerStatus.providerDisplayName} (${providerStatus.providerId})`,
+                `Current profile: ${profile?.name ?? config.currentProfileId} (${config.currentProfileId})`,
                 `Current model: ${chalk.bold(providerStatus.model)}`,
             ];
+            if (profile?.apiMode) {
+                lines.push(`Protocol: ${profile.apiMode}`);
+            }
             if (effortValue !== undefined) {
                 lines.push(`Effort: ${effortValue}`);
             }
@@ -253,7 +297,9 @@ function buildHelpText() {
 function buildNonAnthropicMenuMessage() {
     const providerStatus = getActiveProviderStatus();
     const providerDisplayName = getLlmProviderDisplayName(providerStatus.providerId);
-    return `Current LLM provider: ${providerDisplayName} (${providerStatus.providerId})\nCurrent configured model: ${chalk.bold(providerStatus.model)}\nUse /model [modelId] to update the configured model for this provider.`;
+    const config = loadLlmConfig();
+    const profile = config.profiles[config.currentProfileId];
+    return `Current LLM provider: ${providerDisplayName} (${providerStatus.providerId})\nCurrent profile: ${profile?.name ?? config.currentProfileId} (${config.currentProfileId})\nCurrent configured model: ${chalk.bold(providerStatus.model)}\nUse /model [modelId] to update the model, or /model profile <profileId> [modelId] to switch profile.`;
 }
 export const call = async (onDone, _context, rawArgs) => {
     const args = rawArgs?.trim() || '';
@@ -272,6 +318,10 @@ export const call = async (onDone, _context, rawArgs) => {
         return;
     }
     if (args) {
+        const [command, profileId, modelId] = args.split(/\s+/);
+        if (command === 'profile' && profileId) {
+            return (_jsx(SetConfiguredProfileAndClose, { profileId: profileId, model: modelId, onDone: onDone }));
+        }
         logEvent('tengu_model_command_inline', {
             args: args,
         });

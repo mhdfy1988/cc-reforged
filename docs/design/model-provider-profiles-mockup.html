@@ -1,0 +1,345 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CCR 模型与供应商三栏设计稿</title>
+  <style>
+    :root {
+      --bg: #fbf4e9;
+      --panel: #fffdf8;
+      --panel-soft: #fff8ed;
+      --line: #ead7bd;
+      --line-strong: #f0a829;
+      --text: #201912;
+      --muted: #75604a;
+      --accent: #ef9700;
+      --green: #008d6b;
+      --red: #c94848;
+      --shadow: 0 18px 40px rgba(126, 84, 36, 0.10);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: #f8efe2;
+      color: var(--text);
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    }
+    .window {
+      display: grid;
+      grid-template-columns: 226px minmax(0, 1fr);
+      grid-template-rows: 42px minmax(0, 1fr);
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+    }
+    .titlebar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 42px;
+      border-bottom: 1px solid var(--line);
+      background: #fff7eb;
+      padding: 0 14px;
+      font-weight: 900;
+    }
+    .brand-dot {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 7px;
+      color: white;
+      background: #6da63d;
+      font-size: 14px;
+    }
+    .win-controls { margin-left: auto; display: flex; gap: 18px; color: #2a2118; font-size: 18px; }
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, #fff7eb, #fbf4e9);
+      padding: 22px 22px 20px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: 52px;
+      border: 1px solid transparent;
+      border-radius: 16px;
+      color: #4b3d31;
+      font-size: 17px;
+      font-weight: 900;
+      padding: 0 16px;
+    }
+    .nav-item svg { width: 22px; height: 22px; stroke-width: 2; }
+    .nav-item.active {
+      border-color: rgba(239,151,0,.52);
+      background: #fff0d8;
+      color: #a46200;
+      box-shadow: 0 14px 28px rgba(158,105,25,.08);
+    }
+    .nav-footer { margin-top: auto; }
+    .workspace {
+      display: grid;
+      grid-template-rows: 96px minmax(0, 1fr);
+      min-width: 0;
+      min-height: 0;
+    }
+    .topbar {
+      display: grid;
+      grid-template-columns: minmax(440px, 1fr) auto auto auto;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid rgba(216,190,162,.56);
+      padding: 16px 28px;
+      background: rgba(255, 250, 242, .75);
+    }
+    .chip, .workspace-card {
+      min-height: 58px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: rgba(255,253,249,.92);
+    }
+    .workspace-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      max-width: 850px;
+    }
+    .folder { display:grid; place-items:center; width:34px; height:34px; border:1px solid #f1bc59; border-radius:12px; color:var(--accent); background:#fff7e8; }
+    .workspace-card strong, .chip strong { display: block; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .workspace-card span, .chip span { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; font-weight: 800; }
+    .chip { display: flex; align-items: center; gap: 10px; padding: 0 18px; font-weight: 900; }
+    .dot { width:10px; height:10px; border-radius:999px; background: var(--green); }
+    .page {
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      padding: 24px 28px 26px;
+    }
+    .page-panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 18px;
+      width: 100%;
+      height: 100%;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(255,252,247,.88);
+      padding: 24px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+    }
+    .page-title { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    .page-title h1 { margin:0; font-size:30px; letter-spacing:0; }
+    .page-title p { margin:6px 0 0; color: var(--muted); font-size:14px; font-weight:800; }
+    .actions { display:flex; gap:10px; }
+    .button {
+      height: 44px;
+      border: 1px solid rgba(208,186,158,.9);
+      border-radius: 14px;
+      background: #fff8ea;
+      color:#4f3b27;
+      font-size:14px;
+      font-weight:900;
+      padding:0 16px;
+    }
+    .button.primary { border-color:rgba(239,151,0,.58); background:#ffc766; color:#4d3200; }
+    .layout {
+      display: grid;
+      grid-template-columns: 250px 360px minmax(0, 1fr);
+      gap: 16px;
+      min-height: 0;
+    }
+    .column {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      min-width: 0;
+      min-height: 0;
+      border: 1px solid rgba(208,186,158,.62);
+      border-radius: 18px;
+      background: rgba(255,253,249,.8);
+      overflow: hidden;
+    }
+    .column-head {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      min-height: 58px;
+      border-bottom:1px solid rgba(216,190,162,.5);
+      padding: 0 16px;
+    }
+    .column-head strong { font-size:17px; }
+    .column-head span { color: var(--muted); font-size:12px; font-weight:900; }
+    .list { display:grid; align-content:start; gap:10px; overflow:auto; padding:14px; }
+    .provider, .profile, .model-row, .summary-card, .section {
+      border:1px solid rgba(216,190,162,.68);
+      border-radius:16px;
+      background:#fffdf8;
+    }
+    .provider, .profile {
+      display:grid;
+      gap:4px;
+      min-height:72px;
+      padding:13px 14px;
+    }
+    .provider.active, .profile.active, .model-row.active {
+      border-color: rgba(239,151,0,.62);
+      background:#fff0d8;
+      box-shadow: 0 12px 24px rgba(158,105,25,.08);
+    }
+    .provider-title, .profile-title { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .provider strong, .profile strong { font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .provider span, .profile span { color: var(--muted); font-size:12px; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .badge { flex:0 0 auto; min-width:30px; border-radius:999px; background:#eee3d1; color:#7b5a35; text-align:center; font-size:12px; font-weight:900; padding:5px 8px; }
+    .status { display:inline-flex; align-items:center; gap:6px; color: var(--green); font-size:12px; font-weight:900; }
+    .status.warn { color:#b17000; }
+    .status.error { color:var(--red); }
+    .small-dot { width:8px; height:8px; border-radius:999px; background:currentColor; }
+    .detail {
+      display: grid;
+      align-content: start;
+      gap: 14px;
+      overflow:auto;
+      padding: 0 2px 0 0;
+    }
+    .summary-grid { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; }
+    .summary-card { display:grid; gap:7px; padding:15px; min-height:84px; background:rgba(255,253,249,.86); }
+    .summary-card span, .section-title span, .field label { color:var(--muted); font-size:12px; font-weight:900; }
+    .summary-card strong { font-size:19px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    .section { display:grid; gap:14px; padding:16px; background:rgba(255,253,249,.86); }
+    .section-title { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .section-title h2 { margin:0 0 4px; font-size:19px; }
+    .form-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px; }
+    .field { display:grid; gap:6px; min-width:0; }
+    .input, .select {
+      display:flex;
+      align-items:center;
+      min-height:42px;
+      border:1px solid var(--line);
+      border-radius:13px;
+      background:#fffaf1;
+      color:#2d2117;
+      font-size:14px;
+      font-weight:800;
+      padding:0 12px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .model-list { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
+    .model-row { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:64px; padding:10px 12px; }
+    .model-row strong { display:block; font-size:15px; }
+    .model-row span { display:block; color:var(--muted); font-size:12px; font-weight:800; margin-top:3px; }
+    .kv-grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:10px; }
+    .kv { display:grid; gap:5px; min-height:66px; border-radius:14px; background:#fff8ed; padding:12px; }
+    .kv span { color:var(--muted); font-size:12px; font-weight:900; }
+    .kv strong { overflow-wrap:anywhere; font-size:14px; }
+    .footer-note { color:var(--muted); font-size:13px; font-weight:800; line-height:1.6; }
+    .add-card {
+      display:grid;
+      place-items:center start;
+      min-height:62px;
+      border:1px dashed rgba(239,151,0,.55);
+      border-radius:16px;
+      color:#9a6500;
+      background:#fff8ea;
+      font-size:14px;
+      font-weight:900;
+      padding:0 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="titlebar"><span class="brand-dot">C</span> CCR Desktop <div class="win-controls"><span>−</span><span>□</span><span>×</span></div></div>
+    <aside class="sidebar">
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.9 8.9 0 0 1-3.9-.9L3 21l1.9-5.1a8.4 8.4 0 0 1-.9-3.9A8.5 8.5 0 0 1 12.5 3 8.5 8.5 0 0 1 21 11.5Z"/></svg>聊天</div>
+      <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3 4.8 7.1v8.2L12 19.5l7.2-4.2V7.1Z"/><path d="M12 11.3 4.9 7.2"/><path d="m12 11.3 7.1-4.1"/><path d="M12 11.3v8"/></svg>模型</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 2.8 7.2 4.1v8.2L12 19.2l-7.2-4.1V6.9L12 2.8Z"/><path d="M12 11.2 4.9 7.1"/><path d="m12 11.2 7.1-4.1"/><path d="M12 11.2v8"/></svg>MCP</div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>日志</div>
+      <div class="nav-item nav-footer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2.1 2.1 0 0 1-3 3l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.7V21a2.1 2.1 0 0 1-4.2 0v-.2a1.8 1.8 0 0 0-1.2-1.7 1.8 1.8 0 0 0-2 .4l-.1.1a2.1 2.1 0 0 1-3-3l.1-.1a1.8 1.8 0 0 0 .4-2A1.8 1.8 0 0 0 2 13.3H2a2.1 2.1 0 0 1 0-4.2h.2a1.8 1.8 0 0 0 1.7-1.2 1.8 1.8 0 0 0-.4-2l-.1-.1a2.1 2.1 0 0 1 3-3l.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1.1-1.7V1.5a2.1 2.1 0 0 1 4.2 0v.2a1.8 1.8 0 0 0 1.2 1.7 1.8 1.8 0 0 0 2-.4l.1-.1a2.1 2.1 0 0 1 3 3l-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.7 1.1h.2a2.1 2.1 0 0 1 0 4.2h-.2a1.8 1.8 0 0 0-1.9 1.7Z"/></svg>设置</div>
+    </aside>
+    <main class="workspace">
+      <div class="topbar">
+        <div class="workspace-card"><div class="folder">▣</div><div><strong>D:\agent_project\claude-code-reforged</strong><span>当前工作区 · 点击切换</span></div></div>
+        <div class="chip"><strong>DeepSeek 工作 Key / deepseek-v4-flash</strong></div>
+        <div class="chip"><span class="dot"></span><strong>认证可用</strong></div>
+        <div class="chip"><strong>上下文 18K / 1000K</strong></div>
+      </div>
+      <section class="page">
+        <div class="page-panel">
+          <div class="page-title">
+            <div><h1>模型与供应商</h1><p>供应商是分类，连接配置是可切换实例，凭据只保存在本机。</p></div>
+            <div class="actions"><button class="button">导入</button><button class="button">刷新</button><button class="button primary">新建连接</button></div>
+          </div>
+          <div class="layout">
+            <section class="column">
+              <div class="column-head"><strong>供应商类型</strong><span>分类</span></div>
+              <div class="list">
+                <div class="provider"><div class="provider-title"><strong>Codex OAuth</strong><span class="badge">2</span></div><span>OpenAI Responses · OAuth</span></div>
+                <div class="provider active"><div class="provider-title"><strong>DeepSeek</strong><span class="badge">3</span></div><span>Chat Completions · API Key</span></div>
+                <div class="provider"><div class="provider-title"><strong>OpenAI</strong><span class="badge">1</span></div><span>Responses / Chat Completions</span></div>
+                <div class="provider"><div class="provider-title"><strong>OpenAI Compatible</strong><span class="badge">4</span></div><span>第三方中转 / 自定义 endpoint</span></div>
+                <div class="provider"><div class="provider-title"><strong>Anthropic</strong><span class="badge">1</span></div><span>Anthropic Messages</span></div>
+              </div>
+            </section>
+            <section class="column">
+              <div class="column-head"><strong>连接配置</strong><span>DeepSeek</span></div>
+              <div class="list">
+                <div class="profile active"><div class="profile-title"><strong>DeepSeek 工作 Key</strong><span class="status"><i class="small-dot"></i>当前</span></div><span>默认 deepseek-v4-flash · 2 个模型</span></div>
+                <div class="profile"><div class="profile-title"><strong>DeepSeek 个人 Key</strong><span class="status warn"><i class="small-dot"></i>待测试</span></div><span>默认 deepseek-v4-pro · 继承官方模型</span></div>
+                <div class="profile"><div class="profile-title"><strong>DeepSeek 备用额度</strong><span class="status error"><i class="small-dot"></i>失效</span></div><span>自定义 endpoint · 需要更新 Key</span></div>
+                <div class="add-card">＋ 新建 DeepSeek 连接配置</div>
+              </div>
+            </section>
+            <section class="detail">
+              <div class="summary-grid">
+                <div class="summary-card"><span>连接配置</span><strong>DeepSeek 工作 Key</strong></div>
+                <div class="summary-card"><span>供应商类型</span><strong>DeepSeek</strong></div>
+                <div class="summary-card"><span>协议</span><strong>Chat Completions</strong></div>
+                <div class="summary-card"><span>状态</span><strong>认证可用</strong></div>
+              </div>
+              <div class="section">
+                <div class="section-title"><div><h2>连接详情</h2><span>这些字段属于连接配置，不属于供应商分类。</span></div><button class="button primary">设为当前</button></div>
+                <div class="form-grid">
+                  <div class="field"><label>名称</label><div class="input">DeepSeek 工作 Key</div></div>
+                  <div class="field"><label>认证方式</label><div class="select">API Key</div></div>
+                  <div class="field"><label>Base URL</label><div class="input">https://api.deepseek.com</div></div>
+                  <div class="field"><label>凭据引用</label><div class="input">deepseek-work-key · 已保存</div></div>
+                </div>
+              </div>
+              <div class="section">
+                <div class="section-title"><div><h2>模型</h2><span>默认继承 DeepSeek 官方模型，也可以给当前连接补充或隐藏模型。</span></div><button class="button">管理模型</button></div>
+                <div class="model-list">
+                  <div class="model-row active"><div><strong>DeepSeek V4 Flash</strong><span>deepseek-v4-flash</span></div><span class="badge">默认</span></div>
+                  <div class="model-row"><div><strong>DeepSeek V4 Pro</strong><span>deepseek-v4-pro</span></div><span class="badge">1000K</span></div>
+                  <div class="model-row"><div><strong>自定义模型名</strong><span>relay/deepseek-special</span></div><span class="badge">自定义</span></div>
+                  <div class="add-card">＋ 添加自定义模型</div>
+                </div>
+              </div>
+              <div class="section">
+                <div class="section-title"><div><h2>可用性</h2><span>检测按连接配置执行，同一供应商下不同账号结果可能不同。</span></div><div class="actions"><button class="button">重新读取</button><button class="button primary">测试连接</button></div></div>
+                <div class="kv-grid">
+                  <div class="kv"><span>本地状态</span><strong>认证可用</strong></div>
+                  <div class="kv"><span>最近检测</span><strong>05/11 14:28 · 已验证</strong></div>
+                  <div class="kv"><span>凭据来源</span><strong>C:\Users\luoji\.ccr\data\credentials.local.json</strong></div>
+                  <div class="kv"><span>默认模型</span><strong>deepseek-v4-flash</strong></div>
+                </div>
+                <div class="footer-note">顶部快速切换以后显示“连接配置 / 模型”，例如：DeepSeek 工作 Key / deepseek-v4-flash。恢复历史会话不改变这个当前选择。</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

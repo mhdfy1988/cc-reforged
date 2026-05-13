@@ -3,6 +3,10 @@ import { loadLlmConfig } from './llmConfig.js'
 import { AnthropicProvider } from './providers/AnthropicProvider.js'
 import { CodexOAuthProvider } from './providers/CodexOAuthProvider.js'
 import { DeepSeekProvider } from './providers/DeepSeekProvider.js'
+import {
+  MiniMaxChinaProvider,
+  MiniMaxInternationalProvider,
+} from './providers/MiniMaxProvider.js'
 
 let defaultLlmRuntime: LlmRuntime | undefined
 
@@ -15,6 +19,8 @@ export function createDefaultLlmRuntime(): LlmRuntime {
   runtime.registerProvider(new AnthropicProvider())
   runtime.registerProvider(new CodexOAuthProvider())
   runtime.registerProvider(new DeepSeekProvider())
+  runtime.registerProvider(new MiniMaxInternationalProvider())
+  runtime.registerProvider(new MiniMaxChinaProvider())
   return runtime
 }
 

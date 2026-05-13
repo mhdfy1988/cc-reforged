@@ -11,7 +11,7 @@ import {
   type SimpleStreamOptions as PiAiSimpleStreamOptions,
   type Tool as PiAiTool,
 } from '@mariozechner/pi-ai'
-import { getLlmProviderConfig } from '../llmConfig.js'
+import { getLlmProviderConfig, loadLlmConfig } from '../llmConfig.js'
 import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js'
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js'
 import type {
@@ -74,6 +74,7 @@ export interface CodexOAuthProviderOptions {
 
 type PreparedRequest = {
   credential: Awaited<ReturnType<CodexOAuthSession['getValidCredential']>>
+  baseUrl: string
   model: string
   reasoningEffort: CodexReasoningEffort
   systemPrompt: string
@@ -95,9 +96,11 @@ export class CodexOAuthProvider implements LlmProvider {
   readonly #completeImpl: PiAiComplete
   readonly #streamImpl: PiAiStream
   readonly #getModelImpl: PiAiGetModel
+  readonly #hasCustomSession: boolean
 
   constructor(options: CodexOAuthProviderOptions = {}) {
     const config = getLlmProviderConfig('codex-oauth')
+    this.#hasCustomSession = Boolean(options.session || options.sessionOptions)
     this.#session =
       options.session ||
       (options.sessionOptions
@@ -135,7 +138,7 @@ export class CodexOAuthProvider implements LlmProvider {
     const message = await this.#completeImpl(
       resolvePiAiModel({
         model: prepared.model,
-        baseUrl: this.#baseUrl,
+        baseUrl: prepared.baseUrl,
         getModelImpl: this.#getModelImpl,
       }),
       prepared.context,
@@ -146,7 +149,7 @@ export class CodexOAuthProvider implements LlmProvider {
       model: prepared.model,
       message,
       diagnostics: {
-        baseUrl: this.#baseUrl,
+        baseUrl: prepared.baseUrl,
         transport: this.#defaultTransport,
         systemPrompt: prepared.systemPrompt,
         accountId: prepared.credential.accountId,
@@ -163,7 +166,7 @@ export class CodexOAuthProvider implements LlmProvider {
     const messageStream = this.#streamImpl(
       resolvePiAiModel({
         model: prepared.model,
-        baseUrl: this.#baseUrl,
+        baseUrl: prepared.baseUrl,
         getModelImpl: this.#getModelImpl,
       }),
       prepared.context,
@@ -187,7 +190,7 @@ export class CodexOAuthProvider implements LlmProvider {
       model: prepared.model,
       message: finalMessage,
       diagnostics: {
-        baseUrl: this.#baseUrl,
+        baseUrl: prepared.baseUrl,
         transport: this.#defaultTransport,
         systemPrompt: prepared.systemPrompt,
         accountId: prepared.credential.accountId,
@@ -208,8 +211,14 @@ export class CodexOAuthProvider implements LlmProvider {
     request: LlmGenerateRequest,
   ): Promise<PreparedRequest> {
     configureGlobalFetchDispatcher()
-    const credential = await this.#session.getValidCredential()
-    const model = request.model?.trim() || this.#defaultModel
+    const profile = getCodexProfileForRequest(request.profileId)
+    const session =
+      request.profileId && !this.#hasCustomSession
+        ? createDefaultCodexOAuthSession({ profileId: request.profileId })
+        : this.#session
+    const credential = await session.getValidCredential()
+    const baseUrl = normalizeBaseUrl(profile?.baseUrl || this.#baseUrl)
+    const model = request.model?.trim() || profile?.defaultModel || this.#defaultModel
     const reasoningEffort = normalizeReasoningEffort(
       getReasoningEffort(request.metadata) || this.#defaultReasoningEffort,
     )
@@ -240,6 +249,7 @@ export class CodexOAuthProvider implements LlmProvider {
 
     return {
       credential,
+      baseUrl,
       model,
       reasoningEffort,
       systemPrompt,
@@ -253,6 +263,15 @@ function normalizeReasoningEffort(
   value: string | undefined,
 ): CodexReasoningEffort {
   return value === 'medium' || value === 'high' ? value : 'low'
+}
+
+function getCodexProfileForRequest(profileId: string | undefined) {
+  const normalizedProfileId = profileId?.trim()
+  if (!normalizedProfileId) {
+    return undefined
+  }
+  const profile = loadLlmConfig().profiles[normalizedProfileId]
+  return profile?.providerType === 'codex-oauth' ? profile : undefined
 }
 
 function normalizeTransport(value: string | undefined): PiAiTransport | null {

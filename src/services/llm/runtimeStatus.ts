@@ -3,12 +3,16 @@ import {
   getAuthTokenSource,
   isUsing3PServices,
 } from '../../utils/auth.js'
-import { getFsImplementation } from '../../utils/fsOperations.js'
 import { getAPIProvider } from '../../utils/model/providers.js'
 import {
   getDefaultLlmRuntime,
 } from './defaultRuntime.js'
 import {
+  getLlmProfileOAuthCredential,
+  getLlmProviderApiKey,
+} from './providerCredentials.js'
+import {
+  getLlmProfileForProvider,
   getLlmProviderConfig,
   loadLlmConfig,
   type ResolvedLlmConfig,
@@ -19,7 +23,7 @@ import {
   getBuiltinLlmProviderDefinition,
   mergeLlmProviderDefinition,
 } from './providerDefinitions.js'
-import { getDefaultCodexOAuthSession } from './sessions/defaultCodexOAuthSession.js'
+import { createDefaultCodexOAuthSession } from './sessions/defaultCodexOAuthSession.js'
 import type {
   LlmApiMode,
   LlmAuthStrategy,
@@ -36,6 +40,7 @@ export interface LlmRuntimeDisplayStatus {
   apiMode: LlmApiMode
   capabilities: Readonly<LlmProviderCapabilities>
   modelCatalogEntry: LlmModelCatalogEntry
+  profileId?: string
   baseUrl?: string
   configPath: string
   configSource: ResolvedLlmConfig['source']
@@ -61,6 +66,17 @@ interface CodexCredentialSnapshot {
   expiresAt?: number
 }
 
+const API_KEY_PROVIDER_ENV_NAMES: Record<string, readonly string[]> = {
+  deepseek: ['CCR_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY'],
+  minimax: ['CCR_MINIMAX_API_KEY', 'MINIMAX_API_KEY'],
+  'minimax-cn': [
+    'CCR_MINIMAX_CN_API_KEY',
+    'MINIMAX_CN_API_KEY',
+    'CCR_MINIMAXI_API_KEY',
+    'MINIMAXI_API_KEY',
+  ],
+}
+
 export function getLlmProviderDisplayName(
   providerId: string,
   config: ResolvedLlmConfig = loadLlmConfig(),
@@ -82,15 +98,27 @@ export function getLlmRuntimeDisplayStatus(
 
 export function getLlmRuntimeDisplayStatusForProvider(
   input: {
+    profileId?: string
     provider: string
     model?: string
   },
   config: ResolvedLlmConfig = loadLlmConfig(),
 ): LlmRuntimeDisplayStatus {
   const provider = input.provider.trim()
-  const model =
-    input.model?.trim() || config.providers[provider]?.defaultModel || config.model
+  const selectedProfile = input.profileId
+    ? config.profiles[input.profileId.trim()]
+    : undefined
   const providerConfig = getLlmProviderConfig(provider, config)
+  const profile =
+    selectedProfile?.providerType === provider
+      ? selectedProfile
+      : getLlmProfileForProvider(provider, config)
+  const model =
+    input.model?.trim() ||
+    (!input.profileId && provider === config.provider ? config.model : undefined) ||
+    profile?.defaultModel ||
+    config.providers[provider]?.defaultModel ||
+    config.model
   const providerDefinition = getResolvedLlmProviderDefinition(
     provider,
     config,
@@ -107,7 +135,10 @@ export function getLlmRuntimeDisplayStatusForProvider(
       model,
       providerDefinition,
     }),
-    ...(providerConfig?.baseUrl ? { baseUrl: providerConfig.baseUrl } : {}),
+    ...(profile ? { profileId: profile.id } : {}),
+    ...(profile?.baseUrl ?? providerConfig?.baseUrl
+      ? { baseUrl: profile?.baseUrl ?? providerConfig?.baseUrl }
+      : {}),
     configPath: config.path,
     configSource: config.source,
   }
@@ -168,6 +199,7 @@ export function getLlmRuntimeAuthStatusSync(
 
 export function getLlmRuntimeAuthStatusSyncForProvider(
   input: {
+    profileId?: string
     provider: string
     model?: string
   },
@@ -177,11 +209,9 @@ export function getLlmRuntimeAuthStatusSyncForProvider(
   if (displayStatus.providerId === 'codex-oauth') {
     return getCodexAuthStatusSync(config, displayStatus)
   }
-  if (displayStatus.providerId === 'deepseek') {
-    return getApiKeyAuthStatus(displayStatus, [
-      'CCR_DEEPSEEK_API_KEY',
-      'DEEPSEEK_API_KEY',
-    ])
+  const apiKeyEnvNames = getApiKeyEnvNames(displayStatus.providerId)
+  if (apiKeyEnvNames) {
+    return getApiKeyAuthStatus(displayStatus, apiKeyEnvNames)
   }
   return getAnthropicAuthStatus(displayStatus)
 }
@@ -200,23 +230,24 @@ export async function getLlmRuntimeAuthStatus(
 
 export async function getLlmRuntimeAuthStatusForProvider(
   input: {
+    profileId?: string
     provider: string
     model?: string
   },
   config: ResolvedLlmConfig = loadLlmConfig(),
 ): Promise<LlmRuntimeAuthStatus> {
   const displayStatus = getLlmRuntimeDisplayStatusForProvider(input, config)
-  if (displayStatus.providerId === 'deepseek') {
-    return getApiKeyAuthStatus(displayStatus, [
-      'CCR_DEEPSEEK_API_KEY',
-      'DEEPSEEK_API_KEY',
-    ])
+  const apiKeyEnvNames = getApiKeyEnvNames(displayStatus.providerId)
+  if (apiKeyEnvNames) {
+    return getApiKeyAuthStatus(displayStatus, apiKeyEnvNames)
   }
   if (displayStatus.providerId !== 'codex-oauth') {
     return getAnthropicAuthStatus(displayStatus)
   }
 
-  const availability = await getDefaultCodexOAuthSession().getAvailability()
+  const availability = await createDefaultCodexOAuthSession({
+    ...(displayStatus.profileId ? { profileId: displayStatus.profileId } : {}),
+  }).getAvailability()
   if (availability.available) {
     return {
       state: 'available',
@@ -258,7 +289,7 @@ function getCodexAuthStatusSync(
   config: ResolvedLlmConfig,
   displayStatus: LlmRuntimeDisplayStatus,
 ): LlmRuntimeAuthStatus {
-  const snapshot = getCodexCredentialSnapshotSync(config)
+  const snapshot = getCodexCredentialSnapshotSync(config, displayStatus)
   if (!snapshot.present) {
     return {
       state: 'missing',
@@ -298,6 +329,7 @@ function getCodexAuthStatusSync(
 
 function getCodexCredentialSnapshotSync(
   config: ResolvedLlmConfig,
+  displayStatus: LlmRuntimeDisplayStatus,
 ): CodexCredentialSnapshot {
   if (hasCodexCredentialInEnv()) {
     const expiresAt = Number.parseInt(
@@ -314,51 +346,26 @@ function getCodexCredentialSnapshotSync(
     }
   }
 
-  const credentialFilePath = getLlmProviderConfig(
-    'codex-oauth',
-    config,
-  )?.credentialFilePath?.trim()
-
-  if (!credentialFilePath) {
-    return { present: false }
-  }
-
-  const fs = getFsImplementation()
-  if (!fs.existsSync(credentialFilePath)) {
+  const profileId =
+    displayStatus.profileId ||
+    config.currentProfileId ||
+    getLlmProfileForProvider('codex-oauth', config)?.id
+  const stored = getLlmProfileOAuthCredential(profileId)
+  if (!stored.credential?.access?.trim()) {
     return {
       present: false,
-      source: credentialFilePath,
+      source: stored.source,
     }
   }
-
-  try {
-    const raw = fs.readFileSync(credentialFilePath, { encoding: 'utf8' })
-    const parsed = JSON.parse(raw) as {
-      access?: string
-      accountId?: string
-      expires?: number
-    }
-    if (typeof parsed.access !== 'string' || !parsed.access.trim()) {
-      return {
-        present: false,
-        source: credentialFilePath,
-      }
-    }
-    return {
-      present: true,
-      source: credentialFilePath,
-      ...(typeof parsed.accountId === 'string'
-        ? { accountId: parsed.accountId }
-        : {}),
-      ...(typeof parsed.expires === 'number'
-        ? { expiresAt: parsed.expires }
-        : {}),
-    }
-  } catch {
-    return {
-      present: false,
-      source: credentialFilePath,
-    }
+  return {
+    present: true,
+    source: stored.source,
+    ...(stored.credential.accountId
+      ? { accountId: stored.credential.accountId }
+      : {}),
+    ...(typeof stored.credential.expires === 'number'
+      ? { expiresAt: stored.credential.expires }
+      : {}),
   }
 }
 
@@ -366,18 +373,26 @@ function hasCodexCredentialInEnv(): boolean {
   return Boolean(process.env.CLAUDE_CODE_CODEX_OAUTH_ACCESS_TOKEN?.trim())
 }
 
+function getApiKeyEnvNames(providerId: string): readonly string[] | undefined {
+  return API_KEY_PROVIDER_ENV_NAMES[providerId]
+}
+
 function getApiKeyAuthStatus(
   displayStatus: LlmRuntimeDisplayStatus,
   envNames: readonly string[],
 ): LlmRuntimeAuthStatus {
-  const envName = envNames.find(name => process.env[name]?.trim())
-  if (envName) {
+  const credential = getLlmProviderApiKey({
+    provider: displayStatus.providerId,
+    profileId: displayStatus.profileId,
+    envNames,
+  })
+  if (credential.apiKey) {
     return {
       state: 'available',
       configured: true,
       available: true,
       message: `${displayStatus.providerDisplayName} API key is available.`,
-      source: envName,
+      source: credential.source,
       baseUrl: displayStatus.baseUrl,
     }
   }
@@ -387,6 +402,7 @@ function getApiKeyAuthStatus(
     configured: false,
     available: false,
     message: `${displayStatus.providerDisplayName} API key is missing.`,
+    source: credential.source,
     baseUrl: displayStatus.baseUrl,
   }
 }
@@ -414,6 +430,21 @@ function getAnthropicAuthStatus(
       available: true,
       message: 'Anthropic OAuth credential is available.',
       source: authTokenSource,
+      baseUrl: displayStatus.baseUrl,
+    }
+  }
+  const profileApiKey = getLlmProviderApiKey({
+    provider: displayStatus.providerId,
+    profileId: displayStatus.profileId,
+    envNames: ['ANTHROPIC_API_KEY'],
+  })
+  if (profileApiKey.apiKey) {
+    return {
+      state: 'available',
+      configured: true,
+      available: true,
+      message: 'Anthropic API key is available.',
+      source: profileApiKey.source,
       baseUrl: displayStatus.baseUrl,
     }
   }

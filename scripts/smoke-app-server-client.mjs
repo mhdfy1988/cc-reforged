@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -58,16 +58,20 @@ try {
     assert.equal(initialized.capabilities.memory, true);
 
     const config = await managed.client.getConfig();
-    assert.equal(config.llm.provider, 'codex-oauth');
-    assert.equal(config.llm.model, 'gpt-5.4');
+    assert.equal(config.llm.profileId, undefined);
+    assert.equal(config.llm.provider, '');
+    assert.equal(config.llm.model, '');
     assertNoSecretKeys(config);
 
     const authStatus = await managed.client.getAuthStatus();
-    assert.equal(authStatus.provider, 'codex-oauth');
-    assert.equal(typeof authStatus.available, 'boolean');
+    assert.equal(authStatus.state, 'missing');
+    assert.equal(authStatus.available, false);
     assertNoSecretKeys(authStatus);
 
     const modelList = await managed.client.listModels();
+    assert.equal(modelList.current.profileId, '');
+    assert.equal(modelList.current.provider, '');
+    assert.equal(modelList.current.model, '');
     const codexProvider = modelList.providers.find(
       provider => provider.id === 'codex-oauth',
     );
@@ -76,6 +80,9 @@ try {
     );
     assert.ok(codexProvider);
     assert.ok(deepSeekProvider);
+    assert.deepEqual(modelList.profiles, []);
+    assert.deepEqual(codexProvider.profiles, []);
+    assert.deepEqual(deepSeekProvider.profiles, []);
     assert.ok(codexProvider.models.some(model => model.model === 'gpt-5.5'));
     assert.ok(codexProvider.models.some(model => model.model === 'gpt-5.4'));
     assert.ok(
@@ -84,6 +91,10 @@ try {
     assert.ok(
       deepSeekProvider.models.some(model => model.model === 'deepseek-v4-pro'),
     );
+
+    const emptyProfileList = await managed.client.listModelProfiles();
+    assert.deepEqual(emptyProfileList.profiles, []);
+    assertNoSecretKeys(emptyProfileList);
 
     const deepSeekAvailability = await managed.client.getModelAvailability({
       provider: 'deepseek',
@@ -109,22 +120,133 @@ try {
     assert.equal(deepSeekTest.error.kind, 'auth_required');
     assertNoSecretKeys(deepSeekTest);
 
-    const setDeepSeek = await managed.client.setModel({
+    const deepSeekCredential = await managed.client.updateModelCredential({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      apiKey: 'sk-smoke-deepseek-key',
+    });
+    assert.equal(deepSeekCredential.provider, 'deepseek');
+    assert.equal(deepSeekCredential.model, 'deepseek-v4-flash');
+    assert.equal(deepSeekCredential.credential.configured, true);
+    assert.equal(deepSeekCredential.credential.profileId, 'deepseek-1');
+    assert.equal(deepSeekCredential.availability.state, 'auth_ready');
+    assert.equal(deepSeekCredential.availability.auth.configured, true);
+    assert.equal(deepSeekCredential.availability.auth.available, true);
+    assertNoSecretKeys(deepSeekCredential);
+
+    const secondDeepSeekProfile = await managed.client.saveModelProfile({
+      name: 'DeepSeek Smoke 2',
+      providerType: 'deepseek',
+      apiMode: 'openai-chat',
+      authStrategy: 'api_key',
+      defaultModel: 'deepseek-v4-pro',
+      models: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+    });
+    const secondDeepSeekProfileId = secondDeepSeekProfile.profile.id;
+    const secondDeepSeekCredential = await managed.client.updateModelCredential({
+      profileId: secondDeepSeekProfileId,
+      provider: 'deepseek',
+      model: 'deepseek-v4-pro',
+      apiKey: 'sk-smoke-deepseek-key-2',
+    });
+    assert.equal(secondDeepSeekCredential.credential.profileId, secondDeepSeekProfileId);
+    const credentialsSnapshot = JSON.parse(
+      readFileSync(join(tempDir, 'data', 'llm.credentials.local.json'), 'utf8'),
+    );
+    assert.equal(
+      credentialsSnapshot.profileCredentials['deepseek-1'].apiKey,
+      'sk-smoke-deepseek-key',
+    );
+    assert.equal(
+      credentialsSnapshot.profileCredentials[secondDeepSeekProfileId].apiKey,
+      'sk-smoke-deepseek-key-2',
+    );
+    assertNoSecretKeys(secondDeepSeekCredential);
+
+    const profileList = await managed.client.listModelProfiles();
+    assert.equal(profileList.current.profileId, 'deepseek-1');
+    assert.ok(
+      profileList.profiles.some(
+        profile =>
+          profile.id === 'deepseek-1' &&
+          profile.providerType === 'deepseek' &&
+          profile.source === 'file',
+      ),
+    );
+    assertNoSecretKeys(profileList);
+
+    const copiedProfile = await managed.client.copyModelProfile({
+      profileId: 'deepseek-1',
+      name: 'DeepSeek Smoke Copy',
+    });
+    assert.equal(copiedProfile.profile.name, 'DeepSeek Smoke Copy');
+    assert.equal(copiedProfile.profile.source, 'file');
+    assert.equal(copiedProfile.profile.providerType, 'deepseek');
+    assertNoSecretKeys(copiedProfile);
+
+    const copiedProfileId = copiedProfile.profile.id;
+    const deletedCopy = await managed.client.deleteModelProfile({
+      profileId: copiedProfileId,
+    });
+    assert.equal(
+      deletedCopy.profiles.some(profile => profile.id === copiedProfileId),
+      false,
+    );
+    assertNoSecretKeys(deletedCopy);
+
+    const deepSeekReadyAvailability = await managed.client.getModelAvailability({
       provider: 'deepseek',
       model: 'deepseek-v4-flash',
     });
+    assert.equal(deepSeekReadyAvailability.state, 'auth_ready');
+    assert.equal(deepSeekReadyAvailability.available, true);
+    assert.equal(deepSeekReadyAvailability.testable, true);
+    assertNoSecretKeys(deepSeekReadyAvailability);
+
+    const deepSeekCredentialClear = await managed.client.updateModelCredential({
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+      apiKey: null,
+    });
+    assert.equal(deepSeekCredentialClear.credential.configured, false);
+    assert.equal(deepSeekCredentialClear.availability.state, 'needs_auth');
+    assertNoSecretKeys(deepSeekCredentialClear);
+
+    const setDeepSeek = await managed.client.setModel({
+      profileId: 'deepseek-1',
+      provider: 'deepseek',
+      model: 'deepseek-v4-flash',
+    });
+    assert.equal(setDeepSeek.current.profileId, 'deepseek-1');
     assert.equal(setDeepSeek.current.provider, 'deepseek');
     assert.equal(setDeepSeek.current.model, 'deepseek-v4-flash');
     const deepSeekConfig = await managed.client.getConfig();
+    assert.equal(deepSeekConfig.llm.profileId, 'deepseek-1');
     assert.equal(deepSeekConfig.llm.provider, 'deepseek');
     assert.equal(deepSeekConfig.llm.model, 'deepseek-v4-flash');
     assert.equal(deepSeekConfig.llm.apiMode, 'openai-chat');
     assertNoSecretKeys(deepSeekConfig);
 
+    const savedCodexProfile = await managed.client.saveModelProfile({
+      name: 'Codex OAuth 登录配置',
+      providerType: 'codex-oauth',
+      apiMode: 'openai-responses',
+      authStrategy: 'oauth_refreshable',
+      defaultModel: 'gpt-5.4',
+      models: ['gpt-5.4', 'gpt-5.5', 'gpt-5.4-mini'],
+      setCurrent: true,
+    });
+    assert.equal(savedCodexProfile.profile.id, 'codex-oauth-1');
+    assert.equal(savedCodexProfile.profile.providerType, 'codex-oauth');
+    assert.equal(savedCodexProfile.profile.source, 'file');
+    assertNoSecretKeys(savedCodexProfile);
+
     const setGpt55 = await managed.client.setModel({
+      profileId: 'codex-oauth-1',
       provider: 'codex-oauth',
       model: 'gpt-5.5',
     });
+    assert.equal(setGpt55.current.profileId, 'codex-oauth-1');
     assert.equal(setGpt55.current.provider, 'codex-oauth');
     assert.equal(setGpt55.current.model, 'gpt-5.5');
     const gpt55Config = await managed.client.getConfig();
@@ -132,6 +254,7 @@ try {
     assertNoSecretKeys(gpt55Config);
 
     const setGpt54 = await managed.client.setModel({
+      profileId: 'codex-oauth-1',
       provider: 'codex-oauth',
       model: 'gpt-5.4',
     });
@@ -210,6 +333,21 @@ try {
     });
     assert.equal(turnResult.turn.threadId, threadResult.thread.threadId);
     assert.equal(turnResult.turn.status, 'queued');
+    assert.equal(turnResult.turn.metadata.provider, 'codex-oauth');
+    assert.equal(
+      turnResult.turn.metadata.providerDisplayName,
+      'Codex OAuth',
+    );
+    assert.equal(turnResult.turn.metadata.profileId, 'codex-oauth-1');
+    assert.equal(
+      turnResult.turn.metadata.profileName,
+      'Codex OAuth 登录配置',
+    );
+    assert.equal(turnResult.turn.metadata.apiMode, 'openai-responses');
+    assert.equal(turnResult.turn.metadata.authStrategy, 'oauth_refreshable');
+    assert.equal(turnResult.turn.metadata.model, 'gpt-5.4');
+    assert.equal(turnResult.turn.metadata.requestedModel, 'gpt-5.4');
+    assert.equal(typeof turnResult.turn.metadata.contextWindow, 'number');
 
     await waitForNotification(
       notifications,
@@ -271,8 +409,12 @@ try {
             'config/get',
             'auth/status',
             'model/list',
+            'model/profile/list',
+            'model/profile/save_copy_delete',
             'model/availability',
             'model/test_auth_required_no_network',
+            'model/credential/update',
+            'model/credential/profile_isolation',
             'model/set',
             'mcp/list',
             'workspace/open',
@@ -428,6 +570,7 @@ function createFakeTransport() {
 function getSmokeEnv() {
   const env = { ...process.env, CCR_CONFIG_DIR: tempDir };
   delete env.CCR_LLM_CONFIG_PATH;
+  delete env.CCR_LLM_CREDENTIALS_PATH;
   delete env.CCR_LLM_PROVIDER;
   delete env.CCR_LLM_MODEL;
   delete env.CLAUDE_CODE_CODEX_OAUTH_ACCESS_TOKEN;

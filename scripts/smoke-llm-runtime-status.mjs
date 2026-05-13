@@ -11,10 +11,25 @@ try {
     configPath,
     JSON.stringify(
       {
-        provider: 'codex-oauth',
-        providers: {
-          'codex-oauth': {
+        schemaVersion: 2,
+        current: {
+          profileId: 'codex-oauth-1',
+          model: 'gpt-5.4',
+        },
+        profiles: {
+          'codex-oauth-1': {
+            name: 'Codex OAuth 登录配置',
+            providerType: 'codex-oauth',
+            apiMode: 'openai-responses',
+            auth: {
+              strategy: 'oauth_refreshable',
+            },
             defaultModel: 'gpt-5.4',
+            models: {
+              source: 'mixed',
+              default: 'gpt-5.4',
+              include: ['gpt-5.5', 'gpt-5.4-mini'],
+            },
           },
         },
       },

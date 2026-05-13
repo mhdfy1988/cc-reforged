@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -11,6 +11,7 @@ const packageJson = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), '
 const tempDir = mkdtempSync(join(tmpdir(), 'ccr-app-server-smoke-'));
 
 try {
+  seedSmokeLlmConfig();
   const messages = [
     'not json',
     { jsonrpc: '2.0', id: 1, method: 'config/get', params: {} },
@@ -56,7 +57,39 @@ try {
       method: 'model/test',
       params: { provider: 'deepseek', model: 'deepseek-v4-flash' },
     },
-    { jsonrpc: '2.0', id: 14, method: 'shutdown', params: {} },
+    {
+      jsonrpc: '2.0',
+      id: 14,
+      method: 'model/credential/update',
+      params: {
+        provider: 'deepseek',
+        model: 'deepseek-v4-flash',
+        apiKey: 'sk-smoke-deepseek-key',
+      },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 15,
+      method: 'model/availability',
+      params: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 16,
+      method: 'model/credential/update',
+      params: {
+        provider: 'deepseek',
+        model: 'deepseek-v4-flash',
+        apiKey: null,
+      },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 17,
+      method: 'model/availability',
+      params: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+    },
+    { jsonrpc: '2.0', id: 18, method: 'shutdown', params: {} },
   ];
 
   const result = runAppServer(messages);
@@ -83,6 +116,7 @@ try {
   assert.equal(responses[2].result.capabilities.memory, true);
 
   assert.equal(responses[3].id, 3);
+  assert.equal(responses[3].result.llm.profileId, 'codex-oauth-1');
   assert.equal(responses[3].result.llm.provider, 'codex-oauth');
   assert.equal(responses[3].result.llm.model, 'gpt-5.4');
   assertNoSecretKeys(responses[3].result);
@@ -157,7 +191,31 @@ try {
   assertNoSecretKeys(responses[13].result);
 
   assert.equal(responses[14].id, 14);
-  assert.equal(responses[14].result.accepted, true);
+  assert.equal(responses[14].result.provider, 'deepseek');
+  assert.equal(responses[14].result.model, 'deepseek-v4-flash');
+  assert.equal(responses[14].result.credential.configured, true);
+  assert.equal(responses[14].result.credential.profileId, 'deepseek-1');
+  assert.equal(responses[14].result.availability.state, 'auth_ready');
+  assertNoSecretKeys(responses[14].result);
+
+  assert.equal(responses[15].id, 15);
+  assert.equal(responses[15].result.state, 'auth_ready');
+  assert.equal(responses[15].result.available, true);
+  assert.equal(responses[15].result.testable, true);
+  assertNoSecretKeys(responses[15].result);
+
+  assert.equal(responses[16].id, 16);
+  assert.equal(responses[16].result.credential.configured, false);
+  assert.equal(responses[16].result.availability.state, 'needs_auth');
+  assertNoSecretKeys(responses[16].result);
+
+  assert.equal(responses[17].id, 17);
+  assert.equal(responses[17].result.state, 'needs_auth');
+  assert.equal(responses[17].result.available, false);
+  assertNoSecretKeys(responses[17].result);
+
+  assert.equal(responses[18].id, 18);
+  assert.equal(responses[18].result.accepted, true);
 
   const unsupported = spawnSync(
     process.execPath,
@@ -289,6 +347,7 @@ try {
           'model/list',
           'model/availability',
           'model/test_auth_required_no_network',
+          'model/credential/update',
           'model/set',
           'mcp/list',
           'workspace/open',
@@ -592,9 +651,46 @@ function waitForExit(child) {
   });
 }
 
+function seedSmokeLlmConfig() {
+  const configPath = resolve(tempDir, 'data', 'llm.config.local.json');
+  mkdirSync(dirname(configPath), { recursive: true });
+  writeFileSync(
+    configPath,
+    JSON.stringify(
+      {
+        schemaVersion: 2,
+        current: {
+          profileId: 'codex-oauth-1',
+          model: 'gpt-5.4',
+        },
+        profiles: {
+          'codex-oauth-1': {
+            name: 'Codex OAuth 登录配置',
+            providerType: 'codex-oauth',
+            apiMode: 'openai-responses',
+            auth: {
+              strategy: 'oauth_refreshable',
+            },
+            defaultModel: 'gpt-5.4',
+            models: {
+              source: 'mixed',
+              default: 'gpt-5.4',
+              include: ['gpt-5.5', 'gpt-5.4-mini'],
+            },
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+}
+
 function getSmokeEnv() {
   const env = { ...process.env, CCR_CONFIG_DIR: tempDir };
   delete env.CCR_LLM_CONFIG_PATH;
+  delete env.CCR_LLM_CREDENTIALS_PATH;
   delete env.CCR_LLM_PROVIDER;
   delete env.CCR_LLM_MODEL;
   delete env.CLAUDE_CODE_CODEX_OAUTH_ACCESS_TOKEN;

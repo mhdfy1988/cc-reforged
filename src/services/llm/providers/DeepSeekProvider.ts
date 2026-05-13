@@ -1,4 +1,10 @@
-import { getLlmProviderConfig } from '../llmConfig.js'
+import {
+  getLlmProfileForProvider,
+  getLlmProviderConfig,
+  loadLlmConfig,
+  type ResolvedLlmConfig,
+} from '../llmConfig.js'
+import { getLlmProviderApiKey } from '../providerCredentials.js'
 import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js'
 import {
   OpenAiChatCompletionsAdapter,
@@ -30,29 +36,46 @@ export class DeepSeekProvider implements LlmProvider {
   readonly definition = getBuiltinLlmProviderDefinition(this.name)!
   readonly supportsStreaming = true
 
-  readonly #adapter: OpenAiChatCompletionsAdapter
+  readonly #options: DeepSeekProviderOptions
 
   constructor(options: DeepSeekProviderOptions = {}) {
-    const config = getLlmProviderConfig('deepseek')
+    this.#options = options
+  }
+
+  #createAdapter(request: LlmGenerateRequest): OpenAiChatCompletionsAdapter {
+    const resolvedConfig = loadLlmConfig()
+    const config = getLlmProviderConfig('deepseek', resolvedConfig)
+    const profile = getDeepSeekProfileForRequest(
+      request.profileId,
+      resolvedConfig,
+    )
+    const credential = getLlmProviderApiKey({
+      provider: 'deepseek',
+      profileId: profile?.id,
+      envNames: ['CCR_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY'],
+    })
     const apiKey =
-      options.apiKey?.trim() ||
-      process.env.CCR_DEEPSEEK_API_KEY?.trim() ||
-      process.env.DEEPSEEK_API_KEY?.trim()
+      this.#options.apiKey?.trim() ||
+      credential.apiKey
     const baseUrl =
-      options.baseUrl ||
+      this.#options.baseUrl ||
       process.env.CCR_DEEPSEEK_BASE_URL?.trim() ||
       process.env.DEEPSEEK_BASE_URL?.trim() ||
+      profile?.baseUrl ||
       config?.baseUrl ||
       DEFAULT_BASE_URL
     const defaultModel =
-      options.defaultModel?.trim() || config?.defaultModel || DEFAULT_MODEL
+      this.#options.defaultModel?.trim() ||
+      profile?.defaultModel ||
+      config?.defaultModel ||
+      DEFAULT_MODEL
     const defaultReasoningEffort =
-      options.defaultReasoningEffort ||
+      this.#options.defaultReasoningEffort ||
       normalizeReasoningEffort(config?.reasoningEffort) ||
       DEFAULT_REASONING_EFFORT
-    const configuredThinking = options.thinking
+    const configuredThinking = this.#options.thinking
 
-    this.#adapter = new OpenAiChatCompletionsAdapter({
+    return new OpenAiChatCompletionsAdapter({
       providerId: this.name,
       providerLabel: 'DeepSeek',
       apiKey,
@@ -61,7 +84,7 @@ export class DeepSeekProvider implements LlmProvider {
       defaultReasoningEffort,
       missingApiKeyMessage:
         'DeepSeek API key is missing. Set CCR_DEEPSEEK_API_KEY or DEEPSEEK_API_KEY.',
-      fetchImpl: options.fetchImpl,
+      fetchImpl: this.#options.fetchImpl,
       resolveThinking: ({ model }) =>
         model.startsWith('deepseek-v4-')
           ? configuredThinking || 'enabled'
@@ -70,12 +93,24 @@ export class DeepSeekProvider implements LlmProvider {
   }
 
   async generate(request: LlmGenerateRequest): Promise<LlmGenerateResponse> {
-    return this.#adapter.generate(request)
+    return this.#createAdapter(request).generate(request)
   }
 
   stream(request: LlmGenerateRequest): AsyncIterable<LlmGenerateEvent> {
-    return this.#adapter.stream(request)
+    return this.#createAdapter(request).stream(request)
   }
+}
+
+function getDeepSeekProfileForRequest(
+  profileId: string | undefined,
+  config: ResolvedLlmConfig,
+) {
+  const normalizedProfileId = profileId?.trim()
+  if (normalizedProfileId) {
+    const profile = config.profiles[normalizedProfileId]
+    return profile?.providerType === 'deepseek' ? profile : undefined
+  }
+  return getLlmProfileForProvider('deepseek', config)
 }
 
 function normalizeReasoningEffort(

@@ -1,16 +1,33 @@
-import { getDefaultLlmRuntime } from '../services/llm/defaultRuntime.js'
 import {
+  getDefaultLlmRuntime,
+  resetDefaultLlmRuntime,
+} from '../services/llm/defaultRuntime.js'
+import {
+  getLlmProfileForProvider,
+  listResolvedLlmProfiles,
   loadLlmConfig,
   type ResolvedLlmConfig,
+  type ResolvedLlmProfile,
+  type LlmProfileConfig,
+  deletePersistedLlmProfile,
   updatePersistedLlmConfig,
+  upsertPersistedLlmProfile,
 } from '../services/llm/llmConfig.js'
-import { listKnownLlmModelCatalogEntries } from '../services/llm/modelCatalog.js'
+import {
+  getLlmModelCatalogEntry,
+  listKnownLlmModelCatalogEntries,
+} from '../services/llm/modelCatalog.js'
+import {
+  deleteLlmProfileCredential,
+  updateLlmProviderApiKey,
+} from '../services/llm/providerCredentials.js'
 import {
   getLlmRuntimeAuthStatusForProvider,
   getLlmRuntimeAuthStatusSyncForProvider,
   getLlmRuntimeDisplayStatusForProvider,
   getResolvedLlmProviderDefinition,
 } from '../services/llm/runtimeStatus.js'
+import { resetDefaultCodexOAuthSession } from '../services/llm/sessions/defaultCodexOAuthSession.js'
 import type {
   LlmModelCatalogEntry,
   LlmProviderDefinition,
@@ -27,6 +44,7 @@ type ModelAvailabilityState =
 
 interface ResolvedModelSelection {
   config: ResolvedLlmConfig
+  profile?: ResolvedLlmProfile
   provider: string
   model: string
   providerDefinition: LlmProviderDefinition
@@ -51,6 +69,9 @@ export function listCoreModels(provider?: string): Record<string, unknown> {
         authStrategy: definition.authStrategy,
         apiMode: definition.apiMode,
         capabilities: definition.capabilities,
+        profiles: listResolvedLlmProfiles(config)
+          .filter(profile => profile.providerType === definition.id)
+          .map(profile => profile.id),
         models: listKnownLlmModelCatalogEntries({
           providerId: definition.id,
           defaultModel,
@@ -70,20 +91,45 @@ export function listCoreModels(provider?: string): Record<string, unknown> {
 
   return {
     current: {
+      profileId: config.currentProfileId,
       provider: config.provider,
       model: config.model,
     },
+    profiles: listResolvedLlmProfiles(config).map(profile =>
+      createModelProfileView(profile, config),
+    ),
     providers,
   }
 }
 
+export function listCoreModelProfiles(input: {
+  providerType?: string
+} = {}): Record<string, unknown> {
+  const config = loadLlmConfig()
+  const profiles = listResolvedLlmProfiles(config)
+    .filter(
+      profile => !input.providerType || profile.providerType === input.providerType,
+    )
+    .map(profile => createModelProfileView(profile, config))
+  return {
+    current: {
+      profileId: config.currentProfileId,
+      provider: config.provider,
+      model: config.model,
+    },
+    profiles,
+  }
+}
+
 export function getCoreModelAvailability(input: {
+  profileId?: string
   provider?: string
   model?: string
 } = {}): Record<string, unknown> {
   const selection = resolveCoreModelSelection(input)
   const displayStatus = getLlmRuntimeDisplayStatusForProvider(
     {
+      ...(selection.profile?.id ? { profileId: selection.profile.id } : {}),
       provider: selection.provider,
       model: selection.model,
     },
@@ -91,6 +137,7 @@ export function getCoreModelAvailability(input: {
   )
   const authStatus = getLlmRuntimeAuthStatusSyncForProvider(
     {
+      ...(selection.profile?.id ? { profileId: selection.profile.id } : {}),
       provider: selection.provider,
       model: selection.model,
     },
@@ -100,6 +147,8 @@ export function getCoreModelAvailability(input: {
   return {
     provider: selection.provider,
     providerDisplayName: displayStatus.providerDisplayName,
+    profileId: selection.profile?.id ?? displayStatus.profileId,
+    profileName: selection.profile?.name,
     model: selection.model,
     state,
     configured: state !== 'not_configured',
@@ -125,27 +174,23 @@ export function getCoreModelAvailability(input: {
 }
 
 export async function testCoreModelConnection(input: {
+  profileId?: string
   provider?: string
   model?: string
   prompt?: string
 } = {}): Promise<Record<string, unknown>> {
   const startedAt = Date.now()
   const selection = resolveCoreModelSelection(input)
-  const displayStatus = getLlmRuntimeDisplayStatusForProvider(
-    {
-      provider: selection.provider,
-      model: selection.model,
-    },
-    selection.config,
-  )
   const authStatus = await getLlmRuntimeAuthStatusForProvider(
     {
+      ...(selection.profile?.id ? { profileId: selection.profile.id } : {}),
       provider: selection.provider,
       model: selection.model,
     },
     selection.config,
   )
   const localAvailability = getCoreModelAvailability({
+    ...(selection.profile?.id ? { profileId: selection.profile.id } : {}),
     provider: selection.provider,
     model: selection.model,
   })
@@ -164,24 +209,10 @@ export async function testCoreModelConnection(input: {
     }
   }
 
-  if (displayStatus.apiMode === 'anthropic-messages') {
-    return {
-      ...localAvailability,
-      state: 'configured' satisfies ModelAvailabilityState,
-      ok: false,
-      networkChecked: false,
-      latencyMs: Date.now() - startedAt,
-      error: {
-        kind: 'unsupported_protocol',
-        message:
-          'Connection test for anthropic-messages is not wired through the LLM runtime yet.',
-      },
-    }
-  }
-
   try {
     const runtime = getDefaultLlmRuntime()
     const response = await runtime.generate({
+      ...(selection.profile?.id ? { profileId: selection.profile.id } : {}),
       provider: selection.provider,
       model: selection.model,
       messages: [
@@ -198,7 +229,6 @@ export async function testCoreModelConnection(input: {
         },
       ],
       maxOutputTokens: 32,
-      temperature: 0,
       metadata: {
         connectionTest: true,
       },
@@ -241,11 +271,23 @@ export async function testCoreModelConnection(input: {
 }
 
 export async function setCoreModel(input: {
+  profileId?: string
   provider?: string
   model: string
 }): Promise<Record<string, unknown>> {
   const currentConfig = loadLlmConfig()
-  const requestedProvider = input.provider?.trim() || currentConfig.provider
+  const requestedProfile = input.profileId
+    ? currentConfig.profiles[input.profileId.trim()]
+    : undefined
+  if (input.profileId && !requestedProfile) {
+    throw new CoreError('invalid_params', 'Unknown LLM profile.', {
+      requestedProfileId: input.profileId,
+    })
+  }
+  const requestedProvider =
+    requestedProfile?.providerType ||
+    input.provider?.trim() ||
+    currentConfig.provider
   const requestedModel = input.model.trim()
 
   if (!requestedModel) {
@@ -286,15 +328,27 @@ export async function setCoreModel(input: {
     })
   }
 
-  const models = listKnownLlmModelCatalogEntries({
+  const targetProfile =
+    requestedProfile ?? getLlmProfileForProvider(requestedProvider, currentConfig)
+  if (!targetProfile) {
+    throw new CoreError(
+      'invalid_params',
+      'No LLM profile exists for this provider. Create or login a profile first.',
+      { requestedProvider },
+    )
+  }
+
+  const models = listCatalogEntriesForProvider({
     providerId: requestedProvider,
     defaultModel:
+      targetProfile.defaultModel ??
       currentConfig.providers[requestedProvider]?.defaultModel ??
       currentConfig.model,
     providerDefinition: getResolvedLlmProviderDefinition(
       requestedProvider,
       currentConfig,
     ),
+    profile: targetProfile,
   })
   if (!models.some(model => model.model === requestedModel)) {
     throw new CoreError('invalid_params', 'Unknown LLM model.', {
@@ -306,13 +360,17 @@ export async function setCoreModel(input: {
   const nextConfig = await updatePersistedLlmConfig({
     provider: requestedProvider,
     model: requestedModel,
+    currentProfileId: targetProfile.id,
   })
+  resetDefaultLlmRuntime()
 
   return {
     current: {
+      profileId: nextConfig.currentProfileId,
       provider: nextConfig.provider,
       model: nextConfig.model,
     },
+    profileId: nextConfig.currentProfileId,
     provider: nextConfig.provider,
     model: nextConfig.model,
     configPath: nextConfig.path,
@@ -320,12 +378,256 @@ export async function setCoreModel(input: {
   }
 }
 
+export async function setCoreModelProfile(input: {
+  profileId: string
+  model?: string
+}): Promise<Record<string, unknown>> {
+  const config = loadLlmConfig()
+  const profile = config.profiles[input.profileId.trim()]
+  if (!profile) {
+    throw new CoreError('invalid_params', 'Unknown LLM profile.', {
+      requestedProfileId: input.profileId,
+    })
+  }
+  return setCoreModel({
+    profileId: profile.id,
+    model: input.model?.trim() || profile.defaultModel,
+  })
+}
+
+export async function saveCoreModelProfile(input: {
+  profileId?: string
+  name?: string
+  providerType: string
+  apiMode?: LlmProfileConfig['apiMode']
+  authStrategy?: LlmProfileConfig['auth']['strategy']
+  accountId?: string
+  baseUrl?: string
+  defaultModel?: string
+  models?: string[]
+  setCurrent?: boolean
+}): Promise<Record<string, unknown>> {
+  const config = loadLlmConfig()
+  const providerType = input.providerType.trim()
+  if (!providerType) {
+    throw new CoreError('invalid_params', 'LLM provider type cannot be empty.')
+  }
+  const providerDefinition = getDefaultLlmRuntime()
+    .listProviderDefinitions()
+    .find(definition => definition.id === providerType)
+  if (!providerDefinition) {
+    throw new CoreError('invalid_params', 'Unknown LLM provider.', {
+      providerType,
+    })
+  }
+  const providerConfig = config.providers[providerType] ?? {}
+  const defaultModel =
+    input.defaultModel?.trim() ||
+    input.models?.find(model => model.trim())?.trim() ||
+    providerConfig.defaultModel?.trim()
+  if (!defaultModel) {
+    throw new CoreError('invalid_params', 'LLM profile default model is required.')
+  }
+
+  const profileId =
+    input.profileId?.trim() || createNextProfileId(config, providerType)
+  const models = normalizeProfileModels(defaultModel, input.models)
+  const authStrategy =
+    input.authStrategy ?? providerConfig.authStrategy ?? providerDefinition.authStrategy
+  const profile: LlmProfileConfig = {
+    name: input.name?.trim() || getDefaultProfileDisplayName(providerDefinition),
+    providerType,
+    apiMode: input.apiMode ?? providerConfig.apiMode ?? providerDefinition.apiMode,
+    ...(input.baseUrl?.trim()
+      ? { endpoint: { baseUrl: input.baseUrl.trim() } }
+      : {}),
+    auth: {
+      strategy: authStrategy,
+      ...(input.accountId?.trim() ? { accountId: input.accountId.trim() } : {}),
+    },
+    defaultModel,
+    models: {
+      source: 'mixed',
+      default: defaultModel,
+      include: models.filter(model => model !== defaultModel),
+    },
+  }
+
+  const nextConfig = await upsertPersistedLlmProfile({
+    profileId,
+    profile,
+    setCurrent: input.setCurrent,
+  })
+  resetDefaultLlmRuntime()
+  if (providerType === 'codex-oauth') {
+    resetDefaultCodexOAuthSession()
+  }
+  const savedProfile = nextConfig.profiles[profileId]
+  return {
+    current: {
+      profileId: nextConfig.currentProfileId,
+      provider: nextConfig.provider,
+      model: nextConfig.model,
+    },
+    profile: savedProfile ? createModelProfileView(savedProfile, nextConfig) : null,
+    profiles: listResolvedLlmProfiles(nextConfig).map(profile =>
+      createModelProfileView(profile, nextConfig),
+    ),
+  }
+}
+
+export async function copyCoreModelProfile(input: {
+  profileId: string
+  name?: string
+}): Promise<Record<string, unknown>> {
+  const config = loadLlmConfig()
+  const source = config.profiles[input.profileId.trim()]
+  if (!source) {
+    throw new CoreError('invalid_params', 'Unknown LLM profile.', {
+      requestedProfileId: input.profileId,
+    })
+  }
+  const nextName = input.name?.trim() || `${source.name} 副本`
+  return saveCoreModelProfile({
+    name: nextName,
+    providerType: source.providerType,
+    apiMode: source.apiMode,
+    authStrategy: source.authStrategy,
+    ...(source.accountId ? { accountId: source.accountId } : {}),
+    ...(source.baseUrl ? { baseUrl: source.baseUrl } : {}),
+    defaultModel: source.defaultModel,
+    models: source.models,
+  })
+}
+
+export async function deleteCoreModelProfile(input: {
+  profileId: string
+}): Promise<Record<string, unknown>> {
+  const config = loadLlmConfig()
+  const profile = config.profiles[input.profileId.trim()]
+  if (!profile) {
+    throw new CoreError('invalid_params', 'Unknown LLM profile.', {
+      requestedProfileId: input.profileId,
+    })
+  }
+  if (profile.source !== 'file') {
+    throw new CoreError(
+      'invalid_params',
+      'Legacy LLM profiles cannot be deleted. Save or copy them as a formal profile first.',
+      { requestedProfileId: input.profileId },
+    )
+  }
+  const nextConfig = await deletePersistedLlmProfile(profile.id)
+  await deleteLlmProfileCredential(profile.id)
+  resetDefaultLlmRuntime()
+  if (profile.providerType === 'codex-oauth') {
+    resetDefaultCodexOAuthSession()
+  }
+  return {
+    current: {
+      profileId: nextConfig.currentProfileId,
+      provider: nextConfig.provider,
+      model: nextConfig.model,
+    },
+    profiles: listResolvedLlmProfiles(nextConfig).map(profile =>
+      createModelProfileView(profile, nextConfig),
+    ),
+  }
+}
+
+export async function updateCoreModelCredential(input: {
+  profileId?: string
+  provider: string
+  model?: string
+  apiKey?: string | null
+}): Promise<Record<string, unknown>> {
+  const provider = input.provider.trim()
+  if (!provider) {
+    throw new CoreError('invalid_params', 'LLM provider cannot be empty.')
+  }
+
+  const selection = resolveCoreModelSelection({
+    ...(input.profileId ? { profileId: input.profileId } : {}),
+    provider,
+    ...(input.model ? { model: input.model } : {}),
+  })
+  const acceptsApiKey =
+    selection.providerDefinition.authStrategy === 'api_key' ||
+    selection.providerDefinition.authStrategy === 'hybrid' ||
+    selection.profile?.authStrategy === 'api_key'
+  if (!acceptsApiKey) {
+    throw new CoreError(
+      'invalid_params',
+      'This LLM provider does not accept API Key credentials.',
+      {
+        provider,
+        authStrategy: selection.providerDefinition.authStrategy,
+      },
+    )
+  }
+
+  let credentialProfile = selection.profile
+  if (!credentialProfile) {
+    const profileId = createNextProfileId(selection.config, selection.provider)
+    await saveCoreModelProfile({
+      profileId,
+      providerType: selection.provider,
+      apiMode: selection.providerDefinition.apiMode,
+      authStrategy:
+        selection.providerDefinition.authStrategy === 'hybrid'
+          ? 'api_key'
+          : selection.providerDefinition.authStrategy,
+      ...(selection.config.providers[selection.provider]?.baseUrl
+          ? { baseUrl: selection.config.providers[selection.provider]!.baseUrl }
+          : {}),
+      defaultModel: selection.model,
+      models: [selection.model],
+      setCurrent: !selection.config.currentProfileId,
+    })
+    credentialProfile = loadLlmConfig().profiles[profileId]
+  }
+
+  const credential = await updateLlmProviderApiKey({
+    provider,
+    profileId: credentialProfile.id,
+    apiKey: input.apiKey,
+  })
+  resetDefaultLlmRuntime()
+  const availability = getCoreModelAvailability({
+    ...(credentialProfile?.id ? { profileId: credentialProfile.id } : {}),
+    provider: selection.provider,
+    model: selection.model,
+  })
+
+  return {
+    provider: selection.provider,
+    model: selection.model,
+    credential: {
+      configured: credential.configured,
+      source: credential.source,
+      profileId: credential.profileId,
+    },
+    availability,
+  }
+}
+
 function resolveCoreModelSelection(input: {
+  profileId?: string
   provider?: string
   model?: string
 }): ResolvedModelSelection {
   const config = loadLlmConfig()
-  const requestedProvider = input.provider?.trim() || config.provider
+  const requestedProfile = input.profileId
+    ? config.profiles[input.profileId.trim()]
+    : undefined
+  if (input.profileId && !requestedProfile) {
+    throw new CoreError('invalid_params', 'Unknown LLM profile.', {
+      requestedProfileId: input.profileId,
+    })
+  }
+  const requestedProvider =
+    requestedProfile?.providerType || input.provider?.trim() || config.provider
+  const profile = requestedProfile ?? getLlmProfileForProvider(requestedProvider, config)
   const runtime = getDefaultLlmRuntime()
   const providerDefinition = runtime
     .listProviderDefinitions()
@@ -340,7 +642,8 @@ function resolveCoreModelSelection(input: {
     input.model?.trim() ||
     (requestedProvider === config.provider
       ? config.model
-      : config.providers[requestedProvider]?.defaultModel?.trim())
+      : profile?.defaultModel?.trim() ||
+        config.providers[requestedProvider]?.defaultModel?.trim())
 
   if (!requestedModel) {
     throw new CoreError('invalid_params', 'LLM model cannot be empty.', {
@@ -348,14 +651,17 @@ function resolveCoreModelSelection(input: {
     })
   }
 
-  const models = listKnownLlmModelCatalogEntries({
+  const models = listCatalogEntriesForProvider({
     providerId: requestedProvider,
     defaultModel:
-      config.providers[requestedProvider]?.defaultModel ?? requestedModel,
+      profile?.defaultModel ??
+      config.providers[requestedProvider]?.defaultModel ??
+      requestedModel,
     providerDefinition: getResolvedLlmProviderDefinition(
       requestedProvider,
       config,
     ),
+    profile,
   })
   const modelCatalogEntry = models.find(model => model.model === requestedModel)
   if (!modelCatalogEntry) {
@@ -367,11 +673,99 @@ function resolveCoreModelSelection(input: {
 
   return {
     config,
+    ...(profile ? { profile } : {}),
     provider: requestedProvider,
     model: requestedModel,
     providerDefinition,
     modelCatalogEntry,
   }
+}
+
+function listCatalogEntriesForProvider(input: {
+  providerId: string
+  defaultModel: string
+  providerDefinition: LlmProviderDefinition
+  profile?: ResolvedLlmProfile
+}): readonly LlmModelCatalogEntry[] {
+  const known = listKnownLlmModelCatalogEntries({
+    providerId: input.providerId,
+    defaultModel: input.defaultModel,
+    providerDefinition: input.providerDefinition,
+  })
+  const byModel = new Map(known.map(model => [model.model, model]))
+  for (const model of input.profile?.models ?? []) {
+    if (byModel.has(model)) {
+      continue
+    }
+    byModel.set(
+      model,
+      getLlmModelCatalogEntry({
+        providerId: input.providerId,
+        model,
+        providerDefinition: input.providerDefinition,
+      }),
+    )
+  }
+  return Array.from(byModel.values())
+}
+
+function createModelProfileView(
+  profile: ResolvedLlmProfile,
+  config: ResolvedLlmConfig,
+): Record<string, unknown> {
+  return {
+    id: profile.id,
+    name: profile.name,
+    providerType: profile.providerType,
+    apiMode: profile.apiMode,
+    authStrategy: profile.authStrategy,
+    defaultModel: profile.defaultModel,
+    models: profile.models,
+    capabilities: profile.capabilities,
+    source: profile.source,
+    isCurrent: profile.id === config.currentProfileId,
+    ...(profile.accountId ? { accountId: profile.accountId } : {}),
+    ...(profile.baseUrl ? { baseUrl: profile.baseUrl } : {}),
+    ...(profile.availability ? { availability: profile.availability } : {}),
+  }
+}
+
+function createNextProfileId(config: ResolvedLlmConfig, providerType: string): string {
+  const escapedProvider = providerType.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(`^${escapedProvider}-(\\d+)$`)
+  let maxIndex = 0
+  for (const profileId of Object.keys(config.profiles)) {
+    const match = profileId.match(pattern)
+    if (!match) {
+      continue
+    }
+    maxIndex = Math.max(maxIndex, Number.parseInt(match[1]!, 10))
+  }
+  return `${providerType}-${maxIndex + 1}`
+}
+
+function normalizeProfileModels(
+  defaultModel: string,
+  models: string[] | undefined,
+): string[] {
+  return Array.from(
+    new Set([
+      defaultModel,
+      ...(models ?? []).map(model => model.trim()).filter(Boolean),
+    ]),
+  )
+}
+
+function getDefaultProfileDisplayName(
+  providerDefinition: LlmProviderDefinition,
+): string {
+  if (providerDefinition.authStrategy === 'oauth_refreshable') {
+    return `${providerDefinition.displayName} 登录配置`
+  }
+  if (providerDefinition.authStrategy === 'api_key') {
+    return `${providerDefinition.displayName} API Key`
+  }
+  return `${providerDefinition.displayName} 默认连接`
 }
 
 function getLocalAvailabilityState(input: {

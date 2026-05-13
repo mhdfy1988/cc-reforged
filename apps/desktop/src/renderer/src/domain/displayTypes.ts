@@ -25,8 +25,17 @@ export type DesktopStatus = {
   config: {
     llm?: {
       provider?: string
+      providerDisplayName?: string
+      profileId?: string
       model?: string
       contextWindow?: number
+      authStrategy?: LlmAuthStrategy
+      apiMode?: LlmApiMode
+      capabilities?: LlmProviderCapabilities
+      modelCatalogEntry?: LlmModelCatalogEntry
+      baseUrl?: string
+      configPath?: string
+      configSource?: string
     }
   } | null
   auth: {
@@ -73,18 +82,139 @@ export type LlmModelCatalogEntry = {
   inputModalities?: string[]
 }
 
+export type LlmApiMode =
+  | 'anthropic-messages'
+  | 'openai-responses'
+  | 'openai-chat'
+  | 'custom'
+
+export type LlmAuthStrategy =
+  | 'api_key'
+  | 'oauth_refreshable'
+  | 'oauth_external'
+  | 'external_process'
+  | 'hybrid'
+  | 'unknown'
+
+export type LlmProviderCapabilities = {
+  streaming?: boolean
+  tools?: boolean
+  reasoning?: boolean
+  usage?: boolean
+}
+
 export type LlmModelProviderCatalog = {
   id: string
   displayName?: string
+  authStrategy?: LlmAuthStrategy
+  apiMode?: LlmApiMode
+  capabilities?: LlmProviderCapabilities
+  profiles?: string[]
   models?: LlmModelCatalogEntry[]
+}
+
+export type LlmModelProfile = {
+  id: string
+  name: string
+  providerType: string
+  apiMode?: LlmApiMode
+  authStrategy?: LlmAuthStrategy
+  accountId?: string
+  baseUrl?: string
+  defaultModel?: string
+  models?: string[]
+  capabilities?: LlmProviderCapabilities
+  source?: 'file'
+  isCurrent?: boolean
 }
 
 export type LlmModelListState = {
   current?: {
+    profileId?: string
     provider?: string
     model?: string
   }
+  profiles?: LlmModelProfile[]
   providers?: LlmModelProviderCatalog[]
+}
+
+export type LlmModelAvailabilityState =
+  | 'not_configured'
+  | 'needs_auth'
+  | 'configured'
+  | 'auth_ready'
+  | 'verified'
+  | 'failed'
+
+export type LlmModelAvailability = {
+  provider?: string
+  providerDisplayName?: string
+  profileId?: string
+  profileName?: string
+  model?: string
+  state?: LlmModelAvailabilityState
+  configured?: boolean
+  available?: boolean
+  testable?: boolean
+  networkChecked?: boolean
+  checkedAt?: string
+  latencyMs?: number
+  auth?: {
+    state?: string
+    configured?: boolean
+    available?: boolean
+    message?: string
+    source?: string
+    accountId?: string
+    expiresAt?: number
+    baseUrl?: string
+  }
+  apiMode?: LlmApiMode
+  authStrategy?: LlmAuthStrategy
+  capabilities?: LlmProviderCapabilities
+  modelCatalogEntry?: LlmModelCatalogEntry
+  baseUrl?: string
+  configPath?: string
+  configSource?: string
+  ok?: boolean
+  error?: {
+    kind?: string
+    message?: string
+  }
+  response?: {
+    stopReason?: string
+    text?: string
+    usage?: TurnUsage
+  }
+}
+
+export type LlmModelCredentialUpdateResult = {
+  provider?: string
+  model?: string
+  credential?: {
+    configured?: boolean
+    source?: string
+  }
+  availability?: LlmModelAvailability
+}
+
+export type LlmModelProfileSaveInput = {
+  profileId?: string
+  name?: string
+  providerType: string
+  apiMode?: LlmApiMode
+  authStrategy?: LlmAuthStrategy
+  accountId?: string
+  baseUrl?: string
+  defaultModel?: string
+  models?: string[]
+  setCurrent?: boolean
+}
+
+export type LlmModelProfileMutationResult = {
+  current?: LlmModelListState['current']
+  profile?: LlmModelProfile
+  profiles?: LlmModelProfile[]
 }
 
 export type TurnRuntimeMetadata = {
@@ -92,7 +222,13 @@ export type TurnRuntimeMetadata = {
   threadId?: string
   status?: string
   provider?: string
+  providerDisplayName?: string
+  profileId?: string
+  profileName?: string
+  apiMode?: LlmApiMode | string
+  authStrategy?: LlmAuthStrategy | string
   model?: string
+  requestedModel?: string
   contextWindow?: number
   usage?: TurnUsage
   stopReason?: string
@@ -113,6 +249,11 @@ export type RuntimeContextStatus = {
   threadId?: string
   activeTurnId?: string | null
   provider?: string
+  providerDisplayName?: string
+  profileId?: string
+  profileName?: string
+  apiMode?: LlmApiMode | string
+  authStrategy?: LlmAuthStrategy | string
   model?: string
   contextWindow?: number
   estimatedTokens?: number
@@ -338,7 +479,7 @@ export type ThreadHistoryState = {
   error?: string
 }
 
-export type PageId = 'chat' | 'mcp' | 'settings' | 'logs'
+export type PageId = 'chat' | 'models' | 'mcp' | 'settings' | 'logs'
 
 export type LogSnapshot = {
   logDir: string

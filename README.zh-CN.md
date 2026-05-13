@@ -14,8 +14,8 @@ CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留
 
 - `ccr` CLI / TUI 运行时，支持 Codex OAuth。
 - CCR Desktop Windows 客户端，负责本地 App Server 管理、历史会话、权限设置、自动更新和安装包发布。
-- 内置 LLM Runtime，逐步支持多供应商、多协议和第三方中转。
-- 默认使用 Codex OAuth；DeepSeek 和 OpenAI Compatible 协议链路正在推进中。
+- 内置 LLM Runtime，逐步支持多供应商、多连接配置档案、多协议和每轮模型元数据。
+- 默认支持 Codex OAuth、DeepSeek 官方 API、MiniMax 国际版 / 国内版，并抽出 OpenAI Chat Completions 与 Anthropic Messages 两条公共协议适配器。
 - 项目级 `.ccr` 设置隔离，避免和本机 Claude Code、Codex、OpenClaw 等工具互相污染。
 
 ![CCR Desktop](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
@@ -29,7 +29,7 @@ CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留
 - 运行时要求：Node.js `>=24.0.0`
 - 默认配置目录：`~/.ccr`
 - 默认 LLM 配置文件：`~/.ccr/data/llm.config.local.json`
-- 默认 Codex OAuth 凭据文件：`~/.ccr/data/codex-oauth.json`
+- 默认 LLM 凭据文件：`~/.ccr/data/llm.credentials.local.json`
 - 发布入口：[`mhdfy1988/cc-reforged` GitHub Releases](https://github.com/mhdfy1988/cc-reforged/releases)
 
 主分支可能包含最新版本之后的开发中改动。面向用户的版本变化见 [CHANGELOG.md](CHANGELOG.md)。
@@ -97,14 +97,35 @@ Codex OAuth 是当前默认供应商。推荐首次使用流程：
 node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js auth status --json
 ```
 
-模型和供应商配置默认保存在 `~/.ccr` 下。当前多供应商工作已经包含 DeepSeek 官方 API 第一版和 OpenAI Chat Completions 公共协议适配器；完整 Desktop 模型管理页仍在推进中。
+模型和供应商配置默认保存在 `~/.ccr` 下。当前构建采用 Profile 优先的配置模型：`llm.config.local.json` 保存 `schemaVersion + current + profiles + providerOverrides`，`llm.credentials.local.json` 按 `profileCredentials[profileId]` 保存敏感凭据。一个 Profile 组合供应商类型、协议、endpoint、凭据槽、可用模型和默认模型。
+
+可以通过 CLI 查看和切换模型配置：
+
+```powershell
+ccr model status
+ccr model list
+ccr model set gpt-5.5
+ccr model profile codex-oauth-1 gpt-5.4
+```
+
+CCR Desktop 已新增一级“模型”页面，用于管理供应商 / Profile、填写 API Key、测试连接，并配合顶部模型 / 连接配置两个快速切换入口。顶部切换只影响下一轮消息，不会改写或绑定恢复出来的历史会话。
+
+当前内置供应商：
+
+| 供应商 | 协议 | 认证 |
+| --- | --- | --- |
+| Codex OAuth | OpenAI Responses | OAuth |
+| DeepSeek | OpenAI Chat Completions | API Key |
+| MiniMax 国际版 | Anthropic Messages | API Key |
+| MiniMax 国内版 | Anthropic Messages | API Key |
 
 ## Desktop 能力
 
 - 本地 App Server 生命周期管理。
 - 工作区切换和项目级 settings 隔离。
 - 按工作区分组的历史会话。
-- 顶部当前模型快速切换。
+- 一级“模型”页面，支持供应商 Profile、凭据、模型和测试连接管理。
+- 顶部当前模型和连接配置快速切换。
 - 本地 / 项目 / 用户级权限设置页面。
 - 通过 GitHub Releases 检查自动更新。
 - Windows 安装器打包、发布资产校验和 unsigned 发布提示。
@@ -118,10 +139,15 @@ npm.cmd run build -- --pretty false
 npm.cmd run smoke:llm-config
 npm.cmd run smoke:llm-runtime
 npm.cmd run smoke:llm-runtime-status
+npm.cmd run smoke:openai-chat-protocol
 npm.cmd run smoke:codex-oauth-session
 npm.cmd run smoke:codex-oauth-provider
+npm.cmd run smoke:deepseek-provider
+npm.cmd run smoke:minimax-provider
 npm.cmd run smoke:app-server
 npm.cmd run smoke:app-server-client
+npm.cmd run smoke:cli-model
+npm.cmd run desktop:build
 ```
 
 不要直接用 `node scripts/...` 运行 runtime smoke 脚本，除非确认该脚本不需要项目 loader。npm scripts 已经处理了需要 `bun-bundle-loader.mjs` 的入口。

@@ -12,6 +12,8 @@ import { DesktopUpdateService } from './updateService.js'
 import type { DesktopUpdateState, DesktopUpdateStatus } from './updateState.js'
 import type {
   AuthStatusResult,
+  AuthLoginParams,
+  AuthLoginResult,
   CompactStatusResult,
   ConfigGetResult,
   ContextStatusResult,
@@ -21,8 +23,16 @@ import type {
   MemorySessionStatusResult,
   ModelAvailabilityParams,
   ModelAvailabilityResult,
+  ModelCredentialUpdateParams,
+  ModelCredentialUpdateResult,
+  ModelProfileCopyParams,
+  ModelProfileCopyResult,
+  ModelProfileDeleteParams,
+  ModelProfileDeleteResult,
   ModelListParams,
   ModelListResult,
+  ModelProfileSaveParams,
+  ModelProfileSaveResult,
   ModelSetParams,
   ModelSetResult,
   ModelTestParams,
@@ -951,6 +961,26 @@ async function listModels(
   return managedClient.client.listModels(params)
 }
 
+async function loginAuth(params: AuthLoginParams = {}): Promise<AuthLoginResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  const result = await managedClient.client.loginAuth(
+    params,
+    { timeoutMs: 130_000 },
+  )
+  status.auth = await managedClient.client.getAuthStatus()
+  status.config = await managedClient.client.getConfig()
+  await refreshRuntimeSnapshots()
+  broadcast('state', {
+    message: 'auth login completed',
+    provider: params.provider,
+    result,
+  })
+  return result
+}
+
 async function getModelAvailability(
   params: ModelAvailabilityParams = {},
 ): Promise<ModelAvailabilityResult> {
@@ -994,6 +1024,83 @@ async function testModelConnection(
     message: 'model connection tested',
     provider: params.provider,
     model: params.model,
+    result,
+  })
+  return result
+}
+
+async function updateModelCredential(
+  params: ModelCredentialUpdateParams,
+): Promise<ModelCredentialUpdateResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  const result = await managedClient.client.updateModelCredential(params)
+  status.auth = await managedClient.client.getAuthStatus()
+  await refreshRuntimeSnapshots()
+  broadcast('state', {
+    message: 'model credential updated',
+    provider: params.provider,
+    model: params.model,
+    result,
+  })
+  return result
+}
+
+async function saveModelProfile(
+  params: ModelProfileSaveParams,
+): Promise<ModelProfileSaveResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  const result = await managedClient.client.saveModelProfile(params)
+  status.config = await managedClient.client.getConfig()
+  status.auth = await managedClient.client.getAuthStatus()
+  await refreshRuntimeSnapshots()
+  broadcast('state', {
+    message: 'model profile saved',
+    provider: params.providerType,
+    profileId: params.profileId,
+    result,
+  })
+  return result
+}
+
+async function copyModelProfile(
+  params: ModelProfileCopyParams,
+): Promise<ModelProfileCopyResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  const result = await managedClient.client.copyModelProfile(params)
+  status.config = await managedClient.client.getConfig()
+  status.auth = await managedClient.client.getAuthStatus()
+  await refreshRuntimeSnapshots()
+  broadcast('state', {
+    message: 'model profile copied',
+    profileId: params.profileId,
+    result,
+  })
+  return result
+}
+
+async function deleteModelProfile(
+  params: ModelProfileDeleteParams,
+): Promise<ModelProfileDeleteResult> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  const result = await managedClient.client.deleteModelProfile(params)
+  status.config = await managedClient.client.getConfig()
+  status.auth = await managedClient.client.getAuthStatus()
+  await refreshRuntimeSnapshots()
+  broadcast('state', {
+    message: 'model profile deleted',
+    profileId: params.profileId,
     result,
   })
   return result
@@ -1355,6 +1462,10 @@ ipcMain.handle('ccr:list-models', async (_event, params?: ModelListParams) => {
   return listModels(params ?? {})
 })
 
+ipcMain.handle('ccr:auth-login', async (_event, params?: AuthLoginParams) => {
+  return loginAuth(params ?? {})
+})
+
 ipcMain.handle(
   'ccr:model-availability',
   async (_event, params?: ModelAvailabilityParams) => {
@@ -1369,6 +1480,34 @@ ipcMain.handle('ccr:set-model', async (_event, params: ModelSetParams) => {
 ipcMain.handle('ccr:model-test', async (_event, params?: ModelTestParams) => {
   return testModelConnection(params ?? {})
 })
+
+ipcMain.handle(
+  'ccr:model-profile-save',
+  async (_event, params: ModelProfileSaveParams) => {
+    return saveModelProfile(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:model-profile-copy',
+  async (_event, params: ModelProfileCopyParams) => {
+    return copyModelProfile(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:model-profile-delete',
+  async (_event, params: ModelProfileDeleteParams) => {
+    return deleteModelProfile(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:model-credential-update',
+  async (_event, params: ModelCredentialUpdateParams) => {
+    return updateModelCredential(params)
+  },
+)
 
 ipcMain.handle(
   'ccr:list-session-history',
