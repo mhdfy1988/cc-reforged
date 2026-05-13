@@ -1,6 +1,6 @@
 # 供应商接入文档
 
-这里记录 CCR 每个内置 LLM 供应商的接入方式。截至 `0.4.2`，已接入 Codex OAuth、DeepSeek、MiniMax 国际版和 MiniMax 国内版。
+这里记录 CCR 每个内置 LLM 供应商的接入方式。截至 `0.4.3`，已接入 Codex OAuth、DeepSeek、MiniMax 国际版和 MiniMax 国内版。
 
 文档关注：
 

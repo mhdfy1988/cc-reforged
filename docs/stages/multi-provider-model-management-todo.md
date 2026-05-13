@@ -42,7 +42,7 @@
 ## 当前指针
 
 - 进行中：准备当前版本文档收口与提交。
-- 当前正在做：把 README、CHANGELOG、供应商接入文档和本 todo 调整到 0.4.2 当前状态。
+- 当前正在做：把 README、CHANGELOG、供应商接入文档和本 todo 调整到 0.4.3 当前状态。
 - 当前进展：Core、App Server、SDK、Desktop、CLI 和 TUI 的多 Profile / 多模型第一版已经打通。Desktop 左侧已新增“模型”一级页面，按“供应商类型 / 连接配置 / 配置详情”三栏管理 Profile。顶部快速切换已拆成“模型切换”和“连接配置切换”两个入口。`llm.config.local.json` 已支持 `schemaVersion + current + providerOverrides + profiles`，写回不再保留旧顶层字段。全新安装没有默认 Profile；登录、保存 API Key 或新增连接配置时才生成 `providerType-数字` Profile。敏感凭据统一写入 `llm.credentials.local.json` 的 `profileCredentials[profileId]`，不再使用 `credentialRef` 或单独 `codex-oauth.json`。Profile 新增、编辑、复制、删除已从 Core -> App Server -> Desktop IPC -> 模型页接通。每轮 turn metadata 已记录 `profileId/profileName/provider/providerDisplayName/apiMode/authStrategy/model/requestedModel/contextWindow`，App Server SDK smoke 已覆盖。CLI 已新增 `ccr model status/list/set/profile`，TUI `/model` 已支持 `profile <profileId> [modelId]`。DeepSeek 复用 OpenAI Chat 公共适配器；MiniMax 国际版 / 国内版已切到 Anthropic Messages 公共适配器，测试连接和普通聊天链路已接通。
 - 下一步：提交当前版本；后续主线在官方 OpenAI provider、OpenAI Compatible / 第三方中转、多模态专项、模型页细节打磨之间选择。
 
@@ -678,7 +678,7 @@ MP-09b 已交付：
 
 - MiniMax 国际版 / 国内版切到 Anthropic Messages 兼容协议，OpenAI Chat 分支不再作为 Desktop 可选入口。
 - `smoke:minimax-provider` 覆盖 provider、adapter 和 `model/test` 链路；DeepSeek / OpenAI Chat smoke 保留为公共接口回归。
-- README、CHANGELOG、供应商接入文档和本 todo 已同步到 `0.4.2` 当前状态，准备提交版本。
+- README、CHANGELOG、供应商接入文档和本 todo 已同步到 `0.4.3` 当前状态，准备提交版本。
 
 ## 备注
 

@@ -6,7 +6,7 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.4.2-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.4.3-orange?style=flat-square)
 
 CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留终端优先的工作方式，同时把配置、LLM 运行时、App Server 和 Desktop 客户端逐步收敛到 CCR 自己的边界内。
 
@@ -23,7 +23,7 @@ CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留
 ## 当前状态
 
 - npm 包名：`cc-reforged`
-- 当前版本：`0.4.2`
+- 当前版本：`0.4.3`
 - CLI 命令：`ccr`
 - 桌面应用：`CCR Desktop`
 - 运行时要求：Node.js `>=24.0.0`
