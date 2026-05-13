@@ -165,6 +165,7 @@ const DEFAULT_WINDOW_WIDTH = 1280
 const DEFAULT_WINDOW_HEIGHT = 820
 const MIN_WINDOW_WIDTH = 980
 const MIN_WINDOW_HEIGHT = 680
+const WINDOW_REVEAL_FALLBACK_MS = 10_000
 
 function evaluateProtocolCompatibility(protocolVersion: string): ProtocolCompatibility {
   if (protocolVersion === SUPPORTED_APP_SERVER_PROTOCOL) {
@@ -1302,11 +1303,19 @@ function createWindow(): void {
   attachRendererDiagnostics(mainWindow)
   revealWindowWhenReady(mainWindow)
 
-  if (process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  const rendererLoadPromise = process.env.ELECTRON_RENDERER_URL
+    ? mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
+    : mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  rendererLoadPromise.catch(error => {
+    void appendDesktopLog('renderer.log', {
+      event: 'load-error',
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    })
+    if (!mainWindow?.isDestroyed()) {
+      mainWindow.show()
+    }
+  })
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -1315,28 +1324,46 @@ function createWindow(): void {
 
 function revealWindowWhenReady(window: BrowserWindow): void {
   let revealed = false
+  let loadFinished = false
+  let readyToShow = false
 
-  const reveal = (): void => {
+  const reveal = (reason: string): void => {
     if (revealed || window.isDestroyed()) {
       return
     }
     revealed = true
+    void appendDesktopLog('renderer.log', {
+      event: 'window-revealed',
+      reason,
+      url: window.webContents.getURL(),
+      loadFinished,
+      readyToShow,
+    })
     window.show()
   }
 
-  window.once('ready-to-show', reveal)
-  const fallbackTimer = setTimeout(reveal, 1500)
+  window.once('ready-to-show', () => {
+    readyToShow = true
+    void appendDesktopLog('renderer.log', {
+      event: 'ready-to-show',
+      url: window.webContents.getURL(),
+      loadFinished,
+    })
+  })
+  window.webContents.once('did-finish-load', () => {
+    loadFinished = true
+    setTimeout(() => reveal('did-finish-load'), 50)
+  })
+  window.webContents.once('did-fail-load', () => reveal('did-fail-load'))
+  const fallbackTimer = setTimeout(() => reveal('fallback-timeout'), WINDOW_REVEAL_FALLBACK_MS)
   if (typeof fallbackTimer === 'object' && 'unref' in fallbackTimer) {
     fallbackTimer.unref()
   }
 }
 
 function attachRendererDiagnostics(window: BrowserWindow): void {
-  const diagnosticsEnabled =
+  const verboseDiagnostics =
     runtime.mode === 'development' || process.env.CCR_DESKTOP_RENDERER_DIAGNOSTICS === '1'
-  if (!diagnosticsEnabled) {
-    return
-  }
 
   const preloadPath = join(__dirname, '../preload/index.mjs')
   void appendDesktopLog('renderer.log', {
@@ -1346,15 +1373,17 @@ function attachRendererDiagnostics(window: BrowserWindow): void {
     preloadExists: existsSync(preloadPath),
   })
 
-  window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-    void appendDesktopLog('renderer.log', {
-      event: 'console-message',
-      level,
-      message,
-      line,
-      sourceId,
+  if (verboseDiagnostics) {
+    window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      void appendDesktopLog('renderer.log', {
+        event: 'console-message',
+        level,
+        message,
+        line,
+        sourceId,
+      })
     })
-  })
+  }
 
   window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     void appendDesktopLog('renderer.log', {
@@ -1386,6 +1415,9 @@ function attachRendererDiagnostics(window: BrowserWindow): void {
       event: 'did-finish-load',
       url: window.webContents.getURL(),
     })
+    if (!verboseDiagnostics) {
+      return
+    }
     void window.webContents
       .executeJavaScript(
         `({
