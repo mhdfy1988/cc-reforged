@@ -1273,8 +1273,9 @@ function createWindow(): void {
     minHeight: MIN_WINDOW_HEIGHT,
     title: 'CCR Desktop',
     icon: windowIcon,
-    backgroundColor: '#f7efe3',
+    backgroundColor: '#fbf4e9',
     autoHideMenuBar: true,
+    show: false,
     ...(useCustomTitleBar
       ? {
           titleBarStyle: 'hidden',
@@ -1299,6 +1300,7 @@ function createWindow(): void {
     mainWindow.maximize()
   }
   attachRendererDiagnostics(mainWindow)
+  revealWindowWhenReady(mainWindow)
 
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -1309,6 +1311,24 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+}
+
+function revealWindowWhenReady(window: BrowserWindow): void {
+  let revealed = false
+
+  const reveal = (): void => {
+    if (revealed || window.isDestroyed()) {
+      return
+    }
+    revealed = true
+    window.show()
+  }
+
+  window.once('ready-to-show', reveal)
+  const fallbackTimer = setTimeout(reveal, 1500)
+  if (typeof fallbackTimer === 'object' && 'unref' in fallbackTimer) {
+    fallbackTimer.unref()
+  }
 }
 
 function attachRendererDiagnostics(window: BrowserWindow): void {

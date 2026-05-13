@@ -8,9 +8,161 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CCR Desktop</title>
+    <style>
+      :root {
+        color: #211b16;
+        font-family:
+          "HarmonyOS Sans SC",
+          "MiSans",
+          "Microsoft YaHei UI",
+          "Segoe UI",
+          sans-serif;
+        background: #fbf4e9;
+      }
+
+      html,
+      body,
+      #root {
+        width: 100%;
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #fbf4e9;
+      }
+
+      .boot-shell {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr);
+        width: 100vw;
+        height: 100vh;
+        background: #fbf4e9;
+      }
+
+      .boot-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 18px;
+        border-right: 1px solid rgba(216, 190, 162, 0.58);
+        background: linear-gradient(180deg, #fff7eb, #fbf4e9);
+      }
+
+      .boot-nav {
+        height: 42px;
+        border: 1px solid rgba(239, 151, 0, 0.32);
+        border-radius: 14px;
+        background: #fff0d8;
+      }
+
+      .boot-nav:nth-child(2),
+      .boot-nav:nth-child(3) {
+        width: 72%;
+        border-color: transparent;
+        background: rgba(255, 253, 249, 0.72);
+      }
+
+      .boot-main {
+        display: grid;
+        grid-template-rows: 72px minmax(0, 1fr);
+        min-width: 0;
+        min-height: 0;
+      }
+
+      .boot-topbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 24px;
+        border-bottom: 1px solid rgba(216, 190, 162, 0.52);
+      }
+
+      .boot-workspace {
+        height: 42px;
+        flex: 1;
+        max-width: 680px;
+        border: 1px solid rgba(216, 190, 162, 0.58);
+        border-radius: 14px;
+        background: rgba(255, 253, 249, 0.9);
+      }
+
+      .boot-chip {
+        width: 118px;
+        height: 42px;
+        border: 1px solid rgba(216, 190, 162, 0.58);
+        border-radius: 14px;
+        background: rgba(255, 253, 249, 0.9);
+      }
+
+      .boot-content {
+        display: grid;
+        place-items: center;
+        min-width: 0;
+        min-height: 0;
+        padding: 24px;
+      }
+
+      .boot-card {
+        width: min(360px, 80vw);
+        border: 1px solid rgba(216, 190, 162, 0.58);
+        border-radius: 18px;
+        background: rgba(255, 253, 249, 0.92);
+        box-shadow: 0 24px 72px rgba(76, 49, 20, 0.13);
+        padding: 28px;
+        text-align: center;
+      }
+
+      .boot-mark {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        margin: 0 auto 14px;
+        place-items: center;
+        border-radius: 14px;
+        color: #fff;
+        background: linear-gradient(135deg, #ef9700, #0c8f72);
+        font-weight: 900;
+      }
+
+      .boot-title {
+        margin: 0 0 6px;
+        font-size: 18px;
+        font-weight: 800;
+      }
+
+      .boot-status {
+        margin: 0;
+        color: #76695c;
+        font-size: 13px;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="boot-shell">
+        <aside class="boot-sidebar">
+          <div class="boot-nav"></div>
+          <div class="boot-nav"></div>
+          <div class="boot-nav"></div>
+        </aside>
+        <section class="boot-main">
+          <div class="boot-topbar">
+            <div class="boot-workspace"></div>
+            <div class="boot-chip"></div>
+            <div class="boot-chip"></div>
+          </div>
+          <div class="boot-content">
+            <section class="boot-card" aria-label="CCR Desktop 正在启动">
+              <div class="boot-mark">C</div>
+              <h1 class="boot-title">CCR Desktop</h1>
+              <p class="boot-status">正在启动</p>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
