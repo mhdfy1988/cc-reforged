@@ -1,6 +1,6 @@
 {
   "name": "cc-reforged",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "main": "out/main/index.js",
   "bin": {
     "ccr": "cli.js"
@@ -87,6 +87,7 @@
     "smoke:desktop-signing-readiness": "node ./scripts/smoke-desktop-signing-readiness.mjs",
     "smoke:cli-model": "node ./scripts/smoke-cli-model.mjs",
     "smoke:runtime": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-runtime.mjs",
+    "smoke:settings-isolation": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-settings-isolation.mjs",
     "smoke:permissions": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-permissions.mjs",
     "smoke:deps": "node ./scripts/smoke-deps.mjs",
     "ci:smoke": "node ./scripts/ci-smoke.mjs"
@@ -113,6 +114,7 @@
     "asarUnpack": [
       "**/*.node"
     ],
+    "afterPack": "scripts/patch-desktop-exe-icon.mjs",
     "win": {
       "icon": "apps/desktop/assets/generated/icon.ico",
       "signAndEditExecutable": false,
@@ -134,6 +136,7 @@
       "deleteAppDataOnUninstall": false,
       "installerIcon": "apps/desktop/assets/generated/icon.ico",
       "uninstallerIcon": "apps/desktop/assets/generated/icon.ico",
+      "shortcutName": "CCR",
       "uninstallDisplayName": "CCR"
     },
     "publish": [

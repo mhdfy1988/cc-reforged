@@ -537,8 +537,7 @@ async function applyRemoteEntriesToLocal(
 
   // Apply project-specific files (only if project ID matches)
   if (projectId) {
-    const projectSettingsKey = SYNC_KEYS.projectSettings(projectId)
-    const projectSettingsContent = entries[projectSettingsKey]
+    const projectSettingsContent = entries[SYNC_KEYS.projectSettings(projectId)]
     if (projectSettingsContent) {
       const localSettingsPath = getSettingsFilePathForSource('localSettings')
       if (

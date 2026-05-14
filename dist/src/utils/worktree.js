@@ -350,8 +350,7 @@ export async function copyWorktreeIncludeFiles(repoRoot, worktreePath) {
  * Propagates settings.local.json, configures git hooks, and symlinks directories.
  */
 async function performPostCreationSetup(repoRoot, worktreePath) {
-    // Copy settings.local.json to the worktree's .claude directory
-    // This propagates local settings (which may contain secrets) to the worktree
+    // Copy settings.local.json to the worktree's .ccr directory.
     const localSettingsRelativePath = getRelativeSettingsFilePathForSource('localSettings');
     const sourceSettingsLocal = join(repoRoot, localSettingsRelativePath);
     try {

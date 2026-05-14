@@ -30,6 +30,7 @@ const rendererTitlebar = join(
 const iconPng = join(generatedDir, 'icon.png')
 const iconIco = join(generatedDir, 'icon.ico')
 const expectedIcon = 'apps/desktop/assets/generated/icon.ico'
+const expectedAfterPack = 'scripts/patch-desktop-exe-icon.mjs'
 
 for (const requiredPath of [
   sourceSvg,
@@ -74,12 +75,29 @@ if (winConfig?.icon !== expectedIcon) {
   })
 }
 
+if (winConfig?.signAndEditExecutable !== false) {
+  fail('default unsigned desktop build must not enable electron-builder signing/resource editing', {
+    signAndEditExecutable: winConfig?.signAndEditExecutable,
+  })
+}
+
+if (packageJson.build?.afterPack !== expectedAfterPack) {
+  fail('desktop build must patch CCR.exe icon after pack without invoking winCodeSign', {
+    afterPack: packageJson.build?.afterPack,
+    expected: expectedAfterPack,
+  })
+}
+
 if (nsisConfig?.installerIcon !== expectedIcon || nsisConfig?.uninstallerIcon !== expectedIcon) {
   fail('NSIS installer and uninstaller icons must point to generated desktop icon', {
     installerIcon: nsisConfig?.installerIcon,
     uninstallerIcon: nsisConfig?.uninstallerIcon,
     expected: expectedIcon,
   })
+}
+
+if (nsisConfig?.shortcutName !== 'CCR') {
+  fail('NSIS shortcut name must stay CCR', { shortcutName: nsisConfig?.shortcutName })
 }
 
 if (packageJson.build?.productName !== 'CCR') {
@@ -91,8 +109,10 @@ console.log(
     {
       ok: true,
       productName: packageJson.build.productName,
+      afterPack: packageJson.build.afterPack,
       icon: winConfig.icon,
       installerIcon: nsisConfig.installerIcon,
+      shortcutName: nsisConfig.shortcutName,
       iconPngSize: statSync(iconPng).size,
       iconIcoSize: statSync(iconIco).size,
       rendererPublicIconSize: statSync(rendererPublicIcon).size,
@@ -103,7 +123,10 @@ console.log(
         'rendererPublicIcon',
         'rendererIconReferences',
         'build.win.icon',
+        'build.afterPack',
+        'build.win.signAndEditExecutable',
         'nsis.icons',
+        'nsis.shortcutName',
         'productName',
       ],
     },
@@ -132,6 +155,21 @@ function assertIco(file) {
 
   if (reserved !== 0 || type !== 1 || count < 4) {
     fail('invalid ICO header', { file, reserved, type, count })
+  }
+
+  for (let index = 0; index < count; index += 1) {
+    const directoryOffset = 6 + index * 16
+    const bytesInResource = data.readUInt32LE(directoryOffset + 8)
+    const imageOffset = data.readUInt32LE(directoryOffset + 12)
+    const dibHeaderSize = data.readUInt32LE(imageOffset)
+    if (bytesInResource <= 40 || dibHeaderSize !== 40) {
+      fail('ICO image must use BMP/DIB entries for Windows resource compatibility', {
+        file,
+        index,
+        bytesInResource,
+        dibHeaderSize,
+      })
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import { getEnabledSettingSources, SETTING_SOURCES, SOURCES, } from '../utils/settings/constants.js';
-import { getSettingsFilePathForSource, getSettingsWithSources, updateSettingsForSource, } from '../utils/settings/settings.js';
+import { getSettingsDisplayPathsForSource, getSettingsWithSources, updateSettingsForSource, } from '../utils/settings/settings.js';
 import { SettingsSchema } from '../utils/settings/types.js';
 import { EXTERNAL_PERMISSION_MODES, } from '../types/permissions.js';
 import { CoreError } from './errors.js';
@@ -10,18 +10,20 @@ export function getCorePermissionSettingsSnapshot() {
     const enabledSources = new Set(getEnabledSettingSources());
     return {
         effective: normalizePermissionSettings(settingsWithSources.effective),
-        sources: SETTING_SOURCES.filter(source => enabledSources.has(source)).map(source => ({
-            source,
-            label: getPermissionSettingSourceLabel(source),
-            editable: isEditableSource(source),
-            enabled: enabledSources.has(source),
-            ...(getSettingsFilePathForSource(source)
-                ? { path: getSettingsFilePathForSource(source) }
-                : {}),
-            permissions: normalizePermissionSettings(sourceSettings.get(source)),
-        })),
+        sources: SETTING_SOURCES.filter(source => enabledSources.has(source)).map(source => {
+            const paths = getSettingsDisplayPathsForSource(source);
+            return {
+                source,
+                label: getPermissionSettingSourceLabel(source),
+                editable: isEditableSource(source),
+                enabled: enabledSources.has(source),
+                ...(paths.writePath ? { path: paths.writePath } : {}),
+                readPaths: paths.readPaths,
+                permissions: normalizePermissionSettings(sourceSettings.get(source)),
+            };
+        }),
         editableSources: [...SOURCES],
-        defaultSource: 'localSettings',
+        defaultSource: 'userSettings',
         modes: EXTERNAL_PERMISSION_MODES.map(mode => ({
             value: mode,
             label: getPermissionModeLabel(mode),

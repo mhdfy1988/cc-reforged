@@ -300,6 +300,19 @@ Remote / bridge 认证文件描述符路径仍然写死在：
 
 这一批改动面太大，已经不只是“本机家目录冲突”，而是项目内配置生态迁移。
 
+#### 当前进展
+
+项目级 settings 已进入单独迁移主线：
+
+- 新写入主路径：`.ccr/settings.json`、`.ccr/settings.local.json`
+- 读取主路径：`.ccr/settings.json`、`.ccr/settings.local.json`
+- 安全保护：`.ccr/settings*` 纳入自动编辑保护和 sandbox 禁写
+- 对外展示：Desktop、App Server、CLI/TUI 权限保存选项均以 `.ccr` 为主路径
+- settings sync：上传和下载都使用 `.ccr` key
+- worktree：只复制 `.ccr/settings.local.json`
+
+这一轮只迁 settings，不迁 `.claude/skills`、`.claude/agents`、`.claude/worktrees`、`.claude/plugins` 等项目生态目录。
+
 ## 5. 实施顺序建议
 
 ### 第 1 轮
@@ -321,7 +334,12 @@ Remote / bridge 认证文件描述符路径仍然写死在：
 
 ### 第 3 轮
 
-如果确认要做项目级完全隔离，再评估 `.claude/*` -> `.ccr/*`
+项目级 settings 先行隔离：
+
+1. settings 主写入路径切到 `.ccr/settings*.json`
+2. settings 读取路径也只使用 `.ccr/settings*.json`
+3. App Server、Desktop、TUI、worktree、settings sync 同步展示和流转口径
+4. 旧 `.claude/settings*.json` 不再作为 CCR settings 来源
 
 ## 6. 验收清单
 

@@ -4,7 +4,15 @@
 
 ## Unreleased
 
-- 暂无。
+- 项目级 settings 已统一切换到 `.ccr/settings*.json`，不再运行时兼容读取旧 `.claude/settings*.json`。
+- Desktop、App Server、CLI/TUI 文案、worktree 复制、settings sync、权限保护和 sandbox 禁写已同步使用 `.ccr` 项目配置路径。
+- 新增 settings 隔离 smoke，防止项目级 settings 路径后续回退到 `.claude`。
+
+## 0.4.7 - 2026-05
+
+- 修复 Windows 打包态 `CCR.exe` 资源图标仍保留旧图的问题，桌面快捷方式和任务栏现在会使用统一的 CCR 图标。
+- 将安装器快捷方式名称固定为 `CCR`，避免继续生成旧的 `CCR Desktop` 快捷方式。
+- 调整图标生成脚本，生成 Windows 兼容性更好的 BMP/DIB ICO，并在品牌 smoke 中校验 exe 资源编辑配置。
 
 ## 0.4.6 - 2026-05
 

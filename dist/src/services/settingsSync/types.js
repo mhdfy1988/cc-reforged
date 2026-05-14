@@ -28,9 +28,9 @@ export const UserSyncDataSchema = lazySchema(() => z.object({
  * Keys used for sync entries
  */
 export const SYNC_KEYS = {
-    USER_SETTINGS: '~/.claude/settings.json',
+    USER_SETTINGS: '~/.ccr/settings.json',
     USER_MEMORY: '~/.claude/CLAUDE.md',
-    projectSettings: (projectId) => `projects/${projectId}/.claude/settings.local.json`,
+    projectSettings: (projectId) => `projects/${projectId}/.ccr/settings.local.json`,
     projectMemory: (projectId) => `projects/${projectId}/CLAUDE.local.md`,
 };
 //# sourceMappingURL=types.js.map

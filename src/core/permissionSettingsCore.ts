@@ -8,7 +8,7 @@ import {
   SOURCES,
 } from '../utils/settings/constants.js'
 import {
-  getSettingsFilePathForSource,
+  getSettingsDisplayPathsForSource,
   getSettingsWithSources,
   updateSettingsForSource,
 } from '../utils/settings/settings.js'
@@ -34,6 +34,7 @@ export type CorePermissionSettingsSource = {
   editable: boolean
   enabled: boolean
   path?: string
+  readPaths: string[]
   permissions: CorePermissionSettings
 }
 
@@ -72,19 +73,21 @@ export function getCorePermissionSettingsSnapshot(): CorePermissionSettingsSnaps
   return {
     effective: normalizePermissionSettings(settingsWithSources.effective),
     sources: SETTING_SOURCES.filter(source => enabledSources.has(source)).map(
-      source => ({
-        source,
-        label: getPermissionSettingSourceLabel(source),
-        editable: isEditableSource(source),
-        enabled: enabledSources.has(source),
-        ...(getSettingsFilePathForSource(source)
-          ? { path: getSettingsFilePathForSource(source) }
-          : {}),
-        permissions: normalizePermissionSettings(sourceSettings.get(source)),
-      }),
+      source => {
+        const paths = getSettingsDisplayPathsForSource(source)
+        return {
+          source,
+          label: getPermissionSettingSourceLabel(source),
+          editable: isEditableSource(source),
+          enabled: enabledSources.has(source),
+          ...(paths.writePath ? { path: paths.writePath } : {}),
+          readPaths: paths.readPaths,
+          permissions: normalizePermissionSettings(sourceSettings.get(source)),
+        }
+      },
     ),
     editableSources: [...SOURCES],
-    defaultSource: 'localSettings',
+    defaultSource: 'userSettings',
     modes: EXTERNAL_PERMISSION_MODES.map(mode => ({
       value: mode,
       label: getPermissionModeLabel(mode),

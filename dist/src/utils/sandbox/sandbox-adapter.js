@@ -15,7 +15,7 @@ import { getPlatform } from '../platform.js';
 import { settingsChangeDetector } from '../settings/changeDetector.js';
 import { SETTING_SOURCES } from '../settings/constants.js';
 import { getManagedSettingsDropInDir } from '../settings/managedPath.js';
-import { getInitialSettings, getSettings_DEPRECATED, getSettingsFilePathForSource, getSettingsForSource, getSettingsRootPathForSource, updateSettingsForSource, } from '../settings/settings.js';
+import { CCR_PROJECT_SETTINGS_DIR, getInitialSettings, getSettings_DEPRECATED, getSettingsForSource, getSettingsReadFilePathsForSource, getSettingsRootPathForSource, updateSettingsForSource, } from '../settings/settings.js';
 // ============================================================================
 // Settings Converter
 // ============================================================================
@@ -166,7 +166,7 @@ export function convertToSandboxRuntimeConfig(settings) {
     const allowRead = [];
     // Always deny writes to settings.json files to prevent sandbox escape
     // This blocks settings in the original working directory (where Claude Code started)
-    const settingsPaths = SETTING_SOURCES.map(source => getSettingsFilePathForSource(source)).filter((p) => p !== undefined);
+    const settingsPaths = SETTING_SOURCES.flatMap(source => getSettingsReadFilePathsForSource(source));
     denyWrite.push(...settingsPaths);
     denyWrite.push(getManagedSettingsDropInDir());
     // Also block settings files in the current working directory if it differs from original
@@ -174,8 +174,8 @@ export function convertToSandboxRuntimeConfig(settings) {
     const cwd = getCwdState();
     const originalCwd = getOriginalCwd();
     if (cwd !== originalCwd) {
-        denyWrite.push(resolve(cwd, '.claude', 'settings.json'));
-        denyWrite.push(resolve(cwd, '.claude', 'settings.local.json'));
+        denyWrite.push(resolve(cwd, CCR_PROJECT_SETTINGS_DIR, 'settings.json'));
+        denyWrite.push(resolve(cwd, CCR_PROJECT_SETTINGS_DIR, 'settings.local.json'));
     }
     // Block writes to .claude/skills in both original and current working directories.
     // The sandbox-runtime's getDangerousDirectories() protects .claude/commands and

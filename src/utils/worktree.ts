@@ -511,8 +511,7 @@ async function performPostCreationSetup(
   repoRoot: string,
   worktreePath: string,
 ): Promise<void> {
-  // Copy settings.local.json to the worktree's .claude directory
-  // This propagates local settings (which may contain secrets) to the worktree
+  // Copy settings.local.json to the worktree's .ccr directory.
   const localSettingsRelativePath =
     getRelativeSettingsFilePathForSource('localSettings')
   const sourceSettingsLocal = join(repoRoot, localSettingsRelativePath)

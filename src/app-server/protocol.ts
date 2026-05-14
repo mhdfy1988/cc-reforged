@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { CorePermissionSettingsSnapshot } from '../core/permissionSettingsCore.js'
 
 export const APP_SERVER_PROTOCOL_VERSION = '0.1'
 export const APP_SERVER_CONFIG_SCHEMA_VERSION = '0.1'
@@ -592,9 +593,9 @@ export type PermissionRespondResult = {
   accepted: boolean
 }
 
-export type PermissionSettingsGetResult = Record<string, unknown>
+export type PermissionSettingsGetResult = CorePermissionSettingsSnapshot
 
-export type PermissionSettingsUpdateResult = Record<string, unknown>
+export type PermissionSettingsUpdateResult = CorePermissionSettingsSnapshot
 
 export type ContextStatusResult = Record<string, unknown>
 

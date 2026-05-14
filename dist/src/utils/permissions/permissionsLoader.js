@@ -1,9 +1,10 @@
+import mergeWith from 'lodash-es/mergeWith.js';
 import { readFileSync } from '../fileRead.js';
 import { getFsImplementation, safeResolvePath } from '../fsOperations.js';
 import { safeParseJSON } from '../json.js';
 import { logError } from '../log.js';
 import { getEnabledSettingSources, } from '../settings/constants.js';
-import { getSettingsFilePathForSource, getSettingsForSource, updateSettingsForSource, } from '../settings/settings.js';
+import { getSettingsForSource, getSettingsReadFilePathsForSource, updateSettingsForSource, } from '../settings/settings.js';
 import { permissionRuleValueFromString, permissionRuleValueToString, } from './permissionRuleParser.js';
 /**
  * Returns true if allowManagedPermissionRulesOnly is enabled in managed settings (policySettings).
@@ -35,24 +36,29 @@ const SUPPORTED_RULE_BEHAVIORS = [
  * FOR EDITING ONLY - do not use this for reading settings for execution.
  */
 function getSettingsForSourceLenient_FOR_EDITING_ONLY_NOT_FOR_READING(source) {
-    const filePath = getSettingsFilePathForSource(source);
-    if (!filePath) {
-        return null;
-    }
-    try {
-        const { resolvedPath } = safeResolvePath(getFsImplementation(), filePath);
-        const content = readFileSync(resolvedPath);
-        if (content.trim() === '') {
-            return {};
+    let mergedSettings = {};
+    let foundSettings = false;
+    for (const filePath of getSettingsReadFilePathsForSource(source)) {
+        try {
+            const { resolvedPath } = safeResolvePath(getFsImplementation(), filePath);
+            const content = readFileSync(resolvedPath);
+            if (content.trim() === '') {
+                foundSettings = true;
+                continue;
+            }
+            const data = safeParseJSON(content, false);
+            // Return raw parsed JSON without validation to preserve all existing settings
+            // This is safe because we're only using this for reading/appending, not for execution
+            if (data && typeof data === 'object') {
+                foundSettings = true;
+                mergedSettings = mergeWith(mergedSettings, data);
+            }
         }
-        const data = safeParseJSON(content, false);
-        // Return raw parsed JSON without validation to preserve all existing settings
-        // This is safe because we're only using this for reading/appending, not for execution
-        return data && typeof data === 'object' ? data : null;
+        catch {
+            // Missing or unreadable settings paths are ignored in this lenient editor path.
+        }
     }
-    catch {
-        return null;
-    }
+    return foundSettings ? mergedSettings : null;
 }
 /**
  * Converts permissions JSON to an array of PermissionRule objects

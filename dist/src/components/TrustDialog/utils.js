@@ -26,11 +26,11 @@ export function getHooksSources() {
     const sources = [];
     const projectSettings = getSettingsForSource('projectSettings');
     if (hasHooks(projectSettings)) {
-        sources.push('.claude/settings.json');
+        sources.push('.ccr/settings.json');
     }
     const localSettings = getSettingsForSource('localSettings');
     if (hasHooks(localSettings)) {
-        sources.push('.claude/settings.local.json');
+        sources.push('.ccr/settings.local.json');
     }
     return sources;
 }
@@ -47,11 +47,11 @@ export function getBashPermissionSources() {
     const sources = [];
     const projectRules = getPermissionRulesForSource('projectSettings');
     if (hasBashPermission(projectRules)) {
-        sources.push('.claude/settings.json');
+        sources.push('.ccr/settings.json');
     }
     const localRules = getPermissionRulesForSource('localSettings');
     if (hasBashPermission(localRules)) {
-        sources.push('.claude/settings.local.json');
+        sources.push('.ccr/settings.local.json');
     }
     return sources;
 }
@@ -97,11 +97,11 @@ export function getOtelHeadersHelperSources() {
     const sources = [];
     const projectSettings = getSettingsForSource('projectSettings');
     if (hasOtelHeadersHelper(projectSettings)) {
-        sources.push('.claude/settings.json');
+        sources.push('.ccr/settings.json');
     }
     const localSettings = getSettingsForSource('localSettings');
     if (hasOtelHeadersHelper(localSettings)) {
-        sources.push('.claude/settings.local.json');
+        sources.push('.ccr/settings.local.json');
     }
     return sources;
 }
@@ -119,11 +119,11 @@ export function getApiKeyHelperSources() {
     const sources = [];
     const projectSettings = getSettingsForSource('projectSettings');
     if (hasApiKeyHelper(projectSettings)) {
-        sources.push('.claude/settings.json');
+        sources.push('.ccr/settings.json');
     }
     const localSettings = getSettingsForSource('localSettings');
     if (hasApiKeyHelper(localSettings)) {
-        sources.push('.claude/settings.local.json');
+        sources.push('.ccr/settings.local.json');
     }
     return sources;
 }
@@ -141,11 +141,11 @@ export function getAwsCommandsSources() {
     const sources = [];
     const projectSettings = getSettingsForSource('projectSettings');
     if (hasAwsCommands(projectSettings)) {
-        sources.push('.claude/settings.json');
+        sources.push('.ccr/settings.json');
     }
     const localSettings = getSettingsForSource('localSettings');
     if (hasAwsCommands(localSettings)) {
-        sources.push('.claude/settings.local.json');
+        sources.push('.ccr/settings.local.json');
     }
     return sources;
 }
@@ -163,11 +163,11 @@ export function getGcpCommandsSources() {
     const sources = [];
     const projectSettings = getSettingsForSource('projectSettings');
     if (hasGcpCommands(projectSettings)) {
-        sources.push('.claude/settings.json');
+        sources.push('.ccr/settings.json');
     }
     const localSettings = getSettingsForSource('localSettings');
     if (hasGcpCommands(localSettings)) {
-        sources.push('.claude/settings.local.json');
+        sources.push('.ccr/settings.local.json');
     }
     return sources;
 }
@@ -189,11 +189,11 @@ export function getDangerousEnvVarsSources() {
     const sources = [];
     const projectSettings = getSettingsForSource('projectSettings');
     if (hasDangerousEnvVars(projectSettings)) {
-        sources.push('.claude/settings.json');
+        sources.push('.ccr/settings.json');
     }
     const localSettings = getSettingsForSource('localSettings');
     if (hasDangerousEnvVars(localSettings)) {
-        sources.push('.claude/settings.local.json');
+        sources.push('.ccr/settings.local.json');
     }
     return sources;
 }

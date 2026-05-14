@@ -1914,7 +1914,7 @@ h1 {
 
 .permission-settings-header span,
 .settings-muted,
-.permission-settings-path {
+.permission-settings-paths {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
@@ -1976,8 +1976,36 @@ h1 {
   accent-color: var(--accent);
 }
 
-.permission-settings-path {
+.permission-settings-paths {
   grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+}
+
+.permission-settings-path-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(208, 186, 158, 0.45);
+  border-radius: 12px;
+  background: rgba(255, 250, 241, 0.72);
+}
+
+.permission-settings-path-row span {
+  color: #6b4c25;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.permission-settings-path-row code {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.permission-settings-path {
   overflow-wrap: anywhere;
 }
 

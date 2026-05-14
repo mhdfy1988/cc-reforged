@@ -333,6 +333,7 @@ export type PermissionSettingsSource = {
   editable: boolean
   enabled: boolean
   path?: string
+  readPaths: string[]
   permissions: PermissionSettingsValue
 }
 

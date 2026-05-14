@@ -22,7 +22,7 @@ if (packageJson.scripts['desktop:dist:signed'] !== 'node ./scripts/desktop-packa
 }
 
 if (packageJson.build.win.signAndEditExecutable !== false) {
-  fail('default unsigned desktop build must keep signAndEditExecutable disabled', {
+  fail('default unsigned desktop build must keep electron-builder signAndEditExecutable disabled', {
     signAndEditExecutable: packageJson.build.win.signAndEditExecutable,
   })
 }
@@ -64,6 +64,7 @@ console.log(
       checked: [
         'desktop:dist:signed',
         'default unsigned config',
+        'custom afterPack executable icon patch',
         'certificate env pairing',
         'installer Authenticode status',
       ],

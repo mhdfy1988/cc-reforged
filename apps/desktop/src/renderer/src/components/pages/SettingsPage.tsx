@@ -5,9 +5,9 @@ import type {
   DesktopUpdateState,
   EditablePermissionSettingsSource,
   PermissionModeSetting,
+  PermissionSettingsSource,
   PermissionSettingsState,
   PermissionSettingsUpdateInput,
-  PermissionSettingsValue,
 } from '../../domain/displayTypes.js'
 import {
   getUpdateDetailText,
@@ -288,15 +288,18 @@ function PermissionSettingsPanel(props: {
   const editableSources = useMemo(
     () =>
       props.settings?.sources.filter(
-        source => source.editable,
-      ) as
-        | Array<{
-            source: EditablePermissionSettingsSource
-            label: string
-            path?: string
-            permissions: PermissionSettingsValue
-          }>
-        | undefined,
+        (
+          source,
+        ): source is PermissionSettingsSource & {
+          source: EditablePermissionSettingsSource
+        } =>
+          source.editable &&
+          Boolean(
+            props.settings?.editableSources.includes(
+              source.source as EditablePermissionSettingsSource,
+            ),
+          ),
+      ) ?? [],
     [props.settings],
   )
   const defaultSource = props.settings?.defaultSource ?? 'localSettings'
@@ -440,12 +443,24 @@ function PermissionSettingsPanel(props: {
             value={directories}
             onChange={setDirectories}
           />
-          <div className="permission-settings-path">
-            {selectedSource?.path ?? '未找到设置文件路径'}
+          <div className="permission-settings-paths">
+            <PathRow
+              label="写入"
+              value={selectedSource?.path ?? '未找到写入路径'}
+            />
           </div>
         </div>
       )}
     </section>
+  )
+}
+
+function PathRow(props: { label: string; value: string }) {
+  return (
+    <div className="permission-settings-path-row">
+      <span>{props.label}</span>
+      <code>{props.value}</code>
+    </div>
   )
 }
 

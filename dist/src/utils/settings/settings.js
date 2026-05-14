@@ -25,6 +25,7 @@ import { getHkcuSettings, getMdmSettings } from './mdm/settings.js';
 import { getCachedParsedFile, getCachedSettingsForSource, getPluginSettingsBase, getSessionSettingsCache, resetSettingsCache, setCachedParsedFile, setCachedSettingsForSource, setSessionSettingsCache, } from './settingsCache.js';
 import { SettingsSchema } from './types.js';
 import { filterInvalidPermissionRules, formatZodError, } from './validation.js';
+export const CCR_PROJECT_SETTINGS_DIR = '.ccr';
 /**
  * Get the path to the managed settings file based on the current platform
  */
@@ -201,7 +202,21 @@ function getUserSettingsFilePath() {
     }
     return 'settings.json';
 }
-export function getSettingsFilePathForSource(source) {
+function getProjectSettingsFilenameForSource(source) {
+    switch (source) {
+        case 'projectSettings':
+            return 'settings.json';
+        case 'localSettings':
+            return 'settings.local.json';
+    }
+}
+export function getRelativeProjectSettingsPath(source) {
+    return join(CCR_PROJECT_SETTINGS_DIR, getProjectSettingsFilenameForSource(source));
+}
+export function getRelativeSettingsFilePathForSource(source) {
+    return getRelativeProjectSettingsPath(source);
+}
+export function getSettingsWriteFilePathForSource(source) {
     switch (source) {
         case 'userSettings':
             return join(getSettingsRootPathForSource(source), getUserSettingsFilePath());
@@ -216,13 +231,28 @@ export function getSettingsFilePathForSource(source) {
         }
     }
 }
-export function getRelativeSettingsFilePathForSource(source) {
+export function getSettingsFilePathForSource(source) {
+    return getSettingsWriteFilePathForSource(source);
+}
+export function getSettingsReadFilePathsForSource(source) {
     switch (source) {
         case 'projectSettings':
-            return join('.claude', 'settings.json');
-        case 'localSettings':
-            return join('.claude', 'settings.local.json');
+        case 'localSettings': {
+            const path = getSettingsWriteFilePathForSource(source);
+            return path ? [path] : [];
+        }
+        case 'userSettings':
+        case 'policySettings':
+        case 'flagSettings': {
+            const path = getSettingsWriteFilePathForSource(source);
+            return path ? [path] : [];
+        }
     }
+}
+export function getSettingsDisplayPathsForSource(source) {
+    const writePath = getSettingsWriteFilePathForSource(source);
+    const readPaths = getSettingsReadFilePathsForSource(source);
+    return { writePath, readPaths };
 }
 export function getSettingsForSource(source) {
     const cached = getCachedSettingsForSource(source);
@@ -231,6 +261,13 @@ export function getSettingsForSource(source) {
     const result = getSettingsForSourceUncached(source);
     setCachedSettingsForSource(source, result);
     return result;
+}
+function loadFileSettingsForSource(source) {
+    const filePath = getSettingsFilePathForSource(source);
+    if (!filePath) {
+        return { settings: null, errors: [] };
+    }
+    return parseSettingsFile(filePath);
 }
 function getSettingsForSourceUncached(source) {
     // For policySettings: first source wins (remote > HKLM/plist > file > HKCU)
@@ -253,10 +290,7 @@ function getSettingsForSourceUncached(source) {
         }
         return null;
     }
-    const settingsFilePath = getSettingsFilePathForSource(source);
-    const { settings: fileSettings } = settingsFilePath
-        ? parseSettingsFile(settingsFilePath)
-        : { settings: null };
+    const { settings: fileSettings } = loadFileSettingsForSource(source);
     // For flagSettings, merge in any inline settings set via the SDK
     if (source === 'flagSettings') {
         const inlineSettings = getFlagSettingsInline();
@@ -558,24 +592,24 @@ function loadSettingsFromDisk() {
                 }
                 continue;
             }
-            const filePath = getSettingsFilePathForSource(source);
-            if (filePath) {
+            for (const filePath of getSettingsReadFilePathsForSource(source)) {
                 const resolvedPath = resolve(filePath);
                 // Skip if we've already loaded this file from another source
-                if (!seenFiles.has(resolvedPath)) {
-                    seenFiles.add(resolvedPath);
-                    const { settings, errors } = parseSettingsFile(filePath);
-                    // Add unique errors (deduplication)
-                    for (const error of errors) {
-                        const errorKey = `${error.file}:${error.path}:${error.message}`;
-                        if (!seenErrors.has(errorKey)) {
-                            seenErrors.add(errorKey);
-                            allErrors.push(error);
-                        }
+                if (seenFiles.has(resolvedPath)) {
+                    continue;
+                }
+                seenFiles.add(resolvedPath);
+                const { settings, errors } = parseSettingsFile(filePath);
+                // Add unique errors (deduplication)
+                for (const error of errors) {
+                    const errorKey = `${error.file}:${error.path}:${error.message}`;
+                    if (!seenErrors.has(errorKey)) {
+                        seenErrors.add(errorKey);
+                        allErrors.push(error);
                     }
-                    if (settings) {
-                        mergedSettings = mergeWith(mergedSettings, settings, settingsMergeCustomizer);
-                    }
+                }
+                if (settings) {
+                    mergedSettings = mergeWith(mergedSettings, settings, settingsMergeCustomizer);
                 }
             }
             // For flagSettings, also merge any inline settings set via the SDK
@@ -766,25 +800,23 @@ export function rawSettingsContainsKey(key) {
         if (source === 'policySettings') {
             continue;
         }
-        const filePath = getSettingsFilePathForSource(source);
-        if (!filePath) {
-            continue;
-        }
-        try {
-            const { resolvedPath } = safeResolvePath(getFsImplementation(), filePath);
-            const content = readFileSync(resolvedPath);
-            if (!content.trim()) {
-                continue;
+        for (const filePath of getSettingsReadFilePathsForSource(source)) {
+            try {
+                const { resolvedPath } = safeResolvePath(getFsImplementation(), filePath);
+                const content = readFileSync(resolvedPath);
+                if (!content.trim()) {
+                    continue;
+                }
+                const rawData = safeParseJSON(content, false);
+                if (rawData && typeof rawData === 'object' && key in rawData) {
+                    return true;
+                }
             }
-            const rawData = safeParseJSON(content, false);
-            if (rawData && typeof rawData === 'object' && key in rawData) {
-                return true;
+            catch (error) {
+                // File not found is expected - not all settings files exist
+                // Other errors (permissions, I/O) should be tracked
+                handleFileSystemError(error, filePath);
             }
-        }
-        catch (error) {
-            // File not found is expected - not all settings files exist
-            // Other errors (permissions, I/O) should be tracked
-            handleFileSystemError(error, filePath);
         }
     }
     return false;

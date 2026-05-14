@@ -33,7 +33,8 @@ import { getPlatform } from '../platform.js'
 import { getProjectDir } from '../sessionStorage.js'
 import { SETTING_SOURCES } from '../settings/constants.js'
 import {
-  getSettingsFilePathForSource,
+  CCR_PROJECT_SETTINGS_DIR,
+  getSettingsReadFilePathsForSource,
   getSettingsRootPathForSource,
 } from '../settings/settings.js'
 import { containsVulnerableUncPath } from '../shell/readOnlyCommandValidation.js'
@@ -75,6 +76,7 @@ export const DANGEROUS_DIRECTORIES = [
   '.git',
   '.vscode',
   '.idea',
+  '.ccr',
   '.claude',
 ] as const
 
@@ -192,12 +194,12 @@ export function toPosixPath(path: string): string {
 }
 
 function getSettingsPaths(): string[] {
-  return SETTING_SOURCES.map(source =>
-    getSettingsFilePathForSource(source),
-  ).filter(path => path !== undefined)
+  return SETTING_SOURCES.flatMap(source =>
+    getSettingsReadFilePathsForSource(source),
+  )
 }
 
-export function isClaudeSettingsPath(filePath: string): boolean {
+export function isAgentSettingsPath(filePath: string): boolean {
   // SECURITY: Normalize path structure first to prevent bypass via redundant ./
   // sequences like `./.claude/./settings.json` which would evade the endsWith() check
   const expandedPath = expandPath(filePath)
@@ -208,17 +210,25 @@ export function isClaudeSettingsPath(filePath: string): boolean {
 
   // Use platform separator so endsWith checks work on both Unix (/) and Windows (\)
   if (
-    normalizedPath.endsWith(`${sep}.claude${sep}settings.json`) ||
-    normalizedPath.endsWith(`${sep}.claude${sep}settings.local.json`)
+    normalizedPath.endsWith(
+      `${sep}${CCR_PROJECT_SETTINGS_DIR}${sep}settings.json`,
+    ) ||
+    normalizedPath.endsWith(
+      `${sep}${CCR_PROJECT_SETTINGS_DIR}${sep}settings.local.json`,
+    )
   ) {
-    // Include .claude/settings.json even for other projects
+    // Include project settings even for other projects.
     return true
   }
-  // Check for current project's settings files (including managed settings and CLI args)
+  // Check for current settings files (including managed settings and CLI args)
   // Both paths are now absolute and normalized for consistent comparison
   return getSettingsPaths().some(
     settingsPath => normalizeCaseForComparison(settingsPath) === normalizedPath,
   )
+}
+
+export function isClaudeSettingsPath(filePath: string): boolean {
+  return isAgentSettingsPath(filePath)
 }
 
 // Always ask when Claude Code tries to edit its own config files

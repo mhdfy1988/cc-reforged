@@ -29,7 +29,7 @@ export function SelectEventMode(t0) {
     const subtitle = `${totalHooksCount} ${t1} configured`;
     let t2;
     if ($[2] !== restrictedByPolicy) {
-        t2 = restrictedByPolicy && _jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "suggestion", children: [figures.info, " Hooks Restricted by Policy"] }), _jsx(Text, { dimColor: true, children: "Only hooks from managed settings can run. User-defined hooks from ~/.claude/settings.json, .claude/settings.json, and .claude/settings.local.json are blocked." })] });
+        t2 = restrictedByPolicy && _jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "suggestion", children: [figures.info, " Hooks Restricted by Policy"] }), _jsx(Text, { dimColor: true, children: "Only hooks from managed settings can run. User-defined hooks from ~/.ccr/settings.json, .ccr/settings.json, and .ccr/settings.local.json are blocked." })] });
         $[2] = restrictedByPolicy;
         $[3] = t2;
     }

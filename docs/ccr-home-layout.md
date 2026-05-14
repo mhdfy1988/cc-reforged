@@ -39,7 +39,14 @@ CCR 的用户级默认目录是 `~/.ccr`，也就是 Windows 当前用户下的 
 | `~/.ccr/data/llm.config.local.json` | LLM provider/model 本地配置 | 否 |
 | `~/.ccr/data/codex-oauth.json` | Codex OAuth 登录态 | 否 |
 
-项目级共享配置仍放项目根目录 `.mcp.json`。项目级个人私有配置后续建议放项目 `.ccr/` 下，并加入 `.gitignore`。
+项目级共享 MCP 配置仍放项目根目录 `.mcp.json`。项目级 settings 已迁到项目 `.ccr/` 下：
+
+| 路径 | 用途 | 是否可提交 |
+| --- | --- | --- |
+| `<project>/.ccr/settings.json` | 项目共享 settings，例如团队权限、hooks、插件启用状态 | 是 |
+| `<project>/.ccr/settings.local.json` | 项目个人私有 settings，例如个人权限覆盖 | 否 |
+
+`<project>/.claude/settings.json` 和 `<project>/.claude/settings.local.json` 不再作为 CCR settings 读取来源。CCR 新写入、运行时读取、Desktop 展示、App Server 快照和 settings sync 都以 `.ccr/settings*.json` 为唯一项目级 settings 路径。
 
 当前 MCP 实现已经把 `user` scope 的主读写文件切到 `~/.ccr/mcp.json`。旧全局 settings 里的 `mcpServers` 只做迁移期只读兼容；同名 server 同时存在时，`~/.ccr/mcp.json` 优先。
 
@@ -112,4 +119,5 @@ MCP 配置建议按这个顺序合并：
 - `CCR_CONFIG_DIR` 是用户目录的唯一主覆盖入口。
 - `~/.ccr` 下的 token、cookie、OAuth、私有路径不能提交。
 - 示例配置放仓库 `docs/examples/`，真实用户配置放 `~/.ccr` 或项目私有 `.ccr/`。
+- 项目 `.claude/settings*.json` 不再作为 CCR settings 读取或写入路径。
 - 自研 MCP server 的源码在仓库内，用户安装后的产物在 `~/.ccr/mcp/servers/`。

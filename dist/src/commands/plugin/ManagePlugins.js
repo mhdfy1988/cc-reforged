@@ -965,7 +965,7 @@ export function ManagePlugins({ setViewState: setParentViewState, setResult, onM
                             break; // guarded above; narrows pluginScope
                         if (!isInstallableScope(pluginScope))
                             break;
-                        // If the plugin is enabled in .claude/settings.json (shared with the
+                        // If the plugin is enabled in .ccr/settings.json (shared with the
                         // team), divert to a confirmation dialog that offers to disable in
                         // settings.local.json instead. Check the settings file directly —
                         // `pluginScope` (from installed_plugins.json) can be 'user' even when
@@ -1451,7 +1451,7 @@ export function ManagePlugins({ setViewState: setParentViewState, setResult, onM
                 return;
             }
             clearAllCaches();
-            setResult(`✓ Disabled ${selectedPlugin.plugin.name} in .claude/settings.local.json. Run /reload-plugins to apply.`);
+            setResult(`✓ Disabled ${selectedPlugin.plugin.name} in .ccr/settings.local.json. Run /reload-plugins to apply.`);
             if (onManageComplete)
                 void onManageComplete();
             setParentViewState('menu');
@@ -1639,10 +1639,10 @@ export function ManagePlugins({ setViewState: setParentViewState, setResult, onM
         const fp = viewState.plugin;
         return _jsxs(Box, { flexDirection: "column", children: [_jsx(Box, { children: _jsxs(Text, { bold: true, children: [fp.name, " @ ", fp.marketplace] }) }), _jsxs(Box, { marginBottom: 1, children: [_jsx(Text, { dimColor: true, children: "Status: " }), _jsx(Text, { color: "error", children: "Removed" })] }), _jsxs(Box, { marginBottom: 1, flexDirection: "column", children: [_jsxs(Text, { color: "error", children: ["Removed from marketplace \u00B7 reason: ", fp.reason] }), _jsx(Text, { children: fp.text }), _jsxs(Text, { dimColor: true, children: ["Flagged on ", new Date(fp.flaggedAt).toLocaleDateString()] })] }), _jsx(Box, { marginTop: 1, flexDirection: "column", children: _jsxs(Box, { children: [_jsxs(Text, { children: [figures.pointer, " "] }), _jsx(Text, { color: "suggestion", children: "Dismiss" })] }) }), _jsxs(Byline, { children: [_jsx(ConfigurableShortcutHint, { action: "select:accept", context: "Select", fallback: "Enter", description: "dismiss" }), _jsx(ConfigurableShortcutHint, { action: "confirm:no", context: "Confirmation", fallback: "Esc", description: "back" })] })] });
     }
-    // Confirm-project-uninstall: warn about shared .claude/settings.json,
+    // Confirm-project-uninstall: warn about shared .ccr/settings.json,
     // offer to disable in settings.local.json instead.
     if (viewState === 'confirm-project-uninstall' && selectedPlugin) {
-        return _jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { bold: true, color: "warning", children: [selectedPlugin.plugin.name, " is enabled in .claude/settings.json (shared with your team)"] }), _jsxs(Box, { marginTop: 1, flexDirection: "column", children: [_jsx(Text, { children: "Disable it just for you in .claude/settings.local.json?" }), _jsx(Text, { dimColor: true, children: "This has the same effect as uninstalling, without affecting other contributors." })] }), processError && _jsx(Box, { marginTop: 1, children: _jsx(Text, { color: "error", children: processError }) }), _jsx(Box, { marginTop: 1, children: isProcessing ? _jsx(Text, { dimColor: true, children: "Disabling\u2026" }) : _jsxs(Byline, { children: [_jsx(ConfigurableShortcutHint, { action: "confirm:yes", context: "Confirmation", fallback: "y", description: "disable" }), _jsx(ConfigurableShortcutHint, { action: "confirm:no", context: "Confirmation", fallback: "Esc", description: "cancel" })] }) })] });
+        return _jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { bold: true, color: "warning", children: [selectedPlugin.plugin.name, " is enabled in .ccr/settings.json (shared with your team)"] }), _jsxs(Box, { marginTop: 1, flexDirection: "column", children: [_jsx(Text, { children: "Disable it just for you in .ccr/settings.local.json?" }), _jsx(Text, { dimColor: true, children: "This has the same effect as uninstalling, without affecting other contributors." })] }), processError && _jsx(Box, { marginTop: 1, children: _jsx(Text, { color: "error", children: processError }) }), _jsx(Box, { marginTop: 1, children: isProcessing ? _jsx(Text, { dimColor: true, children: "Disabling\u2026" }) : _jsxs(Byline, { children: [_jsx(ConfigurableShortcutHint, { action: "confirm:yes", context: "Confirmation", fallback: "y", description: "disable" }), _jsx(ConfigurableShortcutHint, { action: "confirm:no", context: "Confirmation", fallback: "Esc", description: "cancel" })] }) })] });
     }
     // Confirm-data-cleanup: prompt before deleting ${CLAUDE_PLUGIN_DATA} dir
     if (typeof viewState === 'object' && viewState.type === 'confirm-data-cleanup' && selectedPlugin) {

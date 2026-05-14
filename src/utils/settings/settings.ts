@@ -52,6 +52,10 @@ import {
   type ValidationError,
 } from './validation.js'
 
+export const CCR_PROJECT_SETTINGS_DIR = '.ccr'
+
+type ProjectSettingsSource = 'projectSettings' | 'localSettings'
+
 /**
  * Get the path to the managed settings file based on the current platform
  */
@@ -271,7 +275,33 @@ function getUserSettingsFilePath(): string {
   return 'settings.json'
 }
 
-export function getSettingsFilePathForSource(
+function getProjectSettingsFilenameForSource(
+  source: ProjectSettingsSource,
+): string {
+  switch (source) {
+    case 'projectSettings':
+      return 'settings.json'
+    case 'localSettings':
+      return 'settings.local.json'
+  }
+}
+
+export function getRelativeProjectSettingsPath(
+  source: ProjectSettingsSource,
+): string {
+  return join(
+    CCR_PROJECT_SETTINGS_DIR,
+    getProjectSettingsFilenameForSource(source),
+  )
+}
+
+export function getRelativeSettingsFilePathForSource(
+  source: ProjectSettingsSource,
+): string {
+  return getRelativeProjectSettingsPath(source)
+}
+
+export function getSettingsWriteFilePathForSource(
   source: SettingSource,
 ): string | undefined {
   switch (source) {
@@ -295,15 +325,37 @@ export function getSettingsFilePathForSource(
   }
 }
 
-export function getRelativeSettingsFilePathForSource(
-  source: 'projectSettings' | 'localSettings',
-): string {
+export function getSettingsFilePathForSource(
+  source: SettingSource,
+): string | undefined {
+  return getSettingsWriteFilePathForSource(source)
+}
+
+export function getSettingsReadFilePathsForSource(
+  source: SettingSource,
+): string[] {
   switch (source) {
     case 'projectSettings':
-      return join('.claude', 'settings.json')
-    case 'localSettings':
-      return join('.claude', 'settings.local.json')
+    case 'localSettings': {
+      const path = getSettingsWriteFilePathForSource(source)
+      return path ? [path] : []
+    }
+    case 'userSettings':
+    case 'policySettings':
+    case 'flagSettings': {
+      const path = getSettingsWriteFilePathForSource(source)
+      return path ? [path] : []
+    }
   }
+}
+
+export function getSettingsDisplayPathsForSource(source: SettingSource): {
+  writePath?: string
+  readPaths: string[]
+} {
+  const writePath = getSettingsWriteFilePathForSource(source)
+  const readPaths = getSettingsReadFilePathsForSource(source)
+  return { writePath, readPaths }
 }
 
 export function getSettingsForSource(
@@ -314,6 +366,19 @@ export function getSettingsForSource(
   const result = getSettingsForSourceUncached(source)
   setCachedSettingsForSource(source, result)
   return result
+}
+
+function loadFileSettingsForSource(source: SettingSource): {
+  settings: SettingsJson | null
+  errors: ValidationError[]
+} {
+  const filePath = getSettingsFilePathForSource(source)
+
+  if (!filePath) {
+    return { settings: null, errors: [] }
+  }
+
+  return parseSettingsFile(filePath)
 }
 
 function getSettingsForSourceUncached(
@@ -344,10 +409,7 @@ function getSettingsForSourceUncached(
     return null
   }
 
-  const settingsFilePath = getSettingsFilePathForSource(source)
-  const { settings: fileSettings } = settingsFilePath
-    ? parseSettingsFile(settingsFilePath)
-    : { settings: null }
+  const { settings: fileSettings } = loadFileSettingsForSource(source)
 
   // For flagSettings, merge in any inline settings set via the SDK
   if (source === 'flagSettings') {
@@ -738,32 +800,32 @@ function loadSettingsFromDisk(): SettingsWithErrors {
         continue
       }
 
-      const filePath = getSettingsFilePathForSource(source)
-      if (filePath) {
+      for (const filePath of getSettingsReadFilePathsForSource(source)) {
         const resolvedPath = resolve(filePath)
 
         // Skip if we've already loaded this file from another source
-        if (!seenFiles.has(resolvedPath)) {
-          seenFiles.add(resolvedPath)
+        if (seenFiles.has(resolvedPath)) {
+          continue
+        }
+        seenFiles.add(resolvedPath)
 
-          const { settings, errors } = parseSettingsFile(filePath)
+        const { settings, errors } = parseSettingsFile(filePath)
 
-          // Add unique errors (deduplication)
-          for (const error of errors) {
-            const errorKey = `${error.file}:${error.path}:${error.message}`
-            if (!seenErrors.has(errorKey)) {
-              seenErrors.add(errorKey)
-              allErrors.push(error)
-            }
+        // Add unique errors (deduplication)
+        for (const error of errors) {
+          const errorKey = `${error.file}:${error.path}:${error.message}`
+          if (!seenErrors.has(errorKey)) {
+            seenErrors.add(errorKey)
+            allErrors.push(error)
           }
+        }
 
-          if (settings) {
-            mergedSettings = mergeWith(
-              mergedSettings,
-              settings,
-              settingsMergeCustomizer,
-            )
-          }
+        if (settings) {
+          mergedSettings = mergeWith(
+            mergedSettings,
+            settings,
+            settingsMergeCustomizer,
+          )
         }
       }
 
@@ -988,26 +1050,23 @@ export function rawSettingsContainsKey(key: string): boolean {
       continue
     }
 
-    const filePath = getSettingsFilePathForSource(source)
-    if (!filePath) {
-      continue
-    }
+    for (const filePath of getSettingsReadFilePathsForSource(source)) {
+      try {
+        const { resolvedPath } = safeResolvePath(getFsImplementation(), filePath)
+        const content = readFileSync(resolvedPath)
+        if (!content.trim()) {
+          continue
+        }
 
-    try {
-      const { resolvedPath } = safeResolvePath(getFsImplementation(), filePath)
-      const content = readFileSync(resolvedPath)
-      if (!content.trim()) {
-        continue
+        const rawData = safeParseJSON(content, false)
+        if (rawData && typeof rawData === 'object' && key in rawData) {
+          return true
+        }
+      } catch (error) {
+        // File not found is expected - not all settings files exist
+        // Other errors (permissions, I/O) should be tracked
+        handleFileSystemError(error, filePath)
       }
-
-      const rawData = safeParseJSON(content, false)
-      if (rawData && typeof rawData === 'object' && key in rawData) {
-        return true
-      }
-    } catch (error) {
-      // File not found is expected - not all settings files exist
-      // Other errors (permissions, I/O) should be tracked
-      handleFileSystemError(error, filePath)
     }
   }
 

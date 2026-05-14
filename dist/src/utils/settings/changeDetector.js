@@ -12,7 +12,7 @@ import { SETTING_SOURCES } from './constants.js';
 import { clearInternalWrites, consumeInternalWrite } from './internalWrites.js';
 import { getManagedSettingsDropInDir } from './managedPath.js';
 import { getHkcuSettings, getMdmSettings, refreshMdmSettings, setMdmSettingsCache, } from './mdm/settings.js';
-import { getSettingsFilePathForSource } from './settings.js';
+import { getSettingsReadFilePathsForSource } from './settings.js';
 import { resetSettingsCache } from './settingsCache.js';
 /**
  * Time in milliseconds to wait for file writes to stabilize before processing.
@@ -160,25 +160,23 @@ async function getWatchTargets() {
         if (source === 'flagSettings') {
             continue;
         }
-        const path = getSettingsFilePathForSource(source);
-        if (!path) {
-            continue;
-        }
-        const dir = platformPath.dirname(path);
-        // Track all potential settings files in each directory
-        if (!dirToSettingsFiles.has(dir)) {
-            dirToSettingsFiles.set(dir, new Set());
-        }
-        dirToSettingsFiles.get(dir).add(path);
-        // Check if file exists - only watch directories that have at least one existing file
-        try {
-            const stats = await stat(path);
-            if (stats.isFile()) {
-                dirsWithExistingFiles.add(dir);
+        for (const path of getSettingsReadFilePathsForSource(source)) {
+            const dir = platformPath.dirname(path);
+            // Track all potential settings files in each directory
+            if (!dirToSettingsFiles.has(dir)) {
+                dirToSettingsFiles.set(dir, new Set());
             }
-        }
-        catch {
-            // File doesn't exist, that's fine
+            dirToSettingsFiles.get(dir).add(path);
+            // Check if file exists - only watch directories that have at least one existing file
+            try {
+                const stats = await stat(path);
+                if (stats.isFile()) {
+                    dirsWithExistingFiles.add(dir);
+                }
+            }
+            catch {
+                // File doesn't exist, that's fine
+            }
         }
     }
     // For watched directories, include ALL potential settings file paths
@@ -303,7 +301,7 @@ function getSourceForPath(path) {
     if (normalizedPath.startsWith(dropInDir + platformPath.sep)) {
         return 'policySettings';
     }
-    return SETTING_SOURCES.find(source => getSettingsFilePathForSource(source) === normalizedPath);
+    return SETTING_SOURCES.find(source => getSettingsReadFilePathsForSource(source).includes(normalizedPath));
 }
 /**
  * Start polling for MDM settings changes (registry/plist).

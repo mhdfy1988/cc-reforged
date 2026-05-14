@@ -36,10 +36,11 @@ import { settingsChangeDetector } from '../settings/changeDetector.js'
 import { SETTING_SOURCES, type SettingSource } from '../settings/constants.js'
 import { getManagedSettingsDropInDir } from '../settings/managedPath.js'
 import {
+  CCR_PROJECT_SETTINGS_DIR,
   getInitialSettings,
   getSettings_DEPRECATED,
-  getSettingsFilePathForSource,
   getSettingsForSource,
+  getSettingsReadFilePathsForSource,
   getSettingsRootPathForSource,
   updateSettingsForSource,
 } from '../settings/settings.js'
@@ -229,9 +230,9 @@ export function convertToSandboxRuntimeConfig(
 
   // Always deny writes to settings.json files to prevent sandbox escape
   // This blocks settings in the original working directory (where Claude Code started)
-  const settingsPaths = SETTING_SOURCES.map(source =>
-    getSettingsFilePathForSource(source),
-  ).filter((p): p is string => p !== undefined)
+  const settingsPaths = SETTING_SOURCES.flatMap(source =>
+    getSettingsReadFilePathsForSource(source),
+  )
   denyWrite.push(...settingsPaths)
   denyWrite.push(getManagedSettingsDropInDir())
 
@@ -240,8 +241,10 @@ export function convertToSandboxRuntimeConfig(
   const cwd = getCwdState()
   const originalCwd = getOriginalCwd()
   if (cwd !== originalCwd) {
-    denyWrite.push(resolve(cwd, '.claude', 'settings.json'))
-    denyWrite.push(resolve(cwd, '.claude', 'settings.local.json'))
+    denyWrite.push(resolve(cwd, CCR_PROJECT_SETTINGS_DIR, 'settings.json'))
+    denyWrite.push(
+      resolve(cwd, CCR_PROJECT_SETTINGS_DIR, 'settings.local.json'),
+    )
   }
 
   // Block writes to .claude/skills in both original and current working directories.

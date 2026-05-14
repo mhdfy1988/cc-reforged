@@ -1,3 +1,4 @@
+import mergeWith from 'lodash-es/mergeWith.js'
 import { readFileSync } from '../fileRead.js'
 import { getFsImplementation, safeResolvePath } from '../fsOperations.js'
 import { safeParseJSON } from '../json.js'
@@ -8,8 +9,8 @@ import {
   type SettingSource,
 } from '../settings/constants.js'
 import {
-  getSettingsFilePathForSource,
   getSettingsForSource,
+  getSettingsReadFilePathsForSource,
   updateSettingsForSource,
 } from '../settings/settings.js'
 import type { SettingsJson } from '../settings/types.js'
@@ -61,25 +62,34 @@ const SUPPORTED_RULE_BEHAVIORS = [
 function getSettingsForSourceLenient_FOR_EDITING_ONLY_NOT_FOR_READING(
   source: SettingSource,
 ): SettingsJson | null {
-  const filePath = getSettingsFilePathForSource(source)
-  if (!filePath) {
-    return null
-  }
+  let mergedSettings: SettingsJson = {}
+  let foundSettings = false
 
-  try {
-    const { resolvedPath } = safeResolvePath(getFsImplementation(), filePath)
-    const content = readFileSync(resolvedPath)
-    if (content.trim() === '') {
-      return {}
+  for (const filePath of getSettingsReadFilePathsForSource(source)) {
+    try {
+      const { resolvedPath } = safeResolvePath(getFsImplementation(), filePath)
+      const content = readFileSync(resolvedPath)
+      if (content.trim() === '') {
+        foundSettings = true
+        continue
+      }
+
+      const data = safeParseJSON(content, false)
+      // Return raw parsed JSON without validation to preserve all existing settings
+      // This is safe because we're only using this for reading/appending, not for execution
+      if (data && typeof data === 'object') {
+        foundSettings = true
+        mergedSettings = mergeWith(
+          mergedSettings,
+          data as SettingsJson,
+        )
+      }
+    } catch {
+      // Missing or unreadable settings paths are ignored in this lenient editor path.
     }
-
-    const data = safeParseJSON(content, false)
-    // Return raw parsed JSON without validation to preserve all existing settings
-    // This is safe because we're only using this for reading/appending, not for execution
-    return data && typeof data === 'object' ? (data as SettingsJson) : null
-  } catch {
-    return null
   }
+
+  return foundSettings ? mergedSettings : null
 }
 
 /**

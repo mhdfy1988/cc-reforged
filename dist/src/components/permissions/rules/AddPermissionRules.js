@@ -30,7 +30,7 @@ export function optionForPermissionSaveDestination(saveDestination) {
         case 'userSettings':
             return {
                 label: 'User settings',
-                description: `Saved in at ~/.claude/settings.json`,
+                description: `Saved in ~/.ccr/settings.json`,
                 value: saveDestination
             };
     }
