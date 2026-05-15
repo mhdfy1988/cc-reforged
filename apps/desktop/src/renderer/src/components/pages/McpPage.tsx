@@ -1,3 +1,5 @@
+import { RawDataBlock } from '../common/RawDataBlock.js'
+
 export function McpPage(props: {
   busy: boolean
   mcp: unknown
@@ -14,17 +16,10 @@ export function McpPage(props: {
           刷新 MCP
         </button>
       </div>
-      <pre className="mcp-raw-config">
-        {formatMcpConfig(props.mcp ?? { servers: [], errors: [] })}
-      </pre>
+      <RawDataBlock
+        preClassName="mcp-raw-config"
+        value={props.mcp ?? { servers: [], errors: [] }}
+      />
     </section>
   )
-}
-
-function formatMcpConfig(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
 }

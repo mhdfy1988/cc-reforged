@@ -1,3 +1,5 @@
+import { RawDataBlock } from '../common/RawDataBlock.js'
+
 export function InteractionDetails(props: {
   label?: string
   value: unknown
@@ -5,18 +7,7 @@ export function InteractionDetails(props: {
   return (
     <details className="interaction-card-details">
       <summary>{props.label ?? '查看详情'}</summary>
-      <pre>{formatDetail(props.value)}</pre>
+      <RawDataBlock value={props.value} />
     </details>
   )
-}
-
-function formatDetail(value: unknown): string {
-  if (typeof value === 'string') {
-    return value
-  }
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
 }

@@ -2,6 +2,7 @@ import { MessageFrame } from './MessageFrame.js'
 import { FileSnapshotPanel } from './FileCard.js'
 import { ShellPermissionInlinePanel } from './ShellPermissionCard.js'
 import { ToolPermissionInlinePanel } from './ToolPermissionInlinePanel.js'
+import { RawDataBlock } from '../common/RawDataBlock.js'
 import type { DisplayEvent } from '../../domain/displayEvents.js'
 import type {
   PermissionCard,
@@ -199,7 +200,7 @@ function ToolDetailBlock(props: { block: ToolDetailBlockView }) {
   return (
     <section className="tool-card-detail-block">
       <h4>{props.block.title}</h4>
-      <pre>{formatToolDetail(props.block.value)}</pre>
+      <RawDataBlock text={formatToolDetail(props.block.value)} />
     </section>
   )
 }

@@ -991,7 +991,7 @@ function App({ initialStatus = null }: AppProps) {
                 busy={busy}
                 events={events}
                 logSnapshot={logSnapshot}
-                onRefresh={() => void runAction(() => refreshLogs())}
+                onRefresh={() => runAction(() => refreshLogs())}
               />
             ) : null}
           </section>

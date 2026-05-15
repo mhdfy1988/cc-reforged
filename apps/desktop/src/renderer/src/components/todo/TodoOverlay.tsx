@@ -1,5 +1,6 @@
 import { useRef, useState, type PointerEvent } from 'react'
 import { TodoListItem } from './TodoListItem.js'
+import { RawDataBlock } from '../common/RawDataBlock.js'
 import type { TodoOverlaySnapshot } from '../../domain/todoEvents.js'
 
 type OverlayPosition = {
@@ -80,7 +81,7 @@ export function TodoOverlay(props: { snapshot: TodoOverlaySnapshot | null }) {
           </ol>
           <details>
             <summary>查看原始 JSON</summary>
-            <pre>{JSON.stringify(snapshot.raw, null, 2)}</pre>
+            <RawDataBlock value={snapshot.raw} />
           </details>
         </div>
       )}
