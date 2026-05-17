@@ -12,6 +12,7 @@ import type {
   Usage,
 } from '@anthropic-ai/sdk/resources/index.mjs'
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js'
+import { toAnthropicImageSource } from '../imageContent.js'
 import type {
   LlmContentPart,
   LlmGenerateEvent,
@@ -71,7 +72,7 @@ export class AnthropicMessagesAdapter {
   }
 
   async generate(request: LlmGenerateRequest): Promise<LlmGenerateResponse> {
-    const body = this.#toMessageRequest(request, false)
+    const body = await this.#toMessageRequest(request, false)
     const raw = await this.#createClient().messages.create(body, {
       signal: request.signal,
     })
@@ -84,7 +85,7 @@ export class AnthropicMessagesAdapter {
   }
 
   async *stream(request: LlmGenerateRequest): AsyncIterable<LlmGenerateEvent> {
-    const body = this.#toMessageRequest(request, true)
+    const body = await this.#toMessageRequest(request, true)
     const stream = await this.#createClient().messages.create(body, {
       signal: request.signal,
     })
@@ -127,17 +128,17 @@ export class AnthropicMessagesAdapter {
   #toMessageRequest(
     request: LlmGenerateRequest,
     stream: false,
-  ): MessageCreateParamsNonStreaming
+  ): Promise<MessageCreateParamsNonStreaming>
   #toMessageRequest(
     request: LlmGenerateRequest,
     stream: true,
-  ): MessageCreateParamsStreaming
-  #toMessageRequest(
+  ): Promise<MessageCreateParamsStreaming>
+  async #toMessageRequest(
     request: LlmGenerateRequest,
     stream: boolean,
-  ): MessageCreateParamsNonStreaming | MessageCreateParamsStreaming {
+  ): Promise<MessageCreateParamsNonStreaming | MessageCreateParamsStreaming> {
     const model = request.model?.trim() || this.#defaultModel
-    const mapped = toAnthropicMessages(request.messages)
+    const mapped = await toAnthropicMessages(request.messages)
     const maxTokens =
       typeof request.maxOutputTokens === 'number'
         ? request.maxOutputTokens
@@ -426,10 +427,10 @@ function handleContentBlockStop(
   }
 }
 
-function toAnthropicMessages(input: readonly LlmMessage[]): {
+async function toAnthropicMessages(input: readonly LlmMessage[]): Promise<{
   system?: string
   messages: MessageParam[]
-} {
+}> {
   const systemParts: string[] = []
   const messages: MessageParam[] = []
 
@@ -465,7 +466,7 @@ function toAnthropicMessages(input: readonly LlmMessage[]): {
       continue
     }
 
-    const content = toAnthropicContentBlocks(message)
+    const content = await toAnthropicContentBlocks(message)
     if (content.length === 0) {
       continue
     }
@@ -504,7 +505,9 @@ function pushAnthropicMessage(
   ]
 }
 
-function toAnthropicContentBlocks(message: LlmMessage): ContentBlockParam[] {
+async function toAnthropicContentBlocks(
+  message: LlmMessage,
+): Promise<ContentBlockParam[]> {
   const blocks: ContentBlockParam[] = []
   for (const part of message.parts) {
     if (part.type === 'text') {
@@ -526,6 +529,13 @@ function toAnthropicContentBlocks(message: LlmMessage): ContentBlockParam[] {
         thinking: part.thinking,
         signature: part.signature ?? '',
       })
+      continue
+    }
+    if (part.type === 'image' && message.role === 'user') {
+      blocks.push({
+        type: 'image',
+        source: await toAnthropicImageSource(part),
+      } as ContentBlockParam)
       continue
     }
     if (part.type === 'tool_call') {

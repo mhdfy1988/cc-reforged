@@ -26,17 +26,44 @@
 - [x] P20 工具事件卡片产品化
 - [x] P21 文件、附件与引用系统
 - [ ] P22 结构化输出与 JSON/Schema 视图（已撤回，后续按具体场景重新设计）
-- [ ] P23 多模态输入/输出、附件上传与预览
+- [x] P23 多模态输入/输出、附件上传与预览
 - [ ] P24 错误分类、限流与拒答状态治理
 - [x] P25 原生上下文链路恢复与短期记忆治理
 - [x] P26 上下文、压缩与记忆能力 App Server 桥接
 
 ## 当前指针
 
-- 进行中：P23 多模态输入/输出、附件上传与预览
-- 当前正在做：P23 已拆成独立专项，后续以 [CCR 多模态输入输出 Todo](./multimodal-input-output-todo.md) 为实时任务列表。
-- 完成后下一项：按 `MM-00 -> MM-01` 推进现有附件能力复核和 App Server 多模态输入协议。
+- 已完成：P23 多模态输入/输出、附件上传与预览第一版。
+- 当前正在做：提交前收口，补 `CHANGELOG.md` 当前未发布说明、确认 diff 分组、跑最终验证，然后 commit + push。
+- 完成后下一项：优先把下午标准文档里的协议/展示统一问题拆成小 goal 执行；第一批接 P24 错误分类、限流与拒答状态治理。
 - 说明：P22 全局结构化展示已撤回；P23 不再和多供应商专项混在一起，附件真实随消息发送、预览、输入协议和多模态能力边界治理进入独立文档。
+
+## 标准文档落地队列
+
+来源：
+
+- [CCR 模型输出归一化与展示标准](../architecture/model-output-normalization-and-display-standard.md)
+- [CCR Provider 工具协议统一化标准](../architecture/provider-tool-protocol-normalization.md)
+
+这些不是独立空文档，而是 P23 收口后继续实施的标准化队列。执行顺序如下：
+
+1. [x] STD-TOOL-01 修复 OpenAI-compatible / DeepSeek 悬空工具结果和 TodoWrite schema 常驻
+   - 已完成：`TodoWrite` 不再 deferred；OpenAI-compatible 请求前会修复缺失工具结果；中断和参数错误不会让会话卡死。
+2. [ ] STD-TOOL-02 Provider 工具协议第一版收口
+   - 目标：补 `ProviderToolProfile` 或等价结构，明确工具 schema、strict 支持、并行工具和工具结果回填能力。
+   - 验收：DeepSeek / OpenAI-compatible 的 TodoWrite 参数错误、工具执行失败和中断都有标准工具结果与标准错误展示。
+3. [ ] STD-DISPLAY-01 抽 `CcrContentBlock` 共享类型
+   - 目标：把 Desktop / App Server / Runtime 里分散的 `text/image/file/audio/tool/json` 内容块口径收成共享类型。
+   - 验收：provider adapter、历史恢复和 Desktop display event 不再各自猜字段。
+4. [ ] STD-DISPLAY-02 Provider 输出 fixture 与历史恢复 smoke
+   - 目标：补 OpenAI、Anthropic、Gemini、DeepSeek、OpenAI Compatible 的输出样例，覆盖文本、工具、附件、错误和历史恢复。
+   - 验收：新增 provider 时至少补一组 fixture，不允许 UI 直接消费 provider 原始结构。
+5. [ ] P24-1 / P24-2 ErrorSnapshot 与错误分类展示
+   - 目标：把 provider 错误、工具错误、参数校验错误、中断、限流、认证过期等统一为可行动错误卡。
+   - 验收：错误不再只是大红框字符串，用户能看懂来源、影响和下一步。
+6. [ ] STD-OUTPUT-03 生成型多模态输出设计
+   - 目标：模型生成图片、音频、文件这类输出单独设计生命周期和安全策略。
+   - 说明：这不是 P23 第一版范围，放在展示标准稳定后再做。
 
 ## 插队修复任务池
 
@@ -2230,7 +2257,15 @@ TodoWrite 浮层设计方向：
 
 ## P23 多模态输入/输出、附件上传与预览
 
-状态：待开始。
+状态：已完成（第一版）。
+
+2026-05-15 方向调整：
+
+- P23 不再从“输入框上传按钮”开始，而是先做模型能力协商。
+- 能力解析必须按 `profileId + model + apiMode` 判断，不只看裸模型名。
+- 没有能力声明的模型默认只支持文本输入和文本输出。
+- Desktop 可以展示附件草稿，但发送前必须明确 `可发送 / 仅预览 / 需转换 / 不支持`。
+- Provider adapter 只处理已经通过能力校验的内容块，不在 adapter 内临时猜模型是否支持图片或文件。
 
 目标：
 
@@ -2240,7 +2275,7 @@ TodoWrite 浮层设计方向：
 - 第一版优先支持图片、截图、小文本文件和普通文件元信息；音频/视频先做卡片占位，不承诺完整播放器和编辑能力。
 - 复用 P21 的文件/附件/引用基础模型和 preload 安全边界，不另起第二套媒体系统。
 
-需要补齐：
+第一版需要补齐的范围：
 
 - 发送前附件队列：输入框 `+` 选中的文件必须进入 renderer 状态、main/preload 安全读取、App Server `turn/start` 参数和 Core user message。
 - 附件发送协议：扩展 `turn/start.input` 或新增附件引用字段，支持 `path`、`mimeType`、`sizeBytes`、`displayName`、`mediaType`、`contentRef`、`previewPolicy`。
@@ -2309,53 +2344,50 @@ TodoWrite 浮层设计方向：
 
 执行顺序：
 
-1. [ ] P23-1 多模态来源与格式盘点
-   - 目标：确认用户上传、浏览器/MCP/工具/模型输出可能产生哪些媒体字段。
-   - 具体动作：盘点图片、截图、文本文件、二进制附件、data URI、URL、MCP resource、工具生成文件和模型多模态 block。
-   - 验收：明确第一版支持哪些输入、哪些只预览、哪些必须 blocked 或 confirmation。
-2. [ ] P23-2 附件发送协议与 provider 能力矩阵
+1. [x] P23-1 模型能力声明、能力来源与能力解析器
+   - 目标：先回答“当前模型到底支持什么输入/输出”。
+   - 具体动作：定义 `LlmModelCapabilities`，接入内置能力目录、Profile 覆盖和默认能力；官方 provider 通过内置目录声明能力，第三方中转通过 Profile `capabilityOverrides` 声明能力；解析结果按 `profileId + model + apiMode` 输出。
+   - 验收：当前模型能给出 `inputModalities`、`outputModalities`、tools、structured output、图片 limits 和能力来源；未知模型默认只支持文本。
+   - 本轮结论：已新增 `src/services/llm/modelCapabilities.ts`、Profile `capabilityOverrides` 配置、`modelCapabilities` 状态输出和 `smoke:model-capabilities`；验证覆盖官方文本模型、官方图片输入模型、第三方中转文本覆盖、同名模型不同 Profile 和未知模型默认文本。
+2. [x] P23-2 多模态内容块协议与发送前校验
    - 目标：先定义“怎么送给 Core/模型”，不要只停留在 UI 选择文件。
-   - 具体动作：扩展 `turn/start` 输入结构，定义 attachment params；盘点当前 LLM provider 支持 `text`、`image`、`file` 的能力。
-   - 验收：Desktop、App Server、Core 对附件字段有同一份 schema；不支持多模态时有稳定错误或 fallback。
-3. [ ] P23-3 main/preload 安全读取与附件引用管理
-   - 目标：renderer 不直接读取本地文件，大内容不长期塞在 renderer 状态里。
-   - 具体动作：由 main/preload 管理文件选择、metadata、缩略图、内容读取、大小限制和 contentRef；工作区外文件需要安全标识。
-   - 验收：renderer 只持有脱敏 metadata 和 contentRef，不直接访问 Node 文件系统。
-4. [ ] P23-4 Core user message 多模态映射
-   - 目标：让附件真正随消息进入模型输入。
-   - 具体动作：把图片映射为模型可用 image block；小文本映射为 text attachment；普通/二进制文件按策略只传元信息或路径引用。
-   - 验收：发送图片后，Core history / transcript 中能看到附件元信息；provider 不支持时不会静默丢附件。
-5. [ ] P23-5 Composer 发送前附件队列与预览
+   - 具体动作：扩展 `turn/start` 输入结构，定义 `content` blocks 和 attachment params；发送前根据能力解析结果决定允许、转换、阻止或要求确认。
+   - 验收：Desktop、App Server、Core 对附件字段有同一份 schema；不支持多模态时不会创建 turn，并返回稳定可展示原因。
+   - 本轮结论：已完成 App Server `turn/start` 新内容块协议和发送前能力校验；当前 Core 仍接收文本 fallback，并通过 `turn.metadata.multimodalInput` 保留多模态输入摘要。Desktop UI、文件读取和 provider 图片映射留给后续 MM-03 之后继续推进。
+3. [x] P23-3 Core user message 内容块归一化
+   - 目标：Core 不再把用户输入固定理解成纯字符串。
+   - 具体动作：新增 Core 内容块输入类型；App Server 已校验内容块进入 Core；当前 provider 请求继续使用文本 fallback。
+   - 验收：Core 能保存 `text/image/file/audio` 内容块；纯文本 turn 不回归；非文本块不会绕过 adapter 直接发给 provider。
+   - 本轮结论：`CoreTurn.input` 已支持 `content`，`smoke:turn-input` 已验证 App Server turn 返回内容块且 Core fake runner 收到内容块。图片真实发送、文件读取和 Desktop 草稿队列继续后移。
+4. [x] P23-4 Desktop 附件草稿队列与能力提示
    - 目标：输入框里的附件从“占位标签”升级为可管理队列。
-   - 具体动作：支持删除附件、查看大小/类型/风险、缩略图、发送策略提示；发送中锁定附件状态。
-   - 验收：不再显示“附件暂不随消息发送”；用户能看出附件是否会随消息发送、以什么方式发送。
-6. [ ] P23-6 用户消息中的已发送附件展示
-   - 目标：发送后用户消息也要展示附件，不只显示纯文本。
-   - 具体动作：把已发送附件转成 `DisplayEvent` / `AttachmentSnapshot` / `MediaSnapshot`，进入聊天时间线。
-   - 验收：历史消息、当前消息和恢复后的消息都能展示附件 metadata。
-7. [ ] P23-7 模型/工具输出媒体归一化
-   - 目标：把工具结果、MCP/browser 截图、模型输出里的媒体统一转成媒体卡，并给出可发送策略。
-   - 具体动作：识别 image URL、data URI、local path、MCP resource、tool generated file；统一来源、风险、`previewPolicy` 和 `sendPolicy`。
-   - 验收：图片和截图不再只是 raw path / raw attachment；能否再次发送给模型必须有明确结论。
-8. [ ] P23-8 图片与截图预览 + 可发送策略
-   - 目标：实现缩略图、放大查看、复制路径、打开文件，并支持把图片/截图按模型能力发送给模型。
-   - 具体动作：工作区内图片可缩略预览；远程图片和工作区外图片先显示来源和风险；provider 支持视觉输入时转换为 image block。
-   - 验收：截图不再只是 raw 路径，图片预览不阻塞主界面；发送图片时模型能收到图片或收到清晰 fallback。
-9. [ ] P23-9 文本文件与二进制文件预览 + 输入策略
+   - 具体动作：支持追加附件、删除附件、查看大小/类型，并根据当前模型能力显示 `可发送 / 可转换 / 仅预览 / 不支持`。
+   - 验收：用户能看出附件当前是否会随消息发送；纯文本发送不回归。
+   - 本轮结论：Composer 已维护附件草稿队列，模型切换后会按 `modelCapabilities` 重新计算状态；本阶段仍不读取文件内容、不生成缩略图、不把附件发送给模型。
+5. [x] P23-5 图片输入最小闭环与 main/preload 安全读取
+   - 目标：renderer 不直接读取本地图片，大内容不长期塞在 renderer 状态里，同时把可发送图片送入 `turn/start` 内容块。
+   - 具体动作：由 main/preload 管理图片 metadata、缩略图、大小限制、内容读取和 contentRef；工作区外文件需要安全标识；支持 PNG/JPEG/WEBP/GIF 的最小 image block。
+   - 验收：支持图片的 Profile 覆盖能通过 App Server 校验并创建 turn；不支持图片的模型在 App Server 阶段稳定拒绝；图片 base64 不进入普通日志。
+   - 本轮结论：Desktop main/preload 已完成图片准备、缩略图和安全元数据返回；Composer 发送时会把图片转成 `turn/start.input.content` 的 image block。真实 provider 图片请求映射留给 P23-7 / MM-07。
+6. [x] P23-6 文本文件与二进制文件输入策略
    - 目标：小文本文件可展开预览并可作为文本附件发送；二进制文件只展示元信息。
    - 具体动作：限制预览大小；超限显示“过大，已禁用内联预览”；小文本可按 `as_text` 进入上下文；大文本默认 `requires_confirmation`；二进制默认 `metadata_only` 或 `blocked`。
    - 验收：不会因为大文件卡死 Desktop，不会把大文件误塞进上下文；用户能知道文件是否真的随消息发送。
-10. [ ] P23-10 音频/视频占位渲染 + 后续发送路线
-   - 目标：先定义音频/视频卡片形态和后续发送路线，不急着接播放器。
-   - 具体动作：展示文件名、时长、大小、来源和打开入口；第一版默认不直接传音视频；后续通过转写、抽帧、关键帧摘要或 provider 原生 audio/video input 接入。
-   - 验收：不支持媒体类型也有清晰 fallback；后续实现路径已经明确，不会误把音视频当普通二进制塞入上下文。
-11. [ ] P23-11 历史、resume 与上下文预算
-   - 目标：附件进入会话后，历史恢复、上下文压缩和 memory 不丢 metadata。
-   - 具体动作：确认 transcript 记录附件 metadata；大附件不重复内联；compact 后保留必要引用。
-   - 验收：重启/resume 后能看到附件卡片；上下文状态不会因附件爆炸。
-12. [ ] P23-12 Fixture / Smoke / 文档收口
+   - 本轮结论：小文本文件 128 KB 以内由 Desktop main 读取为 UTF-8，并在发送时作为 `text` block 进入 `turn/start.input.content`；大文本、二进制、压缩包和未知文件默认只保留元信息，不随消息发送。
+7. [x] P23-7 Provider adapter 多模态映射
+   - 目标：把 CCR 内容块转换成 provider 请求格式。
+   - 具体动作：OpenAI Chat Completions / Compatible 图片映射、Anthropic Messages 图片 block 映射、内建 LLM Runtime 图片内容部件，以及 Codex OAuth 图片支持能力继续保持保守拦截。
+   - 验收：OpenAI Chat / Compatible 和 Anthropic Messages 的图片请求体离线验证通过；不支持图片的 provider 不会收到图片请求；usage、错误和 stream 事件仍能归一化；真实外部 provider 图片请求留给 MM-09 真机验收。
+   - 本轮结论：新增 `LlmImagePart` 与图片读取 helper；内建 LLM Runtime 能将 CCR `image` block 转为运行时图片部件。OpenAI Chat / Compatible 生成 `image_url` part，Anthropic Messages 生成 `image` block；本地图片 base64 只在 adapter 请求体中出现，错误 diagnostics 不输出 base64 或本地路径。新增 `smoke:multimodal-provider-mapping` 离线覆盖请求体映射和诊断脱敏。
+8. [x] P23-8 用户消息附件展示、输出媒体归一化与历史恢复
+   - 目标：发送后用户消息、工具结果、MCP/browser 截图和历史恢复都能展示附件与媒体，不只显示纯文本或 raw path。
+   - 具体动作：把已发送附件转成 `DisplayEvent.attachmentSnapshots`；识别用户内容块和工具结果中的 `image/file/audio/attachment`；当前发送、历史回放和工具卡复用同一紧凑附件条。
+   - 验收：历史消息、当前消息和恢复后的消息都能展示附件 metadata；图片和截图不再只是 raw path / raw attachment；附件展示不输出 base64。
+   - 本轮结论：`MessageFrame`、`UserMessage` 和 `ToolCard` 已支持多附件快照展示；历史用户 `content` block 通过 completed item replay 恢复附件条；display-event fixture/smoke 覆盖用户消息多附件和浏览器工具输出媒体。文件缺失状态不在本轮读取本地文件，留给 MM-09 真机验收后按需补返修。
+9. [x] P23-9 Fixture / Smoke / 文档收口
    - 目标：补图片输入、图片输出、截图、文本文件、大文件、未知二进制、provider 不支持多模态的回归样例。
    - 验收：`typecheck`、`typecheck:desktop`、`build`、`desktop:build`、`smoke:app-server`、display-event smoke 通过。
+   - 本轮结论：已新增 `docs/goals/2026-05-16-p23-9-smoke-real-machine-doc-closeout.md`，自动验证与真机验收均已通过。用户已确认 `codex-oauth / gpt-5.5` 真实图片请求能让模型读取图片，文本模型发送图片会被拦截，小文本文件、图片粘贴、图片点开预览和历史恢复/中断返修均已复测通过。
 
 ## P24 错误分类、限流与拒答状态治理
 
@@ -2795,11 +2827,32 @@ TodoWrite 浮层设计方向：
 - 第 99 轮：完成 P22-10。源码确认原生结构化输出来自 `StructuredOutput` 工具结果生成的 `structured_output` attachment，并最终进入 `QueryEngine` result 的 `structured_output` 字段；Desktop 现在只识别该原生 attachment，派生 `model_structured_output` 快照并用 `StructuredOutputCard` 展示，不从普通 Markdown、stdout 或文件正文猜 JSON。验证通过：`typecheck:desktop`、`smoke:desktop-display-events`、`git diff --check`。当前指针切到 P22-11，下一步收口复制、raw fallback 和诊断体验。
 - 第 100 轮：完成 P22-11。`StructuredView` 的复制入口已改为“复制安全 JSON”，表格视图保留 CSV 复制，节点复制遵循同一安全 copyPolicy；诊断与复制策略默认折叠展示，说明脱敏、截断、fallback、invalid JSON 和 raw 复制禁用原因；文本 fallback/raw 详情默认折叠，避免结构化失败时重新铺成大黑盒。验证通过：`typecheck:desktop`、`smoke:desktop-display-events`、`git diff --check`。当前指针切到 P22-12，下一步做 P22 最终 fixture/smoke/build/doc 收口。
 - 第 101 轮：完成 P22-12 并收口 P22。新增 CCR Desktop 结构化输出实现收口（撤回前历史文档已移除），记录 P22 已接入来源、安全策略、UI 形态和验证口径；`docs/README.md` 已补入口；display-event fixture / smoke 覆盖模型 `structured_output` 结构化卡。验证通过：`typecheck:desktop`、`smoke:desktop-display-events`、`desktop:build`、`git diff --check`。P22 整体标记完成，当前指针切到 P23-1。
+- 第 102 轮：根据多模态模型能力调研调整 P23 方向。P23 不再从 UI 上传按钮开始，而是先做 `ModelCapabilities`、能力来源优先级、发送前校验和 provider adapter 边界；第一版能力来源收敛为内置能力目录与 Profile 覆盖两层，官网/官方文档作为内置目录的第一来源，运行时最终能力按当前 Profile、模型和协议模式解析；未知模型默认只支持文本，OpenAI Compatible / 第三方中转必须通过 Profile 覆盖明确声明后才启用图片/文件输入。
+- 第 103 轮：完成 P23-1。新增 `docs/goals/2026-05-15-p23-1-model-capabilities.md`，以后阶段性 goal 统一放入 `docs/goals/`；新增 `LlmModelCapabilities`、Profile `capabilityOverrides`、能力解析器和 `modelCapabilities` 状态输出。`config/get`、`model/availability`、`model/list` 已能返回解析后能力；未知模型默认纯文本。验证通过：`build`、`typecheck`、`smoke:model-capabilities`、`smoke:llm-config`、`smoke:llm-runtime-status`、`desktop:build`、`git diff --check`。`typecheck:desktop` 仍失败在既有 `MACRO`、Bun 和可选原生依赖类型问题。
+- 第 104 轮：完成 P23-2 / MM-02。新增 `docs/goals/2026-05-15-p23-2-turn-input-validation.md`；App Server `turn/start` 支持 `input.type = "content"` 内容块协议，并在创建 turn 前根据当前 `modelCapabilities` 校验图片、文件、音频和图片限制。不支持的多模态输入返回稳定 `invalid_params` 且不会创建 turn；当前阶段 Core 仍接收文本 fallback，并通过 `turn.metadata.multimodalInput` 暂存多模态输入摘要。新增 `smoke:turn-input` 覆盖旧文本、新 content 文本、默认文本模型阻止图片、Profile 覆盖允许图片、未知模型默认阻止图片。验证通过：`build`、`typecheck`、`smoke:turn-input`、`smoke:model-capabilities`、`smoke:llm-config`、`smoke:llm-runtime-status`、`smoke:app-server`、`desktop:build`、`git diff --check`。`typecheck:desktop` 仍失败在既有 `MACRO`、Bun 和可选原生依赖类型问题。
+- 第 105 轮：完成 P23-3 / MM-03。新增 `docs/goals/2026-05-16-p23-3-core-content-blocks.md`；Core 新增 `CoreTurnInput` 和 `CoreUserContentBlock`，`CoreTurn.input` 支持 `content` 并保留 `text` fallback。App Server 已校验内容块现在进入 Core；Core 用户消息事件可暴露内容块，真实 provider 请求仍使用 `input.text`，避免图片/文件/音频绕过 adapter 直接发送。`smoke:turn-input` 新增 Core fake runner 验证内容块保存与传递。验证通过：`build`、`typecheck`、`smoke:turn-input`、`smoke:app-server`、`smoke:model-capabilities`、`desktop:build`、`git diff --check`。`typecheck:desktop` 仍失败在既有 `MACRO`、Bun 和可选原生依赖类型问题。
+- 第 106 轮：完成 P23-4 / MM-04。新增 `docs/goals/2026-05-16-p23-4-desktop-attachment-drafts.md`；Desktop Composer 附件从单个占位标签升级为草稿队列，支持追加、去重、删除，并按当前 `modelCapabilities` 计算 `可发送 / 可转换 / 仅预览 / 不支持`。本阶段仍不读取文件内容、不生成缩略图、不把附件发送给模型；验证通过：`desktop:build`、`build`、`typecheck`、`smoke:turn-input`、`smoke:app-server`、`git diff --check`。
+- 第 107 轮：完成 P23-5 / MM-05。新增 `docs/goals/2026-05-16-p23-5-image-input-loop.md`；Desktop main/preload 新增图片附件准备入口，负责图片读取验证、10 MB 本地上限、mime type 归一化和缩略图生成。Composer 发送时会把已准备且模型可发送的图片转成 `turn/start.input.content` image block；`smoke:turn-input` 覆盖 `source.kind = "file"` 的 image block。验证通过：`desktop:build`、`typecheck`、`build`、`smoke:turn-input`、`smoke:app-server`、`git diff --check`。
+- 第 108 轮：完成 P23-6 / MM-06。新增 `docs/goals/2026-05-16-p23-6-text-file-input-guardrails.md`；Desktop main/preload 附件准备入口已支持小文本文件和普通文件元信息。小文本文件 128 KB 以内会按 UTF-8 读取，并在发送时作为 `text` block 进入 `turn/start.input.content`；大文本、二进制、压缩包和未知文件默认只保留元信息。`smoke:turn-input` 新增文本文件转 text block 样例。验证通过：`typecheck`、`desktop:build`、`build`、`smoke:turn-input`。
+- 第 109 轮：完成 P23-7 / MM-07。新增 `docs/goals/2026-05-16-p23-7-provider-adapter-mapping.md`；内建 LLM Runtime 新增图片内容部件，OpenAI Chat / Compatible adapter 已生成 `image_url` part，Anthropic Messages adapter 已生成 `image` block。本地图片只在 provider adapter 请求前读取并编码，OpenAI 错误 diagnostics 不输出图片 base64 或本地路径。新增 `smoke:multimodal-provider-mapping`，验证通过：`typecheck`、`build`、`smoke:multimodal-provider-mapping`、`smoke:llm-claude-adapter`、`smoke:openai-chat-protocol`、`smoke:turn-input`、`smoke:app-server`、`desktop:build`。
+- 第 110 轮：完成 P23-8 / MM-08。新增 `docs/goals/2026-05-16-p23-8-attachment-display-history.md`；Desktop display event 新增多附件快照，当前发送的图片/小文本附件、历史用户内容块和工具输出媒体都能复用紧凑附件条展示；附件展示只暴露元信息和复制路径，不输出 base64。验证通过：`typecheck`、`smoke:desktop-display-events`、`desktop:build`、`smoke:turn-input`。
+- 第 111 轮：开始 P23-9 / MM-09。新增 `docs/goals/2026-05-16-p23-9-smoke-real-machine-doc-closeout.md`；自动收口验证通过：`typecheck`、`build`、`desktop:build`、`smoke:model-capabilities`、`smoke:turn-input`、`smoke:multimodal-provider-mapping`、`smoke:desktop-display-events`、`smoke:app-server`、`git diff --check`。剩余真机 Desktop 和真实 provider 图片请求需要先确认是否启动开发版并允许真实模型调用。
+- 第 112 轮：开发版真机复查发现 `codex-oauth / gpt-5.5` 下图片附件仍显示“不支持”。已定位为能力目录和 provider 发送层双重缺口：`gpt-5.5` 仍标为 text-only，且 `CodexOAuthProvider` 用户消息仍只接受文本。本轮已补 `gpt-5.5` 的 `text + image` 内置能力、图片 limits、pi-ai image content 映射和离线 smoke；`gpt-5.4` / `gpt-5.4-mini` 保持文本策略。验证通过：`typecheck`、`build`、`smoke:model-capabilities`、`smoke:codex-oauth-provider`、`smoke:multimodal-provider-mapping`、`smoke:turn-input`、`desktop:build`、`smoke:app-server`、`git diff --check`。开发版 CCR 已重启到最新代码。
+- 第 113 轮：补 P23 / MM-09 粘贴附件体验。Composer 输入框新增 `onPaste`，剪贴板里的文件和图片会进入现有附件草稿队列；资源管理器复制的有路径文件复用当前 main 读取逻辑，截图/微信/浏览器复制的无路径图片通过 IPC 把二进制交给 main，main 写入 `userData/attachments/clipboard` 受控临时文件后返回 `file` source 和缩略图。该实现不把 base64 写入 renderer 状态或普通日志。验证通过：`typecheck`、`desktop:build`。
+- 第 114 轮：补 P23 / MM-09 图片附件展示。发送后的用户消息不再只显示图片文件卡，`previewDataUrl` 会从 Composer 传到 `AttachmentSnapshot` 并渲染为缩略图；历史或工具事件只有本地图片路径时，renderer 通过 `ccr:image-preview` 让 main 生成缩略图，避免直接加载 `file://`。验证通过：`typecheck`、`desktop:build`、`smoke:desktop-display-events`、`git diff --check`。
+- 第 115 轮：补 P23 / MM-09 图片点开查看。消息附件条里的图片缩略图可在当前窗口打开大图预览，支持背景、关闭按钮和 Esc 关闭；点开时按需向 main 请求最大边 1600px 的较大预览，聊天流常驻状态仍保持小缩略图；复制路径按钮样式和缩略图按钮样式已拆开，避免后续附件交互互相影响。
+- 第 116 轮：完成 P23-FIX 自绘窗口标题栏与窗口控制按钮第一版。真机发现 Windows 右上角 Electron `titleBarOverlay` 与自绘标题栏线条不一致，且图片预览遮罩无法覆盖原生 overlay。本轮新增 `docs/goals/2026-05-16-p23-fix-custom-window-controls.md`，已去掉 `titleBarOverlay`、保留 `titleBarStyle: 'hidden'`，并补 main/preload 窗口控制 IPC 与 renderer 自绘最小化 / 最大化还原 / 关闭按钮。验证通过：`desktop:build`、`typecheck`、`smoke:desktop-display-events`、`git diff --check`。额外 `typecheck:desktop` 不再出现本轮命名冲突，剩余失败仍为既有 `MACRO` / `Bun` / 可选原生依赖噪声。开发版真机目视确认待用户复看。
+- 第 117 轮：补 P23 / MM-09 聊天时间线自动贴底返修。真机反馈从底部向上滚动时会被新消息或内容尺寸变化拉回底部；根因是 120px 底部阈值同时承担“是否保持跟随”和“是否恢复跟随”，用户刚向上滚动但还没离开阈值时仍被判定为贴底。本轮已拆分自动跟随语义：用户向上滚动会立即暂停贴底，只在重新接近真实底部或点击“回到底部”后恢复；非贴底状态下 ResizeObserver 只更新新内容提示，不再强制滚动。验证通过：`desktop:build`、`typecheck`、`smoke:desktop-display-events`、`git diff --check`；额外 `typecheck:desktop` 仍失败在既有 `MACRO` / `Bun` / 可选依赖类型噪声。
+- 第 118 轮：补聊天 Markdown 代码块复制入口。真机截图确认普通消息中的三反引号代码块由 `renderMessageBlocks()` 直接渲染 `.message-code`，不是 `RawDataBlock`，因此缺少右上角复制按钮。本轮已把 Markdown 代码块改成带复制按钮的小组件，复用 `window.ccr.copyText` 和现有 raw-data 复制按钮视觉，复制内容只包含代码本体，不包含三反引号。验证通过：`desktop:build`、`typecheck`、`smoke:desktop-display-events`。
+- 第 119 轮：修复历史会话必须重启客户端才出现的问题。真机反馈新生成历史会话、或当前会话切到新会话后成为历史，都必须重启 Desktop 才能在历史列表看到。根因是 App Server 的 `session/history/list` 用内存中所有 thread 的 `sessionId/resumedFromSessionId` 作为“当前 session”集合，导致旧 thread 只要还在内存里就被 `includeCurrent: false` 误过滤；重启后内存清空才显示。已改为 Core 维护单一当前 thread：新建、恢复和开始 turn 时把目标 thread 标为 `active`，其他 thread 标为 `closed`；历史列表只过滤 `active` thread 的 sessionId。验证通过：`typecheck`、`build`、`smoke:app-server-client`、`smoke:app-server`、`git diff --check`。
+- 第 120 轮：修复恢复历史会话后工具卡误显示“正在读取 / 执行中”。真机反馈重新读取会话时，历史里的 Read / PowerShell 等工具卡仍显示 running。根因是 transcript 中工具结果通常落在 `role=user` 的 `tool_result` block，历史回放此前按 role=user 直接渲染成 `user_message`，导致 `tool_result` 没有进入工具生命周期合并；前面的 `tool_use` 就一直停在执行中。已改为历史回放优先识别 `tool_use/tool_result/progress` 生命周期块，即使来自 user role 也进入工具合并；同时历史来源的孤立 `tool_use` 兜底不再显示 running，避免把已结束历史误当成当前执行。验证通过：`desktop:build`、`typecheck`、`smoke:desktop-display-events`。
+- 第 121 轮：修复 DeepSeek 场景下内部附件 raw JSON 泄露。真机反馈 DeepSeek 对话里出现“附件”卡片并铺出大段黑色 JSON，内容实际是 `todo.md` 文件读取附件结构（包含 `content`、`file.filePath`、`displayPath` 等字段）。根因是 Desktop 对 `attachment` content block 的 Markdown fallback 直接 `JSON.stringify(block.attachment)`，且附件快照未识别 `file.filePath/displayPath`。本轮已改为附件文本只显示简短摘要，不再展开 `content`；附件快照补充识别嵌套 `file.filePath` 与 `displayPath`，后续可按文件/附件条展示。验证通过：`desktop:build`、`typecheck`、`smoke:desktop-display-events`。
+- 第 122 轮：完成 P23 / MM-09 真机验收和提交前文档收口。用户已确认 `codex-oauth / gpt-5.5` 真实图片请求能让模型读取图片，文本模型发送图片会被拦截，小文本文件、图片粘贴、图片点开预览和历史恢复/中断返修均已复测通过。`multimodal-input-output-todo.md` 已标记 MM-09 完成，`CHANGELOG.md` 补当前未发布说明；本阶段只 commit + push，不打包发布。
 
 ## 备注
 
-- 当前状态：active
-- 下一步需要：继续 P23-1，先盘点 Desktop composer 附件草稿、App Server turn/start 入参、Core user message 和当前预览/发送断点。
+- 当前状态：P23 第一版已完成，提交前收口中。
+- 下一步需要：跑最终验证，commit + push；之后进入 P24 或新的 Desktop 真机返修项。
 - 当前仓库：`D:\agent_project\claude-code-reforged`
 - 当前主线：先补 App Server，再把 Desktop App 做完整；当前进入模型输出与运行事件展示能力产品化，VS Code 插件延后。
 - 第一阶段非目标：不做 websocket、daemon、多客户端共享、VS Code 插件、完整自动更新。

@@ -165,8 +165,9 @@ export function extractFirstPromptFromHead(head: string): string {
         texts.push(content)
       } else if (Array.isArray(content)) {
         for (const block of content as Record<string, unknown>[]) {
-          if (block.type === 'text' && typeof block.text === 'string') {
-            texts.push(block.text as string)
+          const text = getUserContentBlockText(block)
+          if (text) {
+            texts.push(text)
           }
         }
       }
@@ -199,6 +200,21 @@ export function extractFirstPromptFromHead(head: string): string {
   }
   if (commandFallback) return commandFallback
   return ''
+}
+
+function getUserContentBlockText(block: unknown): string | undefined {
+  if (!block || typeof block !== 'object' || Array.isArray(block)) {
+    return undefined
+  }
+  const object = block as Record<string, unknown>
+  const type = typeof object.type === 'string' ? object.type : ''
+  if (
+    (type === 'text' || type === 'input_text' || type === 'output_text') &&
+    typeof object.text === 'string'
+  ) {
+    return object.text
+  }
+  return undefined
 }
 
 // ---------------------------------------------------------------------------

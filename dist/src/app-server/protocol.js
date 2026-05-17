@@ -102,6 +102,31 @@ export const ModelProfileSetCurrentParamsSchema = z
     model: z.string().min(1).optional(),
 })
     .strict();
+const ModelCapabilityOverrideSchema = z
+    .object({
+    inputModalities: z
+        .array(z.enum(['text', 'image', 'file', 'audio']))
+        .optional(),
+    outputModalities: z.array(z.enum(['text', 'image', 'audio'])).optional(),
+    tools: z.boolean().optional(),
+    structuredOutput: z.boolean().optional(),
+    image: z
+        .object({
+        maxImages: z.number().int().positive().optional(),
+        maxImageBytes: z.number().int().positive().optional(),
+        mimeTypes: z.array(z.string().min(1)).optional(),
+    })
+        .strict()
+        .optional(),
+    reason: z.string().min(1).optional(),
+})
+    .strict();
+const ModelCapabilityOverridesSchema = z
+    .object({
+    default: ModelCapabilityOverrideSchema.optional(),
+    models: z.record(ModelCapabilityOverrideSchema).optional(),
+})
+    .strict();
 export const ModelProfileSaveParamsSchema = z
     .object({
     profileId: z.string().min(1).optional(),
@@ -124,6 +149,7 @@ export const ModelProfileSaveParamsSchema = z
     baseUrl: z.string().min(1).optional(),
     defaultModel: z.string().min(1).optional(),
     models: z.array(z.string().min(1)).optional(),
+    capabilityOverrides: ModelCapabilityOverridesSchema.optional(),
     setCurrent: z.boolean().optional(),
 })
     .strict();
@@ -209,15 +235,74 @@ export const SessionHistoryListParamsSchema = z
 })
     .strict()
     .default({});
-export const TurnStartParamsSchema = z
+export const TurnContentSourceSchema = z.union([
+    z
+        .object({
+        kind: z.literal('file'),
+        path: z.string().min(1),
+    })
+        .strict(),
+    z
+        .object({
+        kind: z.literal('url'),
+        url: z.string().min(1),
+    })
+        .strict(),
+    z
+        .object({
+        kind: z.literal('contentRef'),
+        contentRef: z.string().min(1),
+    })
+        .strict(),
+]);
+const TurnAttachmentMetadataSchema = z
     .object({
-    threadId: z.string().min(1),
-    input: z
+    attachmentId: z.string().min(1).optional(),
+    displayName: z.string().min(1).optional(),
+    mimeType: z.string().min(1).optional(),
+    sizeBytes: z.number().int().nonnegative().optional(),
+    source: TurnContentSourceSchema.optional(),
+})
+    .strict();
+export const TurnTextContentBlockSchema = z
+    .object({
+    type: z.literal('text'),
+    text: z.string().min(1),
+})
+    .strict();
+export const TurnImageContentBlockSchema = TurnAttachmentMetadataSchema.extend({
+    type: z.literal('image'),
+}).strict();
+export const TurnFileContentBlockSchema = TurnAttachmentMetadataSchema.extend({
+    type: z.literal('file'),
+}).strict();
+export const TurnAudioContentBlockSchema = TurnAttachmentMetadataSchema.extend({
+    type: z.literal('audio'),
+}).strict();
+export const TurnContentBlockSchema = z.discriminatedUnion('type', [
+    TurnTextContentBlockSchema,
+    TurnImageContentBlockSchema,
+    TurnFileContentBlockSchema,
+    TurnAudioContentBlockSchema,
+]);
+export const TurnInputSchema = z.discriminatedUnion('type', [
+    z
         .object({
         type: z.literal('text'),
         text: z.string().min(1),
     })
         .strict(),
+    z
+        .object({
+        type: z.literal('content'),
+        content: z.array(TurnContentBlockSchema).min(1),
+    })
+        .strict(),
+]);
+export const TurnStartParamsSchema = z
+    .object({
+    threadId: z.string().min(1),
+    input: TurnInputSchema,
     options: z
         .object({
         stream: z.boolean().optional(),

@@ -3,6 +3,8 @@ import { getSystemPrompt } from '../constants/prompts.js';
 import { APP_SERVER_QUERY_SOURCE } from '../constants/querySource.js';
 import { getSystemContext, getUserContext } from '../context.js';
 import { query } from '../query.js';
+import { shouldUseBuiltinLlmRuntime } from '../services/llm/claudeApiAdapter.js';
+import { loadLlmConfig } from '../services/llm/llmConfig.js';
 import { getLlmRuntimeAuthStatus } from '../services/llm/runtimeStatus.js';
 import { getDefaultAppState } from '../state/AppStateStore.js';
 import { assembleToolPool } from '../tools.js';
@@ -20,7 +22,9 @@ export const runCoreQueryTurn = async (input) => {
         throw new CoreError('auth_required', authStatus.message);
     }
     setCwd(workspace.path);
-    const userMessage = createUserMessage({ content: turn.input.text });
+    const userMessage = createUserMessage({
+        content: createQueryUserMessageContent(turn),
+    });
     const messagesForQuery = [...historyMessages, userMessage];
     await recordMessage(userMessage);
     emitCompletedItem(emit, {
@@ -28,7 +32,7 @@ export const runCoreQueryTurn = async (input) => {
         threadId: turn.threadId,
         turnId: turn.turnId,
         kind: 'user_message',
-        content: [{ type: 'text', text: turn.input.text }],
+        content: renderUserMessageContent(turn),
     });
     const runtime = createCoreQueryRuntime({
         turn,
@@ -648,6 +652,19 @@ function hasToolResult(content) {
 }
 function createItemId() {
     return `item_${randomUUID()}`;
+}
+function renderUserMessageContent(turn) {
+    if (turn.input.type === 'text') {
+        return [{ type: 'text', text: turn.input.text }];
+    }
+    return turn.input.content.map(block => ({ ...block }));
+}
+function createQueryUserMessageContent(turn) {
+    if (turn.input.type !== 'content' ||
+        !shouldUseBuiltinLlmRuntime(loadLlmConfig())) {
+        return turn.input.text;
+    }
+    return turn.input.content.map(block => ({ ...block }));
 }
 function extractAssistantText(message) {
     const content = message.message.content;

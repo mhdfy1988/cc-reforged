@@ -12,7 +12,38 @@ export type LlmAuthStrategy =
   | 'external_process'
   | 'hybrid'
   | 'unknown'
-export type LlmInputModality = 'text' | 'image' | 'audio'
+export type LlmInputModality = 'text' | 'image' | 'file' | 'audio'
+export type LlmOutputModality = 'text' | 'image' | 'audio'
+export type LlmModelCapabilitySource =
+  | 'builtin'
+  | 'profile_override'
+  | 'default'
+
+export interface LlmImageCapabilityLimits {
+  maxImages?: number
+  maxImageBytes?: number
+  mimeTypes?: readonly string[]
+}
+
+export interface LlmModelCapabilityOverride {
+  inputModalities?: readonly LlmInputModality[]
+  outputModalities?: readonly LlmOutputModality[]
+  tools?: boolean
+  structuredOutput?: boolean
+  image?: LlmImageCapabilityLimits
+  reason?: string
+}
+
+export interface LlmModelCapabilities {
+  inputModalities: readonly LlmInputModality[]
+  outputModalities: readonly LlmOutputModality[]
+  tools: boolean
+  structuredOutput: boolean
+  source: LlmModelCapabilitySource
+  reason: string
+  baseSource?: LlmModelCapabilitySource
+  image?: LlmImageCapabilityLimits
+}
 
 export type LlmMessageRole = 'system' | 'user' | 'assistant' | 'tool'
 
@@ -43,11 +74,36 @@ export interface LlmToolResultPart {
   isError?: boolean
 }
 
+export type LlmImageSource =
+  | {
+      kind: 'file'
+      path: string
+    }
+  | {
+      kind: 'url'
+      url: string
+    }
+  | {
+      kind: 'contentRef'
+      contentRef: string
+    }
+
+export interface LlmImagePart {
+  type: 'image'
+  mimeType: string
+  source?: LlmImageSource
+  data?: string
+  attachmentId?: string
+  displayName?: string
+  sizeBytes?: number
+}
+
 export type LlmContentPart =
   | LlmTextPart
   | LlmThinkingPart
   | LlmToolCallPart
   | LlmToolResultPart
+  | LlmImagePart
 
 export interface LlmToolDefinition {
   name: string
@@ -94,6 +150,7 @@ export interface LlmModelCatalogEntry {
   supportsReasoning: boolean
   supportsTools: boolean
   inputModalities: readonly LlmInputModality[]
+  modelCapabilities?: LlmModelCapabilities
   metadata?: Readonly<Record<string, unknown>>
 }
 

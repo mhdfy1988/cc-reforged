@@ -1,5 +1,7 @@
 # CCR 多供应商模型与协议接入设计
 
+工具调用协议的统一化规则单独见 [CCR Provider 工具协议统一化标准](./provider-tool-protocol-normalization.md)。本文负责 provider、profile、模型能力和协议接入边界；不要在各工具里为每个 provider 单独写一套工具格式适配。
+
 ## 1. 目标
 
 这份文档沉淀 CCR 后续“多供应商模型接入”的产品和技术边界。
@@ -9,7 +11,7 @@
 - Core 侧：多供应商、多协议、多认证方式、多模型目录和能力归一化。
 - Desktop 侧：模型与供应商配置页、当前模型快速切换、连接测试和状态展示。
 
-多模态输入/输出、附件上传、图片预览和文件内容发送不在本文展开，单独进入 [CCR 多模态输入输出设计](./multimodal-input-output-design.md)。本文只定义 provider/profile 的能力声明，例如 `vision`、`multimodalInput`、`fileInput`，供多模态专项判断当前模型是否可用。
+多模态输入/输出、附件上传、图片预览和文件内容发送不在本文展开，单独进入 [CCR 多模态输入输出设计](./multimodal-input-output-design.md)。本文只定义 provider/profile/model 的能力声明，例如 `input.image`、`input.file`、`output.image`、`tools` 和能力限制，供多模态专项判断当前消息是否可发送。
 
 这不是单纯给前台加几个模型选项，而是把 CCR 的 LLM Runtime 从“已有 `anthropic` / `codex-oauth` 原型”推进到“可管理多个模型配置档案”的阶段。
 
@@ -195,17 +197,32 @@ OpenAI Compatible
   "apiMode": "openai-chat",
   "baseUrl": "https://example.com/v1",
   "auth": {
-    "strategy": "api-key",
+    "strategy": "api_key",
     "accountId": "work"
   },
   "defaultModel": "deepseek-chat",
   "models": ["deepseek-chat", "claude-sonnet-4.5"],
-  "capabilities": {
-    "streaming": true,
-    "tools": true,
-    "vision": false,
-    "structuredOutput": false,
-    "reasoning": false
+  "capabilityOverrides": {
+    "default": {
+      "inputModalities": ["text"],
+      "outputModalities": ["text"],
+      "tools": true,
+      "structuredOutput": false,
+      "reason": "NewAPI 工作账号当前只允许文本输入"
+    },
+    "models": {
+      "claude-sonnet-4.5": {
+        "inputModalities": ["text", "image"],
+        "outputModalities": ["text"],
+        "tools": true,
+        "structuredOutput": false,
+        "image": {
+          "maxImages": 10,
+          "maxImageBytes": 10485760,
+          "mimeTypes": ["image/png", "image/jpeg"]
+        }
+      }
+    }
   },
   "availability": {
     "status": "verified",
@@ -222,6 +239,57 @@ OpenAI Compatible
 - 同一个 endpoint 可以有默认模型和可选模型列表。
 - 可用性、测试结果、失败原因可以挂到档案上。
 - 顶部快速切换时切的是明确档案，而不是隐含环境变量。
+
+### 4.2.1 模型能力声明
+
+模型能力不是普通展示标签，而是发送前校验和 provider adapter 映射的输入。
+
+第一版能力结构：
+
+```ts
+type LlmModelCapabilities = {
+  inputModalities: Array<'text' | 'image' | 'file' | 'audio'>
+  outputModalities: Array<'text' | 'image' | 'audio'>
+  tools: boolean
+  structuredOutput: boolean
+  source: 'builtin' | 'profile_override' | 'default'
+  reason: string
+  baseSource?: 'builtin' | 'default'
+  image?: {
+    maxImages?: number
+    maxImageBytes?: number
+    mimeTypes?: string[]
+  }
+}
+```
+
+第一版能力来源只保留两层：
+
+1. 内置能力目录。
+   - 官网 / 官方文档是这份目录的事实来源。
+   - 来源包括模型页、vision/audio/file input 文档、SDK 示例和官方限制说明。
+   - CCR 维护版本化 catalog，保存已确认模型能力。
+   - 官网信息更新后，需要通过代码变更或 catalog 更新进入 CCR，不能运行时临时抓网页。
+   - 这层适合官方 OpenAI、Anthropic、Gemini、MiniMax、DeepSeek 等 provider。
+2. Profile 覆盖。
+   - 用户或中转配置可以显式声明能力。
+   - 用于处理“模型名支持图片，但当前中转禁用了图片”或“中转额外支持某能力”的情况。
+   - OpenAI Compatible / 第三方中转默认必须走 Profile 覆盖，不能只按模型名继承官方模型能力。
+
+如果两层都没有命中，则使用默认能力：
+
+- 只支持文本输入和文本输出。
+- `source = 'default'`，`reason` 说明未命中内置目录或 Profile 覆盖。
+
+不变式：
+
+- 能力必须按 `profileId + model + apiMode` 解析，不能只按裸模型名判断。
+- OpenAI Compatible / 第三方中转默认是未知能力；除非 Profile 覆盖明确支持，否则不启用图片/文件输入。
+- 多模态专项只消费解析后的能力，不在 Desktop UI 或 provider adapter 里再次猜模型能力。
+- 每轮 metadata 可以记录实际使用能力快照，便于排查“为什么这个附件被阻止/降级”。
+- 官网是第一来源，但不是运行时唯一真相；最终能力必须由当前 Profile、模型和协议模式解析得出。
+
+当前代码中的能力解析文件、已内置模型能力和缺口清单见 [CCR 多模态输入输出设计：当前实现状态](./multimodal-input-output-design.md#32-当前实现状态)。多供应商专项负责维护 provider/profile/model 能力来源，多模态专项只消费最终解析结果。
 
 ### 4.3 Provider 与 Protocol 分离
 

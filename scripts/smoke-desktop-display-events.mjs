@@ -85,6 +85,40 @@ assert(
   'todo_reminder must not be rendered as a visible attachment event',
 )
 
+const todoValidationError = events.find(
+  event => event.id === 'fixture-todowrite-validation-error',
+)
+assert(
+  todoValidationError?.type === 'tool_call',
+  'invalid TodoWrite input should render as a tool error card',
+)
+assert(
+  !todoValidationError.todoSnapshot,
+  'invalid TodoWrite input must not be silently converted into a todo overlay',
+)
+assert(
+  todoValidationError.timelineHidden === false,
+  'invalid TodoWrite input should stay visible instead of being hidden as a control tool',
+)
+assert(
+  todoValidationError.toolSnapshot?.name === 'TodoWrite' &&
+    todoValidationError.toolSnapshot.status === 'failed' &&
+    todoValidationError.toolSnapshot.category === 'control',
+  'invalid TodoWrite input should preserve tool identity and failed status',
+)
+assert(
+  String(todoValidationError.toolSnapshot?.errorMessage).includes('content') &&
+    String(todoValidationError.toolSnapshot?.errorMessage).includes('activeForm'),
+  'invalid TodoWrite input should explain missing schema fields',
+)
+assert(
+  JSON.stringify(todoValidationError.toolSnapshot?.input).includes('"name"') &&
+    !JSON.stringify(todoValidationError.toolSnapshot?.result).includes(
+      '"content"',
+    ),
+  'invalid TodoWrite input should remain an error instead of mapping name/description into content',
+)
+
 for (const event of events) {
   assert(typeof event.id === 'string' && event.id, 'event.id is required')
   assert(typeof event.text === 'string', `event.text is required for ${event.id}`)
@@ -205,6 +239,36 @@ for (const event of events) {
     )
   }
 
+  if (event.attachmentSnapshots) {
+    assert(
+      Array.isArray(event.attachmentSnapshots) &&
+        event.attachmentSnapshots.length > 0,
+      `message event ${event.id} must expose attachment snapshot list`,
+    )
+    for (const attachment of event.attachmentSnapshots) {
+      assert(
+        typeof attachment.name === 'string' && attachment.name,
+        `message attachment ${event.id} must expose name`,
+      )
+      assert(
+        typeof attachment.status === 'string' && attachment.status,
+        `message attachment ${event.id} must expose status`,
+      )
+      assert(
+        typeof attachment.source === 'string' && attachment.source,
+        `message attachment ${event.id} must expose source`,
+      )
+      assert(
+        typeof attachment.safety === 'string' && attachment.safety,
+        `message attachment ${event.id} must expose safety`,
+      )
+    }
+    assert(
+      !JSON.stringify(event.attachmentSnapshots).includes('base64,'),
+      `message attachment ${event.id} must not inline encoded payloads`,
+    )
+  }
+
   if (event.referenceSnapshot) {
     assert(
       typeof event.referenceSnapshot.kind === 'string' &&
@@ -239,6 +303,34 @@ assert(
 assert(
   events.some(event => event.toolSnapshot?.name === 'Write' && event.fileSnapshot),
   'Write tool events should carry a normalized file snapshot',
+)
+
+const userAttachmentEvent = events.find(
+  event => event.id === 'fixture-user-attachment-1',
+)
+assert(
+  userAttachmentEvent?.attachmentSnapshots?.length >= 2,
+  'user messages should carry multiple normalized attachment snapshots',
+)
+assert(
+  userAttachmentEvent.attachmentSnapshots.some(
+    attachment => attachment.previewKind === 'image',
+  ) &&
+    userAttachmentEvent.attachmentSnapshots.some(
+      attachment => attachment.previewKind === 'text',
+    ),
+  'user message attachment snapshots should preserve image and text preview kinds',
+)
+
+const toolMediaEvent = events.find(
+  event => event.id === 'fixture-tool-media-output',
+)
+assert(
+  toolMediaEvent?.toolSnapshot?.name === 'Browser' &&
+    toolMediaEvent.attachmentSnapshots?.some(
+      attachment => attachment.source === 'Browser',
+    ),
+  'tool output media should carry normalized attachment snapshots',
 )
 assert(
   events.some(

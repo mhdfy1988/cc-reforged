@@ -9,8 +9,9 @@
 .window-titlebar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   height: 34px;
-  padding: 0 150px 0 10px;
+  padding: 0 0 0 10px;
   border-bottom: 1px solid rgba(216, 190, 162, 0.52);
   background: linear-gradient(180deg, #fff7eb, #fbf4e9);
   color: #211b16;
@@ -29,12 +30,129 @@
   white-space: nowrap;
 }
 
+.window-titlebar-drag {
+  align-self: stretch;
+  flex: 1 1 auto;
+  min-width: 16px;
+  -webkit-app-region: drag;
+}
+
 .window-titlebar-icon {
   width: 17px;
   height: 17px;
   flex: 0 0 auto;
   display: block;
   object-fit: contain;
+}
+
+.window-titlebar-controls {
+  display: flex;
+  align-self: stretch;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+
+.window-control-button {
+  position: relative;
+  display: grid;
+  width: 46px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid rgba(216, 190, 162, 0.18);
+  border-radius: 0;
+  background: transparent;
+  color: #4f3d2e;
+  padding: 0;
+}
+
+.window-control-button:hover {
+  background: rgba(117, 84, 53, 0.08);
+}
+
+.window-control-button:active {
+  background: rgba(117, 84, 53, 0.13);
+}
+
+.window-control-button.is-close:hover {
+  background: #c84132;
+  color: #fff;
+}
+
+.window-control-button.is-close:active {
+  background: #a92f24;
+}
+
+.window-control-icon {
+  position: relative;
+  width: 12px;
+  height: 12px;
+}
+
+.window-control-icon-minimize::before,
+.window-control-icon-maximize::before,
+.window-control-icon-close::before,
+.window-control-icon-close::after,
+.window-control-icon-restore::before,
+.window-control-icon-restore::after {
+  position: absolute;
+  content: "";
+}
+
+.window-control-icon-minimize::before {
+  left: 1px;
+  right: 1px;
+  bottom: 2px;
+  height: 1px;
+  background: currentColor;
+}
+
+.window-control-icon-maximize::before {
+  inset: 1px;
+  border: 1px solid currentColor;
+}
+
+.window-control-icon-restore::before,
+.window-control-icon-restore::after {
+  width: 8px;
+  height: 8px;
+  border: 1px solid currentColor;
+}
+
+.window-control-icon-restore::before {
+  top: 1px;
+  right: 1px;
+}
+
+.window-control-icon-restore::after {
+  left: 1px;
+  bottom: 1px;
+  background: #fbf4e9;
+}
+
+.window-control-button:hover .window-control-icon-restore::after {
+  background: #f3e8d9;
+}
+
+.window-control-button.is-close:hover .window-control-icon-restore::after {
+  background: #c84132;
+}
+
+.window-control-icon-close::before,
+.window-control-icon-close::after {
+  top: 5px;
+  left: 0;
+  width: 12px;
+  height: 1px;
+  background: currentColor;
+}
+
+.window-control-icon-close::before {
+  transform: rotate(45deg);
+}
+
+.window-control-icon-close::after {
+  transform: rotate(-45deg);
 }
 
 .shell {

@@ -1,6 +1,7 @@
 import { getDefaultLlmRuntime, resetDefaultLlmRuntime, } from '../services/llm/defaultRuntime.js';
 import { getLlmProfileForProvider, listResolvedLlmProfiles, loadLlmConfig, deletePersistedLlmProfile, updatePersistedLlmConfig, upsertPersistedLlmProfile, } from '../services/llm/llmConfig.js';
 import { getLlmModelCatalogEntry, listKnownLlmModelCatalogEntries, } from '../services/llm/modelCatalog.js';
+import { resolveLlmModelCapabilities } from '../services/llm/modelCapabilities.js';
 import { deleteLlmProfileCredential, updateLlmProviderApiKey, } from '../services/llm/providerCredentials.js';
 import { getLlmRuntimeAuthStatusForProvider, getLlmRuntimeAuthStatusSyncForProvider, getLlmRuntimeDisplayStatusForProvider, getResolvedLlmProviderDefinition, } from '../services/llm/runtimeStatus.js';
 import { resetDefaultCodexOAuthSession } from '../services/llm/sessions/defaultCodexOAuthSession.js';
@@ -9,26 +10,35 @@ export function listCoreModels(provider) {
     const config = loadLlmConfig();
     const runtime = getDefaultLlmRuntime();
     const providerDefinitions = runtime.listProviderDefinitions();
+    const resolvedProfiles = listResolvedLlmProfiles(config);
     const providers = providerDefinitions
         .filter(definition => !provider || definition.id === provider)
         .map(definition => {
         const providerConfig = config.providers[definition.id];
-        const defaultModel = providerConfig?.defaultModel ??
+        const providerProfiles = resolvedProfiles.filter(profile => profile.providerType === definition.id);
+        const profile = providerProfiles.find(profile => profile.id === config.currentProfileId) ??
+            providerProfiles[0];
+        const providerDefinition = getResolvedLlmProviderDefinition(definition.id, config);
+        const defaultModel = profile?.defaultModel ??
+            providerConfig?.defaultModel ??
             (definition.id === config.provider ? config.model : definition.id);
         return {
-            id: definition.id,
-            displayName: definition.displayName,
-            authStrategy: definition.authStrategy,
-            apiMode: definition.apiMode,
-            capabilities: definition.capabilities,
-            profiles: listResolvedLlmProfiles(config)
-                .filter(profile => profile.providerType === definition.id)
-                .map(profile => profile.id),
-            models: listKnownLlmModelCatalogEntries({
-                providerId: definition.id,
+            id: providerDefinition.id,
+            displayName: providerDefinition.displayName,
+            authStrategy: providerDefinition.authStrategy,
+            apiMode: providerDefinition.apiMode,
+            capabilities: providerDefinition.capabilities,
+            profiles: providerProfiles.map(profile => profile.id),
+            models: listCatalogEntriesForProvider({
+                providerId: providerDefinition.id,
                 defaultModel,
-                providerDefinition: getResolvedLlmProviderDefinition(definition.id, config),
-            }),
+                providerDefinition,
+                ...(profile ? { profile } : {}),
+            }).map(model => attachModelCapabilitiesToCatalogEntry({
+                model,
+                providerDefinition,
+                ...(profile ? { profile } : {}),
+            })),
         };
     });
     if (provider && providers.length === 0) {
@@ -42,7 +52,7 @@ export function listCoreModels(provider) {
             provider: config.provider,
             model: config.model,
         },
-        profiles: listResolvedLlmProfiles(config).map(profile => createModelProfileView(profile, config)),
+        profiles: resolvedProfiles.map(profile => createModelProfileView(profile, config)),
         providers,
     };
 }
@@ -96,6 +106,7 @@ export function getCoreModelAvailability(input = {}) {
         authStrategy: displayStatus.authStrategy,
         capabilities: displayStatus.capabilities,
         modelCatalogEntry: selection.modelCatalogEntry,
+        modelCapabilities: selection.modelCapabilities,
         ...(displayStatus.baseUrl ? { baseUrl: displayStatus.baseUrl } : {}),
         configPath: displayStatus.configPath,
         configSource: displayStatus.configSource,
@@ -314,6 +325,9 @@ export async function saveCoreModelProfile(input) {
             default: defaultModel,
             include: models.filter(model => model !== defaultModel),
         },
+        ...(input.capabilityOverrides
+            ? { capabilityOverrides: input.capabilityOverrides }
+            : {}),
     };
     const nextConfig = await upsertPersistedLlmProfile({
         profileId,
@@ -353,6 +367,9 @@ export async function copyCoreModelProfile(input) {
         ...(source.baseUrl ? { baseUrl: source.baseUrl } : {}),
         defaultModel: source.defaultModel,
         models: source.models,
+        ...(source.capabilityOverrides
+            ? { capabilityOverrides: source.capabilityOverrides }
+            : {}),
     });
 }
 export async function deleteCoreModelProfile(input) {
@@ -494,6 +511,14 @@ function resolveCoreModelSelection(input) {
         model: requestedModel,
         providerDefinition,
         modelCatalogEntry,
+        modelCapabilities: resolveLlmModelCapabilities({
+            providerId: requestedProvider,
+            apiMode: profile?.apiMode ?? providerDefinition.apiMode,
+            model: requestedModel,
+            providerCapabilities: providerDefinition.capabilities,
+            catalogEntry: modelCatalogEntry,
+            ...(profile ? { profile } : {}),
+        }),
     };
 }
 function listCatalogEntriesForProvider(input) {
@@ -515,6 +540,19 @@ function listCatalogEntriesForProvider(input) {
     }
     return Array.from(byModel.values());
 }
+function attachModelCapabilitiesToCatalogEntry(input) {
+    return {
+        ...input.model,
+        modelCapabilities: resolveLlmModelCapabilities({
+            providerId: input.model.provider,
+            apiMode: input.profile?.apiMode ?? input.providerDefinition.apiMode,
+            model: input.model.model,
+            providerCapabilities: input.providerDefinition.capabilities,
+            catalogEntry: input.model,
+            ...(input.profile ? { profile: input.profile } : {}),
+        }),
+    };
+}
 function createModelProfileView(profile, config) {
     return {
         id: profile.id,
@@ -525,6 +563,9 @@ function createModelProfileView(profile, config) {
         defaultModel: profile.defaultModel,
         models: profile.models,
         capabilities: profile.capabilities,
+        ...(profile.capabilityOverrides
+            ? { capabilityOverrides: profile.capabilityOverrides }
+            : {}),
         source: profile.source,
         isCurrent: profile.id === config.currentProfileId,
         ...(profile.accountId ? { accountId: profile.accountId } : {}),

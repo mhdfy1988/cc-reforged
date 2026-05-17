@@ -1981,8 +1981,9 @@ export function getFirstMeaningfulUserMessageTextContent<T extends Message>(
       texts.push(content)
     } else if (Array.isArray(content)) {
       for (const block of content) {
-        if (block.type === 'text' && block.text) {
-          texts.push(block.text)
+        const text = getUserContentBlockText(block)
+        if (text) {
+          texts.push(text)
         }
       }
     }
@@ -5144,9 +5145,9 @@ function extractFirstPromptFromChunk(chunk: string): string {
         texts.push(content)
       } else if (Array.isArray(content)) {
         for (const block of content) {
-          const b = block as Record<string, unknown>
-          if (b.type === 'text' && typeof b.text === 'string') {
-            texts.push(b.text as string)
+          const text = getUserContentBlockText(block)
+          if (text) {
+            texts.push(text)
           }
         }
       }
@@ -5206,6 +5207,21 @@ function extractFirstPromptFromChunk(chunk: string): string {
   if ((feature('PROACTIVE') || feature('KAIROS')) && hasTickMessages)
     return 'Proactive session'
   return ''
+}
+
+function getUserContentBlockText(block: unknown): string | undefined {
+  if (!block || typeof block !== 'object' || Array.isArray(block)) {
+    return undefined
+  }
+  const object = block as Record<string, unknown>
+  const type = typeof object.type === 'string' ? object.type : ''
+  if (
+    (type === 'text' || type === 'input_text' || type === 'output_text') &&
+    typeof object.text === 'string'
+  ) {
+    return object.text
+  }
+  return undefined
 }
 
 /**

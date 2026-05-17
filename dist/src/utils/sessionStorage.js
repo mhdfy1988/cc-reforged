@@ -1542,8 +1542,9 @@ export function getFirstMeaningfulUserMessageTextContent(transcript) {
         }
         else if (Array.isArray(content)) {
             for (const block of content) {
-                if (block.type === 'text' && block.text) {
-                    texts.push(block.text);
+                const text = getUserContentBlockText(block);
+                if (text) {
+                    texts.push(text);
                 }
             }
         }
@@ -4161,9 +4162,9 @@ function extractFirstPromptFromChunk(chunk) {
             }
             else if (Array.isArray(content)) {
                 for (const block of content) {
-                    const b = block;
-                    if (b.type === 'text' && typeof b.text === 'string') {
-                        texts.push(b.text);
+                    const text = getUserContentBlockText(block);
+                    if (text) {
+                        texts.push(text);
                     }
                 }
             }
@@ -4220,6 +4221,18 @@ function extractFirstPromptFromChunk(chunk) {
     if ((feature('PROACTIVE') || feature('KAIROS')) && hasTickMessages)
         return 'Proactive session';
     return '';
+}
+function getUserContentBlockText(block) {
+    if (!block || typeof block !== 'object' || Array.isArray(block)) {
+        return undefined;
+    }
+    const object = block;
+    const type = typeof object.type === 'string' ? object.type : '';
+    if ((type === 'text' || type === 'input_text' || type === 'output_text') &&
+        typeof object.text === 'string') {
+        return object.text;
+    }
+    return undefined;
 }
 /**
  * Like extractJsonStringField but returns the first `maxLen` characters of the

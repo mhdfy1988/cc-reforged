@@ -122,6 +122,33 @@ export const ModelProfileSetCurrentParamsSchema = z
   })
   .strict()
 
+const ModelCapabilityOverrideSchema = z
+  .object({
+    inputModalities: z
+      .array(z.enum(['text', 'image', 'file', 'audio']))
+      .optional(),
+    outputModalities: z.array(z.enum(['text', 'image', 'audio'])).optional(),
+    tools: z.boolean().optional(),
+    structuredOutput: z.boolean().optional(),
+    image: z
+      .object({
+        maxImages: z.number().int().positive().optional(),
+        maxImageBytes: z.number().int().positive().optional(),
+        mimeTypes: z.array(z.string().min(1)).optional(),
+      })
+      .strict()
+      .optional(),
+    reason: z.string().min(1).optional(),
+  })
+  .strict()
+
+const ModelCapabilityOverridesSchema = z
+  .object({
+    default: ModelCapabilityOverrideSchema.optional(),
+    models: z.record(ModelCapabilityOverrideSchema).optional(),
+  })
+  .strict()
+
 export const ModelProfileSaveParamsSchema = z
   .object({
     profileId: z.string().min(1).optional(),
@@ -144,6 +171,7 @@ export const ModelProfileSaveParamsSchema = z
     baseUrl: z.string().min(1).optional(),
     defaultModel: z.string().min(1).optional(),
     models: z.array(z.string().min(1)).optional(),
+    capabilityOverrides: ModelCapabilityOverridesSchema.optional(),
     setCurrent: z.boolean().optional(),
   })
   .strict()
@@ -242,15 +270,82 @@ export const SessionHistoryListParamsSchema = z
   .strict()
   .default({})
 
+export const TurnContentSourceSchema = z.union([
+  z
+    .object({
+      kind: z.literal('file'),
+      path: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('url'),
+      url: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('contentRef'),
+      contentRef: z.string().min(1),
+    })
+    .strict(),
+])
+
+const TurnAttachmentMetadataSchema = z
+  .object({
+    attachmentId: z.string().min(1).optional(),
+    displayName: z.string().min(1).optional(),
+    mimeType: z.string().min(1).optional(),
+    sizeBytes: z.number().int().nonnegative().optional(),
+    source: TurnContentSourceSchema.optional(),
+  })
+  .strict()
+
+export const TurnTextContentBlockSchema = z
+  .object({
+    type: z.literal('text'),
+    text: z.string().min(1),
+  })
+  .strict()
+
+export const TurnImageContentBlockSchema = TurnAttachmentMetadataSchema.extend({
+  type: z.literal('image'),
+}).strict()
+
+export const TurnFileContentBlockSchema = TurnAttachmentMetadataSchema.extend({
+  type: z.literal('file'),
+}).strict()
+
+export const TurnAudioContentBlockSchema = TurnAttachmentMetadataSchema.extend({
+  type: z.literal('audio'),
+}).strict()
+
+export const TurnContentBlockSchema = z.discriminatedUnion('type', [
+  TurnTextContentBlockSchema,
+  TurnImageContentBlockSchema,
+  TurnFileContentBlockSchema,
+  TurnAudioContentBlockSchema,
+])
+
+export const TurnInputSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('text'),
+      text: z.string().min(1),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('content'),
+      content: z.array(TurnContentBlockSchema).min(1),
+    })
+    .strict(),
+])
+
 export const TurnStartParamsSchema = z
   .object({
     threadId: z.string().min(1),
-    input: z
-      .object({
-        type: z.literal('text'),
-        text: z.string().min(1),
-      })
-      .strict(),
+    input: TurnInputSchema,
     options: z
       .object({
         stream: z.boolean().optional(),
@@ -368,7 +463,13 @@ export type SessionHistoryListParams = z.infer<
   typeof SessionHistoryListParamsSchema
 >
 export type TurnInterruptParams = z.infer<typeof TurnInterruptParamsSchema>
-export type TurnStartParams = z.infer<typeof TurnStartParamsSchema>
+export type TurnStartParams = {
+  threadId: string
+  input: TurnInput
+  options?: {
+    stream?: boolean
+  }
+}
 export type PermissionRespondParams = z.infer<
   typeof PermissionRespondParamsSchema
 >
@@ -506,10 +607,16 @@ export type AppServerTurn = {
   turnId: string
   threadId: string
   status: string
-  input: {
-    type: 'text'
-    text: string
-  }
+  input:
+    | {
+        type: 'text'
+        text: string
+      }
+    | {
+        type: 'content'
+        text: string
+        content: TurnContentBlock[]
+      }
   provider: string
   model: string
   createdAt: string
@@ -580,6 +687,61 @@ export type SessionHistoryListResult = {
   groups: SessionHistoryWorkspaceGroup[]
   nextCursor?: string
 }
+
+export type TurnContentSource =
+  | {
+      kind: 'file'
+      path: string
+    }
+  | {
+      kind: 'url'
+      url: string
+    }
+  | {
+      kind: 'contentRef'
+      contentRef: string
+    }
+
+export type TurnAttachmentMetadata = {
+  attachmentId?: string
+  displayName?: string
+  mimeType?: string
+  sizeBytes?: number
+  source?: TurnContentSource
+}
+
+export type TurnTextContentBlock = {
+  type: 'text'
+  text: string
+}
+
+export type TurnImageContentBlock = TurnAttachmentMetadata & {
+  type: 'image'
+}
+
+export type TurnFileContentBlock = TurnAttachmentMetadata & {
+  type: 'file'
+}
+
+export type TurnAudioContentBlock = TurnAttachmentMetadata & {
+  type: 'audio'
+}
+
+export type TurnContentBlock =
+  | TurnTextContentBlock
+  | TurnImageContentBlock
+  | TurnFileContentBlock
+  | TurnAudioContentBlock
+
+export type TurnInput =
+  | {
+      type: 'text'
+      text: string
+    }
+  | {
+      type: 'content'
+      content: TurnContentBlock[]
+    }
 
 export type TurnStartResult = {
   turn: AppServerTurn

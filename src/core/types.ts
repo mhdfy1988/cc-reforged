@@ -1,5 +1,61 @@
 export type CoreJsonObject = Record<string, unknown>
 
+export type CoreContentSource =
+  | {
+      kind: 'file'
+      path: string
+    }
+  | {
+      kind: 'url'
+      url: string
+    }
+  | {
+      kind: 'contentRef'
+      contentRef: string
+    }
+
+export type CoreAttachmentContentBlock = {
+  attachmentId?: string
+  displayName?: string
+  mimeType?: string
+  sizeBytes?: number
+  source?: CoreContentSource
+}
+
+export type CoreTextContentBlock = {
+  type: 'text'
+  text: string
+}
+
+export type CoreImageContentBlock = CoreAttachmentContentBlock & {
+  type: 'image'
+}
+
+export type CoreFileContentBlock = CoreAttachmentContentBlock & {
+  type: 'file'
+}
+
+export type CoreAudioContentBlock = CoreAttachmentContentBlock & {
+  type: 'audio'
+}
+
+export type CoreUserContentBlock =
+  | CoreTextContentBlock
+  | CoreImageContentBlock
+  | CoreFileContentBlock
+  | CoreAudioContentBlock
+
+export type CoreTurnInput =
+  | {
+      type: 'text'
+      text: string
+    }
+  | {
+      type: 'content'
+      text: string
+      content: CoreUserContentBlock[]
+    }
+
 export type CoreWorkspace = {
   path: string
   trusted: boolean
@@ -52,6 +108,7 @@ export type CoreTurnMetadata = {
   startedAt?: string | null
   completedAt?: string | null
   errorKind?: string
+  multimodalInput?: CoreJsonObject
 }
 
 export type CoreThread = {
@@ -69,10 +126,7 @@ export type CoreTurn = {
   turnId: string
   threadId: string
   status: CoreTurnStatus
-  input: {
-    type: 'text'
-    text: string
-  }
+  input: CoreTurnInput
   provider: string
   model: string
   createdAt: string

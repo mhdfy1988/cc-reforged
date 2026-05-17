@@ -22,7 +22,7 @@ export async function runTextOnlyCoreTurn(input) {
             turnId: turn.turnId,
             kind: 'user_message',
             status: 'completed',
-            content: [{ type: 'text', text: turn.input.text }],
+            content: renderUserMessageContent(turn),
         },
     });
     emit({
@@ -97,6 +97,12 @@ export async function runTextOnlyCoreTurn(input) {
 }
 function createItemId() {
     return `item_${randomUUID()}`;
+}
+function renderUserMessageContent(turn) {
+    if (turn.input.type === 'text') {
+        return [{ type: 'text', text: turn.input.text }];
+    }
+    return turn.input.content.map(block => ({ ...block }));
 }
 function extractAssistantText(message) {
     const content = message.message.content;

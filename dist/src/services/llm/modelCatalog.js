@@ -9,7 +9,7 @@ const CODEX_OAUTH_MODEL_CATALOG = {
         maxOutputTokens: 32_000,
         supportsReasoning: true,
         supportsTools: true,
-        inputModalities: TEXT_ONLY_MODALITIES,
+        inputModalities: TEXT_AND_IMAGE_MODALITIES,
     },
     'gpt-5.4': {
         displayName: 'GPT-5.4',

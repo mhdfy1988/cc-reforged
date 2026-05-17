@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { isNullRenderingAttachmentType } from '../../../../../../src/utils/nullRenderingAttachmentTypes.js'
 import type { ChatMessage, JsonObject } from './displayTypes.js'
 
@@ -101,9 +101,10 @@ export function renderMessageBlocks(text: string): ReactNode[] {
       }
       flushParagraph()
       blocks.push(
-        <pre className="message-code" key={`code-${blocks.length}`}>
-          <code>{codeLines.join('\n')}</code>
-        </pre>,
+        <MessageCodeBlock
+          code={codeLines.join('\n')}
+          key={`code-${blocks.length}`}
+        />,
       )
       continue
     }
@@ -168,6 +169,74 @@ export function renderMessageBlocks(text: string): ReactNode[] {
   return blocks.length ? blocks : [<p key="empty">暂无内容</p>]
 }
 
+type CopyState = 'idle' | 'copied' | 'failed'
+
+function MessageCodeBlock(props: { code: string }): ReactNode {
+  const [copyState, setCopyState] = useState<CopyState>('idle')
+
+  useEffect(() => {
+    if (copyState === 'idle') {
+      return
+    }
+    const timer = window.setTimeout(() => setCopyState('idle'), 1500)
+    return () => window.clearTimeout(timer)
+  }, [copyState])
+
+  async function copyCode(): Promise<void> {
+    try {
+      if (window.ccr?.copyText) {
+        await window.ccr.copyText(props.code)
+      } else {
+        await navigator.clipboard.writeText(props.code)
+      }
+      setCopyState('copied')
+    } catch {
+      setCopyState('failed')
+    }
+  }
+
+  const copyLabel =
+    copyState === 'copied'
+      ? '已复制'
+      : copyState === 'failed'
+        ? '复制失败'
+        : '复制代码'
+
+  return (
+    <div className="message-code-block raw-data-block">
+      <button
+        aria-label={copyLabel}
+        className={`raw-data-copy-button ${copyState}`}
+        onClick={() => void copyCode()}
+        title={copyLabel}
+        type="button"
+      >
+        {copyState === 'copied' ? (
+          <svg
+            aria-hidden="true"
+            className="raw-data-copy-svg"
+            viewBox="0 0 24 24"
+          >
+            <path d="M5 12.5 9.2 17 19 7" />
+          </svg>
+        ) : (
+          <svg
+            aria-hidden="true"
+            className="raw-data-copy-svg"
+            viewBox="0 0 24 24"
+          >
+            <rect height="11" rx="2" width="11" x="8" y="5" />
+            <rect height="11" rx="2" width="11" x="5" y="8" />
+          </svg>
+        )}
+      </button>
+      <pre className="message-code">
+        <code>{props.code}</code>
+      </pre>
+    </div>
+  )
+}
+
 function formatCompletedItemText(
   kind: string | undefined,
   blocks: JsonObject[],
@@ -227,7 +296,7 @@ function formatContentBlock(block: JsonObject): string {
   }
 
   if (type === 'attachment') {
-    return ['附件', formatUnknownValue(block.attachment)].filter(Boolean).join('\n')
+    return formatAttachmentSummary(block.attachment)
   }
 
   if ('value' in block) {
@@ -304,6 +373,31 @@ function formatUnknownValue(value: unknown): string {
     return limitMessageText(value)
   }
   return formatJsonBlock(value)
+}
+
+function formatAttachmentSummary(value: unknown): string {
+  if (!value || typeof value !== 'object') {
+    return '附件'
+  }
+
+  const attachment = value as JsonObject
+  const nestedFile =
+    attachment.file && typeof attachment.file === 'object'
+      ? (attachment.file as JsonObject)
+      : undefined
+  const label = getStringValue(
+    attachment.displayPath ??
+      attachment.displayName ??
+      attachment.name ??
+      attachment.fileName ??
+      attachment.filename ??
+      attachment.path ??
+      attachment.absolutePath ??
+      nestedFile?.filePath ??
+      nestedFile?.path,
+    '',
+  )
+  return label ? `附件：${label}` : '附件'
 }
 
 function formatJsonBlock(value: unknown): string {

@@ -75,6 +75,7 @@ export class CoreSessionService {
         this.#threadReadFileStates.set(thread.threadId, createFileStateCacheWithSizeLimit(READ_FILE_STATE_CACHE_SIZE));
         this.#threadTranscriptStates.set(thread.threadId, transcriptState);
         this.#threadRuntimeStates.set(thread.threadId, createThreadRuntimeState());
+        this.markCurrentThread(thread.threadId);
         this.emitLater({ type: 'thread_started', thread });
         return thread;
     }
@@ -85,6 +86,7 @@ export class CoreSessionService {
         }
         const existingThread = this.findThreadBySessionId(params.sessionId);
         if (existingThread) {
+            this.markCurrentThread(existingThread.threadId);
             return existingThread;
         }
         const resumed = await loadConversationForResume(params.transcriptPath
@@ -141,6 +143,7 @@ export class CoreSessionService {
         this.#threadReadFileStates.set(thread.threadId, extractReadFilesFromMessages(resumed.messages, workspace.path, READ_FILE_STATE_CACHE_SIZE));
         this.#threadTranscriptStates.set(thread.threadId, transcriptState);
         this.#threadRuntimeStates.set(thread.threadId, createThreadRuntimeState(resumed.messages));
+        this.markCurrentThread(thread.threadId);
         this.emitLater({ type: 'thread_started', thread });
         return thread;
     }
@@ -164,6 +167,7 @@ export class CoreSessionService {
         }
         const config = loadLlmConfig();
         const now = new Date().toISOString();
+        this.markCurrentThread(thread.threadId);
         const derivedTitle = deriveThreadTitleFromText(params.input.text);
         if (derivedTitle && isGenericThreadTitle(thread.title)) {
             thread.title = derivedTitle;
@@ -176,17 +180,14 @@ export class CoreSessionService {
             turnId: createId('turn'),
             threadId: thread.threadId,
             status: 'queued',
-            input: {
-                type: 'text',
-                text: params.input.text,
-            },
+            input: cloneCoreTurnInput(params.input),
             provider: config.provider,
             model: config.model,
             createdAt: now,
             startedAt: null,
             completedAt: null,
             error: null,
-            metadata: createInitialTurnMetadata(config),
+            metadata: mergeTurnMetadata(createInitialTurnMetadata(config), params.metadata),
         };
         this.#turns.set(turn.turnId, turn);
         thread.activeTurnId = turn.turnId;
@@ -744,6 +745,51 @@ export class CoreSessionService {
         await resetSessionFilePointer();
         this.#activeTranscriptSessionId = transcriptState.sessionId;
     }
+    markCurrentThread(threadId) {
+        for (const thread of this.#threads.values()) {
+            thread.status = thread.threadId === threadId ? 'active' : 'closed';
+        }
+    }
+}
+function cloneCoreTurnInput(input) {
+    if (input.type === 'text') {
+        return {
+            type: 'text',
+            text: input.text,
+        };
+    }
+    return {
+        type: 'content',
+        text: input.text,
+        content: input.content.map(cloneCoreUserContentBlock),
+    };
+}
+function cloneCoreUserContentBlock(block) {
+    if (block.type === 'text') {
+        return {
+            type: 'text',
+            text: block.text,
+        };
+    }
+    const cloned = {
+        type: block.type,
+    };
+    if (block.attachmentId) {
+        cloned.attachmentId = block.attachmentId;
+    }
+    if (block.displayName) {
+        cloned.displayName = block.displayName;
+    }
+    if (block.mimeType) {
+        cloned.mimeType = block.mimeType;
+    }
+    if (block.sizeBytes !== undefined) {
+        cloned.sizeBytes = block.sizeBytes;
+    }
+    if (block.source) {
+        cloned.source = { ...block.source };
+    }
+    return cloned;
 }
 function createId(prefix) {
     return `${prefix}_${randomUUID()}`;

@@ -18,6 +18,7 @@ import {
   type ResolvedLlmConfig,
 } from './llmConfig.js'
 import { getLlmModelCatalogEntry } from './modelCatalog.js'
+import { resolveLlmModelCapabilities } from './modelCapabilities.js'
 import {
   createFallbackLlmProviderDefinition,
   getBuiltinLlmProviderDefinition,
@@ -28,6 +29,7 @@ import type {
   LlmApiMode,
   LlmAuthStrategy,
   LlmModelCatalogEntry,
+  LlmModelCapabilities,
   LlmProviderCapabilities,
   LlmProviderDefinition,
 } from './types.js'
@@ -40,6 +42,7 @@ export interface LlmRuntimeDisplayStatus {
   apiMode: LlmApiMode
   capabilities: Readonly<LlmProviderCapabilities>
   modelCatalogEntry: LlmModelCatalogEntry
+  modelCapabilities: LlmModelCapabilities
   profileId?: string
   baseUrl?: string
   configPath: string
@@ -123,17 +126,28 @@ export function getLlmRuntimeDisplayStatusForProvider(
     provider,
     config,
   )
+  const modelCatalogEntry = getLlmModelCatalogEntry({
+    providerId: provider,
+    model,
+    providerDefinition,
+  })
+  const apiMode = profile?.apiMode ?? providerDefinition.apiMode
+  const authStrategy = profile?.authStrategy ?? providerDefinition.authStrategy
   return {
     providerId: provider,
     providerDisplayName: providerDefinition.displayName,
     model,
-    authStrategy: providerDefinition.authStrategy,
-    apiMode: providerDefinition.apiMode,
+    authStrategy,
+    apiMode,
     capabilities: providerDefinition.capabilities,
-    modelCatalogEntry: getLlmModelCatalogEntry({
+    modelCatalogEntry,
+    modelCapabilities: resolveLlmModelCapabilities({
       providerId: provider,
+      apiMode,
       model,
-      providerDefinition,
+      providerCapabilities: providerDefinition.capabilities,
+      catalogEntry: modelCatalogEntry,
+      ...(profile ? { profile } : {}),
     }),
     ...(profile ? { profileId: profile.id } : {}),
     ...(profile?.baseUrl ?? providerConfig?.baseUrl

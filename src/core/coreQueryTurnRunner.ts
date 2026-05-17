@@ -3,6 +3,8 @@ import { getSystemPrompt } from '../constants/prompts.js'
 import { APP_SERVER_QUERY_SOURCE } from '../constants/querySource.js'
 import { getSystemContext, getUserContext } from '../context.js'
 import { query } from '../query.js'
+import { shouldUseBuiltinLlmRuntime } from '../services/llm/claudeApiAdapter.js'
+import { loadLlmConfig } from '../services/llm/llmConfig.js'
 import { getLlmRuntimeAuthStatus } from '../services/llm/runtimeStatus.js'
 import { getDefaultAppState, type AppState } from '../state/AppStateStore.js'
 import type { ToolPermissionContext, ToolUseContext, Tools } from '../Tool.js'
@@ -87,7 +89,9 @@ export const runCoreQueryTurn: CoreQueryTurnRunner = async input => {
 
   setCwd(workspace.path)
 
-  const userMessage = createUserMessage({ content: turn.input.text })
+  const userMessage = createUserMessage({
+    content: createQueryUserMessageContent(turn),
+  })
   const messagesForQuery = [...historyMessages, userMessage]
   await recordMessage(userMessage)
   emitCompletedItem(emit, {
@@ -95,7 +99,7 @@ export const runCoreQueryTurn: CoreQueryTurnRunner = async input => {
     threadId: turn.threadId,
     turnId: turn.turnId,
     kind: 'user_message',
-    content: [{ type: 'text', text: turn.input.text }],
+    content: renderUserMessageContent(turn),
   })
 
   const runtime = createCoreQueryRuntime({
@@ -852,6 +856,29 @@ function hasToolResult(content: unknown): boolean {
 
 function createItemId(): string {
   return `item_${randomUUID()}`
+}
+
+function renderUserMessageContent(turn: CoreTurn): CoreJsonObject[] {
+  if (turn.input.type === 'text') {
+    return [{ type: 'text', text: turn.input.text }]
+  }
+
+  return turn.input.content.map(block => ({ ...block }))
+}
+
+function createQueryUserMessageContent(
+  turn: CoreTurn,
+): Parameters<typeof createUserMessage>[0]['content'] {
+  if (
+    turn.input.type !== 'content' ||
+    !shouldUseBuiltinLlmRuntime(loadLlmConfig())
+  ) {
+    return turn.input.text
+  }
+
+  return turn.input.content.map(block => ({ ...block })) as Parameters<
+    typeof createUserMessage
+  >[0]['content']
 }
 
 function extractAssistantText(message: AssistantMessage): string {

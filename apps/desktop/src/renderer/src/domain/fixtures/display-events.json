@@ -3,11 +3,26 @@
   "expectedCards": [
     {
       "source": "event",
+      "fixtureId": "fixture-user-attachment-1",
+      "cardType": "message_attachments",
+      "eventType": "user_message"
+    },
+    {
+      "source": "event",
       "fixtureId": "fixture-tool-call-1",
       "cardType": "tool",
       "eventType": "tool_call",
       "toolName": "Bash",
       "category": "shell",
+      "status": "completed"
+    },
+    {
+      "source": "event",
+      "fixtureId": "fixture-tool-media-output",
+      "cardType": "tool_output_attachments",
+      "eventType": "tool_call",
+      "toolName": "Browser",
+      "category": "browser",
       "status": "completed"
     },
     {
@@ -35,6 +50,15 @@
       "eventType": "tool_call",
       "toolName": "AskUserQuestion",
       "hidden": true
+    },
+    {
+      "source": "event",
+      "fixtureId": "fixture-todowrite-validation-error",
+      "cardType": "tool",
+      "eventType": "tool_call",
+      "toolName": "TodoWrite",
+      "category": "control",
+      "status": "failed"
     },
     {
       "source": "permission",
@@ -116,6 +140,37 @@
       "text": "帮我检查工作区权限流"
     },
     {
+      "id": "fixture-user-attachment-1",
+      "type": "user_message",
+      "text": "看下这张图和说明文件",
+      "attachmentSnapshots": [
+        {
+          "id": "fixture-user-attachment-image",
+          "source": "UserUpload",
+          "status": "attached",
+          "name": "screen.png",
+          "path": "C:\\Users\\luoji\\Pictures\\screen.png",
+          "absolutePath": "C:\\Users\\luoji\\Pictures\\screen.png",
+          "safety": "unknown",
+          "mimeType": "image/png",
+          "sizeBytes": 12345,
+          "previewKind": "image"
+        },
+        {
+          "id": "fixture-user-attachment-text",
+          "source": "UserUpload",
+          "status": "attached",
+          "name": "notes.md",
+          "path": "docs\\notes.md",
+          "workspaceRelativePath": "docs\\notes.md",
+          "safety": "workspace",
+          "mimeType": "text/markdown",
+          "sizeBytes": 456,
+          "previewKind": "text"
+        }
+      ]
+    },
+    {
       "id": "fixture-assistant-1",
       "type": "assistant_message",
       "text": "我会先检查工作区配置，再确认权限请求链路。"
@@ -159,6 +214,46 @@
         },
         "result": "typecheck:desktop passed"
       }
+    },
+    {
+      "id": "fixture-tool-media-output",
+      "type": "tool_call",
+      "text": "浏览器截图已生成",
+      "status": "completed",
+      "identity": {
+        "itemId": "fixture-tool-media-output",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_browser_media",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-tool-media-output",
+        "kind": "result",
+        "name": "Browser",
+        "displayName": "浏览器",
+        "category": "browser",
+        "status": "completed",
+        "statusLabel": "成功",
+        "summary": "浏览器截图已生成",
+        "result": "screenshot saved"
+      },
+      "attachmentSnapshots": [
+        {
+          "id": "fixture-tool-media-output-image",
+          "source": "Browser",
+          "status": "attached",
+          "name": "browser-shot.png",
+          "path": "D:\\agent_project\\claude-code-reforged\\.tmp\\browser-shot.png",
+          "absolutePath": "D:\\agent_project\\claude-code-reforged\\.tmp\\browser-shot.png",
+          "safety": "unknown",
+          "mimeType": "image/png",
+          "sizeBytes": 2048,
+          "previewKind": "image"
+        }
+      ]
     },
     {
       "id": "fixture-tool-call-2",
@@ -655,6 +750,76 @@
         ],
         "raw": {
           "todos": []
+        }
+      }
+    },
+    {
+      "id": "fixture-todowrite-validation-error",
+      "type": "tool_call",
+      "text": "更新待办列表",
+      "status": "failed",
+      "timelineHidden": false,
+      "identity": {
+        "itemId": "fixture-todowrite-validation-error",
+        "threadId": "thread_fixture",
+        "turnId": "turn_fixture",
+        "contentIndex": 0,
+        "toolUseId": "toolu_fixture_todowrite_invalid",
+        "missingFields": [],
+        "raw": {}
+      },
+      "toolSnapshot": {
+        "id": "fixture-todowrite-validation-error",
+        "kind": "call",
+        "name": "TodoWrite",
+        "displayName": "TodoWrite",
+        "category": "control",
+        "status": "failed",
+        "statusLabel": "失败",
+        "summary": "更新待办列表",
+        "identity": {
+          "itemId": "fixture-todowrite-validation-error",
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture",
+          "contentIndex": 0,
+          "toolUseId": "toolu_fixture_todowrite_invalid",
+          "missingFields": [],
+          "raw": {}
+        },
+        "input": {
+          "todos": [
+            {
+              "name": "审查代码完整性",
+              "status": "in_progress",
+              "description": "DeepSeek 在未拿到 schema 时猜测了字段"
+            }
+          ]
+        },
+        "result": "InputValidationError: TodoWrite failed because todos[0].content is missing and todos[0].activeForm is missing.",
+        "errorClass": "unknown_failure",
+        "errorMessage": "InputValidationError: TodoWrite failed because todos[0].content is missing and todos[0].activeForm is missing.",
+        "actionableHint": "TodoWrite 参数不符合核心 schema。需要使用 content、status、activeForm 字段；不要把 name / description 静默兼容成待办项。",
+        "raw": {
+          "call": {
+            "type": "tool_use",
+            "id": "toolu_fixture_todowrite_invalid",
+            "name": "TodoWrite",
+            "input": {
+              "todos": [
+                {
+                  "name": "审查代码完整性",
+                  "status": "in_progress",
+                  "description": "DeepSeek 在未拿到 schema 时猜测了字段"
+                }
+              ]
+            }
+          },
+          "result": {
+            "type": "tool_result",
+            "tool_use_id": "toolu_fixture_todowrite_invalid",
+            "isError": true,
+            "content": "InputValidationError: TodoWrite failed because todos[0].content is missing and todos[0].activeForm is missing."
+          }
         }
       }
     },

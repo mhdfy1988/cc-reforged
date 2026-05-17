@@ -7,11 +7,13 @@ import {
   TurnStartParamsSchema,
 } from '../protocol.js'
 import type { AppServerContext } from '../router.js'
+import { normalizeTurnStartInputForCurrentModel } from '../turnInput.js'
 import type {
   AppServerThreadMessage,
   SessionHistoryItem,
   SessionHistoryTitleSource,
   SessionHistoryWorkspaceGroup,
+  TurnStartParams,
 } from '../protocol.js'
 import type { LogOption } from '../../types/logs.js'
 import type { Message } from '../../types/message.js'
@@ -109,14 +111,16 @@ export function handleTurnStart(
   context: AppServerContext,
   params: unknown,
 ): Record<string, unknown> {
-  const parsedParams = TurnStartParamsSchema.parse(params)
+  const parsedParams = TurnStartParamsSchema.parse(params) as TurnStartParams
+  const normalizedInput = normalizeTurnStartInputForCurrentModel({
+    params: parsedParams,
+    model: context.core.model,
+  })
   return {
     turn: context.core.session.startTurn({
       threadId: parsedParams.threadId!,
-      input: {
-        type: parsedParams.input!.type!,
-        text: parsedParams.input!.text!,
-      },
+      input: normalizedInput.input,
+      ...(normalizedInput.metadata ? { metadata: normalizedInput.metadata } : {}),
     }),
   }
 }
@@ -134,14 +138,34 @@ export function handleTurnInterrupt(
 }
 
 function toAppServerThreadMessages(messages: Message[]): AppServerThreadMessage[] {
-  return messages
-    .map((message, index) => messageToThreadMessage(message, index))
-    .filter((message): message is AppServerThreadMessage => message !== null)
+  const unresolvedToolUseIds = collectUnresolvedToolUseIds(messages)
+  const replayMessages: AppServerThreadMessage[] = []
+  for (const [index, message] of messages.entries()) {
+    const interruptedNotice = createInterruptedReplayNotice(
+      message,
+      index,
+      messages,
+    )
+    if (interruptedNotice) {
+      replayMessages.push(interruptedNotice)
+      continue
+    }
+    const replayMessage = messageToThreadMessage(
+      message,
+      index,
+      unresolvedToolUseIds,
+    )
+    if (replayMessage) {
+      replayMessages.push(replayMessage)
+    }
+  }
+  return replayMessages
 }
 
 function messageToThreadMessage(
   message: Message,
   index: number,
+  unresolvedToolUseIds: Set<string>,
 ): AppServerThreadMessage | null {
   if (isHiddenHistoryMessage(message)) {
     return null
@@ -151,7 +175,10 @@ function messageToThreadMessage(
   if (!text.trim()) {
     return null
   }
-  const replayContent = getThreadMessageReplayContent(message)
+  const replayContent = getThreadMessageReplayContent(
+    message,
+    unresolvedToolUseIds,
+  )
 
   return {
     id: typeof message.uuid === 'string' ? message.uuid : `history-${index}`,
@@ -170,9 +197,112 @@ function messageToThreadMessage(
 function isHiddenHistoryMessage(message: Message): boolean {
   return (
     ('isMeta' in message && message.isMeta === true) ||
-    ('isVirtual' in message && message.isVirtual === true)
+    ('isVirtual' in message && message.isVirtual === true) ||
+    isSyntheticHistoryMessage(message)
   )
 }
+
+function createInterruptedReplayNotice(
+  message: Message,
+  index: number,
+  messages: Message[],
+): AppServerThreadMessage | null {
+  if (
+    message.type !== 'assistant' ||
+    message.isApiErrorMessage === true ||
+    getSyntheticHistoryMessageText(message) !== 'No response requested.'
+  ) {
+    return null
+  }
+
+  const previousMessage = findPreviousVisibleHistoryMessage(messages, index)
+  if (!previousMessage || previousMessage.type !== 'user') {
+    return null
+  }
+
+  return {
+    id:
+      typeof message.uuid === 'string'
+        ? `${message.uuid}-interrupted-notice`
+        : `history-${index}-interrupted-notice`,
+    role: 'system',
+    text: '本轮已中断，未产生可恢复回复。',
+    status: 'interrupted',
+    kind: 'interrupted_replay_notice',
+    sourceType: 'synthetic_recovery',
+    content: [{ type: 'text', text: '本轮已中断，未产生可恢复回复。' }],
+    ...(typeof message.timestamp === 'string'
+      ? { createdAt: message.timestamp }
+      : {}),
+  }
+}
+
+function findPreviousVisibleHistoryMessage(
+  messages: Message[],
+  beforeIndex: number,
+): Message | undefined {
+  for (let index = beforeIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (
+      !message ||
+      message.type === 'system' ||
+      message.type === 'progress' ||
+      isToolResultHistoryMessage(message) ||
+      isHiddenHistoryMessage(message)
+    ) {
+      continue
+    }
+    return message
+  }
+  return undefined
+}
+
+function isToolResultHistoryMessage(message: Message): boolean {
+  if (message.type !== 'user') {
+    return false
+  }
+  const content = message.message?.content
+  return (
+    Array.isArray(content) &&
+    content.some(
+      block =>
+        block &&
+        typeof block === 'object' &&
+        'type' in block &&
+        block.type === 'tool_result',
+    )
+  )
+}
+
+function isSyntheticHistoryMessage(message: Message): boolean {
+  const text = getSyntheticHistoryMessageText(message)
+  return Boolean(text && SYNTHETIC_HISTORY_MESSAGES.has(text))
+}
+
+function getSyntheticHistoryMessageText(message: Message): string | undefined {
+  if (message.type !== 'assistant' && message.type !== 'user') {
+    return undefined
+  }
+  const content = message.message?.content
+  return typeof content === 'string'
+    ? content
+    : Array.isArray(content) &&
+        content.length === 1 &&
+        content[0] &&
+        typeof content[0] === 'object' &&
+        'text' in content[0] &&
+        typeof content[0].text === 'string'
+      ? content[0].text
+      : undefined
+}
+
+const SYNTHETIC_HISTORY_MESSAGES = new Set([
+  '[Request interrupted by user]',
+  '[Request interrupted by user for tool use]',
+  "The user doesn't want to take this action right now. STOP what you are doing and wait for the user to tell you how to proceed.",
+  "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+  'No response requested.',
+])
 
 function getThreadMessageRole(
   message: Message,
@@ -216,11 +346,18 @@ function extractContentDisplayText(value: unknown): string {
   return extractUnknownDisplayText(value)
 }
 
-function getThreadMessageReplayContent(message: Message): unknown {
+function getThreadMessageReplayContent(
+  message: Message,
+  unresolvedToolUseIds: Set<string>,
+): unknown {
   switch (message.type) {
     case 'user':
-    case 'assistant':
       return message.message?.content
+    case 'assistant':
+      return annotateUnresolvedToolUseBlocks(
+        message.message?.content,
+        unresolvedToolUseIds,
+      )
     case 'system':
       return message.content
     case 'attachment':
@@ -243,13 +380,121 @@ function getThreadMessageReplayContent(message: Message): unknown {
   }
 }
 
+function collectUnresolvedToolUseIds(messages: Message[]): Set<string> {
+  const toolUseIds = new Set<string>()
+  const toolResultIds = new Set<string>()
+
+  for (const message of messages) {
+    for (const block of getMessageContentBlocks(message)) {
+      const type = getContentBlockType(block)
+      if (type === 'tool_use') {
+        const toolUseId = getToolUseBlockId(block)
+        if (toolUseId) {
+          toolUseIds.add(toolUseId)
+        }
+      }
+      if (type === 'tool_result') {
+        const toolUseId = getToolResultBlockToolUseId(block)
+        if (toolUseId) {
+          toolResultIds.add(toolUseId)
+        }
+      }
+    }
+  }
+
+  for (const toolUseId of toolResultIds) {
+    toolUseIds.delete(toolUseId)
+  }
+  return toolUseIds
+}
+
+function annotateUnresolvedToolUseBlocks(
+  content: unknown,
+  unresolvedToolUseIds: Set<string>,
+): unknown {
+  if (!Array.isArray(content) || unresolvedToolUseIds.size === 0) {
+    return content
+  }
+
+  let changed = false
+  const annotated = content.map(block => {
+    if (!isRecord(block) || getContentBlockType(block) !== 'tool_use') {
+      return block
+    }
+    const toolUseId = getToolUseBlockId(block)
+    if (!toolUseId || !unresolvedToolUseIds.has(toolUseId)) {
+      return block
+    }
+    changed = true
+    return {
+      ...block,
+      status: 'interrupted',
+      historyStatus: 'interrupted',
+      statusText: 'interrupted',
+      interruptedReason: 'missing_tool_result_on_history_replay',
+    }
+  })
+
+  return changed ? annotated : content
+}
+
+function getMessageContentBlocks(message: Message): Record<string, unknown>[] {
+  const content =
+    message.type === 'assistant' || message.type === 'user'
+      ? message.message?.content
+      : message.type === 'system'
+        ? message.content
+        : undefined
+  if (!Array.isArray(content)) {
+    return []
+  }
+  return content.filter(isRecord)
+}
+
+function getContentBlockType(block: Record<string, unknown>): string {
+  return typeof block.type === 'string' ? block.type : ''
+}
+
+function getToolUseBlockId(block: Record<string, unknown>): string | undefined {
+  return getStringField(block, ['id', 'toolUseId', 'toolUseID', 'tool_use_id'])
+}
+
+function getToolResultBlockToolUseId(
+  block: Record<string, unknown>,
+): string | undefined {
+  return getStringField(block, [
+    'tool_use_id',
+    'toolUseId',
+    'toolUseID',
+    'toolCallId',
+    'tool_call_id',
+  ])
+}
+
+function getStringField(
+  block: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = block[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value
+    }
+  }
+  return undefined
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 function extractContentBlockDisplayText(block: unknown): string {
   if (!block || typeof block !== 'object') {
     return extractUnknownDisplayText(block)
   }
   const object = block as Record<string, unknown>
   const type = typeof object.type === 'string' ? object.type : ''
-  if (type === 'text') {
+  if (isTextLikeContentBlockType(type)) {
     return extractContentDisplayText(object.text)
   }
   if (type === 'tool_use') {
@@ -261,8 +506,14 @@ function extractContentBlockDisplayText(block: unknown): string {
     const result = extractUnknownDisplayText(object.content)
     return result ? `工具结果：\n${result}` : '工具结果'
   }
-  if (type === 'image' || type === 'image_url') {
+  if (type === 'image' || type === 'image_url' || type === 'input_image') {
     return '[图片]'
+  }
+  if (type === 'file' || type === 'input_file') {
+    return '[文件]'
+  }
+  if (type === 'audio' || type === 'input_audio') {
+    return '[音频]'
   }
   if (
     type === 'thinking' ||
@@ -272,6 +523,10 @@ function extractContentBlockDisplayText(block: unknown): string {
     return ''
   }
   return extractUnknownDisplayText(object.text ?? object.content ?? object)
+}
+
+function isTextLikeContentBlockType(type: string): boolean {
+  return type === 'text' || type === 'input_text' || type === 'output_text'
 }
 
 function extractAttachmentDisplayText(attachment: unknown): string {
@@ -481,6 +736,9 @@ function groupHistoryItems(
 function getCurrentSessionIds(context: AppServerContext): Set<string> {
   const ids = new Set<string>()
   for (const thread of context.core.session.listThreads()) {
+    if (thread.status !== 'active') {
+      continue
+    }
     for (const key of ['sessionId', 'resumedFromSessionId']) {
       const value = thread.metadata[key]
       if (typeof value === 'string' && value.trim()) {

@@ -143,8 +143,9 @@ export function extractFirstPromptFromHead(head) {
             }
             else if (Array.isArray(content)) {
                 for (const block of content) {
-                    if (block.type === 'text' && typeof block.text === 'string') {
-                        texts.push(block.text);
+                    const text = getUserContentBlockText(block);
+                    if (text) {
+                        texts.push(text);
                     }
                 }
             }
@@ -178,6 +179,18 @@ export function extractFirstPromptFromHead(head) {
     if (commandFallback)
         return commandFallback;
     return '';
+}
+function getUserContentBlockText(block) {
+    if (!block || typeof block !== 'object' || Array.isArray(block)) {
+        return undefined;
+    }
+    const object = block;
+    const type = typeof object.type === 'string' ? object.type : '';
+    if ((type === 'text' || type === 'input_text' || type === 'output_text') &&
+        typeof object.text === 'string') {
+        return object.text;
+    }
+    return undefined;
 }
 // ---------------------------------------------------------------------------
 // File I/O — read head and tail of a file

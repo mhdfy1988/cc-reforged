@@ -1,4 +1,5 @@
 import { createDefaultLlmRuntime } from './defaultRuntime.js';
+import { normalizeImageMimeType } from './imageContent.js';
 import { loadLlmConfig } from './llmConfig.js';
 import { errorMessage } from '../../utils/errors.js';
 import { createAssistantAPIErrorMessage, createAssistantMessage, } from '../../utils/messages.js';
@@ -236,6 +237,10 @@ function toLlmMessages(message) {
             }
             continue;
         }
+        if (block.type === 'image') {
+            userParts.push(toLlmImagePart(block));
+            continue;
+        }
         if (isToolResultBlock(block)) {
             toolParts.push({
                 type: 'tool_result',
@@ -250,13 +255,61 @@ function toLlmMessages(message) {
         throw new Error(`Builtin LLM runtime currently does not support user content block type '${String(block.type)}'.`);
     }
     const mapped = [];
-    if (userParts.length > 0) {
-        mapped.push({ role: 'user', parts: userParts });
-    }
     if (toolParts.length > 0) {
         mapped.push({ role: 'tool', parts: toolParts });
     }
+    if (userParts.length > 0) {
+        mapped.push({ role: 'user', parts: userParts });
+    }
     return mapped;
+}
+function toLlmImagePart(block) {
+    const source = toLlmImageSource(block.source);
+    const data = typeof block.data === 'string' ? block.data.trim() : undefined;
+    if (!source && !data) {
+        throw new Error('Builtin LLM runtime requires image content blocks to include a file, URL, contentRef, or base64 data source.');
+    }
+    return {
+        type: 'image',
+        mimeType: normalizeImageMimeType(typeof block.mimeType === 'string' ? block.mimeType : undefined),
+        ...(source ? { source } : {}),
+        ...(data ? { data } : {}),
+        ...(typeof block.attachmentId === 'string'
+            ? { attachmentId: block.attachmentId }
+            : {}),
+        ...(typeof block.displayName === 'string'
+            ? { displayName: block.displayName }
+            : {}),
+        ...(typeof block.sizeBytes === 'number'
+            ? { sizeBytes: block.sizeBytes }
+            : {}),
+    };
+}
+function toLlmImageSource(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined;
+    }
+    const source = value;
+    if (source.kind === 'file' && typeof source.path === 'string') {
+        return {
+            kind: 'file',
+            path: source.path,
+        };
+    }
+    if (source.kind === 'url' && typeof source.url === 'string') {
+        return {
+            kind: 'url',
+            url: source.url,
+        };
+    }
+    if (source.kind === 'contentRef' &&
+        typeof source.contentRef === 'string') {
+        return {
+            kind: 'contentRef',
+            contentRef: source.contentRef,
+        };
+    }
+    return undefined;
 }
 function toAssistantParts(message) {
     const content = message.message.content;

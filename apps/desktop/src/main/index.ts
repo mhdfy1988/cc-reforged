@@ -1,7 +1,8 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, screen, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, screen, shell } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   AppServerClientError,
@@ -47,6 +48,7 @@ import type {
   ThreadResumeResult,
   ThreadStartResult,
   TurnInterruptResult,
+  TurnStartParams,
   TurnStartResult,
   WorkspaceOpenResult,
 } from '../../../../src/app-server/protocol.js'
@@ -98,6 +100,90 @@ type DesktopLogSnapshot = {
     content: string
   }>
 }
+
+type DesktopAttachmentSource =
+  | {
+      kind: 'file'
+      path: string
+    }
+  | {
+      kind: 'contentRef'
+      contentRef: string
+    }
+
+type DesktopAttachmentPrepareInput = {
+  attachments?: Array<{
+    id?: string
+    name?: string
+    path?: string
+    data?: ArrayBuffer | Uint8Array | number[]
+    mimeType?: string
+    sizeBytes?: number
+    modality?: 'image' | 'file' | 'audio'
+  }>
+}
+
+type DesktopPreparedAttachment = {
+  id: string
+  attachmentId?: string
+  displayName: string
+  mimeType: string
+  sizeBytes: number
+  modality: 'image' | 'file' | 'audio'
+  source?: DesktopAttachmentSource
+  previewDataUrl?: string
+  previewText?: string
+  textContent?: string
+  contentRef?: string
+  sendMode?: 'image' | 'text' | 'metadata'
+  safety?: 'workspace' | 'outside_workspace'
+  status: 'ready' | 'rejected'
+  error?: string
+}
+
+type DesktopAttachmentPrepareResult = {
+  attachments: DesktopPreparedAttachment[]
+}
+
+type DesktopImagePreviewInput = {
+  path?: string
+  maxEdge?: number
+}
+
+type DesktopImagePreviewResult = {
+  previewDataUrl?: string
+}
+
+type DesktopWindowControlState = {
+  maximized: boolean
+  fullscreen: boolean
+}
+
+type DesktopTurnAttachmentInput = {
+  type?: 'image' | 'text'
+  attachmentId?: string
+  displayName?: string
+  mimeType?: string
+  sizeBytes?: number
+  source?: DesktopAttachmentSource
+  text?: string
+}
+
+type DesktopStartTurnInput =
+  | string
+  | {
+      text?: string
+      attachments?: DesktopTurnAttachmentInput[]
+    }
+
+const DESKTOP_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const DESKTOP_MAX_TEXT_FILE_BYTES = 128 * 1024
+const DESKTOP_IMAGE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+])
 
 type ProtocolCompatibility = {
   compatible: boolean
@@ -376,6 +462,40 @@ function attachWindowStatePersistence(window: BrowserWindow): void {
     }
     saveWindowState(window)
   })
+}
+
+function getDesktopWindowState(
+  window: BrowserWindow | null = mainWindow,
+): DesktopWindowControlState {
+  return {
+    maximized: Boolean(window && !window.isDestroyed() && window.isMaximized()),
+    fullscreen: Boolean(window && !window.isDestroyed() && window.isFullScreen()),
+  }
+}
+
+function sendDesktopWindowState(window: BrowserWindow | null = mainWindow): void {
+  if (!window || window.isDestroyed()) {
+    return
+  }
+  window.webContents.send('ccr:window-state', getDesktopWindowState(window))
+}
+
+function getIpcWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow {
+  const window = BrowserWindow.fromWebContents(event.sender) ?? mainWindow
+  if (!window || window.isDestroyed()) {
+    throw new Error('Desktop window is not available.')
+  }
+  return window
+}
+
+function attachDesktopWindowStateEvents(window: BrowserWindow): void {
+  const emit = (): void => sendDesktopWindowState(window)
+  window.on('maximize', emit)
+  window.on('unmaximize', emit)
+  window.on('enter-full-screen', emit)
+  window.on('leave-full-screen', emit)
+  window.on('restore', emit)
+  window.webContents.once('did-finish-load', emit)
 }
 
 async function appendDesktopLog(
@@ -1107,19 +1227,17 @@ async function deleteModelProfile(
   return result
 }
 
-async function startTurn(text: string): Promise<TurnStartResult> {
+async function startTurn(input: DesktopStartTurnInput): Promise<TurnStartResult> {
   await ensureAppServer()
   if (!managedClient) {
     throw new Error('App Server client is not available.')
   }
 
+  const turnInput = normalizeDesktopStartTurnInput(input)
   const thread = status.thread ?? (await startThread()).thread
   const result = await managedClient.client.startTurn({
     threadId: thread.threadId,
-    input: {
-      type: 'text',
-      text,
-    },
+    input: turnInput,
     options: {
       stream: true,
     },
@@ -1136,6 +1254,94 @@ async function startTurn(text: string): Promise<TurnStartResult> {
   await refreshRuntimeSnapshots()
   broadcast('state', { message: 'turn queued', turn: result.turn })
   return result
+}
+
+function normalizeDesktopStartTurnInput(
+  input: DesktopStartTurnInput,
+): TurnStartParams['input'] {
+  if (typeof input === 'string') {
+    return {
+      type: 'text',
+      text: input,
+    }
+  }
+
+  const text = String(input.text ?? '').trim()
+  const attachmentBlocks = (input.attachments ?? [])
+    .map(toTurnContentBlock)
+    .filter((block): block is NonNullable<ReturnType<typeof toTurnContentBlock>> =>
+      block !== null,
+    )
+
+  if (attachmentBlocks.length === 0) {
+    return {
+      type: 'text',
+      text,
+    }
+  }
+
+  return {
+    type: 'content',
+    content: [
+      ...(text ? [{ type: 'text' as const, text }] : []),
+      ...attachmentBlocks,
+    ],
+  }
+}
+
+function toTurnContentBlock(
+  attachment: DesktopTurnAttachmentInput,
+): Extract<TurnStartParams['input'], { type: 'content' }>['content'][number] | null {
+  if (attachment.type === 'text') {
+    const text = typeof attachment.text === 'string' ? attachment.text : ''
+    if (!text) {
+      return null
+    }
+    return {
+      type: 'text',
+      text: formatTextAttachmentContent(attachment, text),
+    }
+  }
+
+  if (attachment.type !== 'image' || !attachment.source) {
+    return null
+  }
+
+  const displayName = normalizeOptionalString(attachment.displayName)
+  const attachmentId = normalizeOptionalString(attachment.attachmentId)
+  const mimeType = normalizeImageMimeType(attachment.mimeType ?? '', displayName ?? '')
+  const sizeBytes =
+    typeof attachment.sizeBytes === 'number' && Number.isFinite(attachment.sizeBytes)
+      ? Math.max(0, Math.trunc(attachment.sizeBytes))
+      : undefined
+
+  return {
+    type: 'image',
+    ...(attachmentId ? { attachmentId } : {}),
+    ...(displayName ? { displayName } : {}),
+    mimeType,
+    ...(sizeBytes !== undefined ? { sizeBytes } : {}),
+    source: attachment.source,
+  }
+}
+
+function formatTextAttachmentContent(
+  attachment: DesktopTurnAttachmentInput,
+  text: string,
+): string {
+  const displayName = normalizeOptionalString(attachment.displayName) ?? '未命名文本文件'
+  const mimeType = normalizeOptionalString(attachment.mimeType) ?? 'text/plain'
+  const sizeBytes =
+    typeof attachment.sizeBytes === 'number' && Number.isFinite(attachment.sizeBytes)
+      ? `${Math.max(0, Math.trunc(attachment.sizeBytes))} bytes`
+      : '未知大小'
+  return [
+    `[文本文件：${displayName}]`,
+    `类型：${mimeType}`,
+    `大小：${sizeBytes}`,
+    '',
+    text,
+  ].join('\n')
 }
 
 async function interruptTurn(): Promise<TurnInterruptResult> {
@@ -1258,6 +1464,516 @@ async function showLocalPathInFolder(
   return { revealed: true }
 }
 
+async function prepareDesktopAttachments(
+  input: DesktopAttachmentPrepareInput,
+): Promise<DesktopAttachmentPrepareResult> {
+  const attachments = await Promise.all(
+    (input.attachments ?? []).map(prepareDesktopAttachment),
+  )
+  return { attachments }
+}
+
+async function prepareDesktopAttachment(
+  attachment: NonNullable<DesktopAttachmentPrepareInput['attachments']>[number],
+): Promise<DesktopPreparedAttachment> {
+  const id = normalizeOptionalString(attachment.id) ?? randomUUID()
+  const displayName = normalizeOptionalString(attachment.name) ?? '未命名附件'
+  const modality = attachment.modality ?? 'file'
+  const rawMimeType = normalizeOptionalString(attachment.mimeType) ?? ''
+  if (modality === 'image') {
+    return prepareDesktopImageAttachment({
+      id,
+      displayName,
+      rawMimeType,
+      attachment,
+    })
+  }
+
+  if (modality === 'file') {
+    return prepareDesktopFileAttachment({
+      id,
+      displayName,
+      rawMimeType,
+      attachment,
+    })
+  }
+
+  return prepareMetadataOnlyAttachment({
+    id,
+    displayName,
+    mimeType: rawMimeType || 'application/octet-stream',
+    sizeBytes: normalizeSizeBytes(attachment.sizeBytes),
+    modality,
+    path: normalizeOptionalString(attachment.path),
+  })
+}
+
+async function prepareDesktopImageAttachment(input: {
+  id: string
+  displayName: string
+  rawMimeType: string
+  attachment: NonNullable<DesktopAttachmentPrepareInput['attachments']>[number]
+}): Promise<DesktopPreparedAttachment> {
+  const path = normalizeOptionalString(input.attachment.path)
+  const mimeType = normalizeImageMimeType(input.rawMimeType, path ?? input.displayName)
+  const inlineContent = readInlineAttachmentBuffer(input.attachment.data)
+  if (inlineContent) {
+    return prepareDesktopInlineImageAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      mimeType,
+      content: inlineContent,
+    })
+  }
+
+  if (!path) {
+    return rejectPreparedAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      mimeType,
+      sizeBytes: normalizeSizeBytes(input.attachment.sizeBytes),
+      modality: 'image',
+      error: '无法从系统文件选择器读取图片路径。',
+    })
+  }
+
+  const resolvedPath = resolveWorkspacePath(path)
+  const resolvedMimeType = normalizeImageMimeType(mimeType, resolvedPath)
+  if (!DESKTOP_IMAGE_MIME_TYPES.has(resolvedMimeType)) {
+    return rejectPreparedAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      mimeType: resolvedMimeType,
+      sizeBytes: normalizeSizeBytes(input.attachment.sizeBytes),
+      modality: 'image',
+      error: '暂不支持该图片格式。',
+    })
+  }
+
+  try {
+    const content = await readFile(resolvedPath)
+    if (content.byteLength > DESKTOP_MAX_IMAGE_BYTES) {
+      return rejectPreparedAttachment({
+        id: input.id,
+        displayName: input.displayName,
+        mimeType: resolvedMimeType,
+        sizeBytes: content.byteLength,
+        modality: 'image',
+        error: `图片超过 ${formatBytes(DESKTOP_MAX_IMAGE_BYTES)} 上限。`,
+      })
+    }
+
+    return createPreparedImageAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      resolvedMimeType,
+      sizeBytes: content.byteLength,
+      sourcePath: resolvedPath,
+      safety: isInsideWorkspace(resolvedPath) ? 'workspace' : 'outside_workspace',
+    })
+  } catch (error) {
+    return rejectPreparedAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      mimeType: resolvedMimeType,
+      sizeBytes: normalizeSizeBytes(input.attachment.sizeBytes),
+      modality: 'image',
+      error: error instanceof Error ? error.message : '图片读取失败。',
+    })
+  }
+}
+
+async function prepareDesktopInlineImageAttachment(input: {
+  id: string
+  displayName: string
+  mimeType: string
+  content: Buffer
+}): Promise<DesktopPreparedAttachment> {
+  const resolvedMimeType = normalizeImageMimeType(
+    input.mimeType,
+    input.displayName,
+  )
+  if (!DESKTOP_IMAGE_MIME_TYPES.has(resolvedMimeType)) {
+    return rejectPreparedAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      mimeType: resolvedMimeType,
+      sizeBytes: input.content.byteLength,
+      modality: 'image',
+      error: '暂不支持该图片格式。',
+    })
+  }
+
+  if (input.content.byteLength > DESKTOP_MAX_IMAGE_BYTES) {
+    return rejectPreparedAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      mimeType: resolvedMimeType,
+      sizeBytes: input.content.byteLength,
+      modality: 'image',
+      error: `图片超过 ${formatBytes(DESKTOP_MAX_IMAGE_BYTES)} 上限。`,
+    })
+  }
+
+  try {
+    const cacheDir = getClipboardAttachmentCacheDir()
+    await mkdir(cacheDir, { recursive: true })
+    const cachePath = join(
+      cacheDir,
+      `clipboard-${Date.now()}-${randomUUID()}${getImageExtension(resolvedMimeType)}`,
+    )
+    await writeFile(cachePath, input.content)
+    return createPreparedImageAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      resolvedMimeType,
+      sizeBytes: input.content.byteLength,
+      sourcePath: cachePath,
+      safety: 'outside_workspace',
+    })
+  } catch (error) {
+    return rejectPreparedAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      mimeType: resolvedMimeType,
+      sizeBytes: input.content.byteLength,
+      modality: 'image',
+      error: error instanceof Error ? error.message : '剪贴板图片读取失败。',
+    })
+  }
+}
+
+function createPreparedImageAttachment(input: {
+  id: string
+  displayName: string
+  resolvedMimeType: string
+  sizeBytes: number
+  sourcePath: string
+  safety: 'workspace' | 'outside_workspace'
+}): DesktopPreparedAttachment {
+  const contentRef = `desktop-image:${randomUUID()}`
+  return {
+    id: input.id,
+    attachmentId: contentRef,
+    displayName: input.displayName,
+    mimeType: input.resolvedMimeType,
+    sizeBytes: input.sizeBytes,
+    modality: 'image',
+    source: {
+      kind: 'file',
+      path: input.sourcePath,
+    },
+    contentRef,
+    sendMode: 'image',
+    safety: input.safety,
+    previewDataUrl: createImagePreviewDataUrl(input.sourcePath),
+    status: 'ready',
+  }
+}
+
+function readInlineAttachmentBuffer(value: unknown): Buffer | null {
+  if (!value) {
+    return null
+  }
+  if (value instanceof ArrayBuffer) {
+    return Buffer.from(value)
+  }
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength)
+  }
+  if (Array.isArray(value) && value.every(item => Number.isInteger(item))) {
+    return Buffer.from(value)
+  }
+  return null
+}
+
+function getClipboardAttachmentCacheDir(): string {
+  return join(app.getPath('userData'), 'attachments', 'clipboard')
+}
+
+function getImageExtension(mimeType: string): string {
+  if (mimeType === 'image/jpeg') {
+    return '.jpg'
+  }
+  if (mimeType === 'image/webp') {
+    return '.webp'
+  }
+  if (mimeType === 'image/gif') {
+    return '.gif'
+  }
+  return '.png'
+}
+
+async function prepareDesktopFileAttachment(input: {
+  id: string
+  displayName: string
+  rawMimeType: string
+  attachment: NonNullable<DesktopAttachmentPrepareInput['attachments']>[number]
+}): Promise<DesktopPreparedAttachment> {
+  const path = normalizeOptionalString(input.attachment.path)
+  const mimeType = normalizeTextMimeType(input.rawMimeType, path ?? input.displayName)
+  const sizeBytes = normalizeSizeBytes(input.attachment.sizeBytes)
+  if (!path) {
+    return rejectPreparedAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      mimeType,
+      sizeBytes,
+      modality: 'file',
+      error: '无法从系统文件选择器读取文件路径。',
+    })
+  }
+
+  const resolvedPath = resolveWorkspacePath(path)
+  if (!isTextLikeMimeOrName(mimeType, resolvedPath)) {
+    return prepareMetadataOnlyAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      mimeType,
+      sizeBytes,
+      modality: 'file',
+      path: resolvedPath,
+    })
+  }
+
+  try {
+    const content = await readFile(resolvedPath)
+    if (content.byteLength > DESKTOP_MAX_TEXT_FILE_BYTES) {
+      return {
+        id: input.id,
+        displayName: input.displayName,
+        mimeType,
+        sizeBytes: content.byteLength,
+        modality: 'file',
+        source: {
+          kind: 'file',
+          path: resolvedPath,
+        },
+        sendMode: 'metadata',
+        safety: isInsideWorkspace(resolvedPath) ? 'workspace' : 'outside_workspace',
+        status: 'ready',
+        error: `文本文件超过 ${formatBytes(DESKTOP_MAX_TEXT_FILE_BYTES)}，当前仅保留元信息。`,
+      }
+    }
+
+    const textContent = content.toString('utf8')
+    const contentRef = `desktop-text:${randomUUID()}`
+    return {
+      id: input.id,
+      attachmentId: contentRef,
+      displayName: input.displayName,
+      mimeType,
+      sizeBytes: content.byteLength,
+      modality: 'file',
+      source: {
+        kind: 'file',
+        path: resolvedPath,
+      },
+      contentRef,
+      sendMode: 'text',
+      safety: isInsideWorkspace(resolvedPath) ? 'workspace' : 'outside_workspace',
+      previewText: createTextPreview(textContent),
+      textContent,
+      status: 'ready',
+    }
+  } catch (error) {
+    return rejectPreparedAttachment({
+      id: input.id,
+      displayName: input.displayName,
+      mimeType,
+      sizeBytes,
+      modality: 'file',
+      error: error instanceof Error ? error.message : '文本文件读取失败。',
+    })
+  }
+}
+
+function prepareMetadataOnlyAttachment(input: {
+  id: string
+  displayName: string
+  mimeType: string
+  sizeBytes: number
+  modality: 'image' | 'file' | 'audio'
+  path?: string
+}): DesktopPreparedAttachment {
+  const resolvedPath = input.path ? resolveWorkspacePath(input.path) : undefined
+  return {
+    id: input.id,
+    displayName: input.displayName,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+    modality: input.modality,
+    ...(resolvedPath
+      ? {
+          source: {
+            kind: 'file' as const,
+            path: resolvedPath,
+          },
+          safety: isInsideWorkspace(resolvedPath)
+            ? ('workspace' as const)
+            : ('outside_workspace' as const),
+        }
+      : {}),
+    sendMode: 'metadata',
+    status: 'ready',
+  }
+}
+
+function rejectPreparedAttachment(input: {
+  id: string
+  displayName: string
+  mimeType: string
+  sizeBytes: number
+  modality: 'image' | 'file' | 'audio'
+  error: string
+}): DesktopPreparedAttachment {
+  return {
+    id: input.id,
+    displayName: input.displayName,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+    modality: input.modality,
+    status: 'rejected',
+    error: input.error,
+  }
+}
+
+function createImagePreviewDataUrl(
+  path: string,
+  maxEdge = 96,
+): string | undefined {
+  const image = nativeImage.createFromPath(path)
+  if (image.isEmpty()) {
+    return undefined
+  }
+
+  const size = image.getSize()
+  const scale = Math.min(1, maxEdge / Math.max(size.width, size.height, 1))
+  const preview =
+    scale < 1
+      ? image.resize({
+          width: Math.max(1, Math.round(size.width * scale)),
+          height: Math.max(1, Math.round(size.height * scale)),
+        })
+      : image
+  return preview.toDataURL()
+}
+
+function normalizeImagePreviewMaxEdge(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 96
+  }
+  return Math.max(64, Math.min(1600, Math.round(value)))
+}
+
+function createDesktopImagePreview(
+  input: DesktopImagePreviewInput,
+): DesktopImagePreviewResult {
+  const path = normalizeOptionalString(input.path)
+  if (!path || /^https?:\/\//i.test(path)) {
+    return {}
+  }
+  const resolvedPath = resolveWorkspacePath(path)
+  return {
+    previewDataUrl: createImagePreviewDataUrl(
+      resolvedPath,
+      normalizeImagePreviewMaxEdge(input.maxEdge),
+    ),
+  }
+}
+
+function normalizeImageMimeType(mimeType: string, pathOrName: string): string {
+  const normalized = mimeType.trim().toLowerCase()
+  if (DESKTOP_IMAGE_MIME_TYPES.has(normalized)) {
+    return normalized
+  }
+
+  const extension = extname(pathOrName).toLowerCase()
+  if (extension === '.png') {
+    return 'image/png'
+  }
+  if (extension === '.jpg' || extension === '.jpeg') {
+    return 'image/jpeg'
+  }
+  if (extension === '.webp') {
+    return 'image/webp'
+  }
+  if (extension === '.gif') {
+    return 'image/gif'
+  }
+  return normalized || 'application/octet-stream'
+}
+
+function normalizeTextMimeType(mimeType: string, pathOrName: string): string {
+  const normalized = mimeType.trim().toLowerCase()
+  if (normalized) {
+    return normalized
+  }
+  const extension = extname(pathOrName).toLowerCase()
+  if (extension === '.json' || extension === '.jsonl') {
+    return 'application/json'
+  }
+  if (extension === '.xml') {
+    return 'application/xml'
+  }
+  if (extension === '.yaml' || extension === '.yml') {
+    return 'application/yaml'
+  }
+  if (
+    /\.(txt|md|markdown|csv|ts|tsx|js|jsx|py|java|go|rs|cs|cpp|c|h|hpp|sql|toml|ini|env|log)$/i.test(
+      pathOrName,
+    )
+  ) {
+    return 'text/plain'
+  }
+  return 'application/octet-stream'
+}
+
+function isTextLikeMimeOrName(mimeType: string, pathOrName: string): boolean {
+  if (
+    mimeType.startsWith('text/') ||
+    [
+      'application/json',
+      'application/x-ndjson',
+      'application/xml',
+      'application/yaml',
+      'application/javascript',
+      'application/typescript',
+    ].includes(mimeType)
+  ) {
+    return true
+  }
+
+  return /\.(txt|md|markdown|json|jsonl|yaml|yml|xml|csv|ts|tsx|js|jsx|py|java|go|rs|cs|cpp|c|h|hpp|sql|toml|ini|env|log)$/i.test(
+    pathOrName,
+  )
+}
+
+function createTextPreview(value: string): string {
+  const normalized = value.replace(/\r\n/g, '\n').trim()
+  return normalized.length > 400 ? `${normalized.slice(0, 400).trim()}\n...` : normalized
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function normalizeSizeBytes(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.trunc(value))
+    : 0
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) {
+    return `${value} B`
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
+}
+
 function createWindow(): void {
   const windowIcon = resolveDesktopWindowIcon()
   const useCustomTitleBar = process.platform === 'win32'
@@ -1280,11 +1996,6 @@ function createWindow(): void {
     ...(useCustomTitleBar
       ? {
           titleBarStyle: 'hidden',
-          titleBarOverlay: {
-            color: '#fbf4e9',
-            symbolColor: '#211b16',
-            height: 34,
-          },
         }
       : {}),
     webPreferences: {
@@ -1297,6 +2008,7 @@ function createWindow(): void {
 
   mainWindow.setMenuBarVisibility(false)
   attachWindowStatePersistence(mainWindow)
+  attachDesktopWindowStateEvents(mainWindow)
   if (shouldStartMaximized) {
     mainWindow.maximize()
   }
@@ -1663,8 +2375,48 @@ ipcMain.handle('ccr:update-dev-mock', async (_event, nextStatus: DesktopUpdateSt
   return ensureUpdateService().applyDevelopmentMock(nextStatus)
 })
 
-ipcMain.handle('ccr:start-turn', async (_event, text: string) => {
-  return startTurn(text)
+ipcMain.handle(
+  'ccr:prepare-attachments',
+  async (_event, input: DesktopAttachmentPrepareInput) => {
+    return prepareDesktopAttachments(input ?? {})
+  },
+)
+
+ipcMain.handle(
+  'ccr:image-preview',
+  async (_event, input: DesktopImagePreviewInput) => {
+    return createDesktopImagePreview(input ?? {})
+  },
+)
+
+ipcMain.handle('ccr:window-state', async event => {
+  return getDesktopWindowState(getIpcWindow(event))
+})
+
+ipcMain.handle('ccr:window-minimize', async event => {
+  const window = getIpcWindow(event)
+  window.minimize()
+  return getDesktopWindowState(window)
+})
+
+ipcMain.handle('ccr:window-toggle-maximize', async event => {
+  const window = getIpcWindow(event)
+  if (window.isMaximized()) {
+    window.unmaximize()
+  } else {
+    window.maximize()
+  }
+  return getDesktopWindowState(window)
+})
+
+ipcMain.handle('ccr:window-close', async event => {
+  const window = getIpcWindow(event)
+  window.close()
+  return getDesktopWindowState(window)
+})
+
+ipcMain.handle('ccr:start-turn', async (_event, input: DesktopStartTurnInput) => {
+  return startTurn(input)
 })
 
 ipcMain.handle('ccr:turn-interrupt', async () => {

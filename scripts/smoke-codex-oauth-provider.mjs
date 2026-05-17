@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const { CodexOAuthProvider } = await import(
   '../dist/src/services/llm/providers/CodexOAuthProvider.js'
@@ -277,6 +280,104 @@ assert.equal(events[6]?.response?.stopReason, 'tool_use');
 assert.equal(events[6]?.response?.usage?.totalTokens, 30);
 assert.equal(events[6]?.response?.output[2]?.type, 'tool_call');
 
+const tempDir = await mkdtemp(join(tmpdir(), 'ccr-codex-oauth-image-'));
+const imagePath = join(tempDir, 'tiny.png');
+const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+const imageBase64 = imageBytes.toString('base64');
+
+let imageResult;
+try {
+  await writeFile(imagePath, imageBytes);
+
+  const imageProvider = new CodexOAuthProvider({
+    session: {
+      async getAvailability() {
+        return {
+          available: true,
+          configured: true,
+          reason: 'ready',
+        };
+      },
+      async getValidCredential() {
+        return {
+          access: 'access-token',
+          accountId: 'account-1',
+        };
+      },
+    },
+    getModelImpl: () => {
+      throw new Error('force catalog fallback');
+    },
+    completeImpl: async (model, context, options) => {
+      assert.equal(model.id, 'gpt-5.5');
+      assert.equal(model.input.includes('image'), true);
+      assert.equal(context.messages.length, 1);
+      assert.equal(context.messages[0]?.role, 'user');
+      assert.ok(Array.isArray(context.messages[0]?.content));
+      assert.deepEqual(context.messages[0]?.content[0], {
+        type: 'text',
+        text: '看一下这张图',
+      });
+      assert.deepEqual(context.messages[0]?.content[1], {
+        type: 'image',
+        data: imageBase64,
+        mimeType: 'image/png',
+      });
+      assert.equal(JSON.stringify(context).includes(imagePath), false);
+      assert.equal(JSON.stringify(context).includes('data:image'), false);
+      assert.equal(options?.apiKey, 'access-token');
+
+      return {
+        role: 'assistant',
+        api: 'openai-codex-responses',
+        provider: 'openai-codex',
+        model: 'gpt-5.5',
+        content: [{ type: 'text', text: 'image ok' }],
+        usage: {
+          input: 1,
+          output: 1,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 2,
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0,
+          },
+        },
+        stopReason: 'stop',
+        timestamp: Date.now(),
+      };
+    },
+  });
+
+  imageResult = await imageProvider.generate({
+    provider: 'codex-oauth',
+    model: 'gpt-5.5',
+    messages: [
+      {
+        role: 'user',
+        parts: [
+          { type: 'text', text: '看一下这张图' },
+          {
+            type: 'image',
+            mimeType: 'image/png',
+            source: { kind: 'file', path: imagePath },
+            displayName: 'tiny.png',
+            sizeBytes: imageBytes.length,
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(imageResult.output[0]?.type, 'text');
+  assert.equal(imageResult.output[0]?.text, 'image ok');
+} finally {
+  await rm(tempDir, { recursive: true, force: true });
+}
+
 console.log(
   JSON.stringify(
     {
@@ -284,6 +385,7 @@ console.log(
       provider: result.provider,
       model: result.model,
       stopReason: result.stopReason,
+      imageModel: imageResult?.model,
       streamEvents: events.map(event => event.type),
     },
     null,

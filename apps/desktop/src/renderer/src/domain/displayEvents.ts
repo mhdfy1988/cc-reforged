@@ -2,7 +2,7 @@ import {
   createMessageFromCompletedItem,
   normalizeContentBlocks,
 } from './contentBlocks.js'
-import type { ChatMessage } from './displayTypes.js'
+import type { ChatMessage, JsonObject } from './displayTypes.js'
 import {
   createDisplayEventIdentity,
   type DisplayEventContractContext,
@@ -14,7 +14,10 @@ import type {
   FileToolSnapshot,
   ReferenceSnapshot,
 } from './fileEvents.js'
-import { extractFileDisplaySnapshotsFromToolSnapshot } from './fileEvents.js'
+import {
+  extractAttachmentSnapshotsFromContentBlocks,
+  extractFileDisplaySnapshotsFromToolSnapshot,
+} from './fileEvents.js'
 import {
   extractTodoOverlaySnapshotFromBlocks,
   type TodoOverlaySnapshot,
@@ -52,14 +55,36 @@ export type DisplayEvent = {
   fileToolSnapshot?: FileToolSnapshot
   fileSnapshot?: FileSnapshot
   attachmentSnapshot?: AttachmentSnapshot
+  attachmentSnapshots?: AttachmentSnapshot[]
   referenceSnapshot?: ReferenceSnapshot
 }
 
-export function createUserDisplayEvent(id: string, text: string): DisplayEvent {
+export type DisplayAttachmentInput = {
+  type: string
+  attachmentId?: string
+  displayName?: string
+  mimeType?: string
+  sizeBytes?: number
+  source?: unknown
+  previewDataUrl?: string
+}
+
+export function createUserDisplayEvent(
+  id: string,
+  text: string,
+  attachments: readonly DisplayAttachmentInput[] = [],
+): DisplayEvent {
+  const attachmentSnapshots = extractAttachmentSnapshotsFromContentBlocks({
+    eventId: id,
+    blocks: attachments.map(toAttachmentContentBlock),
+    source: 'UserUpload',
+  })
   return {
     id,
     type: 'user_message',
     text,
+    attachmentSnapshots:
+      attachmentSnapshots.length > 0 ? attachmentSnapshots : undefined,
   }
 }
 
@@ -88,8 +113,14 @@ export function createDisplayEventFromCompletedItem(
 ): DisplayEvent | null {
   const blocks = normalizeContentBlocks(content)
   const identity = createDisplayEventIdentity(context ?? { itemId })
-  if (isRawThinkingOnly(blocks)) {
+  if (isRawThinkingOnly(blocks) || isSyntheticMessageOnly(blocks)) {
     return null
+  }
+
+  if (kind === 'user_message') {
+    return isHistoryReplayContext(context)
+      ? createUserDisplayEventFromBlocks(itemId, blocks, identity)
+      : null
   }
 
   const todoSnapshot = extractTodoOverlaySnapshotFromBlocks(
@@ -118,6 +149,12 @@ export function createDisplayEventFromCompletedItem(
   if (toolSnapshot) {
     const fileDisplaySnapshots =
       extractFileDisplaySnapshotsFromToolSnapshot(toolSnapshot)
+    const attachmentSnapshots = extractAttachmentSnapshotsFromContentBlocks({
+      eventId: itemId,
+      blocks,
+      source: 'ToolResult',
+      identity,
+    })
     return {
       id: itemId,
       type: toolSnapshot.kind === 'call' ? 'tool_call' : 'tool_result',
@@ -128,6 +165,8 @@ export function createDisplayEventFromCompletedItem(
       identity,
       toolSnapshot,
       ...fileDisplaySnapshots,
+      attachmentSnapshots:
+        attachmentSnapshots.length > 0 ? attachmentSnapshots : undefined,
     }
   }
 
@@ -136,7 +175,75 @@ export function createDisplayEventFromCompletedItem(
     return null
   }
 
-  return chatMessageToDisplayEvent(message, identity)
+  const event = chatMessageToDisplayEvent(message, identity)
+  const attachmentSnapshots = extractAttachmentSnapshotsFromContentBlocks({
+    eventId: itemId,
+    blocks,
+    source: 'ToolResult',
+    identity,
+  })
+  return attachmentSnapshots.length > 0
+    ? { ...event, attachmentSnapshots }
+    : event
+}
+
+function toAttachmentContentBlock(attachment: DisplayAttachmentInput): JsonObject {
+  return {
+    ...attachment,
+    type: attachment.type === 'text' ? 'file' : attachment.type,
+  }
+}
+
+function isHistoryReplayContext(
+  context: DisplayEventContractContext | undefined,
+): boolean {
+  return context?.params?.source === 'history'
+}
+
+function createUserDisplayEventFromBlocks(
+  itemId: string,
+  blocks: JsonObject[],
+  identity: DisplayEventIdentity,
+): DisplayEvent | null {
+  const text = blocks
+    .map(getHistoryUserTextBlockValue)
+    .filter(Boolean)
+    .join('\n\n')
+  const attachmentSnapshots = extractAttachmentSnapshotsFromContentBlocks({
+    eventId: itemId,
+    blocks,
+    source: 'UserUpload',
+    identity,
+  })
+
+  if (!text && attachmentSnapshots.length === 0) {
+    return null
+  }
+
+  return {
+    id: itemId,
+    type: 'user_message',
+    text,
+    status: 'completed',
+    sourceKind: 'user_message',
+    identity,
+    attachmentSnapshots:
+      attachmentSnapshots.length > 0 ? attachmentSnapshots : undefined,
+  }
+}
+
+function getHistoryUserTextBlockValue(block: JsonObject): string {
+  const type = typeof block.type === 'string' ? block.type : ''
+  if (
+    (type === 'text' || type === 'input_text' || type === 'output_text') &&
+    typeof block.text === 'string'
+  ) {
+    return block.text.trim()
+  }
+  if (type === 'json' && typeof block.value === 'string') {
+    return block.value.trim()
+  }
+  return ''
 }
 
 function isRawThinkingOnly(blocks: Array<{ type?: unknown }>): boolean {
@@ -150,6 +257,30 @@ function isRawThinkingOnly(blocks: Array<{ type?: unknown }>): boolean {
     )
   )
 }
+
+function isSyntheticMessageOnly(blocks: JsonObject[]): boolean {
+  if (blocks.length !== 1) {
+    return false
+  }
+  const block = blocks[0]
+  const type = typeof block.type === 'string' ? block.type : ''
+  const text =
+    (type === 'text' || type === 'input_text' || type === 'output_text') &&
+    typeof block.text === 'string'
+      ? block.text
+      : type === 'json' && typeof block.value === 'string'
+        ? block.value
+        : undefined
+  return Boolean(text && SYNTHETIC_MESSAGE_TEXT.has(text))
+}
+
+const SYNTHETIC_MESSAGE_TEXT = new Set([
+  '[Request interrupted by user]',
+  '[Request interrupted by user for tool use]',
+  "The user doesn't want to take this action right now. STOP what you are doing and wait for the user to tell you how to proceed.",
+  "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+  'No response requested.',
+])
 
 export function chatMessageToDisplayEvent(
   message: ChatMessage,

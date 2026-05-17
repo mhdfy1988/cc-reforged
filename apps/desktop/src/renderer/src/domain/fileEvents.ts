@@ -1,6 +1,7 @@
 import type { DisplayEventIdentity } from './eventContract.js'
 import type { JsonObject } from './displayTypes.js'
 import type { ToolSnapshot } from './toolEvents.js'
+import { isNullRenderingAttachmentType } from '../../../../../../src/utils/nullRenderingAttachmentTypes.js'
 
 export type FileSnapshotSource =
   | 'Read'
@@ -71,6 +72,7 @@ export type AttachmentSnapshot = {
   mimeType?: string
   sizeBytes?: number
   previewKind?: 'image' | 'text' | 'binary' | 'audio' | 'video' | 'unknown'
+  previewDataUrl?: string
   identity?: DisplayEventIdentity
   raw?: unknown
 }
@@ -103,6 +105,7 @@ export type FileDisplaySnapshots = {
   fileToolSnapshot?: FileToolSnapshot
   fileSnapshot?: FileSnapshot
   attachmentSnapshot?: AttachmentSnapshot
+  attachmentSnapshots?: AttachmentSnapshot[]
   referenceSnapshot?: ReferenceSnapshot
 }
 
@@ -134,6 +137,24 @@ export type FileToolSnapshot = {
   toolUseId?: string
   identity?: DisplayEventIdentity
   raw?: unknown
+}
+
+export function extractAttachmentSnapshotsFromContentBlocks(input: {
+  eventId: string
+  blocks: readonly JsonObject[]
+  source: AttachmentSnapshot['source']
+  identity?: DisplayEventIdentity
+}): AttachmentSnapshot[] {
+  const attachmentBlocks = collectAttachmentBlocks(input.blocks)
+  return attachmentBlocks.map((block, index) =>
+    createAttachmentSnapshotFromBlock({
+      block,
+      eventId: input.eventId,
+      index,
+      source: input.source,
+      identity: input.identity,
+    }),
+  )
 }
 
 export function extractFileDisplaySnapshotsFromToolSnapshot(
@@ -174,6 +195,150 @@ export function extractFileDisplaySnapshotsFromToolSnapshot(
       },
     },
   }
+}
+
+function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
+  const collected: JsonObject[] = []
+  for (const block of blocks) {
+    const type = typeof block.type === 'string' ? block.type : ''
+    if (type === 'image' || type === 'file' || type === 'audio') {
+      collected.push(block)
+      continue
+    }
+
+    if (type === 'attachment') {
+      const attachment = getJsonObject(block.attachment)
+      const attachmentType = getString(attachment, ['type'])
+      if (
+        attachment &&
+        !isNullRenderingAttachmentType(attachmentType ?? 'attachment')
+      ) {
+        collected.push(attachment)
+      }
+      continue
+    }
+
+    if (type === 'tool_result' && Array.isArray(block.content)) {
+      collected.push(
+        ...collectAttachmentBlocks(
+          block.content.filter(
+            (item): item is JsonObject =>
+              !!item && typeof item === 'object' && !Array.isArray(item),
+          ),
+        ),
+      )
+    }
+  }
+  return collected
+}
+
+function createAttachmentSnapshotFromBlock(input: {
+  block: JsonObject
+  eventId: string
+  index: number
+  source: AttachmentSnapshot['source']
+  identity?: DisplayEventIdentity
+}): AttachmentSnapshot {
+  const path = getAttachmentPath(input.block)
+  const name = getAttachmentName(input.block, path, input.index)
+  const pathFields = path ? getPathFields(path) : { safety: 'unknown' as const }
+  return {
+    id: getAttachmentId(input.block, input.eventId, input.index),
+    source: input.source,
+    status: 'attached',
+    name,
+    path,
+    ...pathFields,
+    mimeType: getString(input.block, ['mimeType', 'mime_type', 'mediaType']),
+    sizeBytes: getNumber(input.block, ['sizeBytes', 'size_bytes']),
+    previewKind: getAttachmentPreviewKind(input.block),
+    previewDataUrl: getString(input.block, [
+      'previewDataUrl',
+      'preview_data_url',
+      'thumbnailDataUrl',
+      'thumbnail_data_url',
+    ]),
+    identity: input.identity,
+    raw: input.block,
+  }
+}
+
+function getAttachmentId(
+  block: JsonObject,
+  eventId: string,
+  index: number,
+): string {
+  return (
+    getString(block, ['attachmentId', 'attachment_id', 'id']) ??
+    `${eventId}:attachment:${index}`
+  )
+}
+
+function getAttachmentName(
+  block: JsonObject,
+  path: string | undefined,
+  index: number,
+): string {
+  const nestedFile = getJsonObject(block.file)
+  return (
+    getString(block, [
+      'displayPath',
+      'displayName',
+      'display_name',
+      'name',
+      'filename',
+      'fileName',
+    ]) ??
+    getString(nestedFile, ['displayPath', 'filePath', 'path']) ??
+    (path ? getPathBasename(path) : undefined) ??
+    `附件 ${index + 1}`
+  )
+}
+
+function getAttachmentPath(block: JsonObject): string | undefined {
+  const source = getJsonObject(block.source)
+  const nestedFile = getJsonObject(block.file)
+  return (
+    (source?.kind === 'file' ? getString(source, ['path']) : undefined) ??
+    (source?.kind === 'url' ? getString(source, ['url']) : undefined) ??
+    getString(block, ['path', 'absolutePath', 'url']) ??
+    getString(nestedFile, ['filePath', 'path'])
+  )
+}
+
+function getAttachmentPreviewKind(
+  block: JsonObject,
+): AttachmentSnapshot['previewKind'] {
+  const type = getString(block, ['type'])
+  if (type === 'image' || type === 'audio') {
+    return type
+  }
+  if (type === 'file') {
+    const mimeType = getString(block, ['mimeType', 'mime_type', 'mediaType'])
+    if (isTextMimeType(mimeType)) {
+      return 'text'
+    }
+    return mimeType ? 'binary' : 'unknown'
+  }
+  return 'unknown'
+}
+
+function isTextMimeType(mimeType: string | undefined): boolean {
+  if (!mimeType) {
+    return false
+  }
+  const normalized = mimeType.toLowerCase()
+  return (
+    normalized.startsWith('text/') ||
+    normalized === 'application/json' ||
+    normalized.endsWith('+json') ||
+    normalized === 'application/xml' ||
+    normalized.endsWith('+xml')
+  )
+}
+
+function getPathBasename(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path
 }
 
 function extractFileToolSnapshot(

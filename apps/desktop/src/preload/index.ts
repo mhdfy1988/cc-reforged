@@ -78,6 +78,35 @@ type ModelProfileSaveInput = {
   baseUrl?: string
   defaultModel?: string
   models?: string[]
+  capabilityOverrides?: {
+    default?: {
+      inputModalities?: Array<'text' | 'image' | 'file' | 'audio'>
+      outputModalities?: Array<'text' | 'image' | 'audio'>
+      tools?: boolean
+      structuredOutput?: boolean
+      image?: {
+        maxImages?: number
+        maxImageBytes?: number
+        mimeTypes?: string[]
+      }
+      reason?: string
+    }
+    models?: Record<
+      string,
+      {
+        inputModalities?: Array<'text' | 'image' | 'file' | 'audio'>
+        outputModalities?: Array<'text' | 'image' | 'audio'>
+        tools?: boolean
+        structuredOutput?: boolean
+        image?: {
+          maxImages?: number
+          maxImageBytes?: number
+          mimeTypes?: string[]
+        }
+        reason?: string
+      }
+    >
+  }
   setCurrent?: boolean
 }
 
@@ -96,6 +125,79 @@ type ResumeThreadInput = {
   transcriptPath?: string
   projectPath?: string
   metadata?: Record<string, unknown>
+}
+
+type DesktopAttachmentSource =
+  | {
+      kind: 'file'
+      path: string
+    }
+  | {
+      kind: 'contentRef'
+      contentRef: string
+    }
+
+type DesktopAttachmentPrepareInput = {
+  attachments: Array<{
+    id: string
+    name: string
+    path?: string
+    data?: ArrayBuffer
+    mimeType: string
+    sizeBytes: number
+    modality: 'image' | 'file' | 'audio'
+  }>
+}
+
+type DesktopPreparedAttachment = {
+  id: string
+  attachmentId?: string
+  displayName: string
+  mimeType: string
+  sizeBytes: number
+  modality: 'image' | 'file' | 'audio'
+  source?: DesktopAttachmentSource
+  previewDataUrl?: string
+  previewText?: string
+  textContent?: string
+  contentRef?: string
+  sendMode?: 'image' | 'text' | 'metadata'
+  safety?: 'workspace' | 'outside_workspace'
+  status: 'ready' | 'rejected'
+  error?: string
+}
+
+type DesktopAttachmentPrepareResult = {
+  attachments: DesktopPreparedAttachment[]
+}
+
+type DesktopImagePreviewInput = {
+  path: string
+  maxEdge?: number
+}
+
+type DesktopImagePreviewResult = {
+  previewDataUrl?: string
+}
+
+type DesktopWindowControlState = {
+  maximized: boolean
+  fullscreen: boolean
+}
+
+type DesktopTurnAttachmentInput = {
+  type: 'image' | 'text'
+  attachmentId: string
+  displayName: string
+  mimeType: string
+  sizeBytes: number
+  source: DesktopAttachmentSource
+  text?: string
+}
+
+type DesktopStartTurnInput = {
+  text: string
+  attachments?: DesktopTurnAttachmentInput[]
 }
 
 type PermissionSettingsUpdateInput = {
@@ -155,7 +257,24 @@ const api = {
   downloadUpdate: () => ipcRenderer.invoke('ccr:update-download'),
   installUpdate: () => ipcRenderer.invoke('ccr:update-install'),
   mockUpdateState: (status: string) => ipcRenderer.invoke('ccr:update-dev-mock', status),
-  startTurn: (text: string) => ipcRenderer.invoke('ccr:start-turn', text),
+  prepareAttachments: (
+    input: DesktopAttachmentPrepareInput,
+  ): Promise<DesktopAttachmentPrepareResult> =>
+    ipcRenderer.invoke('ccr:prepare-attachments', input),
+  getImagePreview: (
+    input: DesktopImagePreviewInput,
+  ): Promise<DesktopImagePreviewResult> =>
+    ipcRenderer.invoke('ccr:image-preview', input),
+  getWindowState: (): Promise<DesktopWindowControlState> =>
+    ipcRenderer.invoke('ccr:window-state'),
+  minimizeWindow: (): Promise<DesktopWindowControlState> =>
+    ipcRenderer.invoke('ccr:window-minimize'),
+  toggleMaximizeWindow: (): Promise<DesktopWindowControlState> =>
+    ipcRenderer.invoke('ccr:window-toggle-maximize'),
+  closeWindow: (): Promise<DesktopWindowControlState> =>
+    ipcRenderer.invoke('ccr:window-close'),
+  startTurn: (input: string | DesktopStartTurnInput) =>
+    ipcRenderer.invoke('ccr:start-turn', input),
   interruptTurn: () => ipcRenderer.invoke('ccr:turn-interrupt'),
   openPath: (path: string) => ipcRenderer.invoke('ccr:open-path', path),
   showItemInFolder: (path: string) =>
@@ -173,6 +292,16 @@ const api = {
     }
     ipcRenderer.on('ccr:event', handler)
     return () => ipcRenderer.removeListener('ccr:event', handler)
+  },
+  onWindowState: (listener: (state: DesktopWindowControlState) => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      state: DesktopWindowControlState,
+    ) => {
+      listener(state)
+    }
+    ipcRenderer.on('ccr:window-state', handler)
+    return () => ipcRenderer.removeListener('ccr:window-state', handler)
   },
 }
 

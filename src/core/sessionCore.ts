@@ -63,8 +63,10 @@ import type {
   CoreJsonObject,
   CoreThread,
   CoreTurn,
+  CoreTurnInput,
   CoreTurnMetadata,
   CoreWorkspace,
+  CoreUserContentBlock,
 } from './types.js'
 
 type ActiveTurnRuntime = {
@@ -162,6 +164,7 @@ export class CoreSessionService {
     )
     this.#threadTranscriptStates.set(thread.threadId, transcriptState)
     this.#threadRuntimeStates.set(thread.threadId, createThreadRuntimeState())
+    this.markCurrentThread(thread.threadId)
     this.emitLater({ type: 'thread_started', thread })
     return thread
   }
@@ -180,6 +183,7 @@ export class CoreSessionService {
 
     const existingThread = this.findThreadBySessionId(params.sessionId)
     if (existingThread) {
+      this.markCurrentThread(existingThread.threadId)
       return existingThread
     }
 
@@ -258,6 +262,7 @@ export class CoreSessionService {
       thread.threadId,
       createThreadRuntimeState(resumed.messages),
     )
+    this.markCurrentThread(thread.threadId)
     this.emitLater({ type: 'thread_started', thread })
     return thread
   }
@@ -278,10 +283,8 @@ export class CoreSessionService {
 
   startTurn(params: {
     threadId: string
-    input: {
-      type: 'text'
-      text: string
-    }
+    input: CoreTurnInput
+    metadata?: CoreTurnMetadata
   }): CoreTurn {
     const thread = this.#threads.get(params.threadId)
     if (!thread) {
@@ -296,6 +299,7 @@ export class CoreSessionService {
 
     const config = loadLlmConfig()
     const now = new Date().toISOString()
+    this.markCurrentThread(thread.threadId)
     const derivedTitle = deriveThreadTitleFromText(params.input.text)
     if (derivedTitle && isGenericThreadTitle(thread.title)) {
       thread.title = derivedTitle
@@ -308,17 +312,17 @@ export class CoreSessionService {
       turnId: createId('turn'),
       threadId: thread.threadId,
       status: 'queued',
-      input: {
-        type: 'text',
-        text: params.input.text,
-      },
+      input: cloneCoreTurnInput(params.input),
       provider: config.provider,
       model: config.model,
       createdAt: now,
       startedAt: null,
       completedAt: null,
       error: null,
-      metadata: createInitialTurnMetadata(config),
+      metadata: mergeTurnMetadata(
+        createInitialTurnMetadata(config),
+        params.metadata,
+      ),
     }
 
     this.#turns.set(turn.turnId, turn)
@@ -977,6 +981,61 @@ export class CoreSessionService {
     await resetSessionFilePointer()
     this.#activeTranscriptSessionId = transcriptState.sessionId
   }
+
+  private markCurrentThread(threadId: string): void {
+    for (const thread of this.#threads.values()) {
+      thread.status = thread.threadId === threadId ? 'active' : 'closed'
+    }
+  }
+}
+
+function cloneCoreTurnInput(input: CoreTurnInput): CoreTurnInput {
+  if (input.type === 'text') {
+    return {
+      type: 'text',
+      text: input.text,
+    }
+  }
+
+  return {
+    type: 'content',
+    text: input.text,
+    content: input.content.map(cloneCoreUserContentBlock),
+  }
+}
+
+function cloneCoreUserContentBlock(
+  block: CoreUserContentBlock,
+): CoreUserContentBlock {
+  if (block.type === 'text') {
+    return {
+      type: 'text',
+      text: block.text,
+    }
+  }
+
+  const cloned: Extract<
+    CoreUserContentBlock,
+    { type: 'image' | 'file' | 'audio' }
+  > = {
+    type: block.type,
+  }
+  if (block.attachmentId) {
+    cloned.attachmentId = block.attachmentId
+  }
+  if (block.displayName) {
+    cloned.displayName = block.displayName
+  }
+  if (block.mimeType) {
+    cloned.mimeType = block.mimeType
+  }
+  if (block.sizeBytes !== undefined) {
+    cloned.sizeBytes = block.sizeBytes
+  }
+  if (block.source) {
+    cloned.source = { ...block.source }
+  }
+  return cloned
 }
 
 function createId(prefix: string): string {

@@ -13,6 +13,11 @@ import { Sidebar } from './components/layout/Sidebar.js'
 import { Topbar } from './components/layout/Topbar.js'
 import { WindowTitlebar } from './components/layout/WindowTitlebar.js'
 import { ChatPage } from './components/pages/ChatPage.js'
+import type {
+  ComposerPrepareAttachmentInput,
+  ComposerPreparedAttachment,
+  ComposerSubmitInput,
+} from './components/layout/Composer.js'
 import { LogsPage } from './components/pages/LogsPage.js'
 import { McpPage } from './components/pages/McpPage.js'
 import { ModelsPage } from './components/pages/ModelsPage.js'
@@ -141,6 +146,7 @@ function App({ initialStatus = null }: AppProps) {
 
   const model = status?.config?.llm?.model ?? '模型待加载'
   const provider = status?.config?.llm?.provider ?? 'provider 待加载'
+  const modelCapabilities = status?.config?.llm?.modelCapabilities
   const contextWindow = status?.config?.llm?.contextWindow
   const authText = status?.auth?.available ? '已连接' : '需要登录'
   const coreVersion = status?.initialized?.serverInfo.coreVersion ?? 'unknown'
@@ -302,24 +308,43 @@ function App({ initialStatus = null }: AppProps) {
     )
   }
 
-  async function sendPrompt(): Promise<void> {
+  async function prepareComposerAttachments(
+    attachments: ComposerPrepareAttachmentInput[],
+  ): Promise<ComposerPreparedAttachment[]> {
+    const result = (await window.ccr.prepareAttachments({
+      attachments,
+    })) as { attachments?: ComposerPreparedAttachment[] }
+    return result.attachments ?? []
+  }
+
+  async function sendPrompt(input?: ComposerSubmitInput): Promise<void> {
     const text = prompt.trim()
-    if (!text) {
+    const attachments = input?.attachments ?? []
+    if (!text && attachments.length === 0) {
       return
     }
 
-    appendDisplayEvent(createUserDisplayEvent(`${Date.now()}-user`, text))
+    appendDisplayEvent(
+      createUserDisplayEvent(
+        `${Date.now()}-user`,
+        createOptimisticUserText(text, attachments),
+        attachments,
+      ),
+    )
     dispatchSession({ type: 'set-active-turn', turnId: 'pending' })
     setPrompt('')
 
-    if (isCompactCommand(text)) {
+    if (attachments.length === 0 && isCompactCommand(text)) {
       dispatchSession({ type: 'set-active-turn', turnId: null })
       await runCompactFromDesktop(getCompactInstruction(text))
       return
     }
 
     await runAction(async () => {
-      const result = (await window.ccr.startTurn(text)) as {
+      const result = (await window.ccr.startTurn({
+        text,
+        attachments,
+      })) as {
         turn?: { turnId?: string }
       }
       if (result.turn?.turnId) {
@@ -906,6 +931,7 @@ function App({ initialStatus = null }: AppProps) {
                 contextStatus={status?.context}
                 events={timelineEvents}
                 memoryStatus={status?.memory}
+                modelCapabilities={modelCapabilities}
                 permissions={session.permissions}
                 prompt={prompt}
                 threadHistory={threadHistory}
@@ -921,6 +947,7 @@ function App({ initialStatus = null }: AppProps) {
                 }
                 onHistoryReload={() => void loadThreadHistory()}
                 onInterrupt={interruptCurrentTurn}
+                onPrepareAttachments={prepareComposerAttachments}
                 onRespondPermission={respondPermission}
                 onResumeHistoryThread={resumeThreadFromHistory}
                 onRunCompact={() => void runCompactFromDesktop()}
@@ -1005,6 +1032,16 @@ function isCompactCommand(text: string): boolean {
   return text === '/compact' || text.startsWith('/compact ')
 }
 
+function createOptimisticUserText(
+  text: string,
+  attachments: ComposerSubmitInput['attachments'],
+): string {
+  if (text.trim()) {
+    return text
+  }
+  return attachments.length > 0 ? '已添加附件。' : ''
+}
+
 function getCompactInstruction(text: string): string | undefined {
   const instruction = text.slice('/compact'.length).trim()
   return instruction || undefined
@@ -1051,16 +1088,25 @@ function createHistoryReplayActionsForMessage(
   const object = value as Record<string, unknown>
   const content = 'content' in object ? object.content : undefined
   const blocks = normalizeContentBlocks(content)
-  if (content === undefined || !blocks.some(isHistoryToolLifecycleBlock)) {
+  if (
+    content === undefined ||
+    !shouldReplayHistoryContentAsCompletedItem(message, blocks)
+  ) {
     return [{ type: 'append-message', message }]
   }
 
   const itemId = message.id
-  const kind = getHistoryCompletedItemKind(message.kind, object.sourceType, message.role)
+  const kind = getHistoryCompletedItemKind(
+    message.kind,
+    object.sourceType,
+    message.role,
+    blocks,
+  )
   const statusText = message.status ?? 'completed'
   const context = createCompletedItemContractContext({
     itemId,
     params: compactJsonObject({
+      source: 'history',
       sourceType: object.sourceType,
       createdAt: object.createdAt,
     }),
@@ -1096,8 +1142,11 @@ function normalizeHistoryThreadMessage(
     return null
   }
   const object = value as Record<string, unknown>
-  const text = typeof object.text === 'string' ? object.text.trim() : ''
-  if (!text) {
+  const blocks = normalizeContentBlocks(object.content)
+  const text =
+    (typeof object.text === 'string' ? object.text.trim() : '') ||
+    getTextFromHistoryContentBlocks(blocks)
+  if (!text && blocks.length === 0) {
     return null
   }
 
@@ -1113,11 +1162,52 @@ function normalizeHistoryThreadMessage(
   }
 }
 
+function shouldReplayHistoryContentAsCompletedItem(
+  message: ChatMessage,
+  blocks: JsonObject[],
+): boolean {
+  if (message.role === 'user') {
+    return blocks.some(
+      block =>
+        isHistoryToolLifecycleBlock(block) || isHistoryAttachmentBlock(block),
+    )
+  }
+  return blocks.some(
+    block =>
+      isHistoryToolLifecycleBlock(block) || isHistoryAttachmentBlock(block),
+  )
+}
+
+function getTextFromHistoryContentBlocks(blocks: JsonObject[]): string {
+  return blocks
+    .map(getHistoryTextBlockValue)
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function getHistoryTextBlockValue(block: JsonObject): string {
+  const type = typeof block.type === 'string' ? block.type : ''
+  if (
+    (type === 'text' || type === 'input_text' || type === 'output_text') &&
+    typeof block.text === 'string'
+  ) {
+    return block.text.trim()
+  }
+  if (type === 'json' && typeof block.value === 'string') {
+    return block.value.trim()
+  }
+  return ''
+}
+
 function getHistoryCompletedItemKind(
   kind: string | undefined,
   sourceType: unknown,
   role: ChatMessage['role'],
+  blocks: JsonObject[],
 ): string | undefined {
+  if (blocks.some(isHistoryToolLifecycleBlock)) {
+    return typeof sourceType === 'string' ? sourceType : kind
+  }
   if (role === 'assistant' || sourceType === 'assistant') {
     return 'assistant_message'
   }
@@ -1149,6 +1239,29 @@ function shouldSplitHistoryBlocks(blocks: JsonObject[]): boolean {
 function isHistoryToolLifecycleBlock(block: JsonObject): boolean {
   const type = typeof block.type === 'string' ? block.type : ''
   return type === 'tool_use' || type === 'tool_result' || type === 'progress'
+}
+
+function isHistoryAttachmentBlock(block: JsonObject): boolean {
+  const type = typeof block.type === 'string' ? block.type : ''
+  if (
+    type === 'image' ||
+    type === 'file' ||
+    type === 'audio' ||
+    type === 'attachment'
+  ) {
+    return true
+  }
+  return (
+    type === 'tool_result' &&
+    Array.isArray(block.content) &&
+    block.content.some(
+      item =>
+        !!item &&
+        typeof item === 'object' &&
+        !Array.isArray(item) &&
+        isHistoryAttachmentBlock(item as JsonObject),
+    )
+  )
 }
 
 function createHistorySplitItemId(

@@ -192,16 +192,29 @@ export function sessionReducer(
       }
 
     case 'merge-turn-metadata':
-      return {
-        ...state,
-        turnMetadata: {
+      {
+        const turnMetadata = {
           ...(state.turnMetadata ?? {}),
           ...action.metadata,
           usage: {
             ...(state.turnMetadata?.usage ?? {}),
             ...(action.metadata.usage ?? {}),
           },
-        },
+        }
+        const terminalToolStatus = getTerminalToolStatus(
+          action.metadata.status,
+        )
+        return {
+          ...state,
+          turnMetadata,
+          displayEvents: terminalToolStatus
+            ? markRunningToolsForTerminalTurn(
+                state.displayEvents,
+                action.metadata.turnId ?? state.activeTurnId,
+                terminalToolStatus,
+              )
+            : state.displayEvents,
+        }
       }
 
     case 'clear-permissions':
@@ -317,6 +330,100 @@ function shouldKeepAfterTurnCompleted(permission: PermissionCard): boolean {
     permission.toolName === 'ExitPlanMode' ||
     permission.toolName === 'ExitPlanModeV2' ||
     permission.toolName === 'EnterPlanMode'
+  )
+}
+
+function getTerminalToolStatus(
+  turnStatus: string | undefined,
+): 'interrupted' | 'failed' | undefined {
+  if (
+    turnStatus === 'cancelled' ||
+    turnStatus === 'canceled' ||
+    turnStatus === 'interrupted'
+  ) {
+    return 'interrupted'
+  }
+  if (turnStatus === 'failed' || turnStatus === 'error') {
+    return 'failed'
+  }
+  return undefined
+}
+
+function markRunningToolsForTerminalTurn(
+  events: DisplayEvent[],
+  turnId: string | undefined | null,
+  status: 'interrupted' | 'failed',
+): DisplayEvent[] {
+  return events.map(event =>
+    shouldFinalizeRunningToolEvent(event, turnId)
+      ? finalizeRunningToolEvent(event, status)
+      : event,
+  )
+}
+
+function shouldFinalizeRunningToolEvent(
+  event: DisplayEvent,
+  turnId: string | undefined | null,
+): boolean {
+  const snapshot = event.toolSnapshot
+  if (!snapshot) {
+    return false
+  }
+
+  if (
+    !isRunningToolStatus(snapshot.status) &&
+    !isRunningToolStatus(event.status)
+  ) {
+    return false
+  }
+
+  const eventTurnId = snapshot.identity?.turnId ?? event.identity?.turnId
+  if (turnId && eventTurnId !== turnId) {
+    return false
+  }
+
+  return true
+}
+
+function finalizeRunningToolEvent(
+  event: DisplayEvent,
+  status: 'interrupted' | 'failed',
+): DisplayEvent {
+  const snapshot = event.toolSnapshot
+  if (!snapshot) {
+    return event
+  }
+
+  const errorClass =
+    status === 'failed'
+      ? (snapshot.errorClass ?? ('unknown_failure' satisfies ToolErrorClass))
+      : snapshot.errorClass
+  return {
+    ...event,
+    status,
+    toolSnapshot: {
+      ...snapshot,
+      status,
+      statusLabel: getToolStatusLabel(status),
+      errorClass,
+      actionableHint:
+        status === 'failed'
+          ? (snapshot.actionableHint ?? getActionableHint(errorClass))
+          : snapshot.actionableHint,
+    },
+    fileToolSnapshot: event.fileToolSnapshot
+      ? { ...event.fileToolSnapshot, status }
+      : event.fileToolSnapshot,
+  }
+}
+
+function isRunningToolStatus(status: string | undefined): boolean {
+  return (
+    status === 'preparing' ||
+    status === 'waiting_permission' ||
+    status === 'running' ||
+    status === 'streaming' ||
+    status === 'pending'
   )
 }
 
@@ -458,6 +565,8 @@ function mergeCompletedDisplayEvent(
     fileSnapshot: nextEvent.fileSnapshot ?? currentEvent.fileSnapshot,
     attachmentSnapshot:
       nextEvent.attachmentSnapshot ?? currentEvent.attachmentSnapshot,
+    attachmentSnapshots:
+      nextEvent.attachmentSnapshots ?? currentEvent.attachmentSnapshots,
     referenceSnapshot:
       nextEvent.referenceSnapshot ?? currentEvent.referenceSnapshot,
     status: statusText,
@@ -538,9 +647,11 @@ function mergeToolLifecycleDisplayEvent(
     ...currentEvent,
     type: 'tool_call',
     status,
-    timelineHidden: currentEvent.timelineHidden,
+    timelineHidden: status === 'failed' ? false : currentEvent.timelineHidden,
     identity: currentEvent.identity ?? nextEvent.identity,
     toolSnapshot: mergedSnapshot,
+    attachmentSnapshots:
+      nextEvent.attachmentSnapshots ?? currentEvent.attachmentSnapshots,
     ...fileDisplaySnapshots,
   }
 }

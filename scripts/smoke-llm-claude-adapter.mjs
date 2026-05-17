@@ -174,6 +174,63 @@ assert.equal(request.messages[4].role, 'tool');
 assert.equal(request.tools.length, 1);
 assert.equal(request.tools[0].name, 'Read');
 
+const mixedToolAndUserRequest = buildLlmQueryRequest({
+  config: {
+    provider: 'codex-oauth',
+    model: 'gpt-5.4',
+    providers: {},
+    path: 'smoke',
+    source: 'default',
+  },
+  messages: [
+    createUserMessage({ content: 'before mixed turn' }),
+    assistantWithToolUse,
+    createUserMessage({
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: 'toolu_prev_1',
+          content: 'file content',
+          is_error: false,
+        },
+        {
+          type: 'text',
+          text: '测下',
+        },
+      ],
+    }),
+  ],
+  systemPrompt: asSystemPrompt([]),
+  toolSchemas: [],
+  signal: new AbortController().signal,
+  model: 'gpt-5.4',
+});
+
+const mixedAssistantIndex = mixedToolAndUserRequest.messages.findIndex(
+  message => message.role === 'assistant',
+);
+assert.notEqual(mixedAssistantIndex, -1);
+assert.equal(
+  mixedToolAndUserRequest.messages[mixedAssistantIndex + 1].role,
+  'tool',
+);
+assert.equal(
+  mixedToolAndUserRequest.messages[mixedAssistantIndex + 1].parts[0].type,
+  'tool_result',
+);
+assert.equal(
+  mixedToolAndUserRequest.messages[mixedAssistantIndex + 1].parts[0].toolCallId,
+  'toolu_prev_1',
+);
+assert.equal(
+  mixedToolAndUserRequest.messages[mixedAssistantIndex + 2].role,
+  'user',
+);
+assert.equal(
+  mixedToolAndUserRequest.messages[mixedAssistantIndex + 2].parts[0].text,
+  '测下',
+);
+
 const inheritedDefaultModelRequest = buildLlmQueryRequest({
   config: {
     provider: 'codex-oauth',

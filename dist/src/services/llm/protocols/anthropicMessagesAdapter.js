@@ -1,5 +1,6 @@
 import Anthropic, {} from '@anthropic-ai/sdk';
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js';
+import { toAnthropicImageSource } from '../imageContent.js';
 export class AnthropicMessagesAdapter {
     #providerId;
     #providerLabel;
@@ -22,7 +23,7 @@ export class AnthropicMessagesAdapter {
         this.#fetchImpl = options.fetchImpl;
     }
     async generate(request) {
-        const body = this.#toMessageRequest(request, false);
+        const body = await this.#toMessageRequest(request, false);
         const raw = await this.#createClient().messages.create(body, {
             signal: request.signal,
         });
@@ -34,7 +35,7 @@ export class AnthropicMessagesAdapter {
         });
     }
     async *stream(request) {
-        const body = this.#toMessageRequest(request, true);
+        const body = await this.#toMessageRequest(request, true);
         const stream = await this.#createClient().messages.create(body, {
             signal: request.signal,
         });
@@ -71,9 +72,9 @@ export class AnthropicMessagesAdapter {
             ...(this.#fetchImpl ? { fetch: this.#fetchImpl } : {}),
         });
     }
-    #toMessageRequest(request, stream) {
+    async #toMessageRequest(request, stream) {
         const model = request.model?.trim() || this.#defaultModel;
-        const mapped = toAnthropicMessages(request.messages);
+        const mapped = await toAnthropicMessages(request.messages);
         const maxTokens = typeof request.maxOutputTokens === 'number'
             ? request.maxOutputTokens
             : this.#defaultMaxOutputTokens;
@@ -314,7 +315,7 @@ function handleContentBlockStop(index, state) {
         state.toolDrafts.delete(index);
     }
 }
-function toAnthropicMessages(input) {
+async function toAnthropicMessages(input) {
     const systemParts = [];
     const messages = [];
     for (const message of input) {
@@ -345,7 +346,7 @@ function toAnthropicMessages(input) {
             });
             continue;
         }
-        const content = toAnthropicContentBlocks(message);
+        const content = await toAnthropicContentBlocks(message);
         if (content.length === 0) {
             continue;
         }
@@ -375,7 +376,7 @@ function pushAnthropicMessage(messages, next) {
         ...normalizeContentBlocks(next.content),
     ];
 }
-function toAnthropicContentBlocks(message) {
+async function toAnthropicContentBlocks(message) {
     const blocks = [];
     for (const part of message.parts) {
         if (part.type === 'text') {
@@ -396,6 +397,13 @@ function toAnthropicContentBlocks(message) {
                 type: 'thinking',
                 thinking: part.thinking,
                 signature: part.signature ?? '',
+            });
+            continue;
+        }
+        if (part.type === 'image' && message.role === 'user') {
+            blocks.push({
+                type: 'image',
+                source: await toAnthropicImageSource(part),
             });
             continue;
         }

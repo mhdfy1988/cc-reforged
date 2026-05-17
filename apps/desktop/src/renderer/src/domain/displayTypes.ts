@@ -33,6 +33,7 @@ export type DesktopStatus = {
       apiMode?: LlmApiMode
       capabilities?: LlmProviderCapabilities
       modelCatalogEntry?: LlmModelCatalogEntry
+      modelCapabilities?: LlmModelCapabilities
       baseUrl?: string
       configPath?: string
       configSource?: string
@@ -80,6 +81,27 @@ export type LlmModelCatalogEntry = {
   supportsReasoning?: boolean
   supportsTools?: boolean
   inputModalities?: string[]
+  modelCapabilities?: LlmModelCapabilities
+}
+
+export type LlmModelCapabilitySource =
+  | 'builtin'
+  | 'profile_override'
+  | 'default'
+
+export type LlmModelCapabilities = {
+  inputModalities: string[]
+  outputModalities: string[]
+  tools: boolean
+  structuredOutput: boolean
+  source: LlmModelCapabilitySource
+  reason: string
+  baseSource?: LlmModelCapabilitySource
+  image?: {
+    maxImages?: number
+    maxImageBytes?: number
+    mimeTypes?: string[]
+  }
 }
 
 export type LlmApiMode =
@@ -124,6 +146,10 @@ export type LlmModelProfile = {
   defaultModel?: string
   models?: string[]
   capabilities?: LlmProviderCapabilities
+  capabilityOverrides?: {
+    default?: Partial<LlmModelCapabilities>
+    models?: Record<string, Partial<LlmModelCapabilities>>
+  }
   source?: 'file'
   isCurrent?: boolean
 }
@@ -173,6 +199,7 @@ export type LlmModelAvailability = {
   authStrategy?: LlmAuthStrategy
   capabilities?: LlmProviderCapabilities
   modelCatalogEntry?: LlmModelCatalogEntry
+  modelCapabilities?: LlmModelCapabilities
   baseUrl?: string
   configPath?: string
   configSource?: string
@@ -208,6 +235,7 @@ export type LlmModelProfileSaveInput = {
   baseUrl?: string
   defaultModel?: string
   models?: string[]
+  capabilityOverrides?: LlmModelProfile['capabilityOverrides']
   setCurrent?: boolean
 }
 

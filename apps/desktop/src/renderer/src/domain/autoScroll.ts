@@ -1,4 +1,7 @@
 export const DEFAULT_AUTO_SCROLL_THRESHOLD_PX = 120
+export const AUTO_SCROLL_RESUME_THRESHOLD_PX = 24
+export const SCROLL_CONTENT_BELOW_THRESHOLD_PX = 4
+export const USER_SCROLL_DIRECTION_EPSILON_PX = 2
 
 export type ScrollMetrics = {
   clientHeight: number
@@ -27,4 +30,11 @@ export function isNearScrollBottom(
   thresholdPx = DEFAULT_AUTO_SCROLL_THRESHOLD_PX,
 ): boolean {
   return getDistanceToBottom(metrics) <= thresholdPx
+}
+
+export function hasScrollableContentBelow(
+  metrics: ScrollMetrics,
+  thresholdPx = SCROLL_CONTENT_BELOW_THRESHOLD_PX,
+): boolean {
+  return getDistanceToBottom(metrics) > thresholdPx
 }

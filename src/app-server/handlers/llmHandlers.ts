@@ -92,6 +92,9 @@ export async function handleModelProfileSave(
       ? { defaultModel: parsedParams.defaultModel }
       : {}),
     ...(parsedParams.models ? { models: parsedParams.models } : {}),
+    ...(parsedParams.capabilityOverrides
+      ? { capabilityOverrides: parsedParams.capabilityOverrides }
+      : {}),
     ...(parsedParams.setCurrent !== undefined
       ? { setCurrent: parsedParams.setCurrent }
       : {}),

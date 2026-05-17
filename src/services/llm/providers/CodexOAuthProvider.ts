@@ -5,15 +5,19 @@ import {
   type AssistantMessage as PiAiAssistantMessage,
   type AssistantMessageEvent as PiAiAssistantMessageEvent,
   type Context as PiAiContext,
+  type ImageContent as PiAiImageContent,
   type Message as PiAiMessage,
   type Model as PiAiModel,
   type ProviderStreamOptions as PiAiProviderStreamOptions,
   type SimpleStreamOptions as PiAiSimpleStreamOptions,
+  type TextContent as PiAiTextContent,
   type Tool as PiAiTool,
 } from '@mariozechner/pi-ai'
 import { getLlmProviderConfig, loadLlmConfig } from '../llmConfig.js'
+import { getLlmModelCatalogEntry } from '../modelCatalog.js'
 import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js'
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js'
+import { toBase64ImageContent } from '../imageContent.js'
 import type {
   LlmContentPart,
   LlmGenerateEvent,
@@ -33,6 +37,8 @@ import {
 import { createDefaultCodexOAuthSession } from '../sessions/defaultCodexOAuthSession.js'
 
 type PiAiTransport = NonNullable<PiAiSimpleStreamOptions['transport']>
+type PiAiUserContent = string | (PiAiTextContent | PiAiImageContent)[]
+type PiAiInputModality = PiAiModel<'openai-codex-responses'>['input'][number]
 type PiAiComplete = typeof piComplete
 type PiAiStream = typeof piStream
 type PiAiGetModel = typeof piGetModel
@@ -228,7 +234,7 @@ export class CodexOAuthProvider implements LlmProvider {
     )
     const context: PiAiContext = {
       systemPrompt,
-      messages: toPiAiMessages(request.messages, model),
+      messages: await toPiAiMessages(request.messages, model),
       ...(request.tools && request.tools.length > 0
         ? { tools: toPiAiTools(request.tools) }
         : {}),
@@ -311,10 +317,10 @@ function resolveSystemPrompt(
     : defaultSystemPrompt
 }
 
-function toPiAiMessages(
+async function toPiAiMessages(
   messages: readonly LlmMessage[],
   model: string,
-): PiAiMessage[] {
+): Promise<PiAiMessage[]> {
   const mapped: PiAiMessage[] = []
   let timestamp = Date.now()
 
@@ -325,7 +331,7 @@ function toPiAiMessages(
 
     switch (message.role) {
       case 'user': {
-        const content = textPartsToString(message.parts, 'user')
+        const content = await toPiAiUserContent(message.parts)
         if (!content) {
           continue
         }
@@ -394,6 +400,46 @@ function toPiAiMessages(
   }
 
   return mapped
+}
+
+async function toPiAiUserContent(
+  parts: readonly LlmContentPart[],
+): Promise<PiAiUserContent | null> {
+  const hasImagePart = parts.some(part => part.type === 'image')
+  if (!hasImagePart) {
+    const textContent = textPartsToString(parts, 'user')
+    return textContent || null
+  }
+
+  const mapped: (PiAiTextContent | PiAiImageContent)[] = []
+  for (const part of parts) {
+    if (part.type === 'text') {
+      const text = part.text.trim()
+      if (text) {
+        mapped.push({
+          type: 'text',
+          text,
+        })
+      }
+      continue
+    }
+
+    if (part.type === 'image') {
+      const { mediaType, data } = await toBase64ImageContent(part)
+      mapped.push({
+        type: 'image',
+        data,
+        mimeType: mediaType,
+      })
+      continue
+    }
+
+    throw new Error(
+      'CodexOAuthProvider user messages only support text and image parts.',
+    )
+  }
+
+  return mapped.length > 0 ? mapped : null
 }
 
 function textPartsToString(
@@ -498,6 +544,7 @@ function resolvePiAiModel(input: {
   baseUrl: string
   getModelImpl: PiAiGetModel
 }): PiAiModel<'openai-codex-responses'> {
+  const catalogInput = getCodexOAuthModelInput(input.model)
   try {
     const resolved = input.getModelImpl(
       'openai-codex' as Parameters<PiAiGetModel>[0],
@@ -510,6 +557,7 @@ function resolvePiAiModel(input: {
       api: 'openai-codex-responses',
       provider: 'openai-codex',
       baseUrl: input.baseUrl,
+      input: mergePiAiModelInput(resolved.input, catalogInput),
     }
   } catch {
     return {
@@ -519,7 +567,7 @@ function resolvePiAiModel(input: {
       provider: 'openai-codex',
       baseUrl: input.baseUrl,
       reasoning: true,
-      input: ['text'],
+      input: catalogInput,
       cost: {
         input: 0,
         output: 0,
@@ -530,6 +578,32 @@ function resolvePiAiModel(input: {
       maxTokens: 32000,
     }
   }
+}
+
+function getCodexOAuthModelInput(
+  model: string,
+): PiAiModel<'openai-codex-responses'>['input'] {
+  const providerDefinition = getBuiltinLlmProviderDefinition('codex-oauth')
+  if (!providerDefinition) {
+    return ['text']
+  }
+  const catalogEntry = getLlmModelCatalogEntry({
+    providerId: 'codex-oauth',
+    model,
+    providerDefinition,
+  })
+  const modalities = catalogEntry.inputModalities.filter(
+    (modality): modality is PiAiInputModality =>
+      modality === 'text' || modality === 'image',
+  )
+  return modalities.length > 0 ? modalities : ['text']
+}
+
+function mergePiAiModelInput(
+  resolvedInput: readonly PiAiInputModality[] | undefined,
+  catalogInput: readonly PiAiInputModality[],
+): PiAiModel<'openai-codex-responses'>['input'] {
+  return Array.from(new Set([...(resolvedInput ?? []), ...catalogInput]))
 }
 
 function toGenerateResponse(input: {

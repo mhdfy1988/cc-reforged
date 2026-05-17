@@ -285,6 +285,19 @@ try {
       ),
     );
 
+    const secondThreadResult = await managed.client.startThread({
+      title: 'SDK smoke second thread',
+    });
+    const twoThreadList = await managed.client.listThreads();
+    const firstThreadAfterSecond = twoThreadList.threads.find(
+      thread => thread.threadId === threadResult.thread.threadId,
+    );
+    const secondThreadAfterSecond = twoThreadList.threads.find(
+      thread => thread.threadId === secondThreadResult.thread.threadId,
+    );
+    assert.equal(firstThreadAfterSecond?.status, 'closed');
+    assert.equal(secondThreadAfterSecond?.status, 'active');
+
     const sessionHistory = await managed.client.listSessionHistory({
       scope: 'sameRepo',
       limit: 10,
@@ -349,6 +362,16 @@ try {
     assert.equal(turnResult.turn.metadata.requestedModel, 'gpt-5.4');
     assert.equal(typeof turnResult.turn.metadata.contextWindow, 'number');
 
+    const threadListAfterTurnStart = await managed.client.listThreads();
+    const firstThreadAfterTurnStart = threadListAfterTurnStart.threads.find(
+      thread => thread.threadId === threadResult.thread.threadId,
+    );
+    const secondThreadAfterTurnStart = threadListAfterTurnStart.threads.find(
+      thread => thread.threadId === secondThreadResult.thread.threadId,
+    );
+    assert.equal(firstThreadAfterTurnStart?.status, 'active');
+    assert.equal(secondThreadAfterTurnStart?.status, 'closed');
+
     await waitForNotification(
       notifications,
       waiters,
@@ -385,6 +408,50 @@ try {
           message.role === 'assistant' &&
           message.text.includes('assistant reply from smoke transcript'),
       ),
+    );
+    const replayedToolMessage = resumedThread.messages.find(
+      message =>
+        message.role === 'assistant' &&
+        Array.isArray(message.content) &&
+        message.content.some(block => block?.id === 'toolu-smoke-interrupted'),
+    );
+    assert.ok(replayedToolMessage);
+    const replayedToolBlocks = replayedToolMessage.content;
+    const completedReplayTool = replayedToolBlocks.find(
+      block => block?.id === 'toolu-smoke-completed',
+    );
+    const interruptedReplayTool = replayedToolBlocks.find(
+      block => block?.id === 'toolu-smoke-interrupted',
+    );
+    assert.equal(completedReplayTool?.status, undefined);
+    assert.equal(interruptedReplayTool?.status, 'interrupted');
+    assert.equal(interruptedReplayTool?.historyStatus, 'interrupted');
+    assert.equal(
+      resumedThread.messages.some(message =>
+        message.text.includes('No response requested.'),
+      ),
+      false,
+    );
+
+    const interruptedPromptTranscript = writeInterruptedPromptTranscript();
+    const interruptedPromptThread = await managed.client.resumeThread({
+      sessionId: interruptedPromptTranscript.sessionId,
+      transcriptPath: interruptedPromptTranscript.transcriptPath,
+      projectPath: repoRoot,
+    });
+    assert.ok(
+      interruptedPromptThread.messages.some(
+        message =>
+          message.role === 'system' &&
+          message.status === 'interrupted' &&
+          message.text.includes('本轮已中断，未产生可恢复回复'),
+      ),
+    );
+    assert.equal(
+      interruptedPromptThread.messages.some(message =>
+        message.text.includes('No response requested.'),
+      ),
+      false,
     );
     assertNoSecretKeys(resumedThread);
 
@@ -447,6 +514,7 @@ function writeSmokeTranscript() {
   const sessionId = randomUUID();
   const userUuid = randomUUID();
   const assistantUuid = randomUUID();
+  const toolResultUuid = randomUUID();
   const timestamp = new Date().toISOString();
   const transcriptPath = join(tempDir, `${sessionId}.jsonl`);
   const entries = [
@@ -484,7 +552,97 @@ function writeSmokeTranscript() {
             type: 'text',
             text: 'assistant reply from smoke transcript',
           },
+          {
+            type: 'tool_use',
+            id: 'toolu-smoke-completed',
+            name: 'PowerShell',
+            input: {
+              command: 'Write-Host done',
+            },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu-smoke-interrupted',
+            name: 'PowerShell',
+            input: {
+              command: 'Start-Sleep -Seconds 30',
+            },
+          },
         ],
+      },
+    },
+    {
+      type: 'user',
+      uuid: toolResultUuid,
+      parentUuid: assistantUuid,
+      isSidechain: false,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      message: {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu-smoke-completed',
+            content: 'done',
+          },
+        ],
+      },
+    },
+    {
+      type: 'assistant',
+      uuid: randomUUID(),
+      parentUuid: toolResultUuid,
+      isSidechain: false,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      message: {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: 'No response requested.',
+          },
+        ],
+      },
+    },
+  ];
+  writeFileSync(
+    transcriptPath,
+    `${entries.map(entry => JSON.stringify(entry)).join('\n')}\n`,
+    'utf8',
+  );
+  return { sessionId, transcriptPath };
+}
+
+function writeInterruptedPromptTranscript() {
+  const sessionId = randomUUID();
+  const userUuid = randomUUID();
+  const timestamp = new Date().toISOString();
+  const transcriptPath = join(tempDir, `${sessionId}.jsonl`);
+  const entries = [
+    {
+      type: 'user',
+      uuid: userUuid,
+      parentUuid: null,
+      isSidechain: false,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      message: {
+        role: 'user',
+        content: 'interrupted before assistant persisted',
       },
     },
   ];

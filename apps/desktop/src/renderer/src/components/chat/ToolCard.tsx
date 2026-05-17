@@ -1,4 +1,4 @@
-import { MessageFrame } from './MessageFrame.js'
+import { MessageAttachmentStrip, MessageFrame } from './MessageFrame.js'
 import { FileSnapshotPanel } from './FileCard.js'
 import { ShellPermissionInlinePanel } from './ShellPermissionCard.js'
 import { ToolPermissionInlinePanel } from './ToolPermissionInlinePanel.js'
@@ -10,6 +10,15 @@ import type {
 } from '../../domain/displayTypes.js'
 
 type ToolDetailBlockView = {
+  kind:
+    | 'input'
+    | 'fileTool'
+    | 'file'
+    | 'reference'
+    | 'attachment'
+    | 'attachments'
+    | 'result'
+    | 'error'
   title: string
   value: unknown
 }
@@ -101,6 +110,9 @@ export function ToolCard(props: {
             variant={useCompactFileLayout ? 'compact' : 'default'}
           />
         ) : null}
+        {props.event.attachmentSnapshots?.length ? (
+          <MessageAttachmentStrip attachments={props.event.attachmentSnapshots} />
+        ) : null}
         {hasDetail ? (
           <details>
             <summary>查看详情</summary>
@@ -140,34 +152,54 @@ function createToolDetailBlocks(
       : formatToolDetail(snapshot.errorMessage)
 
   if (snapshot.input !== undefined) {
-    blocks.push({ title: '调用参数', value: snapshot.input })
+    blocks.push({ kind: 'input', title: '调用参数', value: snapshot.input })
   }
 
   if (event.fileToolSnapshot) {
-    blocks.push({ title: '文件工具信息', value: event.fileToolSnapshot })
+    blocks.push({
+      kind: 'fileTool',
+      title: '文件工具信息',
+      value: event.fileToolSnapshot,
+    })
   }
 
   if (event.fileSnapshot) {
-    blocks.push({ title: '文件信息', value: event.fileSnapshot })
+    blocks.push({ kind: 'file', title: '文件信息', value: event.fileSnapshot })
   }
 
   if (event.referenceSnapshot) {
-    blocks.push({ title: '引用信息', value: event.referenceSnapshot })
+    blocks.push({
+      kind: 'reference',
+      title: '引用信息',
+      value: event.referenceSnapshot,
+    })
   }
 
   if (event.attachmentSnapshot) {
-    blocks.push({ title: '附件信息', value: event.attachmentSnapshot })
+    blocks.push({
+      kind: 'attachment',
+      title: '附件信息',
+      value: event.attachmentSnapshot,
+    })
+  }
+
+  if (event.attachmentSnapshots?.length) {
+    blocks.push({
+      kind: 'attachments',
+      title: '附件列表',
+      value: event.attachmentSnapshots,
+    })
   }
 
   if (snapshot.result !== undefined) {
-    blocks.push({ title: '执行结果', value: snapshot.result })
+    blocks.push({ kind: 'result', title: '执行结果', value: snapshot.result })
   }
 
   if (
     snapshot.errorMessage !== undefined &&
     !isDuplicateErrorDetail(resultText, errorText)
   ) {
-    blocks.push({ title: '错误详情', value: snapshot.errorMessage })
+    blocks.push({ kind: 'error', title: '错误详情', value: snapshot.errorMessage })
   }
 
   return blocks
@@ -200,7 +232,7 @@ function ToolDetailBlock(props: { block: ToolDetailBlockView }) {
   return (
     <section className="tool-card-detail-block">
       <h4>{props.block.title}</h4>
-      <RawDataBlock text={formatToolDetail(props.block.value)} />
+      <RawDataBlock text={formatToolDetailBlock(props.block)} />
     </section>
   )
 }
@@ -233,6 +265,9 @@ function getStatusText(status: string): string {
   if (status === 'denied') {
     return '已拒绝'
   }
+  if (status === 'interrupted') {
+    return '已中断'
+  }
   if (status === 'cancelled') {
     return '已取消'
   }
@@ -261,6 +296,7 @@ function getStatusClassName(status: string): string {
   if (
     status === 'failed' ||
     status === 'denied' ||
+    status === 'interrupted' ||
     status === 'cancelled' ||
     status === 'timeout'
   ) {
@@ -375,6 +411,109 @@ function formatToolDetail(detail: unknown): string {
   } catch {
     return String(detail)
   }
+}
+
+function formatToolDetailBlock(block: ToolDetailBlockView): string {
+  if (block.kind === 'result') {
+    return formatToolResultDetail(block.value)
+  }
+
+  if (
+    block.kind === 'fileTool' ||
+    block.kind === 'file' ||
+    block.kind === 'reference' ||
+    block.kind === 'attachment' ||
+    block.kind === 'attachments'
+  ) {
+    return formatToolDetail(sanitizeSnapshotDetail(block.value))
+  }
+
+  return formatToolDetail(block.value)
+}
+
+function formatToolResultDetail(value: unknown): string {
+  const fileContent = extractFileContent(value)
+  if (fileContent !== undefined) {
+    return fileContent
+  }
+
+  return formatToolDetail(value)
+}
+
+function extractFileContent(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    const text = value
+      .map(item => extractFileContent(item))
+      .filter((item): item is string => item !== undefined)
+      .join('\n')
+    return text || undefined
+  }
+
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+
+  const object = value as Record<string, unknown>
+  const file = toRecord(object.file)
+  const nestedContent = file?.content
+  if (typeof nestedContent === 'string') {
+    return nestedContent
+  }
+
+  if (typeof object.content === 'string') {
+    return object.content
+  }
+
+  if (typeof object.text === 'string') {
+    return object.text
+  }
+
+  return undefined
+}
+
+function sanitizeSnapshotDetail(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(item => sanitizeSnapshotDetail(item))
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+
+  const object = value as Record<string, unknown>
+  const sanitized: Record<string, unknown> = {}
+  for (const [key, nestedValue] of Object.entries(object)) {
+    if (shouldHideSnapshotDetailKey(key)) {
+      continue
+    }
+    if (nestedValue === undefined) {
+      continue
+    }
+    sanitized[key] = sanitizeSnapshotDetail(nestedValue)
+  }
+  return sanitized
+}
+
+function shouldHideSnapshotDetailKey(key: string): boolean {
+  return (
+    key === 'raw' ||
+    key === 'identity' ||
+    key === 'id' ||
+    key === 'toolUseId' ||
+    key === 'resultText' ||
+    key === 'diff' ||
+    key === 'actions'
+  )
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
 }
 
 function normalizeDetailText(value: string | null): string {

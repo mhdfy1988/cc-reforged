@@ -4,6 +4,7 @@ import { getDefaultLlmRuntime, } from './defaultRuntime.js';
 import { getLlmProfileOAuthCredential, getLlmProviderApiKey, } from './providerCredentials.js';
 import { getLlmProfileForProvider, getLlmProviderConfig, loadLlmConfig, } from './llmConfig.js';
 import { getLlmModelCatalogEntry } from './modelCatalog.js';
+import { resolveLlmModelCapabilities } from './modelCapabilities.js';
 import { createFallbackLlmProviderDefinition, getBuiltinLlmProviderDefinition, mergeLlmProviderDefinition, } from './providerDefinitions.js';
 import { createDefaultCodexOAuthSession } from './sessions/defaultCodexOAuthSession.js';
 const API_KEY_PROVIDER_ENV_NAMES = {
@@ -40,17 +41,28 @@ export function getLlmRuntimeDisplayStatusForProvider(input, config = loadLlmCon
         config.providers[provider]?.defaultModel ||
         config.model;
     const providerDefinition = getResolvedLlmProviderDefinition(provider, config);
+    const modelCatalogEntry = getLlmModelCatalogEntry({
+        providerId: provider,
+        model,
+        providerDefinition,
+    });
+    const apiMode = profile?.apiMode ?? providerDefinition.apiMode;
+    const authStrategy = profile?.authStrategy ?? providerDefinition.authStrategy;
     return {
         providerId: provider,
         providerDisplayName: providerDefinition.displayName,
         model,
-        authStrategy: providerDefinition.authStrategy,
-        apiMode: providerDefinition.apiMode,
+        authStrategy,
+        apiMode,
         capabilities: providerDefinition.capabilities,
-        modelCatalogEntry: getLlmModelCatalogEntry({
+        modelCatalogEntry,
+        modelCapabilities: resolveLlmModelCapabilities({
             providerId: provider,
+            apiMode,
             model,
-            providerDefinition,
+            providerCapabilities: providerDefinition.capabilities,
+            catalogEntry: modelCatalogEntry,
+            ...(profile ? { profile } : {}),
         }),
         ...(profile ? { profileId: profile.id } : {}),
         ...(profile?.baseUrl ?? providerConfig?.baseUrl

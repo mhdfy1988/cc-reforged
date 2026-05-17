@@ -70,12 +70,10 @@ export function extractToolSnapshotFromBlocks(
 
     if (type === 'tool_use') {
       const name = getToolName(block)
-      if (name === 'TodoWrite') {
-        return null
-      }
       const input = getJsonObject(block.input)
       const category = classifyToolCategory(name, input)
       const metadata = extractToolCallMetadata(name, category, input)
+      const status = getToolUseDisplayStatus(block, context)
 
       return {
         id,
@@ -83,8 +81,8 @@ export function extractToolSnapshotFromBlocks(
         name,
         displayName: metadata.displayName,
         category,
-        status: 'running',
-        statusLabel: '执行中',
+        status,
+        statusLabel: getToolStatusLabel(status),
         summary: metadata.summary,
         identity,
         input: block.input,
@@ -148,6 +146,68 @@ export function extractToolSnapshotFromBlocks(
   }
 
   return null
+}
+
+function isHistoryReplayContext(
+  context: DisplayEventContractContext | undefined,
+): boolean {
+  return context?.params?.source === 'history'
+}
+
+function getToolUseDisplayStatus(
+  block: JsonObject,
+  context: DisplayEventContractContext | undefined,
+): string {
+  const explicitStatus = normalizeToolUseStatus(
+    getString(block, [
+      'status',
+      'historyStatus',
+      'history_status',
+      'statusText',
+      'status_text',
+    ]),
+  )
+  if (explicitStatus) {
+    return explicitStatus
+  }
+  return isHistoryReplayContext(context) ? 'completed' : 'running'
+}
+
+function normalizeToolUseStatus(status: string | undefined): string | undefined {
+  if (!status) {
+    return undefined
+  }
+  const normalized = status.trim().toLowerCase()
+  if (!normalized) {
+    return undefined
+  }
+  if (normalized.includes('interrupt')) {
+    return 'interrupted'
+  }
+  if (normalized.includes('cancel')) {
+    return 'interrupted'
+  }
+  if (normalized.includes('timeout')) {
+    return 'timeout'
+  }
+  if (normalized.includes('denied')) {
+    return 'denied'
+  }
+  if (normalized.includes('fail') || normalized.includes('error')) {
+    return 'failed'
+  }
+  if (normalized.includes('complete') || normalized.includes('success')) {
+    return 'completed'
+  }
+  if (
+    normalized === 'running' ||
+    normalized === 'streaming' ||
+    normalized === 'pending' ||
+    normalized === 'waiting_permission'
+  ) {
+    return normalized
+  }
+  return status
 }
 
 function extractProgressMetadata(data: unknown): Pick<
@@ -390,6 +450,18 @@ function extractToolCallMetadata(
     }
   }
 
+  if (name === 'TodoWrite') {
+    return {
+      displayName: 'TodoWrite',
+      summary: '更新待办列表',
+      description,
+      target,
+      cwd,
+      provider,
+      risk,
+    }
+  }
+
   if (category === 'mcp') {
     return {
       displayName: 'MCP 工具',
@@ -422,7 +494,7 @@ function normalizeToolResultStatus(
   const normalized = statusText.toLowerCase()
   const result = resultText.toLowerCase()
   if (normalized.includes('cancel') || normalized.includes('interrupt')) {
-    return 'cancelled'
+    return normalized.includes('interrupt') ? 'interrupted' : 'cancelled'
   }
   if (normalized.includes('timeout') || result.includes('timed out')) {
     return 'timeout'
@@ -449,6 +521,7 @@ function isFailureStatus(statusText: string): boolean {
     normalized === 'failed' ||
     normalized === 'error' ||
     normalized === 'timeout' ||
+    normalized === 'interrupted' ||
     normalized === 'cancelled' ||
     normalized === 'canceled' ||
     normalized === 'denied'
@@ -554,6 +627,8 @@ export function getToolStatusLabel(status: string): string {
       return '失败'
     case 'denied':
       return '已拒绝'
+    case 'interrupted':
+      return '已中断'
     case 'cancelled':
       return '已取消'
     case 'timeout':

@@ -105,7 +105,7 @@ Core LlmRuntime
 `CodexOAuthProvider` 负责把 CCR 内部消息转换成 pi-ai 消息：
 
 - `system` 消息合并成 system prompt。
-- `user` 消息目前要求文本内容。
+- `user` 消息支持文本内容；`gpt-5.5` 图片输入会在 provider 边界读取为 base64，并映射成 pi-ai 的 `image` content block。
 - `assistant` 支持 text、thinking、tool_call。
 - `tool` 消息转换成 toolResult。
 - 流式事件归一化回 CCR 的 `thinking_*`、`content_part`、`response_complete`。
@@ -154,9 +154,10 @@ npm.cmd run smoke:codex-oauth-provider
 - refresh token 会刷新 access token，并写回同一 Profile 凭据槽。
 - 多个 `codex-oauth` Profile 的 OAuth 凭据不会互相覆盖。
 - `CodexOAuthProvider` 能把消息、thinking、tool_call、tool_result 和 usage 归一化。
+- `CodexOAuthProvider` 已覆盖 `gpt-5.5` 文本 + 图片用户输入映射；`gpt-5.4` / `gpt-5.4-mini` 仍按文本能力处理，避免未验证模型误收图片。
 - 流式事件能转换成 CCR 统一事件。
 
 ## 后续
 
 - 如果官方 Codex OAuth 流程变化，先更新 session 层，不改 Profile / 凭据结构。
-- 如果未来支持图片或附件，需要先扩展 CCR 内部内容模型到 pi-ai 的多模态输入映射。
+- 后续如果继续打开其他 Codex OAuth 模型的图片或文件能力，必须同时更新内置能力目录、provider 映射和 smoke，不只改前端标签。

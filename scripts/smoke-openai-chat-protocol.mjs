@@ -102,12 +102,237 @@ assert.equal(events[1].part.text, 'lo');
 assert.equal(events[2].response.output[0].text, 'hello');
 assert.equal(events[2].response.usage.totalTokens, 6);
 
+const todoToolDefinition = {
+  name: 'TodoWrite',
+  description: 'Update the session todo list',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['todos'],
+    properties: {
+      todos: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['content', 'status', 'activeForm'],
+          properties: {
+            content: { type: 'string' },
+            status: {
+              type: 'string',
+              enum: ['pending', 'in_progress', 'completed'],
+            },
+            activeForm: { type: 'string' },
+          },
+        },
+      },
+    },
+  },
+};
+
+await adapter.generate({
+  ...request,
+  messages: [
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'start todo work' }],
+    },
+    {
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool_call',
+          id: 'call_todo_missing_result',
+          name: 'TodoWrite',
+          input: {
+            todos: [
+              {
+                name: 'bad guessed field',
+                status: 'pending',
+                description: 'DeepSeek guessed the deferred schema',
+              },
+            ],
+          },
+        },
+      ],
+    },
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'continue after interruption' }],
+    },
+  ],
+  tools: [todoToolDefinition],
+});
+
+const repairedMessages = requests[2].body.messages;
+const danglingAssistantIndex = repairedMessages.findIndex(
+  message =>
+    message.role === 'assistant' &&
+    message.tool_calls?.[0]?.id === 'call_todo_missing_result',
+);
+assert.notEqual(danglingAssistantIndex, -1);
+assert.equal(repairedMessages[danglingAssistantIndex + 1].role, 'tool');
+assert.equal(
+  repairedMessages[danglingAssistantIndex + 1].tool_call_id,
+  'call_todo_missing_result',
+);
+const syntheticResult = JSON.parse(
+  repairedMessages[danglingAssistantIndex + 1].content,
+);
+assert.equal(syntheticResult.code, 'TOOL_CALL_INTERRUPTED');
+assert.equal(syntheticResult.toolName, 'TodoWrite');
+assert.equal(repairedMessages[danglingAssistantIndex + 2].role, 'user');
+assert.equal(requests[2].body.tools[0].function.name, 'TodoWrite');
+assert.equal(
+  requests[2].body.tools[0].function.parameters.required.includes('todos'),
+  true,
+);
+
+await adapter.generate({
+  ...request,
+  messages: [
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'start delayed tool result' }],
+    },
+    {
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool_call',
+          id: 'call_result_after_user',
+          name: 'Glob',
+          input: { pattern: '*.md' },
+        },
+      ],
+    },
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'new prompt before delayed result' }],
+    },
+    {
+      role: 'tool',
+      parts: [
+        {
+          type: 'tool_result',
+          toolCallId: 'call_result_after_user',
+          result: 'late tool result after user text',
+        },
+      ],
+    },
+  ],
+  tools: [
+    {
+      name: 'Glob',
+      description: 'Find files',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          pattern: { type: 'string' },
+        },
+      },
+    },
+  ],
+});
+
+const delayedMessages = requests[3].body.messages;
+const delayedAssistantIndex = delayedMessages.findIndex(
+  message =>
+    message.role === 'assistant' &&
+    message.tool_calls?.[0]?.id === 'call_result_after_user',
+);
+assert.notEqual(delayedAssistantIndex, -1);
+assert.equal(delayedMessages[delayedAssistantIndex + 1].role, 'tool');
+assert.equal(
+  delayedMessages[delayedAssistantIndex + 1].tool_call_id,
+  'call_result_after_user',
+);
+const delayedSyntheticResult = JSON.parse(
+  delayedMessages[delayedAssistantIndex + 1].content,
+);
+assert.equal(delayedSyntheticResult.code, 'TOOL_CALL_INTERRUPTED');
+assert.equal(delayedMessages[delayedAssistantIndex + 2].role, 'user');
+assert.equal(
+  delayedMessages.some(
+    message =>
+      message.role === 'tool' &&
+      message.content === 'late tool result after user text',
+  ),
+  false,
+);
+
+await adapter.generate({
+  ...request,
+  messages: [
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'start valid tool call' }],
+    },
+    {
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool_call',
+          id: 'call_todo_with_result',
+          name: 'TodoWrite',
+          input: {
+            todos: [
+              {
+                content: 'valid item',
+                status: 'pending',
+                activeForm: 'working on valid item',
+              },
+            ],
+          },
+        },
+      ],
+    },
+    {
+      role: 'tool',
+      parts: [
+        {
+          type: 'tool_result',
+          toolCallId: 'call_todo_with_result',
+          result: { ok: true },
+        },
+      ],
+    },
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'continue after result' }],
+    },
+  ],
+  tools: [todoToolDefinition],
+});
+
+const preservedMessages = requests[4].body.messages;
+const preservedAssistantIndex = preservedMessages.findIndex(
+  message =>
+    message.role === 'assistant' &&
+    message.tool_calls?.[0]?.id === 'call_todo_with_result',
+);
+assert.notEqual(preservedAssistantIndex, -1);
+assert.equal(preservedMessages[preservedAssistantIndex + 1].role, 'tool');
+assert.equal(
+  preservedMessages[preservedAssistantIndex + 1].tool_call_id,
+  'call_todo_with_result',
+);
+assert.equal(
+  preservedMessages[preservedAssistantIndex + 1].content.includes(
+    'TOOL_CALL_INTERRUPTED',
+  ),
+  false,
+);
+assert.equal(preservedMessages[preservedAssistantIndex + 2].role, 'user');
+
 console.log(
   JSON.stringify(
     {
       ok: true,
       generateRequest: requests[0].body,
       streamRequest: requests[1].body,
+      repairedToolMessages: requests[2].body.messages,
+      delayedRepairMessages: requests[3].body.messages,
       response,
       eventTypes: events.map(event => event.type),
     },

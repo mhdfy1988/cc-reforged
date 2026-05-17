@@ -10,8 +10,11 @@ import { ToolCard } from './ToolCard.js'
 import { UserMessage } from './UserMessage.js'
 import { TodoOverlay } from '../todo/TodoOverlay.js'
 import {
+  AUTO_SCROLL_RESUME_THRESHOLD_PX,
   getScrollMetrics,
+  hasScrollableContentBelow,
   isNearScrollBottom,
+  USER_SCROLL_DIRECTION_EPSILON_PX,
 } from '../../domain/autoScroll.js'
 import type { DisplayEvent } from '../../domain/displayEvents.js'
 import type {
@@ -35,6 +38,7 @@ export function ChatTimeline(props: {
   const scrollContainerRef = useRef<HTMLElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const shouldAutoFollowRef = useRef(true)
+  const lastScrollTopRef = useRef<number | null>(null)
   const [hasNewContentBelow, setHasNewContentBelow] = useState(false)
   const inlinePermissionIds = getInlinePermissionIds(
     props.events,
@@ -49,13 +53,14 @@ export function ChatTimeline(props: {
 
     if (shouldAutoFollowRef.current) {
       scrollToTimelineBottom(container, 'auto')
+      lastScrollTopRef.current = container.scrollTop
       setHasNewContentBelow(false)
       return
     }
 
-    if (!isNearScrollBottom(getScrollMetrics(container))) {
-      setHasNewContentBelow(true)
-    }
+    setHasNewContentBelow(
+      hasScrollableContentBelow(getScrollMetrics(container)),
+    )
   }, [props.activeTurnId, props.events, props.permissions])
 
   useEffect(() => {
@@ -68,8 +73,14 @@ export function ChatTimeline(props: {
     const observer = new ResizeObserver(() => {
       if (shouldAutoFollowRef.current) {
         scrollToTimelineBottom(container, 'auto')
+        lastScrollTopRef.current = container.scrollTop
         setHasNewContentBelow(false)
+        return
       }
+
+      setHasNewContentBelow(
+        hasScrollableContentBelow(getScrollMetrics(container)),
+      )
     })
     observer.observe(content)
     return () => observer.disconnect()
@@ -81,11 +92,28 @@ export function ChatTimeline(props: {
       return
     }
 
-    const isNearBottom = isNearScrollBottom(getScrollMetrics(container))
-    shouldAutoFollowRef.current = isNearBottom
-    if (isNearBottom) {
-      setHasNewContentBelow(false)
+    const metrics = getScrollMetrics(container)
+    const previousScrollTop = lastScrollTopRef.current ?? metrics.scrollTop
+    const isUserScrollingUp =
+      metrics.scrollTop < previousScrollTop - USER_SCROLL_DIRECTION_EPSILON_PX
+    const isAtBottom = isNearScrollBottom(
+      metrics,
+      AUTO_SCROLL_RESUME_THRESHOLD_PX,
+    )
+
+    if (isUserScrollingUp) {
+      shouldAutoFollowRef.current = false
+    } else if (isAtBottom) {
+      shouldAutoFollowRef.current = true
     }
+
+    lastScrollTopRef.current = metrics.scrollTop
+
+    if (shouldAutoFollowRef.current) {
+      setHasNewContentBelow(false)
+      return
+    }
+    setHasNewContentBelow(hasScrollableContentBelow(metrics))
   }
 
   function jumpToBottom(): void {
@@ -96,6 +124,7 @@ export function ChatTimeline(props: {
 
     shouldAutoFollowRef.current = true
     scrollToTimelineBottom(container, 'smooth')
+    lastScrollTopRef.current = container.scrollTop
     setHasNewContentBelow(false)
   }
 

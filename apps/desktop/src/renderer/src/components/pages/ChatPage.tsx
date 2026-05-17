@@ -1,10 +1,16 @@
 import { useMemo, useState } from 'react'
 import { ChatTimeline } from '../chat/ChatTimeline.js'
 import { Composer } from '../layout/Composer.js'
+import type {
+  ComposerPrepareAttachmentInput,
+  ComposerPreparedAttachment,
+  ComposerSubmitInput,
+} from '../layout/Composer.js'
 import type { DisplayEvent } from '../../domain/displayEvents.js'
 import type {
   PermissionCard,
   PermissionRespondPayload,
+  LlmModelCapabilities,
   RuntimeCompactStatus,
   RuntimeContextStatus,
   RuntimeMemoryStatus,
@@ -25,6 +31,7 @@ export function ChatPage(props: {
   contextStatus: RuntimeContextStatus | null | undefined
   events: DisplayEvent[]
   memoryStatus: RuntimeMemoryStatus | null | undefined
+  modelCapabilities: LlmModelCapabilities | null | undefined
   permissions: PermissionCard[]
   prompt: string
   threadHistory: ThreadHistoryState
@@ -36,6 +43,9 @@ export function ChatPage(props: {
   onHistoryQueryChange: (query: string) => void
   onHistoryReload: () => void
   onInterrupt: () => void
+  onPrepareAttachments: (
+    attachments: ComposerPrepareAttachmentInput[],
+  ) => Promise<ComposerPreparedAttachment[]>
   onRunCompact: () => void
   onShowHistory: () => void
   onResumeHistoryThread: (thread: ThreadHistoryItem) => void
@@ -44,7 +54,7 @@ export function ChatPage(props: {
     behavior: 'allow' | 'deny',
     payload?: PermissionRespondPayload,
   ) => Promise<void>
-  onSend: () => void
+  onSend: (input?: ComposerSubmitInput) => Promise<void> | void
   onStartThread: () => void
 }) {
   const compactDisabledReason = getCompactDisabledReason({
@@ -129,9 +139,11 @@ export function ChatPage(props: {
         activeTurnId={props.activeTurnId}
         busy={props.busy}
         canInterruptTurn={props.canInterruptTurn}
+        modelCapabilities={props.modelCapabilities}
         prompt={props.prompt}
         onChangePrompt={props.onChangePrompt}
         onInterrupt={props.onInterrupt}
+        onPrepareAttachments={props.onPrepareAttachments}
         onSend={props.onSend}
       />
     </>

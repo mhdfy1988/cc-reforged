@@ -2527,36 +2527,113 @@ h1 {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
-.composer-attachments span {
+.composer-attachment-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  max-width: 260px;
-  overflow: hidden;
-  border: 1px solid rgba(12, 143, 114, 0.16);
-  border-radius: 999px;
-  background: rgba(235, 255, 248, 0.72);
-  color: #0b715d;
+  gap: 7px;
+  max-width: min(100%, 360px);
+  min-height: 30px;
+  border: 1px solid rgba(136, 94, 39, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 250, 241, 0.86);
+  color: #3f3024;
   font-size: 11px;
   font-weight: 900;
-  padding: 4px 8px;
+  padding: 4px 5px 4px 8px;
+}
+
+.composer-attachment-chip strong {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  background: rgba(255, 178, 60, 0.18);
+  color: #a06200;
+  font-size: 10px;
+}
+
+.composer-attachment-preview {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(64, 48, 36, 0.12);
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.composer-attachment-chip b {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.composer-attachments small {
-  color: rgba(11, 113, 93, 0.72);
+.composer-attachment-chip small {
+  flex: 0 0 auto;
+  color: var(--muted);
   font-size: 10px;
 }
 
-.composer-attachments em {
-  color: var(--muted);
-  font-size: 11px;
+.composer-attachment-chip em {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  font-size: 10px;
   font-style: normal;
   font-weight: 800;
+  padding: 3px 7px;
+}
+
+.composer-attachment-chip button {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 8px;
+  color: #6b5541;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.composer-attachment-chip button:hover {
+  color: #221b15;
+  background: rgba(255, 239, 212, 0.96);
+}
+
+.composer-attachment-chip.is-sendable {
+  border-color: rgba(12, 143, 114, 0.2);
+  background: rgba(235, 255, 248, 0.72);
+}
+
+.composer-attachment-chip.is-sendable em {
+  color: #0b715d;
+  background: rgba(12, 143, 114, 0.12);
+}
+
+.composer-attachment-chip.is-convertible em {
+  color: #9a5d00;
+  background: rgba(255, 178, 60, 0.18);
+}
+
+.composer-attachment-chip.is-preview_only em {
+  color: #6b5541;
+  background: rgba(99, 77, 54, 0.1);
+}
+
+.composer-attachment-chip.is-blocked {
+  border-color: rgba(173, 59, 54, 0.22);
+  background: rgba(255, 244, 241, 0.82);
+}
+
+.composer-attachment-chip.is-blocked em {
+  color: #9f352f;
+  background: rgba(173, 59, 54, 0.12);
 }
 
 .composer input {

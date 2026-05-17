@@ -9,10 +9,12 @@ import type {
 import type { EffortValue } from 'src/utils/effort.js'
 import type { LlmRuntime } from './llmRuntime.js'
 import { createDefaultLlmRuntime } from './defaultRuntime.js'
+import { normalizeImageMimeType } from './imageContent.js'
 import { loadLlmConfig, type ResolvedLlmConfig } from './llmConfig.js'
 import type {
   LlmContentPart,
   LlmGenerateResponse,
+  LlmImageSource,
   LlmMessage,
   LlmToolDefinition,
   LlmUsage,
@@ -301,6 +303,10 @@ function toLlmMessages(message: QueryApiMessage): LlmMessage[] {
       }
       continue
     }
+    if (block.type === 'image') {
+      userParts.push(toLlmImagePart(block))
+      continue
+    }
     if (isToolResultBlock(block)) {
       toolParts.push({
         type: 'tool_result',
@@ -321,13 +327,70 @@ function toLlmMessages(message: QueryApiMessage): LlmMessage[] {
   }
 
   const mapped: LlmMessage[] = []
-  if (userParts.length > 0) {
-    mapped.push({ role: 'user', parts: userParts })
-  }
   if (toolParts.length > 0) {
     mapped.push({ role: 'tool', parts: toolParts })
   }
+  if (userParts.length > 0) {
+    mapped.push({ role: 'user', parts: userParts })
+  }
   return mapped
+}
+
+function toLlmImagePart(block: Record<string, unknown>): LlmContentPart {
+  const source = toLlmImageSource(block.source)
+  const data = typeof block.data === 'string' ? block.data.trim() : undefined
+  if (!source && !data) {
+    throw new Error(
+      'Builtin LLM runtime requires image content blocks to include a file, URL, contentRef, or base64 data source.',
+    )
+  }
+
+  return {
+    type: 'image',
+    mimeType: normalizeImageMimeType(
+      typeof block.mimeType === 'string' ? block.mimeType : undefined,
+    ),
+    ...(source ? { source } : {}),
+    ...(data ? { data } : {}),
+    ...(typeof block.attachmentId === 'string'
+      ? { attachmentId: block.attachmentId }
+      : {}),
+    ...(typeof block.displayName === 'string'
+      ? { displayName: block.displayName }
+      : {}),
+    ...(typeof block.sizeBytes === 'number'
+      ? { sizeBytes: block.sizeBytes }
+      : {}),
+  }
+}
+
+function toLlmImageSource(value: unknown): LlmImageSource | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+  const source = value as Record<string, unknown>
+  if (source.kind === 'file' && typeof source.path === 'string') {
+    return {
+      kind: 'file',
+      path: source.path,
+    }
+  }
+  if (source.kind === 'url' && typeof source.url === 'string') {
+    return {
+      kind: 'url',
+      url: source.url,
+    }
+  }
+  if (
+    source.kind === 'contentRef' &&
+    typeof source.contentRef === 'string'
+  ) {
+    return {
+      kind: 'contentRef',
+      contentRef: source.contentRef,
+    }
+  }
+  return undefined
 }
 
 function toAssistantParts(message: AssistantMessage): LlmContentPart[] {

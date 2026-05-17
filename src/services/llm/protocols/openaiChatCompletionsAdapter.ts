@@ -1,4 +1,5 @@
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js'
+import { toOpenAiImageUrl } from '../imageContent.js'
 import type {
   LlmContentPart,
   LlmGenerateEvent,
@@ -18,12 +19,26 @@ export type OpenAiChatOutputTokenParam =
 
 interface OpenAiChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string | null
+  content: OpenAiChatMessageContent
   name?: string
   reasoning_content?: string
   tool_call_id?: string
   tool_calls?: OpenAiChatToolCall[]
 }
+
+type OpenAiChatMessageContent = string | null | OpenAiChatContentPart[]
+
+type OpenAiChatContentPart =
+  | {
+      type: 'text'
+      text: string
+    }
+  | {
+      type: 'image_url'
+      image_url: {
+        url: string
+      }
+    }
 
 interface OpenAiChatToolCall {
   id: string
@@ -346,7 +361,7 @@ export class OpenAiChatCompletionsAdapter {
       throw new Error(this.#missingApiKeyMessage)
     }
 
-    const requestBody = toRequestBody({
+    const requestBody = await toRequestBody({
       request,
       defaultModel: this.#defaultModel,
       defaultReasoningEffort: this.#defaultReasoningEffort,
@@ -371,14 +386,17 @@ export class OpenAiChatCompletionsAdapter {
 
     if (!response.ok) {
       throw new Error(
-        await getProviderErrorMessage(response, this.#providerLabel),
+        await getProviderErrorMessage(response, this.#providerLabel, {
+          requestBody,
+          includeRequestDiagnostics: true,
+        }),
       )
     }
     return response
   }
 }
 
-function toRequestBody(input: {
+async function toRequestBody(input: {
   request: LlmGenerateRequest
   defaultModel: string
   defaultReasoningEffort: OpenAiChatReasoningEffort
@@ -394,7 +412,7 @@ function toRequestBody(input: {
     OpenAiChatCompletionsAdapterOptions['resolveThinking']
   >
   stream: boolean
-}): Record<string, unknown> {
+}): Promise<Record<string, unknown>> {
   const model = input.request.model?.trim() || input.defaultModel
   const thinking = input.resolveThinking({
     request: input.request,
@@ -410,7 +428,7 @@ function toRequestBody(input: {
   })
   return {
     model,
-    messages: toOpenAiChatMessages(input.request.messages, {
+    messages: await toOpenAiChatMessages(input.request.messages, {
       mergeSystemMessages: input.mergeSystemMessages,
     }),
     stream: input.stream,
@@ -453,12 +471,12 @@ function resolveOutputTokens(
     : maxOutputTokens
 }
 
-function toOpenAiChatMessages(
+async function toOpenAiChatMessages(
   messages: readonly LlmMessage[],
   options: {
     mergeSystemMessages?: boolean
   } = {},
-): OpenAiChatMessage[] {
+): Promise<OpenAiChatMessage[]> {
   const mapped: OpenAiChatMessage[] = []
   const mergedSystemParts: string[] = []
 
@@ -515,6 +533,19 @@ function toOpenAiChatMessages(
       continue
     }
 
+    if (message.role === 'user') {
+      const content = await toOpenAiUserContent(message.parts)
+      if (!content) {
+        continue
+      }
+      mapped.push({
+        role: 'user',
+        content,
+        ...(message.name?.trim() ? { name: message.name.trim() } : {}),
+      })
+      continue
+    }
+
     const content = message.parts
       .filter(part => part.type === 'text')
       .map(part => part.text)
@@ -546,7 +577,120 @@ function toOpenAiChatMessages(
       'OpenAI Chat Completions adapter requires at least one usable message.',
     )
   }
-  return mapped
+
+  const repaired = repairOpenAiToolMessageSequence(mapped)
+  if (repaired.length === 0) {
+    throw new Error(
+      'OpenAI Chat Completions adapter requires at least one usable message.',
+    )
+  }
+  return repaired
+}
+
+function repairOpenAiToolMessageSequence(
+  messages: readonly OpenAiChatMessage[],
+): OpenAiChatMessage[] {
+  const repaired: OpenAiChatMessage[] = []
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index]
+    const toolCalls =
+      message.role === 'assistant' && Array.isArray(message.tool_calls)
+        ? message.tool_calls
+        : []
+
+    if (message.role !== 'assistant' || toolCalls.length === 0) {
+      if (message.role !== 'tool') {
+        repaired.push(message)
+      }
+      continue
+    }
+
+    repaired.push(message)
+
+    const matched = new Map<string, OpenAiChatMessage>()
+    let cursor = index + 1
+    while (cursor < messages.length && messages[cursor].role === 'tool') {
+      const toolMessage = messages[cursor]
+      const toolCallId = toolMessage.tool_call_id
+      if (
+        typeof toolCallId === 'string' &&
+        toolCallId &&
+        !matched.has(toolCallId)
+      ) {
+        matched.set(toolCallId, toolMessage)
+      }
+      cursor += 1
+    }
+
+    for (const toolCall of toolCalls) {
+      repaired.push(
+        matched.get(toolCall.id) ??
+          createInterruptedToolResultMessage(toolCall),
+      )
+    }
+
+    index = cursor - 1
+  }
+
+  return repaired
+}
+
+function createInterruptedToolResultMessage(
+  toolCall: OpenAiChatToolCall,
+): OpenAiChatMessage {
+  return {
+    role: 'tool',
+    tool_call_id: toolCall.id,
+    content: JSON.stringify({
+      status: 'error',
+      code: 'TOOL_CALL_INTERRUPTED',
+      message:
+        '工具调用被中断，或历史记录中缺少对应的工具结果。CCR 已补齐占位结果以恢复会话连续性。',
+      toolName: toolCall.function.name,
+    }),
+  }
+}
+
+async function toOpenAiUserContent(
+  parts: readonly LlmContentPart[],
+): Promise<OpenAiChatMessageContent | undefined> {
+  const contentParts: OpenAiChatContentPart[] = []
+  let textBuffer = ''
+  let hasImage = false
+
+  const flushText = () => {
+    const text = textBuffer.trim()
+    if (text) {
+      contentParts.push({ type: 'text', text })
+    }
+    textBuffer = ''
+  }
+
+  for (const part of parts) {
+    if (part.type === 'text') {
+      textBuffer += part.text
+      continue
+    }
+    if (part.type === 'image') {
+      hasImage = true
+      flushText()
+      contentParts.push({
+        type: 'image_url',
+        image_url: {
+          url: await toOpenAiImageUrl(part),
+        },
+      })
+    }
+  }
+
+  if (!hasImage) {
+    const text = textBuffer.trim()
+    return text || undefined
+  }
+
+  flushText()
+  return contentParts.length > 0 ? contentParts : undefined
 }
 
 function toOpenAiChatTools(
@@ -752,6 +896,8 @@ function toSafeRequestDiagnostics(
   let totalTextChars = 0
   let emptyContentCount = 0
   let nonStringContentCount = 0
+  let contentPartCount = 0
+  let imageContentPartCount = 0
   let assistantToolCallCount = 0
   let toolMessageCount = 0
   let reasoningContentCount = 0
@@ -773,6 +919,26 @@ function toSafeRequestDiagnostics(
       totalTextChars += message.content.length
       if (!message.content.trim()) {
         emptyContentCount += 1
+      }
+      continue
+    }
+    if (Array.isArray(message.content)) {
+      nonStringContentCount += 1
+      for (const part of message.content) {
+        if (!part || typeof part !== 'object' || Array.isArray(part)) {
+          continue
+        }
+        contentPartCount += 1
+        const type = (part as { type?: unknown }).type
+        if (
+          type === 'text' &&
+          typeof (part as { text?: unknown }).text === 'string'
+        ) {
+          totalTextChars += (part as { text: string }).text.length
+        }
+        if (type === 'image_url') {
+          imageContentPartCount += 1
+        }
       }
       continue
     }
@@ -809,6 +975,8 @@ function toSafeRequestDiagnostics(
     totalTextChars,
     emptyContentCount,
     nonStringContentCount,
+    contentPartCount,
+    imageContentPartCount,
     assistantToolCallCount,
     toolMessageCount,
     reasoningContentCount,

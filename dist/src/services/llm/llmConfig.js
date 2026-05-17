@@ -6,6 +6,31 @@ import { getFsImplementation } from '../../utils/fsOperations.js';
 import { safeParseJSON } from '../../utils/json.js';
 import { getDefaultSonnetModel } from '../../utils/model/model.js';
 import { getBuiltinLlmProviderDefinition } from './providerDefinitions.js';
+const llmInputModalitySchema = z.enum(['text', 'image', 'file', 'audio']);
+const llmOutputModalitySchema = z.enum(['text', 'image', 'audio']);
+const llmImageCapabilityLimitsSchema = z
+    .object({
+    maxImages: z.number().int().positive().optional(),
+    maxImageBytes: z.number().int().positive().optional(),
+    mimeTypes: z.array(z.string().trim().min(1)).optional(),
+})
+    .strict();
+const llmModelCapabilityOverrideSchema = z
+    .object({
+    inputModalities: z.array(llmInputModalitySchema).optional(),
+    outputModalities: z.array(llmOutputModalitySchema).optional(),
+    tools: z.boolean().optional(),
+    structuredOutput: z.boolean().optional(),
+    image: llmImageCapabilityLimitsSchema.optional(),
+    reason: z.string().trim().min(1).optional(),
+})
+    .strict();
+const llmProfileCapabilityOverridesSchema = z
+    .object({
+    default: llmModelCapabilityOverrideSchema.optional(),
+    models: z.record(llmModelCapabilityOverrideSchema).optional(),
+})
+    .strict();
 const llmProviderConfigSchema = z
     .object({
     defaultModel: z.string().trim().min(1).optional(),
@@ -86,6 +111,7 @@ const llmProfileConfigSchema = z
     supportsTools: z.boolean().optional(),
     supportsReasoning: z.boolean().optional(),
     supportsUsage: z.boolean().optional(),
+    capabilityOverrides: llmProfileCapabilityOverridesSchema.optional(),
     availability: z
         .object({
         status: z
@@ -296,6 +322,9 @@ function resolveFileProfile(input) {
                 false,
             usage: input.profile.supportsUsage ?? providerConfig.supportsUsage ?? false,
         },
+        ...(input.profile.capabilityOverrides
+            ? { capabilityOverrides: input.profile.capabilityOverrides }
+            : {}),
         ...(input.profile.availability
             ? { availability: input.profile.availability }
             : {}),

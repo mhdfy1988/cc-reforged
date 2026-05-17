@@ -1,7 +1,9 @@
 import { complete as piComplete, getModel as piGetModel, stream as piStream, } from '@mariozechner/pi-ai';
 import { getLlmProviderConfig, loadLlmConfig } from '../llmConfig.js';
+import { getLlmModelCatalogEntry } from '../modelCatalog.js';
 import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js';
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js';
+import { toBase64ImageContent } from '../imageContent.js';
 import { CodexOAuthSession, } from '../sessions/CodexOAuthSession.js';
 import { createDefaultCodexOAuthSession } from '../sessions/defaultCodexOAuthSession.js';
 const DEFAULT_BASE_URL = 'https://chatgpt.com/backend-api';
@@ -135,7 +137,7 @@ export class CodexOAuthProvider {
         const systemPrompt = resolveSystemPrompt(request.messages, this.#defaultSystemPrompt);
         const context = {
             systemPrompt,
-            messages: toPiAiMessages(request.messages, model),
+            messages: await toPiAiMessages(request.messages, model),
             ...(request.tools && request.tools.length > 0
                 ? { tools: toPiAiTools(request.tools) }
                 : {}),
@@ -201,7 +203,7 @@ function resolveSystemPrompt(messages, defaultSystemPrompt) {
         ? textBlocks.join('\n\n')
         : defaultSystemPrompt;
 }
-function toPiAiMessages(messages, model) {
+async function toPiAiMessages(messages, model) {
     const mapped = [];
     let timestamp = Date.now();
     for (const message of messages) {
@@ -210,7 +212,7 @@ function toPiAiMessages(messages, model) {
         }
         switch (message.role) {
             case 'user': {
-                const content = textPartsToString(message.parts, 'user');
+                const content = await toPiAiUserContent(message.parts);
                 if (!content) {
                     continue;
                 }
@@ -268,6 +270,37 @@ function toPiAiMessages(messages, model) {
         throw new Error('CodexOAuthProvider requires at least one usable message.');
     }
     return mapped;
+}
+async function toPiAiUserContent(parts) {
+    const hasImagePart = parts.some(part => part.type === 'image');
+    if (!hasImagePart) {
+        const textContent = textPartsToString(parts, 'user');
+        return textContent || null;
+    }
+    const mapped = [];
+    for (const part of parts) {
+        if (part.type === 'text') {
+            const text = part.text.trim();
+            if (text) {
+                mapped.push({
+                    type: 'text',
+                    text,
+                });
+            }
+            continue;
+        }
+        if (part.type === 'image') {
+            const { mediaType, data } = await toBase64ImageContent(part);
+            mapped.push({
+                type: 'image',
+                data,
+                mimeType: mediaType,
+            });
+            continue;
+        }
+        throw new Error('CodexOAuthProvider user messages only support text and image parts.');
+    }
+    return mapped.length > 0 ? mapped : null;
 }
 function textPartsToString(parts, role) {
     const textParts = parts
@@ -352,6 +385,7 @@ function serializeToolResult(result) {
     }
 }
 function resolvePiAiModel(input) {
+    const catalogInput = getCodexOAuthModelInput(input.model);
     try {
         const resolved = input.getModelImpl('openai-codex', input.model);
         return {
@@ -361,6 +395,7 @@ function resolvePiAiModel(input) {
             api: 'openai-codex-responses',
             provider: 'openai-codex',
             baseUrl: input.baseUrl,
+            input: mergePiAiModelInput(resolved.input, catalogInput),
         };
     }
     catch {
@@ -371,7 +406,7 @@ function resolvePiAiModel(input) {
             provider: 'openai-codex',
             baseUrl: input.baseUrl,
             reasoning: true,
-            input: ['text'],
+            input: catalogInput,
             cost: {
                 input: 0,
                 output: 0,
@@ -382,6 +417,22 @@ function resolvePiAiModel(input) {
             maxTokens: 32000,
         };
     }
+}
+function getCodexOAuthModelInput(model) {
+    const providerDefinition = getBuiltinLlmProviderDefinition('codex-oauth');
+    if (!providerDefinition) {
+        return ['text'];
+    }
+    const catalogEntry = getLlmModelCatalogEntry({
+        providerId: 'codex-oauth',
+        model,
+        providerDefinition,
+    });
+    const modalities = catalogEntry.inputModalities.filter((modality) => modality === 'text' || modality === 'image');
+    return modalities.length > 0 ? modalities : ['text'];
+}
+function mergePiAiModelInput(resolvedInput, catalogInput) {
+    return Array.from(new Set([...(resolvedInput ?? []), ...catalogInput]));
 }
 function toGenerateResponse(input) {
     const output = extractAssistantContentParts(input.message);
