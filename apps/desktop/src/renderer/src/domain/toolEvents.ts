@@ -21,6 +21,7 @@ export type ToolErrorClass =
   | 'command_not_found'
   | 'shell_unavailable'
   | 'path_not_found'
+  | 'file_too_large'
   | 'mcp_unavailable'
   | 'browser_unavailable'
   | 'timeout'
@@ -546,7 +547,8 @@ function classifyToolError(
   if (
     text.includes('command not found') ||
     text.includes('not recognized as an internal') ||
-    text.includes('is not recognized')
+    text.includes('is not recognized') ||
+    isSpawnExecutableMissing(text)
   ) {
     return 'command_not_found'
   }
@@ -557,6 +559,14 @@ function classifyToolError(
     text.includes('path does not exist')
   ) {
     return 'path_not_found'
+  }
+  if (
+    category === 'file' &&
+    (text.includes('exceeds maximum allowed size') ||
+      text.includes('exceeds maximum allowed tokens')) &&
+    (text.includes('offset') || text.includes('limit') || text.includes('search'))
+  ) {
+    return 'file_too_large'
   }
   if (
     text.includes('permission denied') ||
@@ -588,14 +598,20 @@ function classifyToolError(
   return 'unknown_failure'
 }
 
+function isSpawnExecutableMissing(text: string): boolean {
+  return /\bspawn\s+.+\s+enoent\b/.test(text)
+}
+
 export function getActionableHint(errorClass?: ToolErrorClass): string | undefined {
   switch (errorClass) {
     case 'shell_unavailable':
       return '当前环境没有可用 POSIX shell。Windows 下不需要为了 ls 强行安装 Bash，应优先使用 PowerShell、CMD、Node 原生文件能力或高层文件工具。'
     case 'command_not_found':
-      return '命令不存在或不在 PATH 中。请切换为当前平台可用命令，或改用更高层工具。'
+      return '命令或工具依赖不存在。请确认命令/PATH 是否可用，或检查打包产物里的工具二进制是否存在。'
     case 'path_not_found':
       return '目标路径不存在。请先确认工作区、相对路径和目录是否正确。'
+    case 'file_too_large':
+      return '文件超过单次读取上限。请改用 offset/limit 分段读取，或先搜索关键词定位目标内容。'
     case 'permission_denied':
       return '权限被拒绝。请确认用户授权、文件系统权限或安全规则。'
     case 'mcp_unavailable':

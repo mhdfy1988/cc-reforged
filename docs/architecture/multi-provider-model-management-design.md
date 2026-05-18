@@ -252,6 +252,11 @@ type LlmModelCapabilities = {
   outputModalities: Array<'text' | 'image' | 'audio'>
   tools: boolean
   structuredOutput: boolean
+  reasoning?: {
+    supported: boolean
+    efforts?: Array<'low' | 'medium' | 'high' | 'max'>
+    defaultEffort?: 'low' | 'medium' | 'high' | 'max'
+  }
   source: 'builtin' | 'profile_override' | 'default'
   reason: string
   baseSource?: 'builtin' | 'default'
@@ -290,6 +295,34 @@ type LlmModelCapabilities = {
 - 官网是第一来源，但不是运行时唯一真相；最终能力必须由当前 Profile、模型和协议模式解析得出。
 
 当前代码中的能力解析文件、已内置模型能力和缺口清单见 [CCR 多模态输入输出设计：当前实现状态](./multimodal-input-output-design.md#32-当前实现状态)。多供应商专项负责维护 provider/profile/model 能力来源，多模态专项只消费最终解析结果。
+
+### 4.2.2 智能强度 / 推理强度
+
+顶部或模型菜单里的“智能：低 / 中 / 高 / 超高”不应做成全局固定开关。它本质上是模型能力的一部分，长期应和 `profileId + model + apiMode` 绑定，由能力目录和 Profile 覆盖共同决定。
+
+建议口径：
+
+- 面向用户的中文文案用“智能”或“推理强度”，内部字段统一为 `reasoningEffort`。
+- UI 选项映射为 `low / medium / high / max`；如果接入的 provider 使用 `xhigh`、`minimal` 或其他命名，需要在 adapter 层转换，不让 UI 直接暴露各家字段。
+- 只有当前模型声明支持推理强度时才展示选择入口；不支持时隐藏或置灰，并且请求中不发送对应参数。
+- `max` / “超高”必须单独声明支持，不能因为模型支持 `high` 就默认启用。
+- OpenAI Compatible / 第三方中转必须允许 Profile 覆盖禁用或收窄推理强度。即使模型名相同，不同中转也可能禁用 thinking、reasoning 或 `reasoning_effort`。
+- 当前会话不绑定历史模型，但每轮 turn metadata 必须记录实际使用的 `reasoningEffort`，用于排查“为什么这一轮这么慢/这么贵/模型表现不同”。
+- 恢复历史会话时只展示当轮使用过的强度记录，不自动把当前应用切回历史强度。
+
+后续实现建议：
+
+1. 能力目录新增可选 `reasoning` 能力，表达是否支持、支持哪些等级、默认等级和来源。
+2. Profile `capabilityOverrides` 支持覆盖 `reasoning.supported`、`reasoning.efforts`、`reasoning.defaultEffort`。
+3. Desktop 顶部模型区增加轻量“智能”入口，但只在当前模型支持时显示；运行中禁止切换。
+4. 发送请求前解析最终 `reasoningEffort`，并写入本轮 metadata。
+5. Provider adapter 只消费统一后的 `reasoningEffort`：
+   - Anthropic / Claude 路径映射到 `output_config.effort`。
+   - Codex OAuth 路径映射到 pi-ai provider 的 `reasoningEffort`。
+   - OpenAI Chat / DeepSeek 类路径按 provider 能力映射到 `thinking` / `reasoning_effort`。
+   - 未声明支持的 provider 不发送任何推理强度字段。
+6. smoke 覆盖“支持时发送正确字段、不支持时不发送、Profile 覆盖禁用、`max` 不支持时降级或阻止”四类场景。
+7. 更新日志和发布说明必须分类记录，不把所有变化混成一段。一级分类统一为：新功能、改动、BUG 修复；能力目录、Profile 覆盖、Desktop 入口、Provider 参数映射、metadata / 历史展示、验证与兼容性等内容按实际影响归入这三类。
 
 ### 4.3 Provider 与 Protocol 分离
 

@@ -38,6 +38,7 @@
 - [x] MP-10 每轮 provider/model/protocol 元数据记录
 - [x] MP-11 CLI / TUI 配置与切换入口补齐
 - [x] MP-12 smoke、真实 e2e 和文档收口
+- [ ] MP-13 智能强度 / 推理强度能力目录、Profile 覆盖与 Desktop 入口
 
 ## 当前指针
 
@@ -45,6 +46,7 @@
 - 当前正在做：把 README、CHANGELOG、供应商接入文档和本 todo 调整到 0.4.3 当前状态。
 - 当前进展：Core、App Server、SDK、Desktop、CLI 和 TUI 的多 Profile / 多模型第一版已经打通。Desktop 左侧已新增“模型”一级页面，按“供应商类型 / 连接配置 / 配置详情”三栏管理 Profile。顶部快速切换已拆成“模型切换”和“连接配置切换”两个入口。`llm.config.local.json` 已支持 `schemaVersion + current + providerOverrides + profiles`，写回不再保留旧顶层字段。全新安装没有默认 Profile；登录、保存 API Key 或新增连接配置时才生成 `providerType-数字` Profile。敏感凭据统一写入 `llm.credentials.local.json` 的 `profileCredentials[profileId]`，不再使用 `credentialRef` 或单独 `codex-oauth.json`。Profile 新增、编辑、复制、删除已从 Core -> App Server -> Desktop IPC -> 模型页接通。每轮 turn metadata 已记录 `profileId/profileName/provider/providerDisplayName/apiMode/authStrategy/model/requestedModel/contextWindow`，App Server SDK smoke 已覆盖。CLI 已新增 `ccr model status/list/set/profile`，TUI `/model` 已支持 `profile <profileId> [modelId]`。DeepSeek 复用 OpenAI Chat 公共适配器；MiniMax 国际版 / 国内版已切到 Anthropic Messages 公共适配器，测试连接和普通聊天链路已接通。
 - 下一步：提交当前版本；后续主线在官方 OpenAI provider、OpenAI Compatible / 第三方中转、多模态专项、模型页细节打磨之间选择。
+- 后续新增：补 MP-13，把“智能：低 / 中 / 高 / 超高”作为模型能力接入，而不是全局固定开关。该项需要同时覆盖能力目录、Profile 覆盖、顶部入口、provider adapter 参数映射和 turn metadata 记录。
 
 ## 接下来安排
 
@@ -68,6 +70,7 @@
 - 供应商不是账号：一个供应商类型下面可以有多个账号 / API Key / endpoint / Profile，不能长期写死成“一个 provider 只有一个凭据”。
 - 内置供应商目录不是连接配置：它只提供默认建议；真正保存和切换的对象必须是正式 Profile。
 - 全新安装从零开始，不生成默认连接；Profile ID 创建后保持稳定，用户只改 `name`。
+- 智能强度 / 推理强度不是所有模型通用能力；必须按 `profileId + model + apiMode` 解析，只有声明支持时才展示和发送，`max` / “超高”要单独声明支持。
 
 ## MP-00 设计口径复核与现有代码盘点
 
@@ -664,6 +667,40 @@ MP-09b 已交付：
 - `npm.cmd run smoke:app-server-client` 通过。
 - `npm.cmd run desktop:build` 通过。
 - `codex-oauth` 现有链路不回归。
+
+## MP-13 智能强度 / 推理强度能力目录、Profile 覆盖与 Desktop 入口
+
+状态：待开始。
+
+目标：
+
+- 把“智能：低 / 中 / 高 / 超高”从静态 UI 选项升级为模型能力驱动的运行时能力。
+- 当前模型支持时才允许选择和发送；当前模型不支持时不展示或置灰，并且请求体不带推理强度字段。
+- OpenAI Compatible / 第三方中转可以通过 Profile 覆盖声明支持、禁用或限制具体强度。
+
+计划交付：
+
+- 能力目录扩展 `reasoning` 能力，记录 `supported`、`efforts`、`defaultEffort` 和来源。
+- Profile `capabilityOverrides` 支持覆盖推理强度能力。
+- Desktop 顶部模型区增加轻量“智能”入口，选项为 `低 / 中 / 高 / 超高`。
+- 当前任务运行中禁止切换智能强度，避免同一轮请求状态不一致。
+- 发送前解析最终 `reasoningEffort`，并写入 turn metadata。
+- Provider adapter 映射统一：
+  - Anthropic / Claude：`output_config.effort`。
+  - Codex OAuth：pi-ai provider `reasoningEffort`。
+  - OpenAI Chat / DeepSeek 类：按 provider 能力映射 `thinking` / `reasoning_effort`。
+  - 未声明支持：不发送对应字段。
+- 更新 `CHANGELOG.md` 当前未发布说明时必须按类别整理，一级分类统一为：新功能、改动、BUG 修复。能力目录、Profile 覆盖、Desktop 入口、Provider 参数映射、metadata / 历史展示、验证与兼容性等内容按实际影响归入这三类。
+
+验收：
+
+- 支持推理强度的模型能在 Desktop 看到入口，并按选择值发出正确 provider 参数。
+- 不支持推理强度的模型不会显示可用入口，也不会把 `reasoningEffort` 偷偷发出去。
+- `max` / “超高”只有模型或 Profile 明确声明支持时才可选。
+- Profile 覆盖可以禁用某个中转的推理强度能力。
+- 历史恢复只展示当轮实际使用的 `reasoningEffort`，不自动切换当前应用强度。
+- smoke 覆盖支持、不支持、Profile 覆盖、`max` 限制和 metadata 记录。
+- `CHANGELOG.md` 不使用单段流水账，必须按“新功能 / 改动 / BUG 修复”三类写清楚本轮变化。
 
 ## 后续记录（追加）
 

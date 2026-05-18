@@ -1,6 +1,7 @@
-import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
+import { build } from 'esbuild'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const fixturePath = join(
@@ -300,6 +301,8 @@ assert(
   'shell unavailable hint should guide Windows users to PowerShell/CMD/file tools',
 )
 
+await assertToolErrorClassifications()
+
 assert(
   events.some(event => event.toolSnapshot?.name === 'Write' && event.fileSnapshot),
   'Write tool events should carry a normalized file snapshot',
@@ -479,6 +482,92 @@ assert(
 )
 
 console.log('smoke-desktop-display-events: ok')
+
+async function assertToolErrorClassifications() {
+  const tempDir = join(repoRoot, '.tmp', 'smoke-desktop-display-events')
+  const entryPath = join(tempDir, 'entry.ts')
+  const outputPath = join(tempDir, 'entry.mjs')
+
+  await rm(tempDir, { recursive: true, force: true })
+  await mkdir(tempDir, { recursive: true })
+  await writeFile(
+    entryPath,
+    `
+      import assert from 'node:assert/strict'
+      import { createDisplayEventFromCompletedItem } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
+
+      const event = createDisplayEventFromCompletedItem(
+        'fixture-read-too-large',
+        'tool_result',
+        [
+          {
+            type: 'tool_result',
+            name: 'Read',
+            is_error: true,
+            content: 'File content (256.1KB) exceeds maximum allowed size (256KB). Use offset and limit parameters to read specific portions of the file, or search for specific content instead of reading the whole file.',
+          },
+        ],
+        'failed',
+        {
+          itemId: 'fixture-read-too-large',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_fixture_read_too_large',
+        },
+      )
+
+      assert.equal(event?.type, 'tool_result')
+      assert.equal(event?.toolSnapshot?.category, 'file')
+      assert.equal(event?.toolSnapshot?.status, 'failed')
+      assert.equal(event?.toolSnapshot?.errorClass, 'file_too_large')
+      assert.match(event?.toolSnapshot?.actionableHint ?? '', /offset\\/limit|搜索/)
+
+      const missingHelperEvent = createDisplayEventFromCompletedItem(
+        'fixture-grep-missing-helper',
+        'tool_result',
+        [
+          {
+            type: 'tool_result',
+            name: 'Grep',
+            is_error: true,
+            content: 'spawn D:\\\\agent_project\\\\claude-code-reforged\\\\dist\\\\src\\\\utils\\\\vendor\\\\ripgrep\\\\x64-win32\\\\rg.exe ENOENT',
+          },
+        ],
+        'failed',
+        {
+          itemId: 'fixture-grep-missing-helper',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_fixture_grep_missing_helper',
+        },
+      )
+
+      assert.equal(missingHelperEvent?.type, 'tool_result')
+      assert.equal(missingHelperEvent?.toolSnapshot?.category, 'file')
+      assert.equal(missingHelperEvent?.toolSnapshot?.status, 'failed')
+      assert.equal(missingHelperEvent?.toolSnapshot?.errorClass, 'command_not_found')
+      assert.notEqual(missingHelperEvent?.toolSnapshot?.errorClass, 'path_not_found')
+      assert.match(missingHelperEvent?.toolSnapshot?.actionableHint ?? '', /工具依赖|PATH/)
+    `,
+    'utf8',
+  )
+
+  await build({
+    entryPoints: [entryPath],
+    outfile: outputPath,
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    jsx: 'automatic',
+    logLevel: 'silent',
+  })
+
+  try {
+    await import(pathToFileURL(outputPath).href)
+  } finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+}
 
 function assert(condition, message) {
   if (!condition) {
