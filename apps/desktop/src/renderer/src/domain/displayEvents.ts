@@ -6,6 +6,10 @@ import {
   normalizeCcrContentBlocks,
   type CcrContentBlock,
 } from '../../../../../../src/types/contentBlocks.js'
+import {
+  createCcrErrorSnapshot,
+  type CcrErrorSnapshot,
+} from '../../../../../../src/types/errorSnapshot.js'
 import type { ChatMessage, JsonObject } from './displayTypes.js'
 import {
   createDisplayEventIdentity,
@@ -62,6 +66,7 @@ export type DisplayEvent = {
   attachmentSnapshots?: AttachmentSnapshot[]
   referenceSnapshot?: ReferenceSnapshot
   contentBlocks?: CcrContentBlock[]
+  errorSnapshot?: CcrErrorSnapshot
 }
 
 export type DisplayAttachmentInput = {
@@ -103,6 +108,10 @@ export function createErrorDisplayEvent(id: string, text: string): DisplayEvent 
     id,
     type: 'error',
     text,
+    errorSnapshot: createCcrErrorSnapshot({
+      message: text,
+      source: 'desktop',
+    }),
   }
 }
 
@@ -185,6 +194,20 @@ export function createDisplayEventFromCompletedItem(
       attachmentSnapshots:
         attachmentSnapshots.length > 0 ? attachmentSnapshots : undefined,
       contentBlocks,
+      errorSnapshot: toolSnapshot.errorMessage
+        ? createCcrErrorSnapshot({
+            message: toolSnapshot.errorMessage,
+            source: 'tool',
+            category: 'tool_error',
+            turnId: identity.turnId,
+            toolUseId: identity.toolUseId,
+            safeDetails: {
+              toolName: toolSnapshot.name,
+              errorClass: toolSnapshot.errorClass,
+              status: toolSnapshot.status,
+            },
+          })
+        : undefined,
     }
   }
 

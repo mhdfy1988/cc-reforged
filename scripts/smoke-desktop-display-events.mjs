@@ -494,7 +494,29 @@ async function assertToolErrorClassifications() {
     entryPath,
     `
       import assert from 'node:assert/strict'
-      import { createDisplayEventFromCompletedItem } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
+      import { createDisplayEventFromCompletedItem, createErrorDisplayEvent } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
+      import { createCcrErrorSnapshot } from '../../src/types/errorSnapshot.ts'
+
+      const providerError = createErrorDisplayEvent(
+        'fixture-provider-auth-error',
+        'DeepSeek API key is missing. Set CCR_DEEPSEEK_API_KEY or DEEPSEEK_API_KEY.',
+      )
+      assert.equal(providerError.errorSnapshot?.category, 'auth_expired')
+      assert.equal(providerError.errorSnapshot?.recommendedActions?.includes('reauth'), true)
+
+      const sanitizedError = createCcrErrorSnapshot({
+        message: 'Provider API request failed: Bearer sk-secretvalue123456',
+        source: 'provider',
+        safeDetails: {
+          authorization: 'Bearer sk-secretvalue123456',
+          nested: {
+            apiKey: 'sk-secretvalue123456',
+          },
+        },
+      })
+      assert.equal(sanitizedError.safeDetails?.authorization, '[REDACTED]')
+      assert.equal(sanitizedError.safeDetails?.nested?.apiKey, '[REDACTED]')
+      assert.equal(sanitizedError.message.includes('sk-secretvalue123456'), true)
 
       const event = createDisplayEventFromCompletedItem(
         'fixture-read-too-large',
@@ -512,7 +534,11 @@ async function assertToolErrorClassifications() {
           itemId: 'fixture-read-too-large',
           threadId: 'thread_fixture',
           turnId: 'turn_fixture',
-          toolUseId: 'toolu_fixture_read_too_large',
+          params: {
+            threadId: 'thread_fixture',
+            turnId: 'turn_fixture',
+            toolUseId: 'toolu_fixture_read_too_large',
+          },
         },
       )
 
@@ -520,6 +546,9 @@ async function assertToolErrorClassifications() {
       assert.equal(event?.toolSnapshot?.category, 'file')
       assert.equal(event?.toolSnapshot?.status, 'failed')
       assert.equal(event?.toolSnapshot?.errorClass, 'file_too_large')
+      assert.equal(event?.errorSnapshot?.category, 'tool_error')
+      assert.equal(event?.errorSnapshot?.source, 'tool')
+      assert.equal(event?.errorSnapshot?.toolUseId, 'toolu_fixture_read_too_large')
       assert.match(event?.toolSnapshot?.actionableHint ?? '', /offset\\/limit|搜索/)
       assert.equal(event?.contentBlocks?.[0]?.type, 'tool_result')
       assert.equal(

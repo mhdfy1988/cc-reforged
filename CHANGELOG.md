@@ -19,6 +19,7 @@
 - 调整后续标准层开发顺序：先做 `CcrContentBlock` 共享类型，再做发送前历史校验，最后推进 `ErrorSnapshot` 错误分类展示。
 - 新增 `CcrContentBlock` 共享类型，LLM、Core、App Server 和 Desktop 展示事件开始复用同一套内容块口径。
 - 新增 LLM 历史校验器，OpenAI-compatible / DeepSeek 请求前会按 provider profile 修复缺失工具结果或阻断不支持的工具历史。
+- 新增 `ErrorSnapshot` 第一版，Desktop 展示事件可携带统一错误分类、来源、严重级别、可重试状态和脱敏诊断详情。
 - 历史恢复和工具展示补齐多模态附件条、代码块复制、工具中断状态和内部合成消息过滤。
 - 新增 Provider 工具协议能力声明，DeepSeek / OpenAI-compatible / Anthropic 工具 schema、结果回填、strict、deferred tool search 能力有统一查询入口。
 - 为日志页及其它原始数据展示区增加统一复制按钮，便于复制 JSON、日志片段和工具详情。
