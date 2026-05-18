@@ -1,3 +1,12 @@
+import type {
+  CcrContentSource,
+  CcrImageContentBlock,
+  CcrTextContentBlock,
+  CcrThinkingContentBlock,
+  CcrToolCallContentBlock,
+  CcrToolResultContentBlock,
+} from '../../types/contentBlocks.js'
+
 export type LlmProviderId = string
 export type LlmModelId = string
 export type LlmApiMode =
@@ -61,55 +70,21 @@ export interface LlmModelCapabilities {
 
 export type LlmMessageRole = 'system' | 'user' | 'assistant' | 'tool'
 
-export interface LlmTextPart {
-  type: 'text'
-  text: string
-}
+export type LlmTextPart = CcrTextContentBlock
 
-export interface LlmThinkingPart {
-  type: 'thinking'
-  thinking: string
-  signature?: string
-  redacted?: boolean
-}
+export type LlmThinkingPart = CcrThinkingContentBlock
 
-export interface LlmToolCallPart {
-  type: 'tool_call'
-  id: string
-  name: string
-  input: unknown
-}
+export type LlmToolCallPart = CcrToolCallContentBlock
 
-export interface LlmToolResultPart {
-  type: 'tool_result'
+export type LlmToolResultPart = CcrToolResultContentBlock & {
   toolCallId: string
-  toolName?: string
   result: unknown
-  isError?: boolean
 }
 
-export type LlmImageSource =
-  | {
-      kind: 'file'
-      path: string
-    }
-  | {
-      kind: 'url'
-      url: string
-    }
-  | {
-      kind: 'contentRef'
-      contentRef: string
-    }
+export type LlmImageSource = CcrContentSource
 
-export interface LlmImagePart {
-  type: 'image'
+export type LlmImagePart = CcrImageContentBlock & {
   mimeType: string
-  source?: LlmImageSource
-  data?: string
-  attachmentId?: string
-  displayName?: string
-  sizeBytes?: number
 }
 
 export type LlmContentPart =

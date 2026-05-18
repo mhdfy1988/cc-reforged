@@ -2,6 +2,10 @@ import {
   createMessageFromCompletedItem,
   normalizeContentBlocks,
 } from './contentBlocks.js'
+import {
+  normalizeCcrContentBlocks,
+  type CcrContentBlock,
+} from '../../../../../../src/types/contentBlocks.js'
 import type { ChatMessage, JsonObject } from './displayTypes.js'
 import {
   createDisplayEventIdentity,
@@ -57,6 +61,7 @@ export type DisplayEvent = {
   attachmentSnapshot?: AttachmentSnapshot
   attachmentSnapshots?: AttachmentSnapshot[]
   referenceSnapshot?: ReferenceSnapshot
+  contentBlocks?: CcrContentBlock[]
 }
 
 export type DisplayAttachmentInput = {
@@ -74,9 +79,13 @@ export function createUserDisplayEvent(
   text: string,
   attachments: readonly DisplayAttachmentInput[] = [],
 ): DisplayEvent {
+  const rawBlocks = [
+    ...(text.trim() ? [{ type: 'text', text }] : []),
+    ...attachments.map(toAttachmentContentBlock),
+  ]
   const attachmentSnapshots = extractAttachmentSnapshotsFromContentBlocks({
     eventId: id,
-    blocks: attachments.map(toAttachmentContentBlock),
+    blocks: rawBlocks,
     source: 'UserUpload',
   })
   return {
@@ -85,6 +94,7 @@ export function createUserDisplayEvent(
     text,
     attachmentSnapshots:
       attachmentSnapshots.length > 0 ? attachmentSnapshots : undefined,
+    contentBlocks: normalizeCcrContentBlocks(rawBlocks),
   }
 }
 
@@ -112,6 +122,7 @@ export function createDisplayEventFromCompletedItem(
   context?: DisplayEventContractContext,
 ): DisplayEvent | null {
   const blocks = normalizeContentBlocks(content)
+  const contentBlocks = normalizeCcrContentBlocks(content)
   const identity = createDisplayEventIdentity(context ?? { itemId })
   if (isRawThinkingOnly(blocks) || isSyntheticMessageOnly(blocks)) {
     return null
@@ -119,7 +130,12 @@ export function createDisplayEventFromCompletedItem(
 
   if (kind === 'user_message') {
     return isHistoryReplayContext(context)
-      ? createUserDisplayEventFromBlocks(itemId, blocks, identity)
+      ? createUserDisplayEventFromBlocks(
+          itemId,
+          blocks,
+          identity,
+          contentBlocks,
+        )
       : null
   }
 
@@ -137,6 +153,7 @@ export function createDisplayEventFromCompletedItem(
       sourceKind: kind,
       identity,
       todoSnapshot,
+      contentBlocks,
     }
   }
 
@@ -167,6 +184,7 @@ export function createDisplayEventFromCompletedItem(
       ...fileDisplaySnapshots,
       attachmentSnapshots:
         attachmentSnapshots.length > 0 ? attachmentSnapshots : undefined,
+      contentBlocks,
     }
   }
 
@@ -183,8 +201,8 @@ export function createDisplayEventFromCompletedItem(
     identity,
   })
   return attachmentSnapshots.length > 0
-    ? { ...event, attachmentSnapshots }
-    : event
+    ? { ...event, attachmentSnapshots, contentBlocks }
+    : { ...event, contentBlocks }
 }
 
 function toAttachmentContentBlock(attachment: DisplayAttachmentInput): JsonObject {
@@ -204,6 +222,7 @@ function createUserDisplayEventFromBlocks(
   itemId: string,
   blocks: JsonObject[],
   identity: DisplayEventIdentity,
+  contentBlocks: CcrContentBlock[],
 ): DisplayEvent | null {
   const text = blocks
     .map(getHistoryUserTextBlockValue)
@@ -229,6 +248,7 @@ function createUserDisplayEventFromBlocks(
     identity,
     attachmentSnapshots:
       attachmentSnapshots.length > 0 ? attachmentSnapshots : undefined,
+    contentBlocks,
   }
 }
 

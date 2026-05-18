@@ -1,31 +1,19 @@
+import type {
+  CcrAttachmentContentBlockBase,
+  CcrContentSource,
+  CcrTextContentBlock,
+} from '../types/contentBlocks.js'
+
 export type CoreJsonObject = Record<string, unknown>
 
-export type CoreContentSource =
-  | {
-      kind: 'file'
-      path: string
-    }
-  | {
-      kind: 'url'
-      url: string
-    }
-  | {
-      kind: 'contentRef'
-      contentRef: string
-    }
+export type CoreContentSource = CcrContentSource
 
-export type CoreAttachmentContentBlock = {
-  attachmentId?: string
-  displayName?: string
-  mimeType?: string
-  sizeBytes?: number
-  source?: CoreContentSource
-}
+export type CoreAttachmentContentBlock = Omit<
+  CcrAttachmentContentBlockBase,
+  'previewDataUrl'
+>
 
-export type CoreTextContentBlock = {
-  type: 'text'
-  text: string
-}
+export type CoreTextContentBlock = CcrTextContentBlock
 
 export type CoreImageContentBlock = CoreAttachmentContentBlock & {
   type: 'image'

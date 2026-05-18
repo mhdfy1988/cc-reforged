@@ -34,8 +34,8 @@
 ## 当前指针
 
 - 已完成：P23 多模态输入/输出、附件上传与预览第一版。
-- 当前正在做：标准层稳定化，先把多 provider / 多模态 / 工具 / 历史恢复共用的数据结构收口。
-- 完成后下一项：按 `STD-DISPLAY-01 CcrContentBlock` -> `STD-HISTORY-01 History Validator` -> `P24 ErrorSnapshot` 的顺序推进。
+- 当前正在做：`STD-HISTORY-01 History Validator`，发送给 provider 前扫描并修复 / 阻断非法历史。
+- 完成后下一项：完成 `STD-HISTORY-01` 后进入 `P24 ErrorSnapshot`，统一 provider / 工具 / 限流 / 认证 / 拒答错误展示。
 - 说明：P22 全局结构化展示已撤回；P23 不再和多供应商专项混在一起，附件真实随消息发送、预览、输入协议和多模态能力边界治理进入独立文档。
 
 ## 标准文档落地队列
@@ -56,10 +56,10 @@
 4. [x] STD-TOOL-02 Provider 工具协议第一版收口
    - 目标：补 `ProviderToolProfile` 或等价结构，明确工具 schema、strict 支持、并行工具和工具结果回填能力。
    - 已完成：新增 `LlmProviderToolProfile` 与 `toolProtocolProfile` 解析入口；DeepSeek / OpenAI Chat compatible / Anthropic / MiniMax 已有内置或默认 profile；OpenAI Chat adapter 会按 profile 判断工具支持与工具结果修复；新增 `smoke:provider-tool-profile` 覆盖 DeepSeek、OpenAI-compatible、Anthropic 和 custom 默认行为。
-5. [ ] STD-DISPLAY-01 抽 `CcrContentBlock` 共享类型
+5. [x] STD-DISPLAY-01 抽 `CcrContentBlock` 共享类型
    - 目标：把 Desktop / App Server / Runtime 里分散的 `text/image/file/audio/tool/json` 内容块口径收成共享类型。
    - Goal：[2026-05-18 STD-DISPLAY-01 CcrContentBlock 共享类型](../goals/2026-05-18-std-display-01-ccr-content-block.md)
-   - 验收：provider adapter、历史恢复和 Desktop display event 不再各自猜字段。
+   - 已完成：新增共享 `CcrContentBlock` 类型；LLM、Core、App Server 和 Desktop display event 已开始复用；Desktop 展示事件新增标准 `contentBlocks` 快照，现有 UI 行为保持不变。
 6. [ ] STD-HISTORY-01 History Validator 发送前历史校验
    - 目标：发送给 provider 前扫描历史，处理悬空 tool call、缺 tool result、Gemini `functionResponse`、Anthropic `tool_result` 和 reasoning / thinking 回放规则。
    - 验收：OpenAI-compatible / DeepSeek / Anthropic / Gemini 风格历史不会因为中断、参数错误或工具结果缺失把会话打死。

@@ -1,5 +1,10 @@
 import { z } from 'zod'
 import type { CorePermissionSettingsSnapshot } from '../core/permissionSettingsCore.js'
+import type {
+  CcrAttachmentContentBlockBase,
+  CcrContentSource,
+  CcrTextContentBlock,
+} from '../types/contentBlocks.js'
 
 export const APP_SERVER_PROTOCOL_VERSION = '0.1'
 export const APP_SERVER_CONFIG_SCHEMA_VERSION = '0.1'
@@ -688,32 +693,14 @@ export type SessionHistoryListResult = {
   nextCursor?: string
 }
 
-export type TurnContentSource =
-  | {
-      kind: 'file'
-      path: string
-    }
-  | {
-      kind: 'url'
-      url: string
-    }
-  | {
-      kind: 'contentRef'
-      contentRef: string
-    }
+export type TurnContentSource = CcrContentSource
 
-export type TurnAttachmentMetadata = {
-  attachmentId?: string
-  displayName?: string
-  mimeType?: string
-  sizeBytes?: number
-  source?: TurnContentSource
-}
+export type TurnAttachmentMetadata = Omit<
+  CcrAttachmentContentBlockBase,
+  'previewDataUrl'
+>
 
-export type TurnTextContentBlock = {
-  type: 'text'
-  text: string
-}
+export type TurnTextContentBlock = CcrTextContentBlock
 
 export type TurnImageContentBlock = TurnAttachmentMetadata & {
   type: 'image'

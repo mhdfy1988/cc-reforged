@@ -53,12 +53,12 @@
 
 ## 验收标准
 
-- 有一套共享 `CcrContentBlock` 类型，覆盖 text / thinking / image / file / audio / video / tool / structured / error。
-- Core / App Server / Desktop 不再各自发明同名内容块字段。
-- provider adapter 输出可以先归一到 `CcrContentBlock`，再进入展示和历史恢复。
-- 历史恢复可以基于统一内容块识别用户附件、assistant 输出、工具调用和工具结果。
-- 现有多模态图片、小文本文件、工具卡、结构化输出和历史恢复 smoke 通过。
-- `git diff --check` 通过。
+- [x] 有一套共享 `CcrContentBlock` 类型，覆盖 text / thinking / image / file / audio / video / tool / structured / error。
+- [x] Core / App Server / Desktop 不再各自发明同名内容块字段。
+- [x] provider adapter 输出可以先归一到 `CcrContentBlock`，再进入展示和历史恢复。
+- [x] 历史恢复可以基于统一内容块识别用户附件、assistant 输出、工具调用和工具结果。
+- [x] 现有多模态图片、小文本文件、工具卡、结构化输出和历史恢复 smoke 通过。
+- [x] `git diff --check` 通过。
 
 ## 建议验证命令
 
@@ -80,3 +80,24 @@ git diff --check
 - 修复或阻断悬空 tool call。
 - 处理 OpenAI tool messages、Anthropic tool_result、Gemini functionResponse。
 - 处理 reasoning / thinking 回放规则。
+
+## 执行结果
+
+状态：已完成第一版。
+
+已完成：
+
+- 新增 `src/types/contentBlocks.ts`，定义 `CcrContentBlock`、`CcrUserContentBlock`、`CcrLlmContentBlock`、标准附件块、工具块、结构化块和错误块。
+- `LlmContentPart`、`CoreUserContentBlock`、App Server `TurnContentBlock` 已开始复用共享内容块基础类型。
+- Desktop `DisplayEvent` 新增 `contentBlocks` 标准快照；现有 UI 渲染逻辑保持不变。
+- `smoke:desktop-display-events` 补充标准内容块断言，覆盖工具结果和历史用户图片附件。
+
+已完成验证：
+
+- `npm.cmd run typecheck`
+- `npm.cmd run build`
+- `npm.cmd run smoke:turn-input`
+- `npm.cmd run smoke:multimodal-provider-mapping`
+- `npm.cmd run smoke:desktop-display-events`
+- `npm.cmd run desktop:build`
+- `git diff --check`

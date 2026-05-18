@@ -521,6 +521,12 @@ async function assertToolErrorClassifications() {
       assert.equal(event?.toolSnapshot?.status, 'failed')
       assert.equal(event?.toolSnapshot?.errorClass, 'file_too_large')
       assert.match(event?.toolSnapshot?.actionableHint ?? '', /offset\\/limit|搜索/)
+      assert.equal(event?.contentBlocks?.[0]?.type, 'tool_result')
+      assert.equal(
+        event?.contentBlocks?.[0]?.toolName,
+        'Read',
+        'tool_result events should expose normalized CcrContentBlock metadata',
+      )
 
       const missingHelperEvent = createDisplayEventFromCompletedItem(
         'fixture-grep-missing-helper',
@@ -548,6 +554,35 @@ async function assertToolErrorClassifications() {
       assert.equal(missingHelperEvent?.toolSnapshot?.errorClass, 'command_not_found')
       assert.notEqual(missingHelperEvent?.toolSnapshot?.errorClass, 'path_not_found')
       assert.match(missingHelperEvent?.toolSnapshot?.actionableHint ?? '', /工具依赖|PATH/)
+
+      const userEvent = createDisplayEventFromCompletedItem(
+        'fixture-history-user-image',
+        'user_message',
+        [
+          {
+            type: 'text',
+            text: '识别这张图片',
+          },
+          {
+            type: 'image',
+            displayName: 'image.png',
+            mimeType: 'image/png',
+            source: { kind: 'file', path: 'C:\\\\tmp\\\\image.png' },
+          },
+        ],
+        'completed',
+        {
+          itemId: 'fixture-history-user-image',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          params: { source: 'history' },
+        },
+      )
+
+      assert.equal(userEvent?.type, 'user_message')
+      assert.equal(userEvent?.contentBlocks?.[0]?.type, 'text')
+      assert.equal(userEvent?.contentBlocks?.[1]?.type, 'image')
+      assert.equal(userEvent?.attachmentSnapshots?.[0]?.previewKind, 'image')
     `,
     'utf8',
   )
