@@ -212,9 +212,9 @@ Provider 文档和模型能力变化很快。表中链接是本次盘点使用�
 
 - [x] `CCR 标准 LLM 协议 v0.1`：内部标准不以任何一家原始协议为准。
 - [x] `ProviderToolProfile`：工具 schema、工具结果、strict、deferred tool search 能力有统一查询入口。
-- [ ] `CcrContentBlock` 共享类型：统一 text / thinking / image / file / audio / video / json / tool / error。
+- [x] `CcrContentBlock` 共享类型：统一 text / thinking / image / file / audio / video / json / tool / error。
 - [ ] Provider 协议 registry：每个 provider/profile 明确 `apiMode`、官方来源、能力来源、校验日期。
-- [ ] History validator：发送给 provider 前扫描悬空工具调用、非法角色顺序、缺失 thinking/tool result。
+- [x] History validator：发送给 provider 前扫描悬空工具调用、非法角色顺序、缺失 thinking/tool result。
 - [ ] ErrorSnapshot：统一 provider / tool / file / auth / quota / safety / protocol 错误。
 - [ ] Provider fixture：每个协议族至少一组文本、工具、工具错误、结构化输出、历史恢复样例。
 

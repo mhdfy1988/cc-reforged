@@ -18,6 +18,7 @@
 - 新增 Provider 协议盘点与官方文档对照，明确 OpenAI Responses、OpenAI Chat、Anthropic Messages、Gemini GenerateContent、DeepSeek、MiniMax、OpenRouter 和 Vercel AI Gateway 后续需要对接的协议族、协议面和 probe 矩阵。
 - 调整后续标准层开发顺序：先做 `CcrContentBlock` 共享类型，再做发送前历史校验，最后推进 `ErrorSnapshot` 错误分类展示。
 - 新增 `CcrContentBlock` 共享类型，LLM、Core、App Server 和 Desktop 展示事件开始复用同一套内容块口径。
+- 新增 LLM 历史校验器，OpenAI-compatible / DeepSeek 请求前会按 provider profile 修复缺失工具结果或阻断不支持的工具历史。
 - 历史恢复和工具展示补齐多模态附件条、代码块复制、工具中断状态和内部合成消息过滤。
 - 新增 Provider 工具协议能力声明，DeepSeek / OpenAI-compatible / Anthropic 工具 schema、结果回填、strict、deferred tool search 能力有统一查询入口。
 - 为日志页及其它原始数据展示区增加统一复制按钮，便于复制 JSON、日志片段和工具详情。
@@ -27,6 +28,7 @@
 ### BUG 修复
 
 - 修复 OpenAI-compatible / DeepSeek 场景下工具调用中断、缺失工具结果、TodoWrite schema 未常驻导致的会话卡死和参数校验问题。
+- 修复 OpenAI-compatible / DeepSeek 历史中延迟或孤立 tool result 可能再次污染请求的问题，发送前会丢弃不合法 tool result 并补齐 synthetic 结果。
 - 修复历史恢复中内部合成消息被展示的问题，不再显示 `No response requested.`。
 - 新增 settings 隔离 smoke，防止项目级 settings 路径后续回退到 `.claude`。
 

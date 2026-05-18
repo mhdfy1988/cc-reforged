@@ -1,4 +1,5 @@
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js'
+import { validateLlmHistoryForProvider } from '../historyValidator.js'
 import { toOpenAiImageUrl } from '../imageContent.js'
 import {
   isOpenAiChatToolResultProfile,
@@ -501,6 +502,25 @@ async function toOpenAiChatMessages(
     toolProfile?: LlmProviderToolProfile
   } = {},
 ): Promise<OpenAiChatMessage[]> {
+  const toolProfile =
+    options.toolProfile ??
+    resolveProviderToolProfile({
+      providerId: 'openai-chat-compatible',
+      apiMode: 'openai-chat',
+    })
+  const validation = validateLlmHistoryForProvider({
+    messages,
+    toolProfile,
+  })
+  if (validation.status === 'blocked') {
+    throw new Error(
+      `OpenAI Chat Completions adapter blocked invalid history: ${validation.diagnostics
+        .map(diagnostic => diagnostic.detail)
+        .join('; ')}`,
+    )
+  }
+  messages = validation.messages
+
   const mapped: OpenAiChatMessage[] = []
   const mergedSystemParts: string[] = []
 
@@ -602,12 +622,6 @@ async function toOpenAiChatMessages(
     )
   }
 
-  const toolProfile =
-    options.toolProfile ??
-    resolveProviderToolProfile({
-      providerId: 'openai-chat-compatible',
-      apiMode: 'openai-chat',
-    })
   const repaired = isOpenAiChatToolResultProfile(toolProfile)
     ? repairOpenAiToolMessageSequence(mapped)
     : mapped.filter(message => message.role !== 'tool')

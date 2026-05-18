@@ -7,6 +7,9 @@ const {
   resolveProviderToolProfile,
   shouldSendCoreToolInline,
 } = await import('../dist/src/services/llm/toolProtocolProfile.js');
+const { validateLlmHistoryForProvider } = await import(
+  '../dist/src/services/llm/historyValidator.js'
+);
 const { OpenAiChatCompletionsAdapter } = await import(
   '../dist/src/services/llm/protocols/openaiChatCompletionsAdapter.js'
 );
@@ -68,6 +71,152 @@ const builtinProfiles = listBuiltinProviderToolProfiles();
 assert.equal(
   builtinProfiles.some(profile => profile.providerId === 'deepseek'),
   true,
+);
+
+const validHistory = validateLlmHistoryForProvider({
+  toolProfile: deepseekProfile,
+  messages: [
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'start' }],
+    },
+    {
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool_call',
+          id: 'call_valid',
+          name: 'Read',
+          input: { path: 'README.md' },
+        },
+      ],
+    },
+    {
+      role: 'tool',
+      parts: [
+        {
+          type: 'tool_result',
+          toolCallId: 'call_valid',
+          result: 'ok',
+        },
+      ],
+    },
+  ],
+});
+assert.equal(validHistory.status, 'ok');
+assert.equal(validHistory.diagnostics.length, 0);
+
+const repairedHistory = validateLlmHistoryForProvider({
+  toolProfile: deepseekProfile,
+  messages: [
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'start' }],
+    },
+    {
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool_call',
+          id: 'call_missing_a',
+          name: 'Read',
+          input: { path: 'README.md' },
+        },
+        {
+          type: 'tool_call',
+          id: 'call_missing_b',
+          name: 'TodoWrite',
+          input: { todos: [] },
+        },
+      ],
+    },
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'continue' }],
+    },
+  ],
+});
+assert.equal(repairedHistory.status, 'repaired');
+assert.equal(repairedHistory.diagnostics.length, 2);
+assert.deepEqual(
+  repairedHistory.messages
+    .filter(message => message.role === 'tool')
+    .flatMap(message => message.parts.map(part => part.toolCallId)),
+  ['call_missing_a', 'call_missing_b'],
+);
+assert.equal(
+  repairedHistory.messages[2].parts[0].result.code,
+  'TOOL_CALL_INTERRUPTED',
+);
+
+const delayedHistory = validateLlmHistoryForProvider({
+  toolProfile: deepseekProfile,
+  messages: [
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'start' }],
+    },
+    {
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool_call',
+          id: 'call_delayed',
+          name: 'Glob',
+          input: { pattern: '*.md' },
+        },
+      ],
+    },
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'new prompt before result' }],
+    },
+    {
+      role: 'tool',
+      parts: [
+        {
+          type: 'tool_result',
+          toolCallId: 'call_delayed',
+          result: 'late result',
+        },
+      ],
+    },
+  ],
+});
+assert.equal(delayedHistory.status, 'repaired');
+assert.equal(
+  delayedHistory.diagnostics.some(
+    diagnostic => diagnostic.type === 'stray_tool_result_dropped',
+  ),
+  true,
+);
+assert.equal(
+  delayedHistory.messages.some(message =>
+    message.parts.some(part => part.result === 'late result'),
+  ),
+  false,
+);
+
+const blockedHistory = validateLlmHistoryForProvider({
+  toolProfile: customProfile,
+  messages: [
+    {
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool_call',
+          id: 'call_unsupported',
+          name: 'Read',
+          input: { path: 'README.md' },
+        },
+      ],
+    },
+  ],
+});
+assert.equal(blockedHistory.status, 'blocked');
+assert.equal(
+  blockedHistory.diagnostics[0].type,
+  'unsupported_tool_call_blocked',
 );
 
 const requests = [];
@@ -178,6 +327,12 @@ console.log(
       relayProfile,
       anthropicProfile,
       customProfile,
+      historyValidation: {
+        valid: validHistory.status,
+        repaired: repairedHistory.status,
+        delayed: delayedHistory.status,
+        blocked: blockedHistory.status,
+      },
       request: requests[0],
     },
     null,

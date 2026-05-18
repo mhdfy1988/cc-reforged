@@ -1,4 +1,5 @@
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js';
+import { validateLlmHistoryForProvider } from '../historyValidator.js';
 import { toOpenAiImageUrl } from '../imageContent.js';
 import { isOpenAiChatToolResultProfile, resolveProviderToolProfile, } from '../toolProtocolProfile.js';
 export class OpenAiChatCompletionsAdapter {
@@ -308,6 +309,21 @@ function resolveOutputTokens(maxOutputTokens, outputTokenLimit) {
         : maxOutputTokens;
 }
 async function toOpenAiChatMessages(messages, options = {}) {
+    const toolProfile = options.toolProfile ??
+        resolveProviderToolProfile({
+            providerId: 'openai-chat-compatible',
+            apiMode: 'openai-chat',
+        });
+    const validation = validateLlmHistoryForProvider({
+        messages,
+        toolProfile,
+    });
+    if (validation.status === 'blocked') {
+        throw new Error(`OpenAI Chat Completions adapter blocked invalid history: ${validation.diagnostics
+            .map(diagnostic => diagnostic.detail)
+            .join('; ')}`);
+    }
+    messages = validation.messages;
     const mapped = [];
     const mergedSystemParts = [];
     for (const message of messages) {
@@ -398,11 +414,6 @@ async function toOpenAiChatMessages(messages, options = {}) {
     if (mapped.length === 0) {
         throw new Error('OpenAI Chat Completions adapter requires at least one usable message.');
     }
-    const toolProfile = options.toolProfile ??
-        resolveProviderToolProfile({
-            providerId: 'openai-chat-compatible',
-            apiMode: 'openai-chat',
-        });
     const repaired = isOpenAiChatToolResultProfile(toolProfile)
         ? repairOpenAiToolMessageSequence(mapped)
         : mapped.filter(message => message.role !== 'tool');
