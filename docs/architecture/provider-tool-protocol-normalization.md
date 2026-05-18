@@ -4,6 +4,8 @@
 
 本文定义 CCR 后续接入不同模型 / provider 时，如何统一处理工具调用协议。
 
+本文是 [CCR 标准 LLM 协议 v0.1](./ccr-standard-llm-protocol.md) 的工具调用专项细化。内部消息、内容块、能力声明和错误快照以标准协议文档为准；本文只展开工具定义、工具调用、工具结果和 Provider 工具 profile。
+
 核心结论：
 
 ```text

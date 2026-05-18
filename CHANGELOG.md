@@ -14,6 +14,7 @@
 
 ### 改动
 
+- 新增 `CCR 标准 LLM 协议 v0.1` 文档，明确多模型、多 provider、多模态、工具调用和错误展示不以某一家原始协议为标准，而以 CCR 内部标准协议为准。
 - 历史恢复和工具展示补齐多模态附件条、代码块复制、工具中断状态和内部合成消息过滤。
 - 新增 Provider 工具协议能力声明，DeepSeek / OpenAI-compatible / Anthropic 工具 schema、结果回填、strict、deferred tool search 能力有统一查询入口。
 - 为日志页及其它原始数据展示区增加统一复制按钮，便于复制 JSON、日志片段和工具详情。

@@ -47,21 +47,23 @@
 
 这些不是独立空文档，而是 P23 收口后继续实施的标准化队列。执行顺序如下：
 
-1. [x] STD-TOOL-01 修复 OpenAI-compatible / DeepSeek 悬空工具结果和 TodoWrite schema 常驻
+1. [x] STD-PROTOCOL-01 CCR 标准 LLM 协议文档
+   - 已完成：新增 `CCR 标准 LLM 协议 v0.1`，明确 CCR 不以某一家 provider 原始协议为标准，而以内部标准消息、内容块、工具、能力和错误快照为基准；已有多模态、输出展示和工具协议文档已引用该标准。
+2. [x] STD-TOOL-01 修复 OpenAI-compatible / DeepSeek 悬空工具结果和 TodoWrite schema 常驻
    - 已完成：`TodoWrite` 不再 deferred；OpenAI-compatible 请求前会修复缺失工具结果；中断和参数错误不会让会话卡死。
-2. [x] STD-TOOL-02 Provider 工具协议第一版收口
+3. [x] STD-TOOL-02 Provider 工具协议第一版收口
    - 目标：补 `ProviderToolProfile` 或等价结构，明确工具 schema、strict 支持、并行工具和工具结果回填能力。
    - 已完成：新增 `LlmProviderToolProfile` 与 `toolProtocolProfile` 解析入口；DeepSeek / OpenAI Chat compatible / Anthropic / MiniMax 已有内置或默认 profile；OpenAI Chat adapter 会按 profile 判断工具支持与工具结果修复；新增 `smoke:provider-tool-profile` 覆盖 DeepSeek、OpenAI-compatible、Anthropic 和 custom 默认行为。
-3. [ ] STD-DISPLAY-01 抽 `CcrContentBlock` 共享类型
+4. [ ] STD-DISPLAY-01 抽 `CcrContentBlock` 共享类型
    - 目标：把 Desktop / App Server / Runtime 里分散的 `text/image/file/audio/tool/json` 内容块口径收成共享类型。
    - 验收：provider adapter、历史恢复和 Desktop display event 不再各自猜字段。
-4. [ ] STD-DISPLAY-02 Provider 输出 fixture 与历史恢复 smoke
+5. [ ] STD-DISPLAY-02 Provider 输出 fixture 与历史恢复 smoke
    - 目标：补 OpenAI、Anthropic、Gemini、DeepSeek、OpenAI Compatible 的输出样例，覆盖文本、工具、附件、错误和历史恢复。
    - 验收：新增 provider 时至少补一组 fixture，不允许 UI 直接消费 provider 原始结构。
-5. [ ] P24-1 / P24-2 ErrorSnapshot 与错误分类展示
+6. [ ] P24-1 / P24-2 ErrorSnapshot 与错误分类展示
    - 目标：把 provider 错误、工具错误、参数校验错误、中断、限流、认证过期等统一为可行动错误卡。
    - 验收：错误不再只是大红框字符串，用户能看懂来源、影响和下一步。
-6. [ ] STD-OUTPUT-03 生成型多模态输出设计
+7. [ ] STD-OUTPUT-03 生成型多模态输出设计
    - 目标：模型生成图片、音频、文件这类输出单独设计生命周期和安全策略。
    - 说明：这不是 P23 第一版范围，放在展示标准稳定后再做。
 

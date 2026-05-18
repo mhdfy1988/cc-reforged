@@ -4,6 +4,8 @@
 
 本文定义 CCR 面向 Desktop 聊天区的展示标准，以及不同模型 / provider 输出进入展示层前的归一化规则。
 
+内部标准消息、内容块、工具调用、工具结果、能力声明和错误快照的字段定义见 [CCR 标准 LLM 协议 v0.1](./ccr-standard-llm-protocol.md)。本文只展开 provider 输出进入 Desktop 展示层前的归一化和组件展示口径。
+
 核心结论：
 
 ```text
