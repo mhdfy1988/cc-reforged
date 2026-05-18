@@ -34,8 +34,8 @@
 ## 当前指针
 
 - 已完成：P23 多模态输入/输出、附件上传与预览第一版。
-- 当前正在做：提交前收口，补 `CHANGELOG.md` 当前未发布说明、确认 diff 分组、跑最终验证，然后 commit + push。
-- 完成后下一项：优先把下午标准文档里的协议/展示统一问题拆成小 goal 执行；第一批接 P24 错误分类、限流与拒答状态治理。
+- 当前正在做：标准层稳定化，先把多 provider / 多模态 / 工具 / 历史恢复共用的数据结构收口。
+- 完成后下一项：按 `STD-DISPLAY-01 CcrContentBlock` -> `STD-HISTORY-01 History Validator` -> `P24 ErrorSnapshot` 的顺序推进。
 - 说明：P22 全局结构化展示已撤回；P23 不再和多供应商专项混在一起，附件真实随消息发送、预览、输入协议和多模态能力边界治理进入独立文档。
 
 ## 标准文档落地队列
@@ -58,14 +58,18 @@
    - 已完成：新增 `LlmProviderToolProfile` 与 `toolProtocolProfile` 解析入口；DeepSeek / OpenAI Chat compatible / Anthropic / MiniMax 已有内置或默认 profile；OpenAI Chat adapter 会按 profile 判断工具支持与工具结果修复；新增 `smoke:provider-tool-profile` 覆盖 DeepSeek、OpenAI-compatible、Anthropic 和 custom 默认行为。
 5. [ ] STD-DISPLAY-01 抽 `CcrContentBlock` 共享类型
    - 目标：把 Desktop / App Server / Runtime 里分散的 `text/image/file/audio/tool/json` 内容块口径收成共享类型。
+   - Goal：[2026-05-18 STD-DISPLAY-01 CcrContentBlock 共享类型](../goals/2026-05-18-std-display-01-ccr-content-block.md)
    - 验收：provider adapter、历史恢复和 Desktop display event 不再各自猜字段。
-6. [ ] STD-DISPLAY-02 Provider 输出 fixture 与历史恢复 smoke
+6. [ ] STD-HISTORY-01 History Validator 发送前历史校验
+   - 目标：发送给 provider 前扫描历史，处理悬空 tool call、缺 tool result、Gemini `functionResponse`、Anthropic `tool_result` 和 reasoning / thinking 回放规则。
+   - 验收：OpenAI-compatible / DeepSeek / Anthropic / Gemini 风格历史不会因为中断、参数错误或工具结果缺失把会话打死。
+7. [ ] STD-DISPLAY-02 Provider 输出 fixture 与历史恢复 smoke
    - 目标：补 OpenAI、Anthropic、Gemini、DeepSeek、OpenAI Compatible 的输出样例，覆盖文本、工具、附件、错误和历史恢复。
    - 验收：新增 provider 时至少补一组 fixture，不允许 UI 直接消费 provider 原始结构。
-7. [ ] P24-1 / P24-2 ErrorSnapshot 与错误分类展示
+8. [ ] P24-1 / P24-2 ErrorSnapshot 与错误分类展示
    - 目标：把 provider 错误、工具错误、参数校验错误、中断、限流、认证过期等统一为可行动错误卡。
    - 验收：错误不再只是大红框字符串，用户能看懂来源、影响和下一步。
-8. [ ] STD-OUTPUT-03 生成型多模态输出设计
+9. [ ] STD-OUTPUT-03 生成型多模态输出设计
    - 目标：模型生成图片、音频、文件这类输出单独设计生命周期和安全策略。
    - 说明：这不是 P23 第一版范围，放在展示标准稳定后再做。
 

@@ -20,6 +20,7 @@ YYYY-MM-DD-p<阶段号>-<简短主题>.md
 
 当前 Goal：
 
+- [2026-05-18 STD-DISPLAY-01 CcrContentBlock 共享类型](./2026-05-18-std-display-01-ccr-content-block.md)
 - [2026-05-18 STD-PROTOCOL-02 Provider 协议盘点与官方文档对照](./2026-05-18-std-protocol-02-provider-protocol-inventory.md)
 - [2026-05-18 STD-PROTOCOL-01 CCR 标准 LLM 协议文档](./2026-05-18-std-protocol-01-ccr-standard-llm-protocol.md)
 - [2026-05-18 STD-TOOL-02 Provider 工具协议第一版收口](./2026-05-18-std-tool-02-provider-tool-profile.md)

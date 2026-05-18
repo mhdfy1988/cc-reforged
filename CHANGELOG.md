@@ -16,6 +16,7 @@
 
 - 新增 `CCR 标准 LLM 协议 v0.1` 文档，明确多模型、多 provider、多模态、工具调用和错误展示不以某一家原始协议为标准，而以 CCR 内部标准协议为准。
 - 新增 Provider 协议盘点与官方文档对照，明确 OpenAI Responses、OpenAI Chat、Anthropic Messages、Gemini GenerateContent、DeepSeek、MiniMax、OpenRouter 和 Vercel AI Gateway 后续需要对接的协议族、协议面和 probe 矩阵。
+- 调整后续标准层开发顺序：先做 `CcrContentBlock` 共享类型，再做发送前历史校验，最后推进 `ErrorSnapshot` 错误分类展示。
 - 历史恢复和工具展示补齐多模态附件条、代码块复制、工具中断状态和内部合成消息过滤。
 - 新增 Provider 工具协议能力声明，DeepSeek / OpenAI-compatible / Anthropic 工具 schema、结果回填、strict、deferred tool search 能力有统一查询入口。
 - 为日志页及其它原始数据展示区增加统一复制按钮，便于复制 JSON、日志片段和工具详情。
