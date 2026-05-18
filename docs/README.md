@@ -23,6 +23,7 @@
 - [CCR 多供应商模型与协议接入设计](./architecture/multi-provider-model-management-design.md)
 - [CCR 多模态输入输出设计](./architecture/multimodal-input-output-design.md)
 - [CCR 模型输出归一化与展示标准](./architecture/model-output-normalization-and-display-standard.md)
+- [CCR Provider 协议盘点与官方文档对照](./architecture/provider-protocol-inventory-and-official-docs.md)
 - [CCR Provider 工具协议统一化标准](./architecture/provider-tool-protocol-normalization.md)
 - [CCR 项目级 Settings 隔离设计](./architecture/ccr-project-settings-isolation-design.md)
 - [CCR App Server Client SDK 设计](./architecture/app-server-client-sdk-design.md)

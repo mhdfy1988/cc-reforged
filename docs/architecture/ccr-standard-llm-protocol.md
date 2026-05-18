@@ -21,6 +21,7 @@ CCR 以自己的标准协议为中心
 本文是标准化入口文档。相关专项文档：
 
 - [Provider 工具协议统一化标准](./provider-tool-protocol-normalization.md)
+- [Provider 协议盘点与官方文档对照](./provider-protocol-inventory-and-official-docs.md)
 - [多模态输入输出设计](./multimodal-input-output-design.md)
 - [模型输出归一化与展示标准](./model-output-normalization-and-display-standard.md)
 - [多供应商模型与协议接入设计](./multi-provider-model-management-design.md)
