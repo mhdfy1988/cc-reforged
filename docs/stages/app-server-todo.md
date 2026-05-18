@@ -49,9 +49,9 @@
 
 1. [x] STD-TOOL-01 修复 OpenAI-compatible / DeepSeek 悬空工具结果和 TodoWrite schema 常驻
    - 已完成：`TodoWrite` 不再 deferred；OpenAI-compatible 请求前会修复缺失工具结果；中断和参数错误不会让会话卡死。
-2. [ ] STD-TOOL-02 Provider 工具协议第一版收口
+2. [x] STD-TOOL-02 Provider 工具协议第一版收口
    - 目标：补 `ProviderToolProfile` 或等价结构，明确工具 schema、strict 支持、并行工具和工具结果回填能力。
-   - 验收：DeepSeek / OpenAI-compatible 的 TodoWrite 参数错误、工具执行失败和中断都有标准工具结果与标准错误展示。
+   - 已完成：新增 `LlmProviderToolProfile` 与 `toolProtocolProfile` 解析入口；DeepSeek / OpenAI Chat compatible / Anthropic / MiniMax 已有内置或默认 profile；OpenAI Chat adapter 会按 profile 判断工具支持与工具结果修复；新增 `smoke:provider-tool-profile` 覆盖 DeepSeek、OpenAI-compatible、Anthropic 和 custom 默认行为。
 3. [ ] STD-DISPLAY-01 抽 `CcrContentBlock` 共享类型
    - 目标：把 Desktop / App Server / Runtime 里分散的 `text/image/file/audio/tool/json` 内容块口径收成共享类型。
    - 验收：provider adapter、历史恢复和 Desktop display event 不再各自猜字段。

@@ -20,6 +20,7 @@ YYYY-MM-DD-p<阶段号>-<简短主题>.md
 
 当前 Goal：
 
+- [2026-05-18 STD-TOOL-02 Provider 工具协议第一版收口](./2026-05-18-std-tool-02-provider-tool-profile.md)
 - [2026-05-17 P23-FIX OpenAI-compatible 工具恢复与 TodoWrite schema 常驻](./2026-05-17-p23-fix-openai-tool-recovery-and-todowrite-schema.md)
 - [2026-05-16 P23-FIX 自绘窗口标题栏与窗口控制按钮](./2026-05-16-p23-fix-custom-window-controls.md)
 - [2026-05-16 P23-9 Smoke、真机验收和文档收口](./2026-05-16-p23-9-smoke-real-machine-doc-closeout.md)

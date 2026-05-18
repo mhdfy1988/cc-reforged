@@ -66,6 +66,7 @@
     "smoke:deepseek-provider": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-deepseek-provider.mjs",
     "smoke:minimax-provider": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-minimax-provider.mjs",
     "smoke:openai-chat-protocol": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-openai-chat-protocol.mjs",
+    "smoke:provider-tool-profile": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-provider-tool-profile.mjs",
     "smoke:llm-claude-adapter": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-claude-adapter.mjs",
     "smoke:llm-config": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-config.mjs",
     "smoke:model-capabilities": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-model-capabilities.mjs",

@@ -1,11 +1,16 @@
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js'
 import { toOpenAiImageUrl } from '../imageContent.js'
+import {
+  isOpenAiChatToolResultProfile,
+  resolveProviderToolProfile,
+} from '../toolProtocolProfile.js'
 import type {
   LlmContentPart,
   LlmGenerateEvent,
   LlmGenerateRequest,
   LlmGenerateResponse,
   LlmMessage,
+  LlmProviderToolProfile,
   LlmStopReason,
   LlmToolDefinition,
   LlmUsage,
@@ -111,6 +116,7 @@ export interface OpenAiChatCompletionsAdapterOptions {
   includeStreamUsage?: boolean
   includeTools?: boolean
   mergeSystemMessages?: boolean
+  toolProfile?: LlmProviderToolProfile
   missingApiKeyMessage?: string
   fetchImpl?: typeof fetch
   resolveTemperature?: (input: {
@@ -135,6 +141,7 @@ export class OpenAiChatCompletionsAdapter {
   readonly #includeStreamUsage: boolean
   readonly #includeTools: boolean
   readonly #mergeSystemMessages: boolean
+  readonly #toolProfile?: LlmProviderToolProfile
   readonly #missingApiKeyMessage: string
   readonly #fetchImpl: typeof fetch
   readonly #resolveTemperature: NonNullable<
@@ -157,6 +164,7 @@ export class OpenAiChatCompletionsAdapter {
     this.#includeStreamUsage = options.includeStreamUsage ?? true
     this.#includeTools = options.includeTools ?? true
     this.#mergeSystemMessages = options.mergeSystemMessages ?? false
+    this.#toolProfile = options.toolProfile
     this.#missingApiKeyMessage =
       options.missingApiKeyMessage ??
       `${options.providerLabel} API key is missing.`
@@ -370,6 +378,8 @@ export class OpenAiChatCompletionsAdapter {
       includeStreamUsage: this.#includeStreamUsage,
       includeTools: this.#includeTools,
       mergeSystemMessages: this.#mergeSystemMessages,
+      providerId: this.#providerId,
+      toolProfile: this.#toolProfile,
       resolveTemperature: this.#resolveTemperature,
       resolveThinking: this.#resolveThinking,
       stream,
@@ -405,6 +415,8 @@ async function toRequestBody(input: {
   includeStreamUsage: boolean
   includeTools: boolean
   mergeSystemMessages: boolean
+  providerId: string
+  toolProfile?: LlmProviderToolProfile
   resolveTemperature: NonNullable<
     OpenAiChatCompletionsAdapterOptions['resolveTemperature']
   >
@@ -414,6 +426,13 @@ async function toRequestBody(input: {
   stream: boolean
 }): Promise<Record<string, unknown>> {
   const model = input.request.model?.trim() || input.defaultModel
+  const toolProfile =
+    input.toolProfile ??
+    resolveProviderToolProfile({
+      providerId: input.providerId,
+      apiMode: 'openai-chat',
+      model,
+    })
   const thinking = input.resolveThinking({
     request: input.request,
     model,
@@ -430,6 +449,7 @@ async function toRequestBody(input: {
     model,
     messages: await toOpenAiChatMessages(input.request.messages, {
       mergeSystemMessages: input.mergeSystemMessages,
+      toolProfile,
     }),
     stream: input.stream,
     ...(input.stream && input.includeStreamUsage
@@ -450,7 +470,10 @@ async function toRequestBody(input: {
       : typeof temperature === 'number'
         ? { temperature }
         : {}),
-    ...(input.includeTools && input.request.tools && input.request.tools.length > 0
+    ...(input.includeTools &&
+    toolProfile.toolCalling.supported &&
+    input.request.tools &&
+    input.request.tools.length > 0
       ? {
           tools: toOpenAiChatTools(input.request.tools),
           tool_choice: 'auto',
@@ -475,6 +498,7 @@ async function toOpenAiChatMessages(
   messages: readonly LlmMessage[],
   options: {
     mergeSystemMessages?: boolean
+    toolProfile?: LlmProviderToolProfile
   } = {},
 ): Promise<OpenAiChatMessage[]> {
   const mapped: OpenAiChatMessage[] = []
@@ -578,7 +602,15 @@ async function toOpenAiChatMessages(
     )
   }
 
-  const repaired = repairOpenAiToolMessageSequence(mapped)
+  const toolProfile =
+    options.toolProfile ??
+    resolveProviderToolProfile({
+      providerId: 'openai-chat-compatible',
+      apiMode: 'openai-chat',
+    })
+  const repaired = isOpenAiChatToolResultProfile(toolProfile)
+    ? repairOpenAiToolMessageSequence(mapped)
+    : mapped.filter(message => message.role !== 'tool')
   if (repaired.length === 0) {
     throw new Error(
       'OpenAI Chat Completions adapter requires at least one usable message.',

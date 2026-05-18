@@ -18,6 +18,20 @@ export type LlmModelCapabilitySource =
   | 'builtin'
   | 'profile_override'
   | 'default'
+export type LlmToolSchemaStyle =
+  | 'json_schema_function'
+  | 'anthropic_input_schema'
+  | 'gemini_function_declarations'
+export type LlmToolResultStyle =
+  | 'tool_role_with_tool_call_id'
+  | 'anthropic_tool_result_block'
+  | 'gemini_function_response'
+  | 'function_call_output'
+export type LlmProviderToolProfileSource =
+  | 'builtin'
+  | 'api_mode_default'
+  | 'disabled_default'
+export type LlmToolCapabilitySupport = boolean | 'beta' | 'unknown'
 
 export interface LlmImageCapabilityLimits {
   maxImages?: number
@@ -131,6 +145,28 @@ export interface LlmProviderCapabilities {
   tools: boolean
   reasoning: boolean
   usage: boolean
+}
+
+export interface LlmProviderToolProfile {
+  providerId: LlmProviderId
+  apiMode: LlmApiMode
+  source: LlmProviderToolProfileSource
+  modelPattern?: string
+  toolCalling: {
+    supported: boolean
+    schemaStyle: LlmToolSchemaStyle
+    resultStyle: LlmToolResultStyle
+    requiresCallId: boolean
+    supportsParallelCalls: boolean | 'unknown'
+    supportsStrictSchema: LlmToolCapabilitySupport
+    supportsDeferredToolSearch: boolean | 'unknown'
+    coreToolsAlwaysInline: readonly string[]
+    strictSchemaLimits?: {
+      additionalPropertiesFalseRequired?: boolean
+      allObjectPropertiesRequired?: boolean
+      unsupportedKeywords?: readonly string[]
+    }
+  }
 }
 
 export interface LlmProviderDefinition {

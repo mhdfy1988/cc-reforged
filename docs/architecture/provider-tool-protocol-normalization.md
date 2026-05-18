@@ -146,10 +146,10 @@ type ProviderToolProfile = {
   providerId: string
   apiMode:
     | 'openai-responses'
-    | 'openai-chat-completions'
+    | 'openai-chat'
     | 'anthropic-messages'
-    | 'gemini-generate-content'
-    | 'openai-compatible'
+    | 'custom'
+  source: 'builtin' | 'api_mode_default' | 'disabled_default'
   modelPattern?: string
   toolCalling: {
     supported: boolean
@@ -166,6 +166,7 @@ type ProviderToolProfile = {
     supportsParallelCalls: boolean | 'unknown'
     supportsStrictSchema: boolean | 'beta' | 'unknown'
     supportsDeferredToolSearch: boolean | 'unknown'
+    coreToolsAlwaysInline: readonly string[]
     strictSchemaLimits?: {
       additionalPropertiesFalseRequired?: boolean
       allObjectPropertiesRequired?: boolean
@@ -180,7 +181,8 @@ type ProviderToolProfile = {
 ```ts
 const deepseekOpenAiCompatibleProfile: ProviderToolProfile = {
   providerId: 'deepseek',
-  apiMode: 'openai-compatible',
+  apiMode: 'openai-chat',
+  source: 'builtin',
   toolCalling: {
     supported: true,
     schemaStyle: 'json_schema_function',
@@ -189,6 +191,7 @@ const deepseekOpenAiCompatibleProfile: ProviderToolProfile = {
     supportsParallelCalls: 'unknown',
     supportsStrictSchema: 'beta',
     supportsDeferredToolSearch: false,
+    coreToolsAlwaysInline: ['TodoWrite'],
     strictSchemaLimits: {
       additionalPropertiesFalseRequired: true,
       allObjectPropertiesRequired: true,
@@ -197,6 +200,13 @@ const deepseekOpenAiCompatibleProfile: ProviderToolProfile = {
   },
 }
 ```
+
+第一版代码落点：
+
+- `src/services/llm/types.ts`：定义 `LlmProviderToolProfile`。
+- `src/services/llm/toolProtocolProfile.ts`：内置 profile、默认 profile 和查询 helper。
+- `src/services/llm/protocols/openaiChatCompletionsAdapter.ts`：按 profile 判断工具支持，并继续修复 OpenAI Chat / DeepSeek 的工具结果序列。
+- `scripts/smoke-provider-tool-profile.mjs`：覆盖 DeepSeek、OpenAI-compatible 默认、Anthropic 和 custom 默认行为。
 
 ## 7. Provider Adapter 映射表
 
