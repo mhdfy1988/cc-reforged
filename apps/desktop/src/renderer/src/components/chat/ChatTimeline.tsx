@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AssistantMessage } from './AssistantMessage.js'
 import { ErrorCard } from './ErrorCard.js'
 import { FileCard } from './FileCard.js'
@@ -22,6 +22,7 @@ import type {
   PermissionRespondPayload,
 } from '../../domain/displayTypes.js'
 import type { TodoOverlaySnapshot } from '../../domain/todoEvents.js'
+import { isControlToolName } from '../../domain/toolEvents.js'
 
 export function ChatTimeline(props: {
   activeTurnId: string | null
@@ -29,6 +30,8 @@ export function ChatTimeline(props: {
   events: DisplayEvent[]
   permissions: PermissionCard[]
   todoOverlay: TodoOverlaySnapshot | null
+  onOpenLogs?: () => void
+  onOpenModels?: () => void
   onRespondPermission: (
     permissionRequestId: string,
     behavior: 'allow' | 'deny',
@@ -40,9 +43,22 @@ export function ChatTimeline(props: {
   const shouldAutoFollowRef = useRef(true)
   const lastScrollTopRef = useRef<number | null>(null)
   const [hasNewContentBelow, setHasNewContentBelow] = useState(false)
+  const visibleEvents = props.events.filter(event => !event.timelineHidden)
+  const inlineControlFailureByAssistantId =
+    getInlineControlFailureByAssistantId(visibleEvents, props.events)
+  const inlineControlFailureEventIds = new Set(
+    Array.from(inlineControlFailureByAssistantId.values()).map(
+      event => event.id,
+    ),
+  )
+  const compactCarryoverEventIds = useMemo(
+    () => getCompactCarryoverEventIds(visibleEvents),
+    [visibleEvents],
+  )
   const inlinePermissionIds = getInlinePermissionIds(
-    props.events,
+    visibleEvents,
     props.permissions,
+    props.events,
   )
 
   useLayoutEffect(() => {
@@ -133,14 +149,24 @@ export function ChatTimeline(props: {
       <div className="chat-timeline-frame">
         <section className="chat" onScroll={handleScroll} ref={scrollContainerRef}>
           <div className="chat-content" ref={contentRef}>
-            {props.events.map(event => (
+            {visibleEvents.map(event => (
               <TimelineEvent
                 event={event}
                 key={event.id}
+                inlineControlFailure={
+                  event.type === 'assistant_message'
+                    ? inlineControlFailureByAssistantId.get(event.id)
+                    : undefined
+                }
+                compactCarryover={compactCarryoverEventIds.has(event.id)}
+                inlineControlFailureEventIds={inlineControlFailureEventIds}
                 permission={getInlinePermissionForEvent(
                   event,
                   props.permissions,
+                  props.events,
                 )}
+                onOpenLogs={props.onOpenLogs}
+                onOpenModels={props.onOpenModels}
                 onRespondPermission={props.onRespondPermission}
               />
             ))}
@@ -190,6 +216,11 @@ function scrollToTimelineBottom(
 
 function TimelineEvent(props: {
   event: DisplayEvent
+  onOpenLogs?: () => void
+  onOpenModels?: () => void
+  inlineControlFailure?: DisplayEvent
+  compactCarryover?: boolean
+  inlineControlFailureEventIds: Set<string>
   permission?: PermissionCard
   onRespondPermission: (
     permissionRequestId: string,
@@ -204,11 +235,26 @@ function TimelineEvent(props: {
   }
 
   if (event.type === 'assistant_message') {
-    return <AssistantMessage event={event} />
+    return (
+      <AssistantMessage
+        event={event}
+        inlineControlFailure={props.inlineControlFailure}
+        onOpenLogs={props.onOpenLogs}
+        onOpenModels={props.onOpenModels}
+        permission={props.permission}
+        onRespondPermission={props.onRespondPermission}
+      />
+    )
   }
 
   if (event.type === 'error') {
-    return <ErrorCard event={event} />
+    return (
+      <ErrorCard
+        event={event}
+        onOpenLogs={props.onOpenLogs}
+        onOpenModels={props.onOpenModels}
+      />
+    )
   }
 
   if (event.type === 'thinking_summary') {
@@ -216,6 +262,9 @@ function TimelineEvent(props: {
   }
 
   if (event.type === 'tool_call' || event.type === 'tool_result') {
+    if (props.inlineControlFailureEventIds.has(event.id)) {
+      return null
+    }
     return (
       <ToolCard
         event={event}
@@ -233,16 +282,27 @@ function TimelineEvent(props: {
     return <FileCard event={event} />
   }
 
-  return <SystemNoticeCard event={event} />
+  return (
+    <SystemNoticeCard
+      compactCarryover={props.compactCarryover}
+      event={event}
+    />
+  )
 }
 
 function getInlinePermissionIds(
   events: DisplayEvent[],
   permissions: PermissionCard[],
+  allEvents: DisplayEvent[],
 ): Set<string> {
   const ids = new Set<string>()
-  for (const event of events) {
-    const permission = getInlinePermissionForEvent(event, permissions)
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index]
+    const permission = getInlinePermissionForEvent(
+      event,
+      permissions,
+      allEvents,
+    )
     if (permission) {
       ids.add(permission.permissionRequestId)
     }
@@ -250,10 +310,48 @@ function getInlinePermissionIds(
   return ids
 }
 
+function getInlineControlFailureByAssistantId(
+  events: DisplayEvent[],
+  allEvents: DisplayEvent[],
+): Map<string, DisplayEvent> {
+  const assistantIds = new Set(
+    events
+      .filter(event => event.type === 'assistant_message')
+      .map(event => event.id),
+  )
+  const inlineMap = new Map<string, DisplayEvent>()
+
+  for (const event of events) {
+    if (!isInlineControlFailureEvent(event)) {
+      continue
+    }
+    const anchorAssistantId = resolveControlFailureAnchorAssistantId(
+      event,
+      allEvents,
+    )
+    if (!anchorAssistantId || !assistantIds.has(anchorAssistantId)) {
+      continue
+    }
+    inlineMap.set(anchorAssistantId, event)
+  }
+
+  return inlineMap
+}
+
 function getInlinePermissionForEvent(
   event: DisplayEvent,
   permissions: PermissionCard[],
+  allEvents: DisplayEvent[],
 ): PermissionCard | undefined {
+  const planPermission = getInlinePlanApprovalPermissionForAssistantEvent(
+    event,
+    permissions,
+    allEvents,
+  )
+  if (planPermission) {
+    return planPermission
+  }
+
   const eventToolUseId = getEventToolUseId(event)
   const permissionRequestId = event.toolSnapshot?.permissionRequestId
   if (!eventToolUseId && !permissionRequestId) {
@@ -272,6 +370,183 @@ function getInlinePermissionForEvent(
     }
     return Boolean(eventToolUseId && permission.toolUseId === eventToolUseId)
   })
+}
+
+function getInlinePlanApprovalPermissionForAssistantEvent(
+  event: DisplayEvent,
+  permissions: PermissionCard[],
+  allEvents: DisplayEvent[],
+): PermissionCard | undefined {
+  if (event.type !== 'assistant_message') {
+    return undefined
+  }
+
+  const anchoredCandidates = permissions.filter(permission => {
+    if (!isInlinePlanApprovalPermission(permission)) {
+      return false
+    }
+    const anchorAssistantId = resolvePlanApprovalAnchorAssistantId(
+      permission,
+      allEvents,
+    )
+    return Boolean(anchorAssistantId && anchorAssistantId === event.id)
+  })
+  if (!anchoredCandidates.length) {
+    return undefined
+  }
+
+  return (
+    anchoredCandidates.find(permission => permission.status === 'pending') ??
+    anchoredCandidates[anchoredCandidates.length - 1]
+  )
+}
+
+function resolvePlanApprovalAnchorAssistantId(
+  permission: PermissionCard,
+  allEvents: DisplayEvent[],
+): string | undefined {
+  const turnId =
+    typeof permission.turnId === 'string' && permission.turnId.trim()
+      ? permission.turnId.trim()
+      : undefined
+  const hiddenControlCallIndex = findHiddenControlCallEventIndexForPermission(
+    allEvents,
+    permission,
+    turnId,
+  )
+  if (hiddenControlCallIndex !== -1) {
+    const anchor = findNearestAssistantMessageBeforeIndex(
+      allEvents,
+      hiddenControlCallIndex,
+      turnId,
+    )
+    if (anchor) {
+      return anchor.id
+    }
+  }
+
+  if (turnId) {
+    const fallbackAssistant = findLastAssistantMessageForTurn(allEvents, turnId)
+    if (fallbackAssistant) {
+      return fallbackAssistant.id
+    }
+  }
+
+  const globalFallback = findLastAssistantMessage(allEvents)
+  if (globalFallback) {
+    return globalFallback.id
+  }
+
+  return undefined
+}
+
+function resolveControlFailureAnchorAssistantId(
+  event: DisplayEvent,
+  allEvents: DisplayEvent[],
+): string | undefined {
+  const eventIndex = allEvents.findIndex(candidate => candidate.id === event.id)
+  if (eventIndex === -1) {
+    return undefined
+  }
+
+  const turnId =
+    event.toolSnapshot?.identity?.turnId ?? event.identity?.turnId ?? undefined
+  const nearestAssistant = findNearestAssistantMessageBeforeIndex(
+    allEvents,
+    eventIndex,
+    turnId,
+  )
+  if (nearestAssistant) {
+    return nearestAssistant.id
+  }
+
+  if (turnId) {
+    const fallbackAssistant = findLastAssistantMessageForTurn(allEvents, turnId)
+    if (fallbackAssistant) {
+      return fallbackAssistant.id
+    }
+  }
+
+  const globalFallback = findLastAssistantMessage(allEvents)
+  return globalFallback?.id
+}
+
+function findLastAssistantMessageForTurn(
+  events: DisplayEvent[],
+  turnId: string,
+): DisplayEvent | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.identity?.turnId !== turnId) {
+      continue
+    }
+    if (event.type === 'assistant_message') {
+      return event
+    }
+  }
+  return undefined
+}
+
+function findLastAssistantMessage(events: DisplayEvent[]): DisplayEvent | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.type === 'assistant_message') {
+      return event
+    }
+  }
+  return undefined
+}
+
+function findHiddenControlCallEventIndexForPermission(
+  events: DisplayEvent[],
+  permission: PermissionCard,
+  turnId: string | undefined,
+): number {
+  const normalizedToolUseId =
+    typeof permission.toolUseId === 'string' && permission.toolUseId.trim()
+      ? permission.toolUseId.trim()
+      : undefined
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (
+      event.type !== 'tool_call' ||
+      !event.timelineHidden ||
+      event.toolSnapshot?.kind !== 'call'
+    ) {
+      continue
+    }
+    if (turnId && event.identity?.turnId !== turnId) {
+      continue
+    }
+    if (normalizedToolUseId) {
+      if (getEventToolUseId(event) === normalizedToolUseId) {
+        return index
+      }
+      continue
+    }
+    if (event.toolSnapshot?.name === permission.toolName) {
+      return index
+    }
+  }
+  return -1
+}
+
+function findNearestAssistantMessageBeforeIndex(
+  events: DisplayEvent[],
+  startIndex: number,
+  turnId: string | undefined,
+): DisplayEvent | undefined {
+  for (let index = startIndex - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (turnId && event.identity?.turnId !== turnId) {
+      continue
+    }
+    if (event.type === 'assistant_message') {
+      return event
+    }
+  }
+  return undefined
 }
 
 function getEventToolUseId(event: DisplayEvent): string | undefined {
@@ -301,17 +576,87 @@ function getRawToolUseId(value: unknown): string | undefined {
   return typeof id === 'string' && id.trim() ? id : undefined
 }
 
+function isInlineControlFailureEvent(event: DisplayEvent): boolean {
+  if (event.type !== 'tool_call' && event.type !== 'tool_result') {
+    return false
+  }
+  const snapshot = event.toolSnapshot
+  if (!snapshot) {
+    return false
+  }
+  if (snapshot.status !== 'failed' && snapshot.status !== 'timeout') {
+    return false
+  }
+  return snapshot.category === 'control' || isControlToolName(snapshot.name)
+}
+
 function isInlineToolPermission(permission: PermissionCard): boolean {
   if (
     permission.interactionKind === 'ask_user_question' ||
-    permission.interactionKind === 'plan_approval' ||
+    isInlinePlanApprovalPermission(permission) ||
     permission.interactionKind === 'enter_plan_mode' ||
-    permission.toolName === 'AskUserQuestion' ||
-    permission.toolName === 'ExitPlanMode' ||
-    permission.toolName === 'ExitPlanModeV2' ||
-    permission.toolName === 'EnterPlanMode'
+    permission.toolName === 'AskUserQuestion'
   ) {
     return false
   }
   return Boolean(permission.toolUseId)
+}
+
+function isInlinePlanApprovalPermission(permission: PermissionCard): boolean {
+  return (
+    permission.interactionKind === 'plan_approval' ||
+    permission.toolName === 'ExitPlanMode' ||
+    permission.toolName === 'ExitPlanModeV2'
+  )
+}
+
+function getCompactCarryoverEventIds(events: DisplayEvent[]): Set<string> {
+  const ids = new Set<string>()
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index]
+    if (!isCompactBoundaryNotice(event)) {
+      continue
+    }
+
+    for (let nextIndex = index + 1; nextIndex < events.length; nextIndex += 1) {
+      const nextEvent = events[nextIndex]
+      if (isCompactCarryoverAttachmentEvent(nextEvent)) {
+        ids.add(nextEvent.id)
+        continue
+      }
+      break
+    }
+  }
+  return ids
+}
+
+function isCompactBoundaryNotice(event: DisplayEvent): boolean {
+  if (event.type !== 'system_notice') {
+    return false
+  }
+  const text = event.text.trim().toLowerCase()
+  return text === 'conversation compacted'
+}
+
+function isCompactCarryoverAttachmentEvent(event: DisplayEvent): boolean {
+  if (event.type !== 'system_notice') {
+    return false
+  }
+  if (!event.attachmentSnapshots?.length) {
+    return false
+  }
+  if (
+    event.toolSnapshot ||
+    event.fileSnapshot ||
+    event.referenceSnapshot ||
+    event.attachmentSnapshot
+  ) {
+    return false
+  }
+  return isAttachmentNoticeText(event.text)
+}
+
+function isAttachmentNoticeText(value: string): boolean {
+  const normalized = value.trim()
+  return normalized.startsWith('附件：') || normalized.startsWith('Attachment:')
 }

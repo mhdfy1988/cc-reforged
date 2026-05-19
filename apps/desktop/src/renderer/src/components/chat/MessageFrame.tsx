@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { MessageContent } from './MessageContent.js'
 import { displayEventToChatMessage, type DisplayEvent } from '../../domain/displayEvents.js'
 import type { AttachmentSnapshot } from '../../domain/fileEvents.js'
@@ -6,15 +6,27 @@ import type { AttachmentSnapshot } from '../../domain/fileEvents.js'
 export function MessageFrame(props: {
   label: string
   event: DisplayEvent
+  compactCarryover?: boolean
+  children?: ReactNode
 }) {
   const message = displayEventToChatMessage(props.event)
+  const hideCompactAttachmentNoticeText =
+    Boolean(props.compactCarryover) &&
+    isAttachmentNoticeText(message.text) &&
+    Boolean(props.event.attachmentSnapshots?.length)
 
   return (
     <div className={`message ${message.role} ${message.kind ?? ''}`}>
       <b>{props.label}</b>
       <div className="message-body">
-        <MessageContent message={message} />
-        <MessageAttachmentStrip attachments={props.event.attachmentSnapshots} />
+        {hideCompactAttachmentNoticeText ? null : (
+          <MessageContent message={message} />
+        )}
+        <MessageAttachmentStrip
+          attachments={props.event.attachmentSnapshots}
+          compactCarryover={props.compactCarryover}
+        />
+        {props.children}
       </div>
     </div>
   )
@@ -22,28 +34,71 @@ export function MessageFrame(props: {
 
 export function MessageAttachmentStrip(props: {
   attachments?: readonly AttachmentSnapshot[]
+  compactCarryover?: boolean
 }) {
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [actionState, setActionState] = useState<{
+    id: string
+    action: AttachmentAction
+    label: string
+  } | null>(null)
   const [preview, setPreview] = useState<ImagePreviewState | null>(null)
   if (!props.attachments?.length) {
     return null
   }
 
-  async function copyPath(snapshot: AttachmentSnapshot): Promise<void> {
+  async function runAttachmentAction(
+    snapshot: AttachmentSnapshot,
+    action: AttachmentAction,
+  ): Promise<void> {
     const path = getAttachmentActionPath(snapshot)
-    if (!path) {
+    const localPath = path && !isRemotePath(path) ? path : undefined
+    if (action !== 'copy' && !localPath) {
       return
     }
-    await window.ccr.copyText(path)
-    setCopiedId(snapshot.id)
+    if (action === 'copy' && !path) {
+      return
+    }
+
+    try {
+      if (action === 'open' && localPath) {
+        await window.ccr.openPath(localPath)
+        setActionState({ id: snapshot.id, action, label: '已打开' })
+      }
+      if (action === 'reveal' && localPath) {
+        await window.ccr.showItemInFolder(localPath)
+        setActionState({ id: snapshot.id, action, label: '已定位' })
+      }
+      if (action === 'save' && localPath) {
+        await window.ccr.savePathAs(localPath)
+        setActionState({ id: snapshot.id, action, label: '已另存' })
+      }
+      if (action === 'copy' && path) {
+        await window.ccr.copyText(path)
+        setActionState({ id: snapshot.id, action, label: '已复制' })
+      }
+    } catch (error) {
+      setActionState({
+        id: snapshot.id,
+        action,
+        label: error instanceof Error ? error.message : '操作失败',
+      })
+    }
   }
 
   return (
     <>
       <div className="message-attachments">
+        {props.compactCarryover ? (
+          <div className="message-attachment-context">
+            <strong>压缩恢复附件</strong>
+            <span>这些文件由系统在会话压缩后自动保留，用于延续上下文。</span>
+          </div>
+        ) : null}
         {props.attachments.map(snapshot => {
           const path = getAttachmentDisplayPath(snapshot)
           const actionPath = getAttachmentActionPath(snapshot)
+          const localActionPath =
+            actionPath && !isRemotePath(actionPath) ? actionPath : undefined
           return (
             <div
               className={`message-attachment-chip ${
@@ -59,15 +114,36 @@ export function MessageAttachmentStrip(props: {
                 <strong title={snapshot.name}>{snapshot.name}</strong>
                 <small title={path}>{getAttachmentMeta(snapshot, path)}</small>
               </span>
-              <button
-                className="message-attachment-copy"
-                disabled={!actionPath}
-                onClick={() => void copyPath(snapshot)}
-                title={actionPath ? '复制路径' : '暂无可复制路径'}
-                type="button"
-              >
-                {copiedId === snapshot.id ? '已复制' : '复制'}
-              </button>
+              <span className="message-attachment-actions">
+                <AttachmentActionButton
+                  action="open"
+                  disabled={!localActionPath}
+                  label={getActionButtonLabel(actionState, snapshot.id, 'open', '打开')}
+                  onRun={() => void runAttachmentAction(snapshot, 'open')}
+                  title={localActionPath ? '打开文件' : '暂无可打开路径'}
+                />
+                <AttachmentActionButton
+                  action="reveal"
+                  disabled={!localActionPath}
+                  label={getActionButtonLabel(actionState, snapshot.id, 'reveal', '定位')}
+                  onRun={() => void runAttachmentAction(snapshot, 'reveal')}
+                  title={localActionPath ? '在文件夹中显示' : '暂无可定位路径'}
+                />
+                <AttachmentActionButton
+                  action="save"
+                  disabled={!localActionPath}
+                  label={getActionButtonLabel(actionState, snapshot.id, 'save', '另存')}
+                  onRun={() => void runAttachmentAction(snapshot, 'save')}
+                  title={localActionPath ? '另存为' : '暂无可另存路径'}
+                />
+                <AttachmentActionButton
+                  action="copy"
+                  disabled={!actionPath}
+                  label={getActionButtonLabel(actionState, snapshot.id, 'copy', '复制')}
+                  onRun={() => void runAttachmentAction(snapshot, 'copy')}
+                  title={actionPath ? '复制路径' : '暂无可复制路径'}
+                />
+              </span>
             </div>
           )
         })}
@@ -80,6 +156,37 @@ export function MessageAttachmentStrip(props: {
       ) : null}
     </>
   )
+}
+
+type AttachmentAction = 'open' | 'reveal' | 'save' | 'copy'
+
+function AttachmentActionButton(props: {
+  action: AttachmentAction
+  disabled: boolean
+  label: string
+  onRun: () => void
+  title: string
+}) {
+  return (
+    <button
+      className={`message-attachment-action action-${props.action}`}
+      disabled={props.disabled}
+      onClick={props.onRun}
+      title={props.title}
+      type="button"
+    >
+      {props.label}
+    </button>
+  )
+}
+
+function getActionButtonLabel(
+  state: { id: string; action: AttachmentAction; label: string } | null,
+  id: string,
+  action: AttachmentAction,
+  fallback: string,
+): string {
+  return state?.id === id && state.action === action ? state.label : fallback
 }
 
 type ImagePreviewState = {
@@ -253,6 +360,7 @@ function getAttachmentKindLabel(snapshot: AttachmentSnapshot): string {
 
 function getAttachmentDisplayPath(snapshot: AttachmentSnapshot): string {
   return (
+    snapshot.savedPath ??
     snapshot.workspaceRelativePath ??
     snapshot.path ??
     snapshot.absolutePath ??
@@ -261,6 +369,9 @@ function getAttachmentDisplayPath(snapshot: AttachmentSnapshot): string {
 }
 
 function getAttachmentActionPath(snapshot: AttachmentSnapshot): string | undefined {
+  if (snapshot.savedPath) {
+    return snapshot.savedPath
+  }
   if (snapshot.safety === 'remote') {
     return snapshot.path
   }
@@ -276,13 +387,52 @@ function getAttachmentMeta(
   path: string,
 ): string {
   const parts = [
+    snapshot.source === 'ModelOutput' ? '模型生成' : undefined,
     snapshot.mimeType,
     typeof snapshot.sizeBytes === 'number'
       ? formatBytes(snapshot.sizeBytes)
       : undefined,
+    snapshot.provider,
+    snapshot.model,
+    getOutputLifecycleLabel(snapshot.outputLifecycle),
+    getOutputSafetyLabel(snapshot.outputSafety),
     path !== snapshot.name ? path : undefined,
   ].filter(Boolean)
   return parts.join(' · ')
+}
+
+function getOutputLifecycleLabel(
+  lifecycle: AttachmentSnapshot['outputLifecycle'],
+): string | undefined {
+  switch (lifecycle) {
+    case 'inline':
+      return '内联'
+    case 'referenced':
+      return '引用'
+    case 'temporary':
+      return '临时'
+    case 'persisted':
+      return '已持久化'
+    case 'expired':
+      return '已过期'
+    default:
+      return undefined
+  }
+}
+
+function getOutputSafetyLabel(
+  safety: AttachmentSnapshot['outputSafety'],
+): string | undefined {
+  switch (safety) {
+    case 'trusted':
+      return '已信任'
+    case 'needs_review':
+      return '需确认'
+    case 'blocked':
+      return '已拦截'
+    default:
+      return undefined
+  }
 }
 
 function formatBytes(value: number): string {
@@ -296,4 +446,9 @@ function formatBytes(value: number): string {
     return `${(value / 1024).toFixed(1)} KB`
   }
   return `${(value / 1024 / 1024).toFixed(1)} MB`
+}
+
+function isAttachmentNoticeText(value: string): boolean {
+  const normalized = value.trim()
+  return normalized.startsWith('附件：') || normalized.startsWith('Attachment:')
 }

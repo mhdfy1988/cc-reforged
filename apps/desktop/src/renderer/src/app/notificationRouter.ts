@@ -188,8 +188,18 @@ function formatCompactNotification(params: JsonObject): string {
   const compactBoundaryCount = getNumber(
     metadata?.compactBoundaryCount ?? result?.compactBoundaryCount,
   )
+  const attachmentCount = getNumber(
+    result?.attachmentCount ?? metadata?.attachmentCount,
+  )
   if (messageCount !== undefined) {
-    return `已压缩上下文：当前保留 ${messageCount} 条消息，压缩边界 ${compactBoundaryCount ?? 0} 个。`
+    const attachmentSummary =
+      typeof attachmentCount === 'number' && attachmentCount > 0
+        ? `，并恢复 ${attachmentCount} 个上下文附件`
+        : ''
+    return `已压缩上下文：当前保留 ${messageCount} 条消息，压缩边界 ${compactBoundaryCount ?? 0} 个${attachmentSummary}。`
+  }
+  if (typeof attachmentCount === 'number' && attachmentCount > 0) {
+    return `已压缩上下文，并恢复 ${attachmentCount} 个上下文附件。`
   }
   return '已压缩上下文，运行状态已刷新。'
 }
