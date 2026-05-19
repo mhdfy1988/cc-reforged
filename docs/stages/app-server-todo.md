@@ -140,7 +140,7 @@
    - 目标：不急着新增 Gateway / 其他 provider，先把 Codex OAuth、DeepSeek、MiniMax、Kimi、GLM 这些当前可用 provider 做到“能稳定日常使用”。
    - Goal：[2026-05-19 STD-PROVIDER-02 已接 provider 成熟化与真实使用闭环](../goals/2026-05-19-std-provider-02-provider-maturity.md)
    - 验收：为每个已接 provider 建立成熟度矩阵，覆盖配置档案、凭据、模型目录、文本、stream、工具、普通会话、错误快照、Desktop 展示、真实 probe 记录和文档；没有 API Key 的项必须标明是未验证而不是已完成。
-   - 当前状态：已补当前 provider 多模态能力初判和正式版目标 provider 成熟度总表；GLM 第一版按 `glm-api/glm-5.1` 最新文本主模型 + `glm-api/glm-5v-turbo` 多模态输入模型 + `glm-api/glm-image` 图片生成模型记录，其中 `glm-5v-turbo` 已进入文本+图片+视频能力目录，`glm-image` 已进入文本生图目录并接入 `/images/generations`，官方文件输入先标 pending。下一步补真实 probe 入口和普通会话 E2E。
+   - 当前状态：已补当前 provider 多模态能力初判和正式版目标 provider 成熟度总表；GLM 第一版按 `glm-api/glm-5.1` 最新文本主模型 + `glm-api/glm-4.7` 资源包文本模型 + `glm-api/glm-4.6v` 资源包多模态模型 + `glm-api/glm-4.5-air` 资源包轻量文本模型 + `glm-api/glm-5v-turbo` 多模态输入模型 + `glm-api/glm-image` 图片生成模型记录，其中 `glm-4.6v` / `glm-5v-turbo` 已进入文本+图片+视频能力目录，`glm-image` 已进入文本生图目录并接入 `/images/generations`，官方文件输入先标 pending。下一步补真实 probe 入口和普通会话 E2E。
 
 
 ## 归档索引

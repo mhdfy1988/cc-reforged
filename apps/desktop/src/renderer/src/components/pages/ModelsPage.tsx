@@ -914,8 +914,28 @@ export function ModelsPage(props: {
                 <dd>{effectiveAvailability?.networkChecked ? '已联网检测' : '本地判断'}</dd>
               </div>
               <div>
-                <dt>能力</dt>
-                <dd>{formatCapabilities(selectedProvider)}</dd>
+                <dt>Provider 声明</dt>
+                <dd>{formatProviderCapabilities(selectedProvider)}</dd>
+              </div>
+              <div>
+                <dt>当前模型能力</dt>
+                <dd>
+                  {formatModelCapabilities(
+                    effectiveAvailability?.modelCapabilities ??
+                      selectedModel?.modelCapabilities,
+                    selectedModel,
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>能力来源</dt>
+                <dd>
+                  {formatCapabilitySource(
+                    effectiveAvailability?.modelCapabilities ??
+                      selectedModel?.modelCapabilities,
+                    effectiveAvailability,
+                  )}
+                </dd>
               </div>
               <div>
                 <dt>当前模型</dt>
@@ -1178,11 +1198,58 @@ function getCapabilityBadges(provider: LlmModelProviderCatalog | undefined) {
   ]
 }
 
-function formatCapabilities(provider: LlmModelProviderCatalog | undefined): string {
+function formatProviderCapabilities(provider: LlmModelProviderCatalog | undefined): string {
   const enabled = getCapabilityBadges(provider)
     .filter(item => item.enabled)
     .map(item => item.label)
   return enabled.length > 0 ? enabled.join('、') : '暂无声明'
+}
+
+function formatModelCapabilities(
+  capabilities: LlmModelCatalogEntry['modelCapabilities'] | undefined,
+  model: LlmModelCatalogEntry | undefined,
+): string {
+  const input = capabilities?.inputModalities?.length
+    ? capabilities.inputModalities.join('+')
+    : model?.inputModalities?.length
+      ? model.inputModalities.join('+')
+      : '未知'
+  const output = capabilities?.outputModalities?.length
+    ? capabilities.outputModalities.join('+')
+    : 'text'
+  const flags = [
+    (capabilities?.tools ?? model?.supportsTools) ? '工具' : null,
+    model?.supportsReasoning ? '推理' : null,
+    capabilities?.structuredOutput ? '结构化输出' : null,
+  ].filter((item): item is string => Boolean(item))
+  return [
+    `输入 ${input}`,
+    `输出 ${output}`,
+    ...(flags.length > 0 ? flags : ['暂无额外声明']),
+  ].join('、')
+}
+
+function formatCapabilitySource(
+  capabilities: LlmModelCatalogEntry['modelCapabilities'] | undefined,
+  availability: LlmModelAvailability | null,
+): string {
+  const checked = availability?.networkChecked ? '已联网检测' : '本地判断'
+  if (!capabilities) {
+    return `${checked} / 默认推断`
+  }
+  return `${checked} / ${getCapabilitySourceText(capabilities.source)}`
+}
+
+function getCapabilitySourceText(
+  source: NonNullable<LlmModelCatalogEntry['modelCapabilities']>['source'],
+): string {
+  if (source === 'builtin') {
+    return '内置模型目录'
+  }
+  if (source === 'profile_override') {
+    return 'Profile 覆盖'
+  }
+  return '默认纯文本推断'
 }
 
 function formatTokenCount(tokens: number | undefined): string {

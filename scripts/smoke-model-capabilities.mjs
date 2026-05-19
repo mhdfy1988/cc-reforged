@@ -237,6 +237,40 @@ try {
   );
   assert.deepEqual(glmApiTextCapabilities.inputModalities, ['text']);
 
+  const glm47Catalog = getLlmModelCatalogEntry({
+    providerId: 'glm-api',
+    model: 'glm-4.7',
+    providerDefinition: glmApiDefinition,
+  });
+  const glm47Capabilities = resolveLlmModelCapabilities({
+    providerId: 'glm-api',
+    apiMode: 'openai-chat',
+    model: 'glm-4.7',
+    providerCapabilities: glmApiDefinition.capabilities,
+    catalogEntry: glm47Catalog,
+  });
+  assert.equal(glm47Catalog.metadata.resourcePackage, 'glm-4.7');
+  assert.equal(glm47Catalog.metadata.protocol, 'openai-chat');
+  assert.deepEqual(glm47Capabilities.inputModalities, ['text']);
+  assert.equal(glm47Capabilities.tools, true);
+
+  const glm45AirCatalog = getLlmModelCatalogEntry({
+    providerId: 'glm-api',
+    model: 'glm-4.5-air',
+    providerDefinition: glmApiDefinition,
+  });
+  const glm45AirCapabilities = resolveLlmModelCapabilities({
+    providerId: 'glm-api',
+    apiMode: 'openai-chat',
+    model: 'glm-4.5-air',
+    providerCapabilities: glmApiDefinition.capabilities,
+    catalogEntry: glm45AirCatalog,
+  });
+  assert.equal(glm45AirCatalog.metadata.resourcePackage, 'glm-4.5-air');
+  assert.equal(glm45AirCatalog.metadata.protocol, 'openai-chat');
+  assert.deepEqual(glm45AirCapabilities.inputModalities, ['text']);
+  assert.equal(glm45AirCapabilities.tools, true);
+
   const glmImageCatalog = getLlmModelCatalogEntry({
     providerId: 'glm-api',
     model: 'glm-image',
@@ -273,6 +307,23 @@ try {
   assert.equal(glmVisionCapabilities.inputModalities.includes('video'), true);
   assert.equal(glmVisionCatalog.metadata.officialFileInput, true);
   assert.equal(glmVisionCatalog.metadata.ccrFileInput, 'pending-provider-file-upload-or-url-only-policy');
+
+  const glm46vCatalog = getLlmModelCatalogEntry({
+    providerId: 'glm-api',
+    model: 'glm-4.6v',
+    providerDefinition: glmApiDefinition,
+  });
+  const glm46vCapabilities = resolveLlmModelCapabilities({
+    providerId: 'glm-api',
+    apiMode: 'openai-chat',
+    model: 'glm-4.6v',
+    providerCapabilities: glmApiDefinition.capabilities,
+    catalogEntry: glm46vCatalog,
+  });
+  assert.equal(glm46vCatalog.metadata.resourcePackage, 'glm-4.6v');
+  assert.equal(glm46vCatalog.metadata.officialFileInput, true);
+  assert.equal(glm46vCapabilities.inputModalities.includes('image'), true);
+  assert.equal(glm46vCapabilities.inputModalities.includes('video'), true);
 
   const glmCodingCatalog = getLlmModelCatalogEntry({
     providerId: 'glm-coding',
@@ -364,8 +415,11 @@ try {
         kimiApiCapabilities,
         kimiCodeCapabilities,
         glmApiTextCapabilities,
+        glm47Capabilities,
+        glm45AirCapabilities,
         glmImageCapabilities,
         glmVisionCapabilities,
+        glm46vCapabilities,
         glmCodingCatalog,
         textProfileCapabilities,
         visionProfileCapabilities,

@@ -9,6 +9,9 @@ import {
   OpenAiImageGenerationAdapter,
 } from '../protocols/openaiImageGenerationAdapter.js'
 import type {
+  LlmGenerateEvent,
+  LlmGenerateRequest,
+  LlmGenerateResponse,
   LlmImageGenerationRequest,
   LlmImageGenerationResponse,
 } from '../types.js'
@@ -32,6 +35,8 @@ const GLM_API_SPEC: OpenAiChatCompatibleProviderSpec = {
   baseUrlEnvNames: ['CCR_GLM_API_BASE_URL', 'GLM_API_BASE_URL'],
 }
 
+const GLM_IMAGE_GENERATION_MODELS = new Set(['glm-image'])
+
 const GLM_CODING_SPEC: OpenAiChatCompatibleProviderSpec = {
   providerId: 'glm-coding',
   providerLabel: 'GLM Coding Plan',
@@ -53,6 +58,20 @@ export class GlmApiProvider extends OpenAiChatCompatibleProvider {
   constructor(options: OpenAiChatCompatibleProviderOptions = {}) {
     super(GLM_API_SPEC, options)
     this.#options = options
+  }
+
+  async generate(request: LlmGenerateRequest): Promise<LlmGenerateResponse> {
+    if (isGlmImageGenerationModel(request.model)) {
+      throw createGlmImageChatRouteError()
+    }
+    return super.generate(request)
+  }
+
+  stream(request: LlmGenerateRequest): AsyncIterable<LlmGenerateEvent> {
+    if (isGlmImageGenerationModel(request.model)) {
+      throw createGlmImageChatRouteError()
+    }
+    return super.stream(request)
   }
 
   async generateImage(
@@ -138,4 +157,14 @@ function getDefaultImageModelFromMetadata(
 ): string | undefined {
   const value = metadata?.defaultImageModel
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function isGlmImageGenerationModel(model: string | undefined): boolean {
+  return GLM_IMAGE_GENERATION_MODELS.has(model?.trim().toLowerCase() ?? '')
+}
+
+function createGlmImageChatRouteError(): Error {
+  return new Error(
+    'GLM-Image only supports the image generation route. Use a GLM API text model as the current model; CCR will call glm-image through /images/generations when an image-generation prompt is detected.',
+  )
 }

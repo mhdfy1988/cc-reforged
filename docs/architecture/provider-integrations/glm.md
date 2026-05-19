@@ -22,6 +22,9 @@ GLM 在 CCR 里不能只做成一个 provider。官方文档明确区分通用 A
 
 - 智谱开放平台 API 使用概述：<https://docs.bigmodel.cn/cn/api/introduction>
 - GLM-5V-Turbo 模型说明：<https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5v-turbo>
+- GLM-4.7 模型说明：<https://docs.z.ai/guides/llm/glm-4.7>
+- GLM-4.6V 模型说明：<https://docs.z.ai/guides/vlm/glm-4.6v>
+- GLM-4.5 系列模型说明：<https://docs.z.ai/guides/llm/glm-4.5>
 - GLM-Image 模型说明：<https://docs.bigmodel.cn/cn/guide/models/image-generation/glm-image>
 - 图像生成 API：<https://docs.bigmodel.cn/api-reference/%E6%A8%A1%E5%9E%8B-api/%E5%9B%BE%E5%83%8F%E7%94%9F%E6%88%90>
 - GLM Coding Plan 接入工具说明：<https://docs.bigmodel.cn/cn/coding-plan/tool/others>
@@ -44,6 +47,9 @@ GLM 在 CCR 里不能只做成一个 provider。官方文档明确区分通用 A
 | Provider | 模型 ID | 模型定位 | CCR 输入能力 |
 | --- | --- | --- | --- |
 | `glm-api` | `glm-5.1` | GLM API 最新文本 / 推理主模型 | `text` |
+| `glm-api` | `glm-4.7` | GLM API 文本 / 推理模型，适配 GLM-4.7 资源包 | `text` |
+| `glm-api` | `glm-4.6v` | GLM API 多模态理解模型，适配 GLM-4.6V 资源包 | `text + image + video`，官方 `file` 输入待 CCR 后续专项 |
+| `glm-api` | `glm-4.5-air` | GLM API 轻量文本 / 推理模型，适配 GLM-4.5-Air 资源包 | `text` |
 | `glm-api` | `glm-5v-turbo` | GLM API 多模态理解模型 | `text + image + video`，官方 `file` 输入待 CCR 后续专项 |
 | `glm-api` | `glm-image` | GLM API 图像生成模型 | `text -> image` |
 | `glm-coding` | `glm-5.1` | GLM Coding Plan 文本主模型 | `text` |
@@ -152,6 +158,18 @@ Core LlmRuntime
 -> https://open.bigmodel.cn/api/paas/v4/chat/completions
    或 https://open.bigmodel.cn/api/coding/paas/v4/chat/completions
 ```
+
+图片生成链路单独走同一个 `glm-api` provider 下的图像接口，不走聊天流式接口：
+
+```text
+Desktop 生图意图 / App Server imageGeneration metadata
+-> Core ImageGenerationTurnRunner
+-> LlmRuntime.generateImage(provider: glm-api, model: glm-image)
+-> GlmApiProvider.generateImage
+-> https://open.bigmodel.cn/api/paas/v4/images/generations
+```
+
+因此 `glm-image` 只作为 `glm-api` 的生成图片子能力使用。当前聊天模型应选择 `glm-5.1`、`glm-4.7`、`glm-4.6v`、`glm-4.5-air` 或 `glm-5v-turbo`；当用户触发生图意图时，CCR 会在同一供应商和同一 Profile 凭据下调用 `glm-image`。如果 `glm-image` 被误送到普通 chat / stream 路径，provider 会在本地拦截并提示改走图片生成链路，避免请求 GLM 不支持的 SSE chat 方式。
 
 Provider 壳第一版只保留供应商差异：
 

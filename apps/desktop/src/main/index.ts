@@ -1356,8 +1356,9 @@ function extractImageGenerationPrompt(text: string): string | undefined {
   }
   const patterns = [
     /^\/(?:image|imagine)\s+(.+)$/iu,
-    /^(?:生成图片|生成一张图|画一张|帮我画|请画)\s*[:：]\s*(.+)$/iu,
-    /^(?:draw|generate image)\s*[:：]\s*(.+)$/iu,
+    /^(?:帮我|请|给我)?(?:生成|创建|做)(?:一张|一个|一幅)?(?:图片|图像|图|画面|插画|海报|照片)\s*[:：]?\s*(.+)$/iu,
+    /^(?:帮我|请|给我)?(?:画|绘制)(?:一张|一个|一幅)?(?:图片|图像|图|画面|插画|海报|照片)?\s*[:：]?\s*(.+)$/iu,
+    /^(?:draw|generate image)\s*[:：]?\s*(.+)$/iu,
   ]
   for (const pattern of patterns) {
     const match = normalized.match(pattern)

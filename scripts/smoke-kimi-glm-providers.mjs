@@ -28,6 +28,7 @@ const PROVIDERS = {
   'glm-api': {
     Provider: GlmApiProvider,
     model: 'glm-5.1',
+    models: ['glm-4.7', 'glm-4.6v', 'glm-4.5-air', 'glm-5v-turbo', 'glm-image'],
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     envNames: [
       'CCR_GLM_API_KEY',
@@ -358,6 +359,43 @@ async function smokeProvider(providerId, settings) {
     assert.equal(imageResult.output[0].source.kind, 'url')
     assert.equal(imageResult.output[0].outputId, 'out_glm_image')
     assert.equal(imageResult.generatedArtifacts.length, 0)
+
+    await assert.rejects(
+      () =>
+        provider.generate({
+          provider: providerId,
+          profileId: `${providerId}-secondary`,
+          model: 'glm-image',
+          messages: [
+            {
+              role: 'user',
+              parts: [{ type: 'text', text: 'hello from chat path' }],
+            },
+          ],
+        }),
+      /GLM-Image only supports the image generation route/,
+    )
+    assert.equal(requests.length, 3)
+
+    await assert.rejects(
+      async () => {
+        for await (const _event of provider.stream({
+          provider: providerId,
+          profileId: `${providerId}-secondary`,
+          model: 'glm-image',
+          messages: [
+            {
+              role: 'user',
+              parts: [{ type: 'text', text: 'hello from stream path' }],
+            },
+          ],
+        })) {
+          // No event should be yielded for the guarded chat route.
+        }
+      },
+      /GLM-Image only supports the image generation route/,
+    )
+    assert.equal(requests.length, 3)
   }
 
   return {
@@ -580,6 +618,7 @@ function createProfile(providerId, settings, suffix) {
     models: {
       source: 'mixed',
       default: settings.model,
+      include: settings.models ?? [],
     },
   }
 }

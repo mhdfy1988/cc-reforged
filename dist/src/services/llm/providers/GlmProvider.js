@@ -15,6 +15,7 @@ const GLM_API_SPEC = {
     ],
     baseUrlEnvNames: ['CCR_GLM_API_BASE_URL', 'GLM_API_BASE_URL'],
 };
+const GLM_IMAGE_GENERATION_MODELS = new Set(['glm-image']);
 const GLM_CODING_SPEC = {
     providerId: 'glm-coding',
     providerLabel: 'GLM Coding Plan',
@@ -33,6 +34,18 @@ export class GlmApiProvider extends OpenAiChatCompatibleProvider {
     constructor(options = {}) {
         super(GLM_API_SPEC, options);
         this.#options = options;
+    }
+    async generate(request) {
+        if (isGlmImageGenerationModel(request.model)) {
+            throw createGlmImageChatRouteError();
+        }
+        return super.generate(request);
+    }
+    stream(request) {
+        if (isGlmImageGenerationModel(request.model)) {
+            throw createGlmImageChatRouteError();
+        }
+        return super.stream(request);
     }
     async generateImage(request) {
         const connection = resolveGlmApiConnection(request.profileId, this.#options);
@@ -95,5 +108,11 @@ function getFirstEnvironmentValue(names) {
 function getDefaultImageModelFromMetadata(metadata) {
     const value = metadata?.defaultImageModel;
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+function isGlmImageGenerationModel(model) {
+    return GLM_IMAGE_GENERATION_MODELS.has(model?.trim().toLowerCase() ?? '');
+}
+function createGlmImageChatRouteError() {
+    return new Error('GLM-Image only supports the image generation route. Use a GLM API text model as the current model; CCR will call glm-image through /images/generations when an image-generation prompt is detected.');
 }
 //# sourceMappingURL=GlmProvider.js.map
