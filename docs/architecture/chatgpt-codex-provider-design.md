@@ -2,7 +2,7 @@
 
 > 状态：历史方案，已被 `builtin-llm-runtime-design.md` 取代。
 >
-> 这份文档保留外部 Anthropic 兼容网关的过渡思路，仅作为背景参考；当前主线不再采用“前台 Claude 模型名、后台 Codex 模型映射”的长期方案。正式实施方案见 `docs/stages/builtin-llm-runtime-design.md`。
+> 这份文档保留外部 Anthropic 兼容网关的过渡思路，仅作为背景参考；当前主线不再采用“前台 Claude 模型名、后台 Codex 模型映射”的长期方案。正式实施方案见 [内置通用 LLM Runtime 设计方案](./builtin-llm-runtime-design.md)。
 
 ## 目标
 

@@ -92,7 +92,28 @@
 5. token 写入 `llm.credentials.local.json` 的 `profileCredentials[profileId]`。
 6. 后续请求前如果 access token 临近过期，自动用 refresh token 刷新并写回同一个 Profile 凭据槽。
 
+## OAuth 登录链路护栏
+
+`CodexOAuthSession` 是登录与凭据生命周期链路，不是普通 provider 请求链路。它负责拿授权码、换 token、刷新 token、写入凭据文件。这里的行为一旦坏掉，表现会是“浏览器回调页显示成功，但 token 没写入文件，后续测试继续使用旧 refresh token”。
+
+硬性边界：
+
+- 浏览器回调成功只代表本机收到了 authorization code，不代表 token exchange 成功，也不代表 `llm.credentials.local.json` 已写入。
+- `exchangeAuthorizationCode(...)` 和 `refreshCredential(...)` 不得因为 provider 网络统一化、probe、stream、图片生成或普通模型请求改造而加入 `configureGlobalFetchDispatcher()`、全局 undici dispatcher、provider 级 proxy/retry 包装。
+- 如果确实要改 OAuth token exchange / refresh，只能以“修 OAuth 登录链路”为明确目标，并先对照官方流程、当前成熟实现和真实 payload。
+- API Key provider 的网络策略和 Codex OAuth 登录链路必须分开治理；不要把 API Key provider 的 fetch/proxy 方案搬到 OAuth token endpoint。
+
+回归要求：
+
+1. 跑 `npm.cmd run smoke:codex-oauth-session`。
+2. 跑 `npm.cmd run smoke:codex-oauth-provider`。
+3. 启动 Desktop 开发版，走真实浏览器登录。
+4. 确认目标 profile 在 `llm.credentials.local.json` 中的 OAuth 凭据实际写入或更新时间发生变化。
+5. 如果浏览器页显示成功但文件未变化，优先排查 token exchange / saveCredential，不要先改 UI 错误展示。
+
 ## 请求链路
+
+文本会话链路：
 
 ```text
 Core LlmRuntime
@@ -109,6 +130,52 @@ Core LlmRuntime
 - `assistant` 支持 text、thinking、tool_call。
 - `tool` 消息转换成 toolResult。
 - 流式事件归一化回 CCR 的 `thinking_*`、`content_part`、`response_complete`。
+
+## 图片生成链路
+
+Codex OAuth 图片生成不是 OpenAI API Key 的 `/images/generations`，也不是把 `gpt-5.5` 当成普通图片模型直接调用。按 Codex 源码口径，它是 Responses 请求里的 hosted tool：
+
+```json
+{
+  "model": "gpt-5.5",
+  "stream": true,
+  "tools": [
+    {
+      "type": "image_generation",
+      "output_format": "png"
+    }
+  ]
+}
+```
+
+CCR 第一版实现：
+
+```text
+Core LlmRuntime.generateImage(...)
+-> CodexOAuthProvider.generateImage(...)
+-> CodexOAuthSession.getValidCredential()
+-> CodexOAuthImageGenerationAdapter
+-> OpenAiResponsesHostedImageGenerationAdapter
+-> POST https://chatgpt.com/backend-api/codex/responses
+-> response.output_item.done(item.type = image_generation_call)
+-> normalizeOpenAiImageGenerationCall(...)
+-> normalizeGeneratedImageOutputs(...)
+-> CcrImageContentBlock + CcrGeneratedArtifactSnapshot
+```
+
+认证要求：
+
+- 使用 Codex OAuth access token。
+- 请求头必须带 `chatgpt-account-id`，来自 OAuth 凭据里的 `accountId`。
+- 请求头使用 `OpenAI-Beta: responses=experimental`，并请求 `text/event-stream`。
+
+边界说明：
+
+- 第一版只接文本生图输出。
+- `size` / `quality` 这类 OpenAI Images API 参数不透传到 Codex hosted tool；Codex 源码当前稳定暴露的是 `output_format`。
+- 返回的 `image_generation_call.result` 只在 provider 边界用于落盘，不进入 Desktop raw response 或历史恢复 payload。
+- 真实联网生成仍属于单独 probe，不放入默认 smoke。
+- 底层解析、SSE / JSON 兼容、`image_generation_call` 归一化和落盘逻辑复用 `OpenAiResponsesHostedImageGenerationAdapter`；Codex 专属部分只保留 OAuth header、`/codex/responses` URL 和 Codex 请求体差异。
 
 ## 环境变量
 
@@ -136,6 +203,9 @@ OAuth endpoint 覆盖：
 - 默认配置：`src/services/llm/llmConfig.ts`
 - 模型目录：`src/services/llm/modelCatalog.ts`
 - 供应商壳：`src/services/llm/providers/CodexOAuthProvider.ts`
+- 图片生成适配器：`src/services/llm/protocols/codexOAuthImageGenerationAdapter.ts`
+- Responses hosted tool 通用适配器：`src/services/llm/protocols/openaiResponsesHostedImageGenerationAdapter.ts`
+- 图片输出归一化：`src/services/llm/protocols/generatedImageOutputAdapter.ts`
 - OAuth 会话：`src/services/llm/sessions/CodexOAuthSession.ts`
 - 默认会话工厂：`src/services/llm/sessions/defaultCodexOAuthSession.ts`
 - 凭据存储：`src/services/llm/providerCredentials.ts`
@@ -146,6 +216,7 @@ OAuth endpoint 覆盖：
 npm.cmd run build -- --pretty false
 npm.cmd run smoke:codex-oauth-session
 npm.cmd run smoke:codex-oauth-provider
+npm.cmd run smoke:generated-output-provider
 ```
 
 验证内容：
@@ -156,6 +227,8 @@ npm.cmd run smoke:codex-oauth-provider
 - `CodexOAuthProvider` 能把消息、thinking、tool_call、tool_result 和 usage 归一化。
 - `CodexOAuthProvider` 已覆盖 `gpt-5.5` 文本 + 图片用户输入映射；`gpt-5.4` / `gpt-5.4-mini` 仍按文本能力处理，避免未验证模型误收图片。
 - 流式事件能转换成 CCR 统一事件。
+- `CodexOAuthProvider.generateImage(...)` 会发到 `/codex/responses`，带 OAuth / account header，并使用 hosted `image_generation` 工具。
+- Codex 图片生成结果会落到 `generated_outputs/<sessionId>/<outputId>.png`，Desktop 和恢复链路只消费 `savedPath` 等轻量字段。
 
 ## 后续
 

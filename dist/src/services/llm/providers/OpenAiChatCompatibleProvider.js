@@ -1,0 +1,85 @@
+import { getLlmProfileForProvider, getLlmProviderConfig, loadLlmConfig, } from '../llmConfig.js';
+import { getLlmProviderApiKey } from '../providerCredentials.js';
+import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js';
+import { OpenAiChatCompletionsAdapter, } from '../protocols/openaiChatCompletionsAdapter.js';
+export class OpenAiChatCompatibleProvider {
+    name;
+    definition;
+    supportsStreaming = true;
+    #spec;
+    #options;
+    constructor(spec, options = {}) {
+        this.name = spec.providerId;
+        this.definition = getBuiltinLlmProviderDefinition(spec.providerId);
+        this.#spec = spec;
+        this.#options = options;
+    }
+    async generate(request) {
+        return this.#createAdapter(request).generate(request);
+    }
+    stream(request) {
+        return this.#createAdapter(request).stream(request);
+    }
+    #createAdapter(request) {
+        const resolvedConfig = loadLlmConfig();
+        const config = getLlmProviderConfig(this.name, resolvedConfig);
+        const profile = getProfileForRequest(this.name, request.profileId, resolvedConfig);
+        const credential = getLlmProviderApiKey({
+            provider: this.name,
+            profileId: profile?.id,
+            envNames: this.#spec.apiKeyEnvNames,
+        });
+        const apiKey = this.#options.apiKey?.trim() || credential.apiKey;
+        const baseUrl = this.#options.baseUrl ||
+            getFirstEnvironmentValue(this.#spec.baseUrlEnvNames) ||
+            profile?.baseUrl ||
+            config?.baseUrl ||
+            this.#spec.defaultBaseUrl;
+        const defaultModel = this.#options.defaultModel?.trim() ||
+            profile?.defaultModel ||
+            config?.defaultModel ||
+            this.#spec.defaultModel;
+        const defaultReasoningEffort = this.#options.defaultReasoningEffort ||
+            normalizeReasoningEffort(config?.reasoningEffort) ||
+            this.#spec.defaultReasoningEffort;
+        return new OpenAiChatCompletionsAdapter({
+            providerId: this.name,
+            providerLabel: this.#spec.providerLabel,
+            apiKey,
+            baseUrl,
+            defaultModel,
+            defaultReasoningEffort,
+            outputTokenParam: this.#spec.outputTokenParam,
+            outputTokenLimit: this.#spec.outputTokenLimit,
+            includeTools: this.#spec.includeTools,
+            includeStreamUsage: this.#spec.includeStreamUsage,
+            mergeSystemMessages: this.#spec.mergeSystemMessages,
+            missingApiKeyMessage: this.#spec.missingApiKeyMessage ??
+                `${this.#spec.providerLabel} API key is missing. Set one of ${this.#spec.apiKeyEnvNames.join(', ')}.`,
+            fetchImpl: this.#options.fetchImpl,
+            resolveTemperature: this.#spec.resolveTemperature,
+            resolveThinking: this.#spec.resolveThinking,
+        });
+    }
+}
+function getProfileForRequest(providerId, profileId, config) {
+    const normalizedProfileId = profileId?.trim();
+    if (normalizedProfileId) {
+        const profile = config.profiles[normalizedProfileId];
+        return profile?.providerType === providerId ? profile : undefined;
+    }
+    return getLlmProfileForProvider(providerId, config);
+}
+function getFirstEnvironmentValue(names) {
+    for (const name of names) {
+        const value = process.env[name]?.trim();
+        if (value) {
+            return value;
+        }
+    }
+    return undefined;
+}
+function normalizeReasoningEffort(value) {
+    return value === 'high' ? 'high' : undefined;
+}
+//# sourceMappingURL=OpenAiChatCompatibleProvider.js.map

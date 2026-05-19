@@ -21,6 +21,7 @@ export type ToolErrorClass =
   | 'command_not_found'
   | 'shell_unavailable'
   | 'path_not_found'
+  | 'task_not_found'
   | 'file_too_large'
   | 'mcp_unavailable'
   | 'browser_unavailable'
@@ -102,11 +103,12 @@ export function extractToolSnapshotFromBlocks(
       const resultText = stringifyToolResult(block.content)
       const category = classifyToolCategory(getToolName(block))
       const isError = Boolean(block.isError) || isFailureStatus(statusText)
-      const errorClass = isError
+      const isMissingTaskOutput = isTaskNotFoundToolResult(resultText)
+      const errorClass = isError || isMissingTaskOutput
         ? classifyToolError(resultText, category)
         : undefined
       const status = normalizeToolResultStatus(
-        isError,
+        isError && !isMissingTaskOutput,
         statusText,
         resultText,
         errorClass,
@@ -118,11 +120,13 @@ export function extractToolSnapshotFromBlocks(
         category,
         status,
         statusLabel: getToolStatusLabel(status),
-        summary: status === 'completed' ? '工具执行成功' : '工具执行失败',
+        summary: isMissingTaskOutput
+          ? '任务不存在，可能是模型误调用'
+          : status === 'completed' ? '工具执行成功' : '工具执行失败',
         identity,
         result: block.content,
         errorClass,
-        errorMessage: errorClass ? resultText : undefined,
+        errorMessage: isError && errorClass ? resultText : undefined,
         actionableHint: getActionableHint(errorClass),
         raw: block,
       }
@@ -248,7 +252,13 @@ function getToolName(block: JsonObject): string {
 }
 
 export function isControlToolName(name: string): boolean {
-  return name === 'AskUserQuestion' || name === 'TodoWrite'
+  return (
+    name === 'AskUserQuestion' ||
+    name === 'TodoWrite' ||
+    name === 'EnterPlanMode' ||
+    name === 'ExitPlanMode' ||
+    name === 'ExitPlanModeV2'
+  )
 }
 
 export function isControlToolInvocation(
@@ -269,7 +279,13 @@ export function isControlToolInvocation(
   }
 
   const searchableText = `${name} ${stringifyControlToolInput(input)}`.toLowerCase()
-  return ['todowrite', 'askuserquestion'].some(toolName =>
+  return [
+    'todowrite',
+    'askuserquestion',
+    'enterplanmode',
+    'exitplanmode',
+    'exitplanmodev2',
+  ].some(toolName =>
     searchableText.includes(toolName.toLowerCase()),
   )
 }
@@ -561,6 +577,12 @@ function classifyToolError(
     return 'path_not_found'
   }
   if (
+    text.includes('no task found with id') ||
+    text.includes('<retrieval_status>not_found</retrieval_status>')
+  ) {
+    return 'task_not_found'
+  }
+  if (
     category === 'file' &&
     (text.includes('exceeds maximum allowed size') ||
       text.includes('exceeds maximum allowed tokens')) &&
@@ -610,6 +632,8 @@ export function getActionableHint(errorClass?: ToolErrorClass): string | undefin
       return '命令或工具依赖不存在。请确认命令/PATH 是否可用，或检查打包产物里的工具二进制是否存在。'
     case 'path_not_found':
       return '目标路径不存在。请先确认工作区、相对路径和目录是否正确。'
+    case 'task_not_found':
+      return '任务不存在或已清理。这通常是模型误用了 TaskOutput：只能使用后台任务返回的真实 task_id，不能自己编。'
     case 'file_too_large':
       return '文件超过单次读取上限。请改用 offset/limit 分段读取，或先搜索关键词定位目标内容。'
     case 'permission_denied':
@@ -621,10 +645,18 @@ export function getActionableHint(errorClass?: ToolErrorClass): string | undefin
     case 'timeout':
       return '工具执行超时。可以缩小任务范围、增加超时时间或分步执行。'
     case 'unknown_failure':
-      return '工具执行失败。请展开详情查看原始错误。'
+      return '工具执行失败，原始错误已在卡片结果中展示。'
     default:
       return undefined
   }
+}
+
+function isTaskNotFoundToolResult(text: string): boolean {
+  const normalized = text.toLowerCase()
+  return (
+    normalized.includes('no task found with id') ||
+    normalized.includes('<retrieval_status>not_found</retrieval_status>')
+  )
 }
 
 export function getToolStatusLabel(status: string): string {

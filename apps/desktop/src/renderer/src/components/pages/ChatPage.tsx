@@ -43,6 +43,8 @@ export function ChatPage(props: {
   onHistoryQueryChange: (query: string) => void
   onHistoryReload: () => void
   onInterrupt: () => void
+  onOpenLogs?: () => void
+  onOpenModels?: () => void
   onPrepareAttachments: (
     attachments: ComposerPrepareAttachmentInput[],
   ) => Promise<ComposerPreparedAttachment[]>
@@ -122,6 +124,8 @@ export function ChatPage(props: {
           events={props.events}
           permissions={props.permissions}
           todoOverlay={props.todoOverlay}
+          onOpenLogs={props.onOpenLogs}
+          onOpenModels={props.onOpenModels}
           onRespondPermission={props.onRespondPermission}
         />
       </section>

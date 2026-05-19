@@ -18,6 +18,11 @@ import {
   type CoreQueryRuntimeState,
   type CoreQueryTurnRunner,
 } from './coreQueryTurnRunner.js'
+import {
+  runCoreImageGenerationTurn,
+  shouldRunCoreImageGenerationTurn,
+  type CoreImageGenerationTurnRunner,
+} from './coreImageGenerationTurnRunner.js'
 import { CoreError } from './errors.js'
 import { collectContextData } from '../commands/context/context-noninteractive.js'
 import { call as compactCommandCall } from '../commands/compact/compact.js'
@@ -108,6 +113,7 @@ export class CoreSessionService {
         turnId: string
       }) => CanUseToolFn
       runQueryTurn?: CoreQueryTurnRunner
+      runImageGenerationTurn?: CoreImageGenerationTurnRunner
       persistTranscripts?: boolean
     },
   ) {}
@@ -661,6 +667,10 @@ export class CoreSessionService {
     try {
       turn.status = 'running'
       turn.startedAt = new Date().toISOString()
+      turn.metadata = mergeTurnMetadata(
+        turn.metadata,
+        this.createContextMetadata(thread.threadId),
+      )
       thread.updatedAt = turn.startedAt
       this.options.emit({
         type: 'turn_started',
@@ -678,20 +688,30 @@ export class CoreSessionService {
         throw new CoreError('workspace_not_open', 'Workspace is not open.')
       }
 
-      const runner = this.options.runQueryTurn ?? runCoreQueryTurn
-      const runtimeMetadata = await runner({
-        turn,
-        workspace,
-        signal: abortController.signal,
-        emit: this.options.emit,
-        historyMessages: threadMessages,
-        readFileState,
-        runtimeState,
-        recordMessage: message => {
-          return this.recordThreadMessage(thread.threadId, message)
-        },
-        createCanUseTool: this.options.createCanUseTool,
-      })
+      const runtimeMetadata = shouldRunCoreImageGenerationTurn(turn.metadata)
+        ? await (this.options.runImageGenerationTurn ??
+            runCoreImageGenerationTurn)({
+            turn,
+            workspace,
+            signal: abortController.signal,
+            emit: this.options.emit,
+            recordMessage: message => {
+              return this.recordThreadMessage(thread.threadId, message)
+            },
+          })
+        : await (this.options.runQueryTurn ?? runCoreQueryTurn)({
+            turn,
+            workspace,
+            signal: abortController.signal,
+            emit: this.options.emit,
+            historyMessages: threadMessages,
+            readFileState,
+            runtimeState,
+            recordMessage: message => {
+              return this.recordThreadMessage(thread.threadId, message)
+            },
+            createCanUseTool: this.options.createCanUseTool,
+          })
 
       if (!isTurnCancelled(turn)) {
         turn.status = 'completed'
@@ -1016,7 +1036,7 @@ function cloneCoreUserContentBlock(
 
   const cloned: Extract<
     CoreUserContentBlock,
-    { type: 'image' | 'file' | 'audio' }
+    { type: 'image' | 'file' | 'audio' | 'video' }
   > = {
     type: block.type,
   }

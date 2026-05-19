@@ -2,7 +2,7 @@
 
 ## 1. 文档目标
 
-本文档是 [recovery-repair-plan.md](D:/agent_project/claude-code-reforged/docs/recovery-repair-plan.md) 的下一层执行文档，专门回答下面这个问题：
+本文档是 [recovery-repair-plan.md](./recovery-repair-plan.md) 的下一层执行文档，专门回答下面这个问题：
 
 **在不先动大规模业务逻辑的前提下，如何把 `claude-code-reforged` 缺失的工程骨架补回来，让它具备最小可构建、可校验、可继续修复的基础。**
 

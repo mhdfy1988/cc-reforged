@@ -299,6 +299,10 @@ function formatContentBlock(block: JsonObject): string {
     return formatAttachmentSummary(block.attachment)
   }
 
+  if (type === 'image' || type === 'file' || type === 'audio' || type === 'video') {
+    return formatGeneratedOutputBlock(block, type)
+  }
+
   if ('value' in block) {
     return formatUnknownValue(block.value)
   }
@@ -350,6 +354,101 @@ function formatToolResultContent(content: unknown): string {
   }
 
   return formatUnknownValue(content)
+}
+
+function formatGeneratedOutputBlock(
+  block: JsonObject,
+  type: string,
+): string {
+  const title =
+    block.origin === 'model_output'
+      ? `模型生成${getAttachmentTypeText(type)}`
+      : getAttachmentTypeText(type)
+  const name = getStringValue(
+    block.displayName ?? block.display_name ?? block.name ?? block.filename,
+    '未命名输出',
+  )
+  const details = [
+    getOptionalStringValue(block.mimeType ?? block.mime_type ?? block.mediaType),
+    typeof block.sizeBytes === 'number' ? formatBytes(block.sizeBytes) : undefined,
+    getOptionalStringValue(block.provider),
+    getOptionalStringValue(block.model),
+    getLifecycleText(getOptionalStringValue(block.lifecycle)),
+    getSafetyText(getOptionalStringValue(block.safety)),
+    getGeneratedSavedPathText(block),
+  ].filter(Boolean)
+  return [`${title}：${name}`, details.join(' · ')].filter(Boolean).join('\n')
+}
+
+function getGeneratedSavedPathText(block: JsonObject): string | undefined {
+  const artifact =
+    block.generatedArtifact && typeof block.generatedArtifact === 'object'
+      ? (block.generatedArtifact as JsonObject)
+      : block.generated_artifact && typeof block.generated_artifact === 'object'
+        ? (block.generated_artifact as JsonObject)
+        : undefined
+  const savedPath = getOptionalStringValue(
+    block.savedPath ?? block.saved_path ?? artifact?.savedPath ?? artifact?.saved_path,
+  )
+  return savedPath ? `已保存：${savedPath}` : undefined
+}
+
+function getAttachmentTypeText(type: string): string {
+  switch (type) {
+    case 'image':
+      return '图片'
+    case 'audio':
+      return '音频'
+    case 'video':
+      return '视频'
+    case 'file':
+      return '文件'
+    default:
+      return '附件'
+  }
+}
+
+function getLifecycleText(value: string | undefined): string | undefined {
+  switch (value) {
+    case 'inline':
+      return '内联'
+    case 'referenced':
+      return '引用'
+    case 'temporary':
+      return '临时'
+    case 'persisted':
+      return '已持久化'
+    case 'expired':
+      return '已过期'
+    default:
+      return undefined
+  }
+}
+
+function getSafetyText(value: string | undefined): string | undefined {
+  switch (value) {
+    case 'trusted':
+      return '已信任'
+    case 'needs_review':
+      return '需确认'
+    case 'blocked':
+      return '已拦截'
+    default:
+      return undefined
+  }
+}
+
+function formatBytes(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0 B'
+  }
+  if (value < 1024) {
+    return `${value} B`
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
 
 function localizeToolResultText(text: string): string {
@@ -421,6 +520,10 @@ function formatJsonBlock(value: unknown): string {
 
 function getStringValue(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
+}
+
+function getOptionalStringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined
 }
 
 function limitMessageText(text: string): string {

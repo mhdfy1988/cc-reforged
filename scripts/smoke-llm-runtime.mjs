@@ -42,6 +42,29 @@ const mockProvider = {
       },
     };
   },
+  async generateImage(request) {
+    return {
+      provider: request.provider,
+      model: request.model,
+      output: [
+        {
+          type: 'image',
+          origin: 'model_output',
+          lifecycle: 'persisted',
+          safety: 'needs_review',
+          provider: request.provider,
+          model: request.model,
+          outputId: request.outputId,
+          prompt: request.prompt,
+          source: {
+            kind: 'file',
+            path: 'C:\\tmp\\mock-image.png',
+          },
+        },
+      ],
+      generatedArtifacts: [],
+    };
+  },
 };
 
 const registry = new LlmProviderRegistry();
@@ -73,6 +96,16 @@ assert.equal(response.output.length, 1);
 assert.equal(response.output[0].type, 'text');
 assert.match(response.output[0].text, /hello llm runtime/);
 
+const imageResponse = await runtime.generateImage({
+  prompt: 'draw a mock image',
+  sessionId: 'thread_mock',
+  outputId: 'out_mock_image',
+});
+assert.equal(imageResponse.provider, 'mock');
+assert.equal(imageResponse.model, 'mock-model');
+assert.equal(imageResponse.output[0].type, 'image');
+assert.equal(imageResponse.output[0].outputId, 'out_mock_image');
+
 const streamedEvents = [];
 for await (const event of runtime.stream(request)) {
   streamedEvents.push(event.type);
@@ -86,14 +119,25 @@ assert.deepEqual(streamedEvents, [
 
 const defaultRuntime = getDefaultLlmRuntime();
 const defaultConfig = loadLlmConfig();
-assert.equal(defaultRuntime.listProviders().length, 3);
-assert.equal(defaultRuntime.listProviderDefinitions().length, 3);
+assert.equal(defaultRuntime.listProviders().length, 10);
+assert.equal(defaultRuntime.listProviderDefinitions().length, 10);
 assert.equal(defaultRuntime.getProvider('anthropic').name, 'anthropic');
+assert.equal(defaultRuntime.getProvider('openai').name, 'openai');
 assert.equal(defaultRuntime.getProvider('codex-oauth').name, 'codex-oauth');
 assert.equal(defaultRuntime.getProvider('deepseek').name, 'deepseek');
+assert.equal(defaultRuntime.getProvider('kimi-api').name, 'kimi-api');
+assert.equal(defaultRuntime.getProvider('kimi-code').name, 'kimi-code');
+assert.equal(defaultRuntime.getProvider('glm-api').name, 'glm-api');
+assert.equal(defaultRuntime.getProvider('glm-coding').name, 'glm-coding');
+assert.equal(defaultRuntime.getProvider('minimax').name, 'minimax');
+assert.equal(defaultRuntime.getProvider('minimax-cn').name, 'minimax-cn');
 assert.equal(
   defaultRuntime.getProviderDefinition('anthropic').apiMode,
   'anthropic-messages',
+);
+assert.equal(
+  defaultRuntime.getProviderDefinition('openai').apiMode,
+  'openai-chat',
 );
 assert.equal(
   defaultRuntime.getProviderDefinition('codex-oauth').apiMode,
@@ -101,6 +145,22 @@ assert.equal(
 );
 assert.equal(
   defaultRuntime.getProviderDefinition('deepseek').apiMode,
+  'openai-chat',
+);
+assert.equal(
+  defaultRuntime.getProviderDefinition('kimi-api').apiMode,
+  'openai-chat',
+);
+assert.equal(
+  defaultRuntime.getProviderDefinition('kimi-code').apiMode,
+  'anthropic-messages',
+);
+assert.equal(
+  defaultRuntime.getProviderDefinition('glm-api').apiMode,
+  'openai-chat',
+);
+assert.equal(
+  defaultRuntime.getProviderDefinition('glm-coding').apiMode,
   'openai-chat',
 );
 const [, defaultResolvedRequest] = defaultRuntime.resolveRequest({
@@ -121,6 +181,7 @@ console.log(
       defaultProviderDefinitions: defaultRuntime.listProviderDefinitions(),
       defaultConfig,
       response,
+      imageResponse,
       streamedEvents,
     },
     null,

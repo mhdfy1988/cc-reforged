@@ -17,6 +17,8 @@ type AllowedPrompt = {
 
 export function PlanApprovalCard(props: {
   permission: PermissionCard
+  compact?: boolean
+  inline?: boolean
   onRespond: (
     permissionRequestId: string,
     behavior: 'allow' | 'deny',
@@ -24,6 +26,8 @@ export function PlanApprovalCard(props: {
   ) => Promise<void>
 }) {
   const permission = props.permission
+  const compact = props.compact ?? false
+  const inline = props.inline ?? false
   const [feedback, setFeedback] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const disabled = permission.status !== 'pending' || submitting
@@ -121,26 +125,37 @@ export function PlanApprovalCard(props: {
             </button>
           </>
         }
-        className="plan-approval-card enter-plan-card"
+        className={`plan-approval-card enter-plan-card ${inline ? 'is-inline' : ''}`}
         status={formatPermissionStatus(permission.status, submitting)}
         title="进入计划模式？"
         typeLabel="计划模式"
       >
-        <p className="plan-card-lead">
-          模型想先探索代码、梳理方案，再把计划交给你确认。进入计划模式后，
-          在你批准计划前不会直接修改代码。
-        </p>
-        <ul className="plan-card-points">
-          <li>先阅读项目和现有实现。</li>
-          <li>识别风险、依赖和改动边界。</li>
-          <li>输出计划后再等待你批准执行。</li>
-        </ul>
-        <InteractionDetails value={permission.input} />
+        {compact ? (
+          <p className="plan-card-lead">
+            模型申请进入计划模式。批准后将先做方案与风险梳理，再进入编码阶段。
+          </p>
+        ) : (
+          <>
+            <p className="plan-card-lead">
+              模型想先探索代码、梳理方案，再把计划交给你确认。进入计划模式后，在你批准计划前不会直接修改代码。
+            </p>
+            <ul className="plan-card-points">
+              <li>先阅读项目和现有实现。</li>
+              <li>识别风险、依赖和改动边界。</li>
+              <li>输出计划后再等待你批准执行。</li>
+            </ul>
+            <InteractionDetails value={permission.input} />
+          </>
+        )}
       </InteractionCardShell>
     )
   }
 
-  const plan = extractPlanText(permission.input, permission.description)
+  const title = resolveExitPlanModeTitle(permission)
+  const plan = extractPlanText(
+    permission.input,
+    resolvePlanTextFallback(permission),
+  )
   const planFilePath = extractPlanFilePath(permission.input)
   const allowedPrompts = extractAllowedPrompts(permission.input)
 
@@ -172,30 +187,41 @@ export function PlanApprovalCard(props: {
           </button>
         </>
       }
-      className="plan-approval-card exit-plan-card"
+      className={`plan-approval-card exit-plan-card ${inline ? 'is-inline' : ''}`}
       meta={planFilePath ? `计划文件：${planFilePath}` : null}
       status={formatPermissionStatus(permission.status, submitting)}
-      title={permission.description ?? '模型已准备好退出计划模式'}
+      title={title}
       typeLabel="计划确认"
     >
-      <section className="plan-card-preview">
-        <h4>计划内容</h4>
-        <div className="plan-card-markdown">{renderMessageBlocks(plan)}</div>
-      </section>
-
-      {allowedPrompts.length > 0 ? (
-        <section className="plan-card-prompts">
-          <h4>计划申请的语义权限</h4>
-          <ul>
-            {allowedPrompts.map((prompt, index) => (
-              <li key={`${prompt.tool}:${index}`}>
-                <strong>{prompt.tool}</strong>
-                <span>{prompt.prompt}</span>
-              </li>
-            ))}
-          </ul>
+      {compact ? (
+        <section className="plan-card-preview">
+          {inline ? null : <h4>计划确认</h4>}
+          <div className="plan-card-markdown">
+            {renderMessageBlocks('计划文本已在上方助手消息展示，请直接在这里确认。')}
+          </div>
         </section>
-      ) : null}
+      ) : (
+        <>
+          <section className="plan-card-preview">
+            <h4>计划内容</h4>
+            <div className="plan-card-markdown">{renderMessageBlocks(plan)}</div>
+          </section>
+
+          {allowedPrompts.length > 0 ? (
+            <section className="plan-card-prompts">
+              <h4>计划申请的语义权限</h4>
+              <ul>
+                {allowedPrompts.map((prompt, index) => (
+                  <li key={`${prompt.tool}:${index}`}>
+                    <strong>{prompt.tool}</strong>
+                    <span>{prompt.prompt}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </>
+      )}
 
       <label className="plan-card-feedback">
         <span>反馈 / 补充要求（可选）</span>
@@ -208,7 +234,7 @@ export function PlanApprovalCard(props: {
         />
       </label>
 
-      <InteractionDetails value={permission.input} />
+      {compact ? null : <InteractionDetails value={permission.input} />}
     </InteractionCardShell>
   )
 }
@@ -234,17 +260,70 @@ function getPlanUpdatedInput(input: JsonObject): JsonObject {
   return {}
 }
 
-function extractPlanText(
-  input: JsonObject,
-  fallbackDescription?: string,
-): string {
+function extractPlanText(input: JsonObject, fallbackText?: string): string {
   return (
     getString(input.plan) ??
     getString(input.planContent) ??
     getString(input.content) ??
-    fallbackDescription ??
+    fallbackText ??
     '计划内容由原生计划文件提供。若这里没有展示完整计划，请展开原始 JSON 或回到计划文件查看。'
   )
+}
+
+function resolveExitPlanModeTitle(permission: PermissionCard): string {
+  const displayName = getString(permission.displayName)
+  if (displayName) {
+    return displayName
+  }
+
+  const decisionReason = normalizePlanTitleHint(permission.decisionReason)
+  if (decisionReason) {
+    return decisionReason
+  }
+
+  const description = normalizePlanTitleHint(permission.description)
+  if (description) {
+    return description
+  }
+
+  return '退出计划模式并开始编码？'
+}
+
+function normalizePlanTitleHint(value: unknown): string | undefined {
+  const text = getString(value)
+  if (!text) {
+    return undefined
+  }
+
+  const normalized = text.trim().toLowerCase()
+  if (normalized === 'exit plan mode?') {
+    return '退出计划模式并开始编码？'
+  }
+  if (isGenericExitPlanDescription(text)) {
+    return undefined
+  }
+  return text
+}
+
+function resolvePlanTextFallback(permission: PermissionCard): string | undefined {
+  const description = getString(permission.description)
+  if (description && !isGenericExitPlanDescription(description)) {
+    return description
+  }
+
+  const decisionReason = getString(permission.decisionReason)
+  if (
+    decisionReason &&
+    decisionReason.trim().toLowerCase() !== 'exit plan mode?'
+  ) {
+    return decisionReason
+  }
+  return undefined
+}
+
+function isGenericExitPlanDescription(value: string): boolean {
+  const normalized = value.trim().toLowerCase()
+  return normalized.startsWith('prompts the user to exit plan mode')
 }
 
 function extractPlanFilePath(input: JsonObject): string | undefined {

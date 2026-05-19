@@ -17,9 +17,13 @@ const { asSystemPrompt } = await import('../dist/src/utils/systemPromptType.js')
 
 const tempDir = await mkdtemp(join(tmpdir(), 'ccr-mm-provider-'));
 const imagePath = join(tempDir, 'tiny.png');
+const videoPath = join(tempDir, 'tiny.mp4');
 const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
+const videoBytes = Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]);
 const imageBase64 = imageBytes.toString('base64');
+const videoBase64 = videoBytes.toString('base64');
 await writeFile(imagePath, imageBytes);
+await writeFile(videoPath, videoBytes);
 
 try {
   const queryRequest = buildLlmQueryRequest({
@@ -41,6 +45,13 @@ try {
             displayName: 'tiny.png',
             sizeBytes: imageBytes.length,
           },
+          {
+            type: 'video',
+            mimeType: 'video/mp4',
+            source: { kind: 'file', path: videoPath },
+            displayName: 'tiny.mp4',
+            sizeBytes: videoBytes.length,
+          },
         ],
       }),
     ],
@@ -58,6 +69,12 @@ try {
   assert.deepEqual(queryRequest.messages[0].parts[1].source, {
     kind: 'file',
     path: imagePath,
+  });
+  assert.equal(queryRequest.messages[0].parts[2].type, 'video');
+  assert.equal(queryRequest.messages[0].parts[2].mimeType, 'video/mp4');
+  assert.deepEqual(queryRequest.messages[0].parts[2].source, {
+    kind: 'file',
+    path: videoPath,
   });
 
   let openAiBody;
@@ -112,7 +129,13 @@ try {
     openAiContent[1].image_url.url,
     `data:image/png;base64,${imageBase64}`,
   );
+  assert.equal(openAiContent[2].type, 'video_url');
+  assert.equal(
+    openAiContent[2].video_url.url,
+    `data:video/mp4;base64,${videoBase64}`,
+  );
   assert.equal(JSON.stringify(openAiBody).includes(imagePath), false);
+  assert.equal(JSON.stringify(openAiBody).includes(videoPath), false);
 
   const failingOpenAiAdapter = new OpenAiChatCompletionsAdapter({
     providerId: 'compatible',
@@ -145,8 +168,11 @@ try {
     error => {
       const message = error instanceof Error ? error.message : String(error);
       assert.equal(message.includes(imagePath), false);
+      assert.equal(message.includes(videoPath), false);
       assert.equal(message.includes(imageBase64), false);
+      assert.equal(message.includes(videoBase64), false);
       assert.match(message, /imageContentPartCount/);
+      assert.match(message, /videoContentPartCount/);
       return true;
     },
   );
@@ -209,6 +235,7 @@ try {
       data: imageBase64,
     },
   });
+  assert.equal(anthropicContent.length, 2);
   assert.equal(JSON.stringify(anthropicBody).includes(imagePath), false);
 
   console.log(
@@ -217,8 +244,11 @@ try {
         ok: true,
         checked: [
           'query_request_image_part',
+          'query_request_video_part',
           'openai_chat_image_url_part',
+          'openai_chat_video_url_part',
           'openai_error_diagnostics_hide_image_payload',
+          'openai_error_diagnostics_hide_video_payload',
           'anthropic_messages_image_block',
           'provider_payloads_do_not_include_local_path',
         ],

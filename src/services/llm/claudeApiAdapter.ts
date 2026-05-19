@@ -9,7 +9,7 @@ import type {
 import type { EffortValue } from 'src/utils/effort.js'
 import type { LlmRuntime } from './llmRuntime.js'
 import { createDefaultLlmRuntime } from './defaultRuntime.js'
-import { normalizeImageMimeType } from './imageContent.js'
+import { normalizeImageMimeType, normalizeVideoMimeType } from './imageContent.js'
 import { loadLlmConfig, type ResolvedLlmConfig } from './llmConfig.js'
 import type {
   LlmContentPart,
@@ -18,6 +18,7 @@ import type {
   LlmMessage,
   LlmToolDefinition,
   LlmUsage,
+  LlmVideoSource,
 } from './types.js'
 import type {
   AssistantMessage,
@@ -307,6 +308,10 @@ function toLlmMessages(message: QueryApiMessage): LlmMessage[] {
       userParts.push(toLlmImagePart(block))
       continue
     }
+    if (block.type === 'video') {
+      userParts.push(toLlmVideoPart(block))
+      continue
+    }
     if (isToolResultBlock(block)) {
       toolParts.push({
         type: 'tool_result',
@@ -337,7 +342,7 @@ function toLlmMessages(message: QueryApiMessage): LlmMessage[] {
 }
 
 function toLlmImagePart(block: Record<string, unknown>): LlmContentPart {
-  const source = toLlmImageSource(block.source)
+  const source = toLlmMediaSource(block.source)
   const data = typeof block.data === 'string' ? block.data.trim() : undefined
   if (!source && !data) {
     throw new Error(
@@ -364,7 +369,35 @@ function toLlmImagePart(block: Record<string, unknown>): LlmContentPart {
   }
 }
 
-function toLlmImageSource(value: unknown): LlmImageSource | undefined {
+function toLlmVideoPart(block: Record<string, unknown>): LlmContentPart {
+  const source = toLlmMediaSource(block.source)
+  if (!source) {
+    throw new Error(
+      'Builtin LLM runtime requires video content blocks to include a file or URL source.',
+    )
+  }
+
+  return {
+    type: 'video',
+    mimeType: normalizeVideoMimeType(
+      typeof block.mimeType === 'string' ? block.mimeType : undefined,
+    ),
+    source,
+    ...(typeof block.attachmentId === 'string'
+      ? { attachmentId: block.attachmentId }
+      : {}),
+    ...(typeof block.displayName === 'string'
+      ? { displayName: block.displayName }
+      : {}),
+    ...(typeof block.sizeBytes === 'number'
+      ? { sizeBytes: block.sizeBytes }
+      : {}),
+  }
+}
+
+function toLlmMediaSource(
+  value: unknown,
+): LlmImageSource | LlmVideoSource | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined
   }

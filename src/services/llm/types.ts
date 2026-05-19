@@ -1,6 +1,8 @@
 import type {
   CcrContentSource,
+  CcrGeneratedArtifactSnapshot,
   CcrImageContentBlock,
+  CcrVideoContentBlock,
   CcrTextContentBlock,
   CcrThinkingContentBlock,
   CcrToolCallContentBlock,
@@ -21,8 +23,8 @@ export type LlmAuthStrategy =
   | 'external_process'
   | 'hybrid'
   | 'unknown'
-export type LlmInputModality = 'text' | 'image' | 'file' | 'audio'
-export type LlmOutputModality = 'text' | 'image' | 'audio'
+export type LlmInputModality = 'text' | 'image' | 'file' | 'audio' | 'video'
+export type LlmOutputModality = 'text' | 'image' | 'audio' | 'file' | 'video'
 export type LlmModelCapabilitySource =
   | 'builtin'
   | 'profile_override'
@@ -87,12 +89,19 @@ export type LlmImagePart = CcrImageContentBlock & {
   mimeType: string
 }
 
+export type LlmVideoSource = CcrContentSource
+
+export type LlmVideoPart = CcrVideoContentBlock & {
+  mimeType: string
+}
+
 export type LlmContentPart =
   | LlmTextPart
   | LlmThinkingPart
   | LlmToolCallPart
   | LlmToolResultPart
   | LlmImagePart
+  | LlmVideoPart
 
 export interface LlmToolDefinition {
   name: string
@@ -194,6 +203,57 @@ export interface LlmGenerateResponse {
   raw?: unknown
 }
 
+export type LlmImageGenerationSize =
+  | 'auto'
+  | '1024x1024'
+  | '1024x1536'
+  | '1536x1024'
+  | '256x256'
+  | '512x512'
+  | string
+
+export type LlmImageGenerationQuality =
+  | 'auto'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'standard'
+  | 'hd'
+  | string
+
+export type LlmImageGenerationOutputFormat =
+  | 'png'
+  | 'jpeg'
+  | 'webp'
+  | string
+
+export type LlmImageGenerationResponseFormat = 'b64_json' | 'url'
+
+export interface LlmImageGenerationRequest {
+  provider: LlmProviderId
+  model: LlmModelId
+  profileId?: string
+  prompt: string
+  sessionId: string
+  outputId?: string
+  ccrHome?: string
+  size?: LlmImageGenerationSize
+  quality?: LlmImageGenerationQuality
+  outputFormat?: LlmImageGenerationOutputFormat
+  responseFormat?: LlmImageGenerationResponseFormat
+  n?: number
+  metadata?: Readonly<Record<string, unknown>>
+  signal?: AbortSignal
+}
+
+export interface LlmImageGenerationResponse {
+  provider: LlmProviderId
+  model: LlmModelId
+  output: readonly CcrImageContentBlock[]
+  generatedArtifacts: readonly CcrGeneratedArtifactSnapshot[]
+  raw?: unknown
+}
+
 export interface LlmResponseStartEvent {
   type: 'response_start'
   provider: LlmProviderId
@@ -259,5 +319,8 @@ export interface LlmProvider {
   readonly definition?: LlmProviderDefinition
   readonly supportsStreaming?: boolean
   generate(request: LlmGenerateRequest): Promise<LlmGenerateResponse>
+  generateImage?(
+    request: LlmImageGenerationRequest,
+  ): Promise<LlmImageGenerationResponse>
   stream?(request: LlmGenerateRequest): AsyncIterable<LlmGenerateEvent>
 }

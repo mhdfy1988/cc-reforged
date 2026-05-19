@@ -1,0 +1,141 @@
+import {
+  getLlmProfileForProvider,
+  getLlmProviderConfig,
+  loadLlmConfig,
+  type ResolvedLlmConfig,
+} from '../llmConfig.js'
+import { getLlmProviderApiKey } from '../providerCredentials.js'
+import {
+  OpenAiImageGenerationAdapter,
+} from '../protocols/openaiImageGenerationAdapter.js'
+import type {
+  LlmImageGenerationRequest,
+  LlmImageGenerationResponse,
+} from '../types.js'
+import {
+  OpenAiChatCompatibleProvider,
+  type OpenAiChatCompatibleProviderOptions,
+  type OpenAiChatCompatibleProviderSpec,
+} from './OpenAiChatCompatibleProvider.js'
+
+const GLM_API_SPEC: OpenAiChatCompatibleProviderSpec = {
+  providerId: 'glm-api',
+  providerLabel: 'GLM API',
+  defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+  defaultModel: 'glm-5.1',
+  apiKeyEnvNames: [
+    'CCR_GLM_API_KEY',
+    'GLM_API_KEY',
+    'ZAI_API_KEY',
+    'ZHIPUAI_API_KEY',
+  ],
+  baseUrlEnvNames: ['CCR_GLM_API_BASE_URL', 'GLM_API_BASE_URL'],
+}
+
+const GLM_CODING_SPEC: OpenAiChatCompatibleProviderSpec = {
+  providerId: 'glm-coding',
+  providerLabel: 'GLM Coding Plan',
+  defaultBaseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+  defaultModel: 'glm-5.1',
+  apiKeyEnvNames: [
+    'CCR_GLM_CODING_API_KEY',
+    'GLM_CODING_API_KEY',
+    'ZAI_CODING_API_KEY',
+  ],
+  baseUrlEnvNames: ['CCR_GLM_CODING_BASE_URL', 'GLM_CODING_BASE_URL'],
+  missingApiKeyMessage:
+    'GLM Coding Plan API key is missing. Set CCR_GLM_CODING_API_KEY, GLM_CODING_API_KEY, or ZAI_CODING_API_KEY.',
+}
+
+export class GlmApiProvider extends OpenAiChatCompatibleProvider {
+  readonly #options: OpenAiChatCompatibleProviderOptions
+
+  constructor(options: OpenAiChatCompatibleProviderOptions = {}) {
+    super(GLM_API_SPEC, options)
+    this.#options = options
+  }
+
+  async generateImage(
+    request: LlmImageGenerationRequest,
+  ): Promise<LlmImageGenerationResponse> {
+    const connection = resolveGlmApiConnection(request.profileId, this.#options)
+    const adapter = new OpenAiImageGenerationAdapter({
+      providerId: GLM_API_SPEC.providerId,
+      providerLabel: GLM_API_SPEC.providerLabel,
+      apiKey: connection.apiKey,
+      baseUrl: connection.baseUrl,
+      defaultModel: connection.defaultImageModel,
+      missingApiKeyMessage:
+        'GLM API key is missing. Set CCR_GLM_API_KEY, GLM_API_KEY, ZAI_API_KEY, or ZHIPUAI_API_KEY.',
+      fetchImpl: this.#options.fetchImpl,
+    })
+    return adapter.generateImage({
+      ...request,
+      model: request.model?.trim() || connection.defaultImageModel,
+    })
+  }
+}
+
+export class GlmCodingProvider extends OpenAiChatCompatibleProvider {
+  constructor(options: OpenAiChatCompatibleProviderOptions = {}) {
+    super(GLM_CODING_SPEC, options)
+  }
+}
+
+function resolveGlmApiConnection(
+  profileId: string | undefined,
+  options: OpenAiChatCompatibleProviderOptions,
+): {
+  apiKey?: string
+  baseUrl: string
+  defaultImageModel: string
+} {
+  const config = loadLlmConfig()
+  const providerConfig = getLlmProviderConfig(GLM_API_SPEC.providerId, config)
+  const profile = getGlmProfileForRequest(profileId, config)
+  const credential = getLlmProviderApiKey({
+    provider: GLM_API_SPEC.providerId,
+    profileId: profile?.id,
+    envNames: GLM_API_SPEC.apiKeyEnvNames,
+  })
+  return {
+    apiKey: options.apiKey?.trim() || credential.apiKey,
+    baseUrl:
+      options.baseUrl?.trim() ||
+      getFirstEnvironmentValue(GLM_API_SPEC.baseUrlEnvNames) ||
+      profile?.baseUrl ||
+      providerConfig?.baseUrl ||
+      GLM_API_SPEC.defaultBaseUrl,
+    defaultImageModel:
+      getDefaultImageModelFromMetadata(providerConfig?.metadata) ?? 'glm-image',
+  }
+}
+
+function getGlmProfileForRequest(
+  profileId: string | undefined,
+  config: ResolvedLlmConfig,
+) {
+  const normalizedProfileId = profileId?.trim()
+  if (normalizedProfileId) {
+    const profile = config.profiles[normalizedProfileId]
+    return profile?.providerType === GLM_API_SPEC.providerId ? profile : undefined
+  }
+  return getLlmProfileForProvider(GLM_API_SPEC.providerId, config)
+}
+
+function getFirstEnvironmentValue(names: readonly string[]): string | undefined {
+  for (const name of names) {
+    const value = process.env[name]?.trim()
+    if (value) {
+      return value
+    }
+  }
+  return undefined
+}
+
+function getDefaultImageModelFromMetadata(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): string | undefined {
+  const value = metadata?.defaultImageModel
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}

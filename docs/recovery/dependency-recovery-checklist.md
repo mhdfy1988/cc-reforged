@@ -13,8 +13,8 @@
 
 本文档是以下两份文档的进一步执行化拆解：
 
-- [recovery-repair-plan.md](D:/agent_project/claude-code-reforged/docs/recovery-repair-plan.md)
-- [engineering-skeleton-recovery-checklist.md](D:/agent_project/claude-code-reforged/docs/engineering-skeleton-recovery-checklist.md)
+- [recovery-repair-plan.md](./recovery-repair-plan.md)
+- [engineering-skeleton-recovery-checklist.md](./engineering-skeleton-recovery-checklist.md)
 
 ## 2. 当前基线
 

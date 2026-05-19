@@ -15,12 +15,14 @@
 - MiniMax Anthropic 文本聊天接口：<https://platform.minimax.io/docs/api-reference/text-chat-anthropic>
 - MiniMax AI Coding Tools 接入说明：<https://platform.minimax.io/document/guides_coding_m1>
 - MiniMax OpenAI 兼容接口：<https://platform.minimax.io/docs/api-reference/text-openai-api>
+- MiniMax 国际版图片生成：<https://platform.minimax.io/docs/api-reference/image-generation-t2i>
+- MiniMax 国内版图片生成：<https://platform.minimaxi.com/docs/api-reference/image-generation-t2i>
 
 ## 当前方案
 
-当前只把 MiniMax 接入 Anthropic Messages 兼容协议。
+当前文本聊天把 MiniMax 接入 Anthropic Messages 兼容协议；图片生成走 MiniMax 原生 `image_generation` 接口。
 
-原因：
+文本聊天选择 Anthropic-compatible 的原因：
 
 - MiniMax 官方给 AI 编程工具的推荐配置就是 Anthropic-compatible。
 - Anthropic Messages 原生支持 `tool_use` / `tool_result`，和 CCR 当前工具链更贴近。
@@ -28,6 +30,11 @@
 - OpenAI Chat 公共适配器已经被 DeepSeek 等供应商复用，MiniMax 的特殊规则不应继续污染这条公共链路。
 
 MiniMax OpenAI 兼容端点暂不作为 Desktop 可选分支；如果以后要恢复，也必须作为独立 provider/protocol 分支，不复用当前 MiniMax provider。
+
+图片生成不走 Anthropic-compatible，也不复用 OpenAI Images API 壳。它在 `MiniMaxProvider.generateImage(...)` 中走原生地址：
+
+- 国际版：`https://api.minimax.io/v1/image_generation`
+- 国内版：`https://api.minimaxi.com/v1/image_generation`
 
 ## 供应商定义
 
@@ -43,12 +50,19 @@ Anthropic SDK 会在 Base URL 后请求 `/v1/messages`，所以实际请求地�
 
 ## 模型目录
 
-第一版内置两个常用模型：
+文本模型第一版内置两个常用模型：
 
 | 模型 ID | 显示名 |
 | --- | --- |
 | `MiniMax-M2.7` | MiniMax M2.7 |
 | `MiniMax-M2.7-highspeed` | MiniMax M2.7 Highspeed |
+
+图片生成模型：
+
+| 模型 ID | 显示名 | 输出能力 |
+| --- | --- | --- |
+| `image-01` | MiniMax Image 01 | 图片输出 |
+| `image-01-live` | MiniMax Image 01 Live | 图片输出 |
 
 能力声明：
 
@@ -57,7 +71,14 @@ Anthropic SDK 会在 Base URL 后请求 `/v1/messages`，所以实际请求地�
 - `supportsUsage=true`
 - `inputModalities=['text']`
 
-图片能力暂不接入。当前目标是代码工具链可用，而不是补 MiniMax 的多模态分支。
+`MiniMax-M2.7` / `MiniMax-M2.7-highspeed` 当前按文本模型处理，不声明图片 / 视频输入。`image-01` / `image-01-live` 的能力声明为文本输入、图片输出。默认图片模型通过 provider metadata 声明为 `image-01`。
+
+MiniMax 的多模态方向要分开看：
+
+- 文本聊天：当前走 Anthropic Messages compatible，第一版只启用文本输入、工具和 thinking。
+- 图片生成：已走原生 `image_generation`，输出会落到 CCR 生成物模型。
+- 图生图 / 图片编辑：不是当前 `LlmImageGenerationRequest` 的稳定字段，后续需要单独扩展 reference image / mask / edit 参数。
+- 视频 / 音频生成：不进入当前正式版主线，后续再按生成物生命周期单开阶段。
 
 ## 配置结构
 
@@ -124,6 +145,32 @@ Core LlmRuntime
 -> https://api.minimax.io/anthropic/v1/messages
 ```
 
+图片生成链路：
+
+```text
+Core LlmRuntime.generateImage(...)
+-> MiniMaxProvider.generateImage(...)
+-> MiniMaxImageGenerationAdapter
+-> https://api.minimax.io/v1/image_generation
+-> normalizeGeneratedImageOutputs(...)
+-> CcrImageContentBlock + CcrGeneratedArtifactSnapshot
+```
+
+普通会话流里的图片生成链路：
+
+```text
+turn/start options.imageGeneration
+-> normalizeTurnStartInputForCurrentModel(...)
+-> CoreSessionService
+-> runCoreImageGenerationTurn(...)
+-> LlmRuntime.generateImage(...)
+-> MiniMaxProvider.generateImage(...)
+-> item_completed assistant_message(contentBlocks: image + generatedArtifact)
+-> Desktop DisplayEvent(AttachmentSnapshot.source = ModelOutput)
+```
+
+这条链路和 OpenAI 共享同一套 `CcrImageContentBlock` / `generatedArtifact` / `savedPath` 展示模型。Desktop 不区分 MiniMax raw `image_base64` 或 OpenAI raw `b64_json`，只消费 CCR 归一化后的内容块。
+
 `MiniMaxProvider` 只保留供应商差异：
 
 - 地区对应的默认 Base URL。
@@ -162,6 +209,10 @@ messages、system、tools、tool result、usage 和 stop reason 都由 `Anthropi
 - 模型目录：`src/services/llm/modelCatalog.ts`
 - 供应商壳：`src/services/llm/providers/MiniMaxProvider.ts`
 - Anthropic 兼容适配器：`src/services/llm/protocols/anthropicMessagesAdapter.ts`
+- 图片生成适配器：`src/services/llm/protocols/minimaxImageGenerationAdapter.ts`
+- 通用图片输出归一化：`src/services/llm/protocols/generatedImageOutputAdapter.ts`
+- 会话流图片 runner：`src/core/coreImageGenerationTurnRunner.ts`
+- App Server 图片生成输入归一化：`src/app-server/turnInput.ts`
 - Runtime 注册：`src/services/llm/defaultRuntime.ts`
 - 可用性状态：`src/services/llm/runtimeStatus.ts`
 - 验证脚本：`scripts/smoke-minimax-provider.mjs`
@@ -171,6 +222,10 @@ messages、system、tools、tool result、usage 和 stop reason 都由 `Anthropi
 ```powershell
 npm.cmd run build -- --pretty false
 npm.cmd run smoke:minimax-provider
+npm.cmd run smoke:generated-output-provider
+npm.cmd run smoke:provider-output-fixtures
+npm.cmd run smoke:session-generated-image-flow
+npm.cmd run smoke:model-capabilities
 ```
 
 验证内容：
@@ -181,6 +236,11 @@ npm.cmd run smoke:minimax-provider
 - 系统消息合并到 Anthropic Messages 的顶层 `system`。
 - tools 映射为 Anthropic `tools`，并使用 `tool_choice: { "type": "auto" }`。
 - 响应中的 `text`、`thinking`、`tool_use` 和 usage 能归一化成 CCR 的 `LlmGenerateResponse`。
+- MiniMax 图片生成请求落到 `/v1/image_generation`。
+- `response_format=base64` 时图片落盘为 `generated_outputs/<sessionId>/<outputId>.png`。
+- `response_format=url` 时输出临时 URL 图片块，不把 URL 图片误当成本地落盘文件。
+- 展示事件和恢复 payload 不直接泄露 MiniMax raw `image_base64`。
+- 普通会话流中的图片生成会输出标准 `contentBlocks` / `generatedArtifact`，Desktop 展示 `ModelOutput/generated`。
 
 ## OpenAI Chat 分支结论
 

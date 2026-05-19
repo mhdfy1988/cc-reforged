@@ -220,7 +220,7 @@ export function createDisplayEventFromCompletedItem(
   const attachmentSnapshots = extractAttachmentSnapshotsFromContentBlocks({
     eventId: itemId,
     blocks,
-    source: 'ToolResult',
+    source: kind === 'assistant_message' ? 'ModelOutput' : 'ToolResult',
     identity,
   })
   return attachmentSnapshots.length > 0

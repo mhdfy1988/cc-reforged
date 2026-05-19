@@ -46,6 +46,13 @@ export interface CcrErrorSnapshot {
   rawRef?: string
 }
 
+type ErrorClassificationContext = {
+  message: string
+  source?: CcrErrorSource
+  error?: unknown
+  safeDetails?: Record<string, unknown>
+}
+
 export function createCcrErrorSnapshot(input: {
   error?: unknown
   message?: string
@@ -62,9 +69,29 @@ export function createCcrErrorSnapshot(input: {
   safeDetails?: Record<string, unknown>
 }): CcrErrorSnapshot {
   const message = normalizeErrorMessage(input.message ?? getErrorMessage(input.error))
-  const category = input.category ?? classifyErrorCategory(message, input.source)
-  const source = input.source ?? inferErrorSource(message, category)
+  const category =
+    input.category ??
+    classifyErrorCategory({
+      message,
+      source: input.source,
+      error: input.error,
+      safeDetails: input.safeDetails,
+    })
+  const source =
+    input.source ??
+    inferErrorSource({
+      message,
+      category,
+      error: input.error,
+      safeDetails: input.safeDetails,
+    })
   const retryable = input.retryable ?? inferRetryable(category)
+  const retryAfterMs =
+    input.retryAfterMs ??
+    inferRetryAfterMs({
+      error: input.error,
+      safeDetails: input.safeDetails,
+    })
   return {
     errorId: createErrorId(source, category, message),
     category,
@@ -74,7 +101,7 @@ export function createCcrErrorSnapshot(input: {
     source,
     retryable,
     recommendedActions: getRecommendedActions(category, retryable),
-    ...(input.retryAfterMs === undefined ? {} : { retryAfterMs: input.retryAfterMs }),
+    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
     ...(input.requestId ? { requestId: input.requestId } : {}),
     ...(input.turnId ? { turnId: input.turnId } : {}),
     ...(input.toolUseId ? { toolUseId: input.toolUseId } : {}),
@@ -116,37 +143,65 @@ function normalizeErrorMessage(message: string): string {
 }
 
 function classifyErrorCategory(
-  message: string,
-  source: CcrErrorSource | undefined,
+  context: ErrorClassificationContext,
 ): CcrErrorCategory {
-  const text = message.toLowerCase()
+  const text = collectClassificationText(context)
   if (
     text.includes('api key') ||
+    text.includes('invalid_api_key') ||
     text.includes('unauthorized') ||
+    text.includes('authentication_error') ||
     text.includes('401') ||
+    text.includes('403') ||
     text.includes('authentication') ||
     text.includes('auth_required') ||
-    text.includes('token expired')
+    text.includes('token expired') ||
+    text.includes('token revoked') ||
+    text.includes('oauth_expired') ||
+    text.includes('not logged in')
   ) {
     return 'auth_expired'
-  }
-  if (
-    text.includes('rate limit') ||
-    text.includes('rate_limited') ||
-    text.includes('too many requests') ||
-    text.includes('429')
-  ) {
-    return 'rate_limited'
   }
   if (
     text.includes('quota') ||
     text.includes('billing') ||
     text.includes('insufficient balance') ||
-    text.includes('credits')
+    text.includes('insufficient_balance') ||
+    text.includes('insufficient_quota') ||
+    text.includes('credit balance') ||
+    text.includes('credits') ||
+    text.includes('payment required') ||
+    text.includes('402')
   ) {
     return 'quota_exceeded'
   }
   if (
+    text.includes('rate limit') ||
+    text.includes('rate_limit') ||
+    text.includes('rate_limited') ||
+    text.includes('rate-limit') ||
+    text.includes('too many requests') ||
+    text.includes('too_many_requests') ||
+    text.includes('429') ||
+    text.includes('throttle') ||
+    text.includes('overloaded') ||
+    text.includes('529')
+  ) {
+    return 'rate_limited'
+  }
+  if (
+    text.includes('safety') ||
+    text.includes('content_filter') ||
+    text.includes('blocked by policy') ||
+    text.includes('safety_blocked') ||
+    text.includes('policy_violation')
+  ) {
+    return 'safety_blocked'
+  }
+  if (
+    text.includes('model_refusal') ||
+    text.includes('stopreason:refusal') ||
+    text.includes('stop_reason:refusal') ||
     text.includes('refusal') ||
     text.includes('refused') ||
     text.includes('model refused')
@@ -154,63 +209,142 @@ function classifyErrorCategory(
     return 'model_refusal'
   }
   if (
-    text.includes('safety') ||
-    text.includes('content_filter') ||
-    text.includes('blocked by policy') ||
-    text.includes('safety_blocked')
-  ) {
-    return 'safety_blocked'
-  }
-  if (
     text.includes('tool_call_id') ||
     text.includes('tool_result') ||
     text.includes('functionresponse') ||
     text.includes('function_call_output') ||
     text.includes('invalid role') ||
-    text.includes('protocol')
+    text.includes('protocol') ||
+    text.includes('invalid_request_error') ||
+    text.includes('invalid request') ||
+    text.includes('invalid_params') ||
+    text.includes('parse_error') ||
+    text.includes('method_not_found') ||
+    text.includes('capability_mismatch') ||
+    text.includes('json schema') ||
+    text.includes('schema validation') ||
+    text.includes('400') ||
+    text.includes('422')
   ) {
     return 'protocol_error'
   }
   if (
     text.includes('network') ||
     text.includes('timeout') ||
+    text.includes('timed out') ||
     text.includes('econnrefused') ||
     text.includes('enotfound') ||
+    text.includes('eai_again') ||
+    text.includes('econnreset') ||
+    text.includes('api_connection_error') ||
+    text.includes('connection error') ||
+    text.includes('fetch failed') ||
+    text.includes('socket') ||
+    text.includes('request_timeout') ||
     text.includes('und_err_connect_timeout')
   ) {
     return 'network_error'
   }
-  if (source === 'tool') {
+  if (context.source === 'tool' || text.includes('tool_error')) {
     return 'tool_error'
   }
   return 'unknown_error'
 }
 
-function inferErrorSource(
-  message: string,
+function inferErrorSource(context: ErrorClassificationContext & {
   category: CcrErrorCategory,
-): CcrErrorSource {
-  if (category === 'network_error') {
-    return 'network'
-  }
+}): CcrErrorSource {
+  const text = collectClassificationText(context)
   if (
-    category === 'auth_expired' ||
-    category === 'rate_limited' ||
-    category === 'quota_exceeded' ||
-    category === 'model_refusal' ||
-    category === 'safety_blocked' ||
-    category === 'protocol_error'
+    text.includes('appservererror') ||
+    text.includes('appserverclienterror') ||
+    text.includes('jsonrpc') ||
+    text.includes('json-rpc') ||
+    text.includes('-326') ||
+    text.includes('-320')
   ) {
-    return 'provider'
+    return 'app_server'
   }
-  const text = message.toLowerCase()
+  if (text.includes('coreerror')) {
+    return 'core'
+  }
   if (text.includes('mcp')) {
     return 'mcp'
   }
-  if (text.includes('tool')) {
+  if (text.includes('tool') || context.category === 'tool_error') {
     return 'tool'
   }
+  if (context.category === 'network_error') {
+    return 'network'
+  }
+  if (
+    context.category === 'auth_expired' ||
+    context.category === 'rate_limited' ||
+    context.category === 'quota_exceeded' ||
+    context.category === 'model_refusal' ||
+    context.category === 'safety_blocked' ||
+    context.category === 'protocol_error'
+  ) {
+    return 'provider'
+  }
   return 'unknown'
+}
+
+function collectClassificationText(context: ErrorClassificationContext): string {
+  const signals = new Set<string>()
+  addClassificationSignal(signals, context.message)
+  addClassificationSignal(signals, context.source)
+  collectClassificationSignals(context.error, 'error', signals)
+  collectClassificationSignals(context.safeDetails, 'details', signals)
+  return Array.from(signals).join('\n').toLowerCase()
+}
+
+function collectClassificationSignals(
+  value: unknown,
+  path: string,
+  signals: Set<string>,
+  depth = 0,
+): void {
+  if (signals.size > 120 || depth > 4 || value === undefined || value === null) {
+    return
+  }
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    addClassificationSignal(signals, `${path}:${String(value)}`)
+    addClassificationSignal(signals, String(value))
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) =>
+      collectClassificationSignals(item, `${path}[${index}]`, signals, depth + 1),
+    )
+    return
+  }
+  if (typeof value !== 'object') {
+    return
+  }
+  if (value instanceof Error) {
+    addClassificationSignal(signals, value.name)
+    addClassificationSignal(signals, value.message)
+    collectClassificationSignals(value.cause, `${path}.cause`, signals, depth + 1)
+  }
+  for (const [key, child] of Object.entries(value)) {
+    addClassificationSignal(signals, key)
+    collectClassificationSignals(child, `${path}.${key}`, signals, depth + 1)
+  }
+}
+
+function addClassificationSignal(signals: Set<string>, value: unknown): void {
+  if (typeof value !== 'string') {
+    return
+  }
+  const normalized = value.trim()
+  if (normalized) {
+    signals.add(normalized)
+  }
 }
 
 function inferRetryable(category: CcrErrorCategory): boolean | 'unknown' {
@@ -239,6 +373,116 @@ function inferSeverity(category: CcrErrorCategory): CcrErrorSeverity {
     default:
       return 'error'
   }
+}
+
+function inferRetryAfterMs(context: {
+  error?: unknown
+  safeDetails?: Record<string, unknown>
+}): number | undefined {
+  const signals: Array<{ key: string; value: unknown }> = []
+  collectRetryAfterSignals(context.error, 'error', signals)
+  collectRetryAfterSignals(context.safeDetails, 'details', signals)
+  for (const signal of signals) {
+    const retryAfterMs = parseRetryAfterValue(signal.value, signal.key)
+    if (retryAfterMs !== undefined) {
+      return retryAfterMs
+    }
+  }
+  return undefined
+}
+
+function collectRetryAfterSignals(
+  value: unknown,
+  path: string,
+  signals: Array<{ key: string; value: unknown }>,
+  depth = 0,
+): void {
+  if (signals.length > 24 || depth > 4 || value === undefined || value === null) {
+    return
+  }
+  if (typeof value !== 'object') {
+    return
+  }
+  if (value instanceof Error) {
+    collectRetryAfterSignals(value.cause, `${path}.cause`, signals, depth + 1)
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (isRetryAfterKey(key)) {
+      signals.push({ key, value: child })
+    }
+    collectRetryAfterSignals(child, `${path}.${key}`, signals, depth + 1)
+  }
+}
+
+function isRetryAfterKey(key: string): boolean {
+  const compact = normalizeSignalKey(key)
+  return (
+    compact === 'retryafter' ||
+    compact === 'retryafterms' ||
+    compact === 'retryafterseconds' ||
+    compact === 'ratelimitreset' ||
+    compact === 'xratelimitreset' ||
+    compact === 'resetat'
+  )
+}
+
+function parseRetryAfterValue(
+  value: unknown,
+  key: string,
+): number | undefined {
+  if (typeof value === 'number') {
+    return parseRetryAfterNumber(value, key)
+  }
+  if (typeof value !== 'string') {
+    return undefined
+  }
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return undefined
+  }
+  const numeric = Number(trimmed)
+  if (Number.isFinite(numeric)) {
+    return parseRetryAfterNumber(numeric, key)
+  }
+  const parsedDate = Date.parse(trimmed)
+  if (Number.isNaN(parsedDate)) {
+    return undefined
+  }
+  return clampRetryAfterMs(parsedDate - Date.now())
+}
+
+function parseRetryAfterNumber(
+  value: number,
+  key: string,
+): number | undefined {
+  if (!Number.isFinite(value) || value < 0) {
+    return undefined
+  }
+  const compact = normalizeSignalKey(key)
+  if (compact.endsWith('ms')) {
+    return clampRetryAfterMs(value)
+  }
+  if (compact.includes('reset')) {
+    if (value > 1_000_000_000_000) {
+      return clampRetryAfterMs(value - Date.now())
+    }
+    if (value > 1_000_000_000) {
+      return clampRetryAfterMs(value * 1000 - Date.now())
+    }
+  }
+  return clampRetryAfterMs(value * 1000)
+}
+
+function clampRetryAfterMs(value: number): number | undefined {
+  if (!Number.isFinite(value) || value < 0) {
+    return undefined
+  }
+  const maxRetryAfterMs = 7 * 24 * 60 * 60 * 1000
+  return Math.min(Math.round(value), maxRetryAfterMs)
+}
+
+function normalizeSignalKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/gu, '')
 }
 
 function getErrorTitle(category: CcrErrorCategory): string {

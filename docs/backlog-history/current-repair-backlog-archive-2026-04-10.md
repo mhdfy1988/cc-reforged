@@ -9,7 +9,7 @@
 3. 接下来按什么顺序继续修，避免在多个热点文件之间来回切换。
 
 这份文档是执行清单，不替代总体恢复方案。总体背景和阶段边界仍以
-[recovery-repair-plan.md](D:/agent_project/claude-code-reforged/docs/recovery-repair-plan.md)
+[recovery-repair-plan.md](../recovery/recovery-repair-plan.md)
 为准。
 
 ## 2. 当前快照

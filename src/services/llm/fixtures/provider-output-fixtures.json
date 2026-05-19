@@ -1,0 +1,744 @@
+{
+  "fixtureSchemaVersion": 1,
+  "description": "Provider raw output fixtures for CCR display normalization smoke.",
+  "cases": [
+    {
+      "id": "provider-openai-responses-text",
+      "provider": "openai",
+      "apiMode": "openai-responses",
+      "scenario": "text",
+      "rawProviderOutput": {
+        "id": "resp_openai_text",
+        "output": [
+          {
+            "type": "message",
+            "role": "assistant",
+            "content": [
+              {
+                "type": "output_text",
+                "text": "OpenAI Responses 文本已经归一化。"
+              }
+            ]
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "blocks": [
+          {
+            "type": "text",
+            "text": "OpenAI Responses 文本已经归一化。"
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "assistant_message",
+        "contentBlockTypes": ["text"],
+        "textIncludes": "OpenAI Responses 文本",
+        "rawProviderMarkers": ["\"output\"", "\"output_text\""],
+        "forbiddenDisplayMarkers": ["\"output_text\"", "\"choices\"", "\"candidates\""]
+      }
+    },
+    {
+      "id": "provider-openai-image-generation",
+      "provider": "openai",
+      "apiMode": "openai-images",
+      "scenario": "generated_image",
+      "rawProviderOutput": {
+        "created": 1770000000,
+        "data": [
+          {
+            "b64_json": "<redacted-base64>",
+            "revised_prompt": "A clean sunrise over calm water."
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "context": {
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture"
+        },
+        "blocks": [
+          {
+            "type": "image",
+            "origin": "model_output",
+            "lifecycle": "persisted",
+            "safety": "needs_review",
+            "attachmentId": "out_img_openai_fixture",
+            "displayName": "out_img_openai_fixture.png",
+            "mimeType": "image/png",
+            "provider": "openai",
+            "model": "gpt-image-1",
+            "outputId": "out_img_openai_fixture",
+            "savedPath": "C:\\Users\\[USER]\\.ccr\\generated_outputs\\thread_fixture\\out_img_openai_fixture.png",
+            "prompt": "画一张日出图片",
+            "revisedPrompt": "A clean sunrise over calm water.",
+            "source": {
+              "kind": "file",
+              "path": "C:\\Users\\[USER]\\.ccr\\generated_outputs\\thread_fixture\\out_img_openai_fixture.png"
+            },
+            "generatedArtifact": {
+              "id": "out_img_openai_fixture",
+              "type": "image",
+              "status": "saved",
+              "savedPath": "C:\\Users\\[USER]\\.ccr\\generated_outputs\\thread_fixture\\out_img_openai_fixture.png",
+              "mimeType": "image/png",
+              "provider": "openai",
+              "model": "gpt-image-1",
+              "outputId": "out_img_openai_fixture",
+              "prompt": "画一张日出图片",
+              "revisedPrompt": "A clean sunrise over calm water.",
+              "lifecycle": "persisted",
+              "safety": "needs_review"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "assistant_message",
+        "contentBlockTypes": ["image"],
+        "attachmentPreviewKind": "image",
+        "rawProviderMarkers": ["\"b64_json\"", "\"revised_prompt\""],
+        "forbiddenDisplayMarkers": ["\"b64_json\"", "<redacted-base64>", "base64,"]
+      }
+    },
+    {
+      "id": "provider-openai-responses-image-generation-call",
+      "provider": "openai",
+      "apiMode": "openai-responses",
+      "scenario": "generated_image",
+      "rawProviderOutput": {
+        "id": "resp_openai_image_tool",
+        "model": "gpt-5.5",
+        "output": [
+          {
+            "type": "image_generation_call",
+            "id": "ig_codex_style_fixture",
+            "status": "completed",
+            "result": "<redacted-base64>",
+            "revised_prompt": "A clean sunrise over calm water."
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "context": {
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture"
+        },
+        "blocks": [
+          {
+            "type": "image",
+            "origin": "model_output",
+            "lifecycle": "persisted",
+            "safety": "needs_review",
+            "attachmentId": "ig_codex_style_fixture",
+            "displayName": "ig_codex_style_fixture.png",
+            "mimeType": "image/png",
+            "provider": "openai",
+            "model": "gpt-5.5",
+            "outputId": "ig_codex_style_fixture",
+            "savedPath": "C:\\Users\\[USER]\\.ccr\\generated_outputs\\thread_fixture\\ig_codex_style_fixture.png",
+            "prompt": "画一张日出图片",
+            "revisedPrompt": "A clean sunrise over calm water.",
+            "source": {
+              "kind": "file",
+              "path": "C:\\Users\\[USER]\\.ccr\\generated_outputs\\thread_fixture\\ig_codex_style_fixture.png"
+            },
+            "generatedArtifact": {
+              "id": "ig_codex_style_fixture",
+              "type": "image",
+              "status": "saved",
+              "savedPath": "C:\\Users\\[USER]\\.ccr\\generated_outputs\\thread_fixture\\ig_codex_style_fixture.png",
+              "mimeType": "image/png",
+              "provider": "openai",
+              "model": "gpt-5.5",
+              "outputId": "ig_codex_style_fixture",
+              "prompt": "画一张日出图片",
+              "revisedPrompt": "A clean sunrise over calm water.",
+              "lifecycle": "persisted",
+              "safety": "needs_review"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "assistant_message",
+        "contentBlockTypes": ["image"],
+        "attachmentPreviewKind": "image",
+        "rawProviderMarkers": ["\"image_generation_call\"", "\"result\"", "\"gpt-5.5\""],
+        "forbiddenDisplayMarkers": ["\"image_generation_call\"", "\"result\"", "<redacted-base64>", "base64,"]
+      }
+    },
+    {
+      "id": "provider-minimax-image-generation",
+      "provider": "minimax",
+      "apiMode": "minimax-image-generation",
+      "scenario": "generated_image",
+      "rawProviderOutput": {
+        "id": "minimax_image_fixture",
+        "data": {
+          "image_base64": ["<redacted-base64>"]
+        },
+        "metadata": {
+          "success_count": 1,
+          "failed_count": 0
+        },
+        "base_resp": {
+          "status_code": 0,
+          "status_msg": "success"
+        }
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "context": {
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture"
+        },
+        "blocks": [
+          {
+            "type": "image",
+            "origin": "model_output",
+            "lifecycle": "persisted",
+            "safety": "needs_review",
+            "attachmentId": "out_minimax_fixture",
+            "displayName": "out_minimax_fixture.png",
+            "mimeType": "image/png",
+            "provider": "minimax",
+            "model": "image-01",
+            "outputId": "out_minimax_fixture",
+            "savedPath": "C:\\Users\\[USER]\\.ccr\\generated_outputs\\thread_fixture\\out_minimax_fixture.png",
+            "prompt": "画一张日出图片",
+            "source": {
+              "kind": "file",
+              "path": "C:\\Users\\[USER]\\.ccr\\generated_outputs\\thread_fixture\\out_minimax_fixture.png"
+            },
+            "generatedArtifact": {
+              "id": "out_minimax_fixture",
+              "type": "image",
+              "status": "saved",
+              "savedPath": "C:\\Users\\[USER]\\.ccr\\generated_outputs\\thread_fixture\\out_minimax_fixture.png",
+              "mimeType": "image/png",
+              "provider": "minimax",
+              "model": "image-01",
+              "outputId": "out_minimax_fixture",
+              "prompt": "画一张日出图片",
+              "lifecycle": "persisted",
+              "safety": "needs_review"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "assistant_message",
+        "contentBlockTypes": ["image"],
+        "attachmentPreviewKind": "image",
+        "rawProviderMarkers": ["\"image_base64\"", "\"base_resp\"", "\"success_count\""],
+        "forbiddenDisplayMarkers": ["\"image_base64\"", "\"base_resp\"", "<redacted-base64>", "base64,"]
+      }
+    },
+    {
+      "id": "provider-anthropic-tool-call",
+      "provider": "anthropic",
+      "apiMode": "anthropic-messages",
+      "scenario": "tool_call",
+      "rawProviderOutput": {
+        "id": "msg_anthropic_tool",
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "我需要读取 README。"
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_read_readme",
+            "name": "Read",
+            "input": {
+              "file_path": "README.md"
+            }
+          }
+        ],
+        "stop_reason": "tool_use"
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "context": {
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture"
+        },
+        "blocks": [
+          {
+            "type": "text",
+            "text": "我需要读取 README。"
+          },
+          {
+            "type": "tool_use",
+            "id": "toolu_read_readme",
+            "name": "Read",
+            "input": {
+              "file_path": "README.md"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "tool_call",
+        "contentBlockTypes": ["text", "tool_call"],
+        "toolName": "Read",
+        "rawProviderMarkers": ["\"stop_reason\"", "\"tool_use\""],
+        "forbiddenDisplayMarkers": ["\"stop_reason\"", "\"content\":[", "\"message_start\""]
+      }
+    },
+    {
+      "id": "provider-gemini-function-call",
+      "provider": "gemini",
+      "apiMode": "gemini-generate-content",
+      "scenario": "tool_call",
+      "rawProviderOutput": {
+        "candidates": [
+          {
+            "content": {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "我需要检索文档。"
+                },
+                {
+                  "functionCall": {
+                    "name": "Read",
+                    "args": {
+                      "file_path": "docs/README.md"
+                    }
+                  }
+                }
+              ]
+            },
+            "finishReason": "STOP"
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "context": {
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture"
+        },
+        "blocks": [
+          {
+            "type": "text",
+            "text": "我需要检索文档。"
+          },
+          {
+            "type": "tool_use",
+            "id": "gemini_call_read",
+            "name": "Read",
+            "input": {
+              "file_path": "docs/README.md"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "tool_call",
+        "contentBlockTypes": ["text", "tool_call"],
+        "toolName": "Read",
+        "rawProviderMarkers": ["\"candidates\"", "\"functionCall\""],
+        "forbiddenDisplayMarkers": ["\"candidates\"", "\"functionCall\"", "\"finishReason\""]
+      }
+    },
+    {
+      "id": "provider-deepseek-thinking-tool",
+      "provider": "deepseek",
+      "apiMode": "openai-chat",
+      "scenario": "tool_call",
+      "rawProviderOutput": {
+        "id": "deepseek_tool_response",
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "message": {
+              "reasoning_content": "先判断需要搜索文件。",
+              "content": "我会搜索目标文件。",
+              "tool_calls": [
+                {
+                  "id": "call_grep",
+                  "type": "function",
+                  "function": {
+                    "name": "Grep",
+                    "arguments": "{\"pattern\":\"ErrorSnapshot\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "context": {
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture"
+        },
+        "blocks": [
+          {
+            "type": "thinking",
+            "thinking": "先判断需要搜索文件。"
+          },
+          {
+            "type": "text",
+            "text": "我会搜索目标文件。"
+          },
+          {
+            "type": "tool_use",
+            "id": "call_grep",
+            "name": "Grep",
+            "input": {
+              "pattern": "ErrorSnapshot"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "tool_call",
+        "contentBlockTypes": ["thinking", "text", "tool_call"],
+        "toolName": "Grep",
+        "rawProviderMarkers": ["\"choices\"", "\"reasoning_content\"", "\"tool_calls\""],
+        "forbiddenDisplayMarkers": ["\"choices\"", "\"reasoning_content\"", "\"tool_calls\"", "\"finish_reason\""]
+      }
+    },
+    {
+      "id": "provider-kimi-api-text",
+      "provider": "kimi-api",
+      "apiMode": "openai-chat",
+      "scenario": "text",
+      "rawProviderOutput": {
+        "id": "kimi_api_text_response",
+        "model": "kimi-k2.6",
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "message": {
+              "content": "Kimi API 文本已经归一化。"
+            }
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "blocks": [
+          {
+            "type": "text",
+            "text": "Kimi API 文本已经归一化。"
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "assistant_message",
+        "contentBlockTypes": ["text"],
+        "textIncludes": "Kimi API 文本",
+        "rawProviderMarkers": ["\"choices\"", "\"kimi-k2.6\""],
+        "forbiddenDisplayMarkers": ["\"choices\"", "\"finish_reason\""]
+      }
+    },
+    {
+      "id": "provider-kimi-code-tool-call",
+      "provider": "kimi-code",
+      "apiMode": "openai-chat",
+      "scenario": "tool_call",
+      "rawProviderOutput": {
+        "id": "kimi_code_tool_response",
+        "model": "kimi-for-coding",
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "message": {
+              "content": "我需要检查项目状态。",
+              "tool_calls": [
+                {
+                  "id": "call_kimi_status",
+                  "type": "function",
+                  "function": {
+                    "name": "Status",
+                    "arguments": "{\"scope\":\"repo\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "context": {
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture"
+        },
+        "blocks": [
+          {
+            "type": "text",
+            "text": "我需要检查项目状态。"
+          },
+          {
+            "type": "tool_use",
+            "id": "call_kimi_status",
+            "name": "Status",
+            "input": {
+              "scope": "repo"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "tool_call",
+        "contentBlockTypes": ["text", "tool_call"],
+        "toolName": "Status",
+        "rawProviderMarkers": ["\"tool_calls\"", "\"kimi-for-coding\""],
+        "forbiddenDisplayMarkers": ["\"tool_calls\"", "\"finish_reason\""]
+      }
+    },
+    {
+      "id": "provider-glm-api-text",
+      "provider": "glm-api",
+      "apiMode": "openai-chat",
+      "scenario": "text",
+      "rawProviderOutput": {
+        "id": "glm_api_text_response",
+        "model": "glm-5.1",
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "message": {
+              "content": "GLM API 文本已经归一化。"
+            }
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "blocks": [
+          {
+            "type": "text",
+            "text": "GLM API 文本已经归一化。"
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "assistant_message",
+        "contentBlockTypes": ["text"],
+        "textIncludes": "GLM API 文本",
+        "rawProviderMarkers": ["\"choices\"", "\"glm-5.1\""],
+        "forbiddenDisplayMarkers": ["\"choices\"", "\"finish_reason\""]
+      }
+    },
+    {
+      "id": "provider-glm-coding-tool-call",
+      "provider": "glm-coding",
+      "apiMode": "openai-chat",
+      "scenario": "tool_call",
+      "rawProviderOutput": {
+        "id": "glm_coding_tool_response",
+        "model": "glm-5.1",
+        "choices": [
+          {
+            "finish_reason": "tool_calls",
+            "message": {
+              "content": "我需要读取配置。",
+              "tool_calls": [
+                {
+                  "id": "call_glm_read",
+                  "type": "function",
+                  "function": {
+                    "name": "Read",
+                    "arguments": "{\"file_path\":\"config.toml\"}"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "assistant_message",
+        "status": "completed",
+        "context": {
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture"
+        },
+        "blocks": [
+          {
+            "type": "text",
+            "text": "我需要读取配置。"
+          },
+          {
+            "type": "tool_use",
+            "id": "call_glm_read",
+            "name": "Read",
+            "input": {
+              "file_path": "config.toml"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "tool_call",
+        "contentBlockTypes": ["text", "tool_call"],
+        "toolName": "Read",
+        "rawProviderMarkers": ["\"tool_calls\"", "\"glm-5.1\""],
+        "forbiddenDisplayMarkers": ["\"tool_calls\"", "\"finish_reason\""]
+      }
+    },
+    {
+      "id": "provider-openai-compatible-history-attachment",
+      "provider": "openai-compatible",
+      "apiMode": "openai-chat",
+      "scenario": "attachment",
+      "rawProviderOutput": {
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "识别这张截图"
+              },
+              {
+                "type": "image_url",
+                "image_url": {
+                  "url": "data:image/png;base64,iVBORw0KGgo="
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "user_message",
+        "status": "completed",
+        "context": {
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture",
+          "params": {
+            "source": "history"
+          }
+        },
+        "blocks": [
+          {
+            "type": "text",
+            "text": "识别这张截图"
+          },
+          {
+            "type": "image",
+            "attachmentId": "fixture-image-1",
+            "displayName": "screen.png",
+            "mimeType": "image/png",
+            "sizeBytes": 16,
+            "source": {
+              "kind": "contentRef",
+              "contentRef": "attachment://fixture-image-1"
+            },
+            "previewDataUrl": "data:image/png;base64,iVBORw0KGgo="
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "user_message",
+        "contentBlockTypes": ["text", "image"],
+        "textIncludes": "识别这张截图",
+        "attachmentPreviewKind": "image",
+        "rawProviderMarkers": ["\"image_url\"", "\"messages\""],
+        "forbiddenDisplayMarkers": ["\"image_url\"", "\"messages\"", "\"role\":\"user\""]
+      }
+    },
+    {
+      "id": "provider-openai-compatible-tool-result-history",
+      "provider": "openai-compatible",
+      "apiMode": "openai-chat",
+      "scenario": "tool_result",
+      "rawProviderOutput": {
+        "messages": [
+          {
+            "role": "tool",
+            "tool_call_id": "call_readme",
+            "content": "{\"ok\":true,\"path\":\"README.md\"}"
+          }
+        ]
+      },
+      "displayInput": {
+        "kind": "tool_result",
+        "status": "completed",
+        "context": {
+          "threadId": "thread_fixture",
+          "turnId": "turn_fixture",
+          "params": {
+            "toolUseId": "call_readme"
+          }
+        },
+        "blocks": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "call_readme",
+            "name": "Read",
+            "content": {
+              "ok": true,
+              "path": "README.md"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "eventType": "tool_result",
+        "contentBlockTypes": ["tool_result"],
+        "toolSnapshotKind": "result",
+        "rawProviderMarkers": ["\"tool_call_id\"", "\"role\":\"tool\""],
+        "forbiddenDisplayMarkers": ["\"tool_call_id\"", "\"role\":\"tool\""]
+      }
+    },
+    {
+      "id": "provider-openai-compatible-rate-limit-error",
+      "provider": "openai-compatible",
+      "apiMode": "openai-chat",
+      "scenario": "error",
+      "rawProviderOutput": {
+        "error": {
+          "type": "rate_limit_error",
+          "message": "Too many requests"
+        },
+        "status": 429
+      },
+      "displayInput": {
+        "kind": "error",
+        "error": {
+          "message": "OpenAI Compatible API request failed (429 Too Many Requests): Too many requests.",
+          "source": "provider",
+          "safeDetails": {
+            "status": 429,
+            "error": {
+              "type": "rate_limit_error"
+            }
+          }
+        }
+      },
+      "expected": {
+        "eventType": "error",
+        "contentBlockTypes": ["error"],
+        "errorCategory": "rate_limited",
+        "errorSource": "provider",
+        "rawProviderMarkers": ["\"rate_limit_error\"", "\"status\":429"],
+        "forbiddenDisplayMarkers": ["\"Too many requests\",\"status\"", "\"choices\"", "\"candidates\""]
+      }
+    }
+  ]
+}

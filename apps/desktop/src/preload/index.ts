@@ -195,9 +195,26 @@ type DesktopTurnAttachmentInput = {
   text?: string
 }
 
+type DesktopImageGenerationOption =
+  | boolean
+  | {
+      enabled?: boolean
+      prompt?: string
+      model?: string
+      size?: string
+      quality?: string
+      outputFormat?: string
+      responseFormat?: 'b64_json' | 'url'
+      n?: number
+      metadata?: Record<string, unknown>
+    }
+
 type DesktopStartTurnInput = {
   text: string
   attachments?: DesktopTurnAttachmentInput[]
+  options?: {
+    imageGeneration?: DesktopImageGenerationOption
+  }
 }
 
 type PermissionSettingsUpdateInput = {
@@ -279,6 +296,7 @@ const api = {
   openPath: (path: string) => ipcRenderer.invoke('ccr:open-path', path),
   showItemInFolder: (path: string) =>
     ipcRenderer.invoke('ccr:show-item-in-folder', path),
+  savePathAs: (path: string) => ipcRenderer.invoke('ccr:save-path-as', path),
   copyText: (text: string) => ipcRenderer.invoke('ccr:copy-text', text),
   respondPermission: (input: PermissionRespondInput) =>
     ipcRenderer.invoke('ccr:permission-respond', input),

@@ -618,6 +618,13 @@ function contentBlocks(content) {
                 content: 'content' in block ? block.content : undefined,
             };
         }
+        if ('type' in block &&
+            (block.type === 'image' ||
+                block.type === 'file' ||
+                block.type === 'audio' ||
+                block.type === 'video')) {
+            return { ...block, type: String(block.type) };
+        }
         return { type: String('type' in block ? block.type : 'json'), value: block };
     });
 }

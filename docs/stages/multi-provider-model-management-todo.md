@@ -6,6 +6,8 @@
 
 参考设计：[CCR 多供应商模型与协议接入设计](../architecture/multi-provider-model-management-design.md)。
 
+长期路线图：[CCR LLM Provider 与多模态协议长期路线图](../architecture/llm-provider-protocol-long-term-roadmap.md)。
+
 多模态输入/输出、附件上传和图片预览不在本文推进，单独见 [CCR 多模态输入输出 Todo](./multimodal-input-output-todo.md)。本文只提供模型能力声明和 provider/profile 选择能力。
 
 ## 当前任务列表（实时）
@@ -26,6 +28,13 @@
 - [ ] MP-06 OpenAI Compatible / 第三方中转 provider
 - [x] MP-06a DeepSeek 官方 API provider 第一版
 - [x] MP-06b MiniMax 国际版 / 国内版官方 API provider 第一版
+- [x] MP-06c Kimi API provider 第一版
+- [x] MP-06d Kimi Code provider 第一版
+- [x] MP-06e GLM API provider 第一版
+- [x] MP-06f GLM Coding Plan provider 第一版
+- [ ] MP-06g OpenAI-compatible / Gateway profile 能力覆盖
+- [ ] MP-06h Anthropic 官方 provider 标准化
+- [ ] MP-06i Gemini GenerateContent provider 第一版
 - [x] MP-07 可用性状态与测试连接
 - [x] MP-07a Core / App Server / SDK 可用性状态与手动测试连接第一版
 - [x] MP-07b Desktop 模型页展示、测试按钮和失败状态第一版
@@ -39,23 +48,27 @@
 - [x] MP-11 CLI / TUI 配置与切换入口补齐
 - [x] MP-12 smoke、真实 e2e 和文档收口
 - [ ] MP-13 智能强度 / 推理强度能力目录、Profile 覆盖与 Desktop 入口
+- [ ] MP-14 Structured Output provider profile 与 Desktop 视图
+- [ ] MP-15 生成型多模态输出第二阶段
+- [ ] MP-16 Provider conformance matrix 与发布回归体系
 
 ## 当前指针
 
-- 进行中：准备当前版本文档收口与提交。
-- 当前正在做：把 README、CHANGELOG、供应商接入文档和本 todo 调整到 0.4.3 当前状态。
-- 当前进展：Core、App Server、SDK、Desktop、CLI 和 TUI 的多 Profile / 多模型第一版已经打通。Desktop 左侧已新增“模型”一级页面，按“供应商类型 / 连接配置 / 配置详情”三栏管理 Profile。顶部快速切换已拆成“模型切换”和“连接配置切换”两个入口。`llm.config.local.json` 已支持 `schemaVersion + current + providerOverrides + profiles`，写回不再保留旧顶层字段。全新安装没有默认 Profile；登录、保存 API Key 或新增连接配置时才生成 `providerType-数字` Profile。敏感凭据统一写入 `llm.credentials.local.json` 的 `profileCredentials[profileId]`，不再使用 `credentialRef` 或单独 `codex-oauth.json`。Profile 新增、编辑、复制、删除已从 Core -> App Server -> Desktop IPC -> 模型页接通。每轮 turn metadata 已记录 `profileId/profileName/provider/providerDisplayName/apiMode/authStrategy/model/requestedModel/contextWindow`，App Server SDK smoke 已覆盖。CLI 已新增 `ccr model status/list/set/profile`，TUI `/model` 已支持 `profile <profileId> [modelId]`。DeepSeek 复用 OpenAI Chat 公共适配器；MiniMax 国际版 / 国内版已切到 Anthropic Messages 公共适配器，测试连接和普通聊天链路已接通。
-- 下一步：提交当前版本；后续主线在官方 OpenAI provider、OpenAI Compatible / 第三方中转、多模态专项、模型页细节打磨之间选择。
+- 已完成：STD-PROVIDER-01 Kimi / GLM Provider 接入第一版。
+- 当前正在做：STD-PROVIDER-02 已接 provider 成熟化与真实使用闭环，先把 Codex OAuth、DeepSeek、MiniMax、Kimi、GLM 做成熟。
+- 当前进展：Core、App Server、SDK、Desktop、CLI 和 TUI 的多 Profile / 多模型第一版已经打通。Desktop 左侧已新增“模型”一级页面，按“供应商类型 / 连接配置 / 配置详情”三栏管理 Profile。顶部快速切换已拆成“模型切换”和“连接配置切换”两个入口。`llm.config.local.json` 已支持 `schemaVersion + current + providerOverrides + profiles`，写回不再保留旧顶层字段。全新安装没有默认 Profile；登录、保存 API Key 或新增连接配置时才生成 `providerType-数字` Profile。敏感凭据统一写入 `llm.credentials.local.json` 的 `profileCredentials[profileId]`，不再使用 `credentialRef` 或单独 `codex-oauth.json`。Profile 新增、编辑、复制、删除已从 Core -> App Server -> Desktop IPC -> 模型页接通。每轮 turn metadata 已记录 `profileId/profileName/provider/providerDisplayName/apiMode/authStrategy/model/requestedModel/contextWindow`，App Server SDK smoke 已覆盖。CLI 已新增 `ccr model status/list/set/profile`，TUI `/model` 已支持 `profile <profileId> [modelId]`。DeepSeek、Kimi API 和 GLM 复用 OpenAI Chat 公共适配器；MiniMax 国际版 / 国内版和 Kimi Code 已切到 Anthropic Messages 公共适配器，测试连接和普通聊天链路已接通。
+- 下一步：先建立已接 provider 成熟度矩阵和真实 probe 清单；MP-06g OpenAI-compatible / Gateway profile 能力覆盖后置，不急于新增入口。
 - 后续新增：补 MP-13，把“智能：低 / 中 / 高 / 超高”作为模型能力接入，而不是全局固定开关。该项需要同时覆盖能力目录、Profile 覆盖、顶部入口、provider adapter 参数映射和 turn metadata 记录。
 
 ## 接下来安排
 
-整体顺序：先做 Core 配置与协议模型，再做 provider 接入，最后做 Desktop / CLI / TUI 的配置和切换体验。
+整体顺序：先做 Core 配置与协议模型，再做 provider 接入，再补协议族和多模态输出，最后做验证、可观测和发布硬化。
 
 - 第一段：MP-00 到 MP-03，先把数据模型、配置读写和敏感信息隔离定稳。
 - 第二段：MP-04 到 MP-06，落协议适配层、官方 OpenAI、OpenAI Compatible / 第三方中转。
 - 第三段：MP-07 到 MP-10，落可用性判断、测试连接、Desktop 一级模型页、顶部快速切换和每轮元数据。
 - 第四段：MP-11 到 MP-12，补 CLI/TUI 入口、smoke、真实 e2e 和文档收口。
+- 第五段：MP-13 到 MP-16，补推理强度、结构化输出、生成型多模态输出第二阶段，以及 provider conformance matrix。
 
 ## 关键规则
 
@@ -277,7 +290,7 @@ MP-03d 已交付：
 
 ## MP-05 官方 OpenAI provider
 
-状态：待开始。
+状态：已完成第一版。
 
 目标：
 
@@ -396,6 +409,227 @@ MP-03d 已交付：
 
 - 继续观察 MiniMax 真实工具调用边界，并补充 thinking / redacted thinking 的边界测试。
 - MiniMax 新模型、thinking、多模态和真实上下文窗口以官方文档为准。
+
+## MP-06c Kimi API provider 第一版
+
+状态：待开始。
+
+Goal：[2026-05-19 STD-PROVIDER-01 Kimi / GLM Provider 接入](../goals/2026-05-19-std-provider-01-kimi-glm-openai-chat-compatible.md)
+
+长期接入文档：[Kimi / Moonshot 供应商接入记录](../architecture/provider-integrations/kimi.md)
+
+目标：
+
+- 新增 `kimi-api` provider，不把 Kimi 开放平台伪装成 OpenAI。
+- 复用公共 `OpenAiChatCompletionsAdapter`。
+- 覆盖文本、流式、OpenAI-style tools、tool result 历史和错误快照。
+
+计划交付：
+
+- `providerDefinitions.ts` 新增 `kimi-api`。
+- `llmConfig.ts` 新增默认 Kimi API 配置。
+- `modelCatalog.ts` 新增 Kimi API 模型目录和能力声明。
+- `KimiApiProvider.ts` 新增供应商壳。
+- provider fixture 和 smoke。
+- provider 文档补实现记录。
+
+验收：
+
+- Kimi API Profile 能读取独立凭据。
+- 请求落到 `https://api.moonshot.cn/v1/chat/completions`。
+- 文本 / stream / tools / tool result / 错误快照均归一化到 CCR 标准结构。
+- 不影响 DeepSeek 和其他 OpenAI Chat compatible provider 默认行为。
+
+已交付：
+
+- `providerDefinitions.ts` 新增 `kimi-api`。
+- `llmConfig.ts` 新增默认 Kimi API 配置，默认 base URL 为 `https://api.moonshot.cn/v1`。
+- `modelCatalog.ts` 新增 `kimi-k2.6` 目录项。
+- `KimiApiProvider` 复用公共 OpenAI Chat 兼容 provider 壳。
+- `smoke:kimi-glm-providers` 覆盖凭据隔离、请求 URL、文本响应、stream 和工具历史修复。
+
+## MP-06d Kimi Code provider 第一版
+
+状态：已完成第一版。
+
+Goal：[2026-05-19 STD-PROVIDER-01 Kimi / GLM Provider 接入](../goals/2026-05-19-std-provider-01-kimi-glm-openai-chat-compatible.md)
+
+长期接入文档：[Kimi / Moonshot 供应商接入记录](../architecture/provider-integrations/kimi.md)
+
+目标：
+
+- 新增 `kimi-code` provider，不把 Kimi Code 和 Kimi 开放平台混成一个 provider。
+- 复用公共 `AnthropicMessagesAdapter`。
+- 请求 `model` 字段固定为统一模型标识 `kimi-for-coding`，不把它当成具体底层模型。
+- 明确 Kimi Code 是会员订阅的编程场景入口，不用于产品集成、团队协作或用量管理。
+
+计划交付：
+
+- `providerDefinitions.ts` 新增 `kimi-code`。
+- `llmConfig.ts` 新增默认 Kimi Code 配置。
+- `modelCatalog.ts` 新增 `kimi-code` provider 能力声明，`kimi-for-coding` 只作为 API 请求的统一模型标识。
+- `KimiCodeProvider.ts` 新增供应商壳。
+- provider fixture 和 smoke。
+- provider 文档补实现记录。
+
+验收：
+
+- Kimi Code Profile 能读取独立凭据。
+- 请求落到 `https://api.kimi.com/coding/v1/messages`。
+- 请求 `model` 字段固定为统一模型标识 `kimi-for-coding`。
+- 文档和配置语义能提示 Kimi Code 的会员订阅、频控和编程场景边界。
+- 文本 / stream / tools / tool result / 错误快照均归一化到 CCR 标准结构。
+- 不靠 base URL 猜 Kimi API 还是 Kimi Code，必须由 `providerType` 显式决定。
+
+已交付：
+
+- `providerDefinitions.ts` 新增 `kimi-code`。
+- `llmConfig.ts` 新增默认 Kimi Code 配置，保留 `modelIdentifierKind: "unified"` metadata。
+- `modelCatalog.ts` 新增 `kimi-for-coding` 目录项，并明确它是统一模型标识。
+- `KimiCodeProvider` 复用公共 Anthropic Messages 适配器，provider 壳负责 base URL 归一化、凭据读取和默认模型标识。
+- `smoke:kimi-glm-providers` 断言 `model` 字段为 `kimi-for-coding`，且请求落到 Kimi Code 专用 Anthropic Messages endpoint。
+
+## MP-06e GLM API provider 第一版
+
+状态：已完成第一版。
+
+Goal：[2026-05-19 STD-PROVIDER-01 Kimi / GLM Provider 接入](../goals/2026-05-19-std-provider-01-kimi-glm-openai-chat-compatible.md)
+
+长期接入文档：[GLM / BigModel 供应商接入记录](../architecture/provider-integrations/glm.md)
+
+目标：
+
+- 新增 `glm-api` provider，不把 GLM 通用 API 伪装成 OpenAI。
+- 复用公共 `OpenAiChatCompletionsAdapter`。
+- 把 GLM thinking / reasoning 差异留在 provider 壳或显式 options 中。
+
+计划交付：
+
+- `providerDefinitions.ts` 新增 `glm-api`。
+- `llmConfig.ts` 新增默认 GLM API 配置。
+- `modelCatalog.ts` 新增 GLM API 模型目录和能力声明。
+- `GlmApiProvider.ts` 新增供应商壳。
+- provider fixture 和 smoke。
+- provider 文档补实现记录。
+
+验收：
+
+- GLM API Profile 能读取独立凭据。
+- 请求落到 `https://open.bigmodel.cn/api/paas/v4/chat/completions`。
+- 文本 / stream / tools / tool result / 错误快照均归一化到 CCR 标准结构。
+- GLM thinking / reasoning 字段不污染公共 OpenAI Chat 默认行为。
+
+已交付：
+
+- `providerDefinitions.ts` 新增 `glm-api`。
+- `llmConfig.ts` 新增默认 GLM API 配置。
+- `modelCatalog.ts` 新增 `glm-5.1` 目录项。
+- `GlmApiProvider` 复用公共 OpenAI Chat 兼容 provider 壳。
+- `smoke:kimi-glm-providers` 覆盖请求 URL、文本响应、stream 和工具历史修复。
+
+## MP-06f GLM Coding Plan provider 第一版
+
+状态：已完成第一版。
+
+Goal：[2026-05-19 STD-PROVIDER-01 Kimi / GLM Provider 接入](../goals/2026-05-19-std-provider-01-kimi-glm-openai-chat-compatible.md)
+
+长期接入文档：[GLM / BigModel 供应商接入记录](../architecture/provider-integrations/glm.md)
+
+目标：
+
+- 新增 `glm-coding` provider，不把 GLM Coding Plan 和通用 API 混成一个 provider。
+- 复用公共 `OpenAiChatCompletionsAdapter`。
+- 使用 Coding API 专用 endpoint 和对应订阅权益边界。
+
+计划交付：
+
+- `providerDefinitions.ts` 新增 `glm-coding`。
+- `llmConfig.ts` 新增默认 GLM Coding 配置。
+- `modelCatalog.ts` 新增 GLM Coding 模型目录和能力声明。
+- `GlmCodingProvider.ts` 新增供应商壳。
+- provider fixture 和 smoke。
+- provider 文档补实现记录。
+
+验收：
+
+- GLM Coding Profile 能读取独立凭据。
+- 请求落到 `https://open.bigmodel.cn/api/coding/paas/v4/chat/completions`。
+- 文本 / stream / tools / tool result / 错误快照均归一化到 CCR 标准结构。
+- 不靠 base URL 猜 GLM API 还是 GLM Coding，必须由 `providerType` 显式决定。
+
+已交付：
+
+- `providerDefinitions.ts` 新增 `glm-coding`。
+- `llmConfig.ts` 新增默认 GLM Coding Plan 配置，默认 base URL 为 Coding API 专用 endpoint。
+- `modelCatalog.ts` 新增 `glm-5.1` 目录项。
+- `GlmCodingProvider` 复用公共 OpenAI Chat 兼容 provider 壳。
+- `smoke:kimi-glm-providers` 断言请求落到 `https://open.bigmodel.cn/api/coding/paas/v4/chat/completions`。
+
+## MP-06g OpenAI-compatible / Gateway profile 能力覆盖
+
+状态：待开始。
+
+目标：
+
+- 在 Kimi / GLM 这类官方 OpenAI Chat compatible provider 跑通后，再补泛 OpenAI-compatible / Gateway profile 的能力覆盖。
+- 不靠模型名猜能力，必须通过 profile override、provider probe 或用户配置声明工具、多模态、structured output 等能力。
+
+计划交付：
+
+- Profile capability override。
+- Gateway / relay provider 差异记录。
+- 工具 profile 和历史校验默认规则。
+- provider fixture 和 smoke。
+
+验收：
+
+- 自定义 endpoint 不需要伪装成官方 OpenAI。
+- 可以配置多个 Gateway Profile。
+- 模型能力来自 profile / probe / 显式声明，而不是硬编码模型名。
+
+## MP-06h Anthropic 官方 provider 标准化
+
+状态：待开始。
+
+目标：
+
+- 官方 Anthropic provider 去掉 transition metadata 依赖，直接消费 `LlmMessage`。
+- 先用 fixture/mock 完成标准 adapter，等有真实 API Key 后再补联网 probe。
+
+计划交付：
+
+- 官方 Anthropic provider 标准化。
+- Anthropic Messages history rule。
+- tool_use / tool_result fixture。
+- thinking / redacted thinking 回放规则。
+
+验收：
+
+- Anthropic raw response 不进入 Desktop。
+- `tool_use` / `tool_result` 进入 CCR 标准工具协议。
+- 没有真实 key 时不阻塞默认 smoke。
+
+## MP-06i Gemini GenerateContent provider 第一版
+
+状态：待开始。
+
+目标：
+
+- 实现 Gemini `GenerateContent` 协议族。
+- 覆盖 `contents.parts`、`functionCall`、`functionResponse` 和图片 / 文件输入边界。
+
+计划交付：
+
+- Gemini provider definition。
+- Gemini adapter。
+- Gemini 模型能力目录。
+- Gemini function call / function response history rule。
+- provider fixture 和 smoke。
+
+验收：
+
+- Gemini 文本、工具调用和工具结果能归一化为 CCR 标准结构。
+- Gemini 历史回放规则不污染 OpenAI Chat / Anthropic Messages adapter。
 
 ## MP-07 可用性状态与测试连接
 
@@ -717,8 +951,14 @@ MP-09b 已交付：
 - `smoke:minimax-provider` 覆盖 provider、adapter 和 `model/test` 链路；DeepSeek / OpenAI Chat smoke 保留为公共接口回归。
 - README、CHANGELOG、供应商接入文档和本 todo 已同步到 `0.4.3` 当前状态，准备提交版本。
 
+### 2026-05-19 Kimi / GLM Provider 收口
+
+- 完成 `kimi-api` / `kimi-code` / `glm-api` / `glm-coding` 四个 provider 第一版；`kimi-api` / `glm-api` / `glm-coding` 复用公共 `OpenAiChatCompletionsAdapter`，`kimi-code` 复用 `AnthropicMessagesAdapter`，并通过独立 providerType 保留产品边界、base URL、默认模型标识和凭据环境变量。
+- 新增 `OpenAiChatCompatibleProvider` 共享壳，避免 Kimi API / GLM 重复复制 profile、credential、baseUrl、defaultModel 解析逻辑。
+- `kimi-code` 的 `kimi-for-coding` 只作为统一模型标识处理，不用于推断底层模型能力。
+- 已验证：`npm.cmd run typecheck`、`npm.cmd run build`、`npm.cmd run smoke:kimi-glm-providers`、`npm.cmd run smoke:llm-config`、`npm.cmd run smoke:llm-runtime`、`npm.cmd run smoke:provider-output-fixtures`、`npm.cmd run smoke:openai-chat-protocol`、`npm.cmd run smoke:deepseek-provider`、`npm.cmd run smoke:minimax-provider`、`npm.cmd run smoke:model-capabilities`、`npm.cmd run smoke:desktop-display-events`、`git diff --check`。
+
 ## 备注
 
-- 当前状态：ready-for-release
-- 暂停原因：本轮多供应商第一版、MiniMax Anthropic Messages 接入和文档收口已经完成，等待提交与发布决策。
-- 下一步需要：在“官方 OpenAI provider / OpenAI Compatible 第三方中转 / 多模态输入输出 / Desktop 模型页细节打磨”里选下一条主线。
+- 当前状态：provider-maturity
+- 下一步需要：先把 Codex OAuth、DeepSeek、MiniMax、Kimi、GLM 的成熟度矩阵、普通会话 E2E、Desktop 配置体验和真实 probe 记录补齐；Gateway / Anthropic / Gemini 暂时后置。

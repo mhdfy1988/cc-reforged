@@ -27,11 +27,16 @@ export type CoreAudioContentBlock = CoreAttachmentContentBlock & {
   type: 'audio'
 }
 
+export type CoreVideoContentBlock = CoreAttachmentContentBlock & {
+  type: 'video'
+}
+
 export type CoreUserContentBlock =
   | CoreTextContentBlock
   | CoreImageContentBlock
   | CoreFileContentBlock
   | CoreAudioContentBlock
+  | CoreVideoContentBlock
 
 export type CoreTurnInput =
   | {
@@ -97,6 +102,8 @@ export type CoreTurnMetadata = {
   completedAt?: string | null
   errorKind?: string
   multimodalInput?: CoreJsonObject
+  imageGeneration?: CoreJsonObject
+  generatedImage?: CoreJsonObject
 }
 
 export type CoreThread = {

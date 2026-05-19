@@ -24,7 +24,7 @@ type ModelAvailabilitySnapshot = {
 
 type AttachmentBlock = Extract<
   TurnContentBlock,
-  { type: 'image' | 'file' | 'audio' }
+  { type: 'image' | 'file' | 'audio' | 'video' }
 >
 
 type BlockRejection = {
@@ -45,12 +45,19 @@ export function normalizeTurnStartInputForCurrentModel(input: {
   model: CoreModelFacade
 }): NormalizedTurnStartInput {
   const turnInput = input.params.input
+  const imageGenerationMetadata = normalizeImageGenerationMetadata(
+    input.params.options?.imageGeneration,
+    turnInput,
+  )
   if (turnInput.type === 'text') {
     return {
       input: {
         type: 'text',
         text: turnInput.text,
       },
+      ...(imageGenerationMetadata
+        ? { metadata: { imageGeneration: imageGenerationMetadata } }
+        : {}),
     }
   }
 
@@ -58,11 +65,17 @@ export function normalizeTurnStartInputForCurrentModel(input: {
     block => block.type !== 'text',
   )
   if (!requiresCapabilityCheck) {
-    return normalizeContentInput(turnInput)
+    return mergeNormalizedInputMetadata(
+      normalizeContentInput(turnInput),
+      imageGenerationMetadata,
+    )
   }
 
   const availability = input.model.getAvailability({}) as ModelAvailabilitySnapshot
-  return normalizeContentInput(turnInput, availability)
+  return mergeNormalizedInputMetadata(
+    normalizeContentInput(turnInput, availability),
+    imageGenerationMetadata,
+  )
 }
 
 export function normalizeContentInput(
@@ -208,6 +221,9 @@ function createAttachmentSummary(block: AttachmentBlock): string {
   if (block.type === 'audio') {
     return `[音频附件：${label}]`
   }
+  if (block.type === 'video') {
+    return `[视频附件：${label}]`
+  }
   return `[文件附件：${label}]`
 }
 
@@ -224,7 +240,7 @@ function toCoreUserContentBlocks(
 
     const coreBlock: Extract<
       CoreUserContentBlock,
-      { type: 'image' | 'file' | 'audio' }
+      { type: 'image' | 'file' | 'audio' | 'video' }
     > = {
       type: block.type,
     }
@@ -264,6 +280,60 @@ function createMultimodalMetadata(
   }
 }
 
+function mergeNormalizedInputMetadata(
+  input: NormalizedTurnStartInput,
+  imageGenerationMetadata: CoreJsonObject | undefined,
+): NormalizedTurnStartInput {
+  if (!imageGenerationMetadata) {
+    return input
+  }
+  return {
+    ...input,
+    metadata: {
+      ...(input.metadata ?? {}),
+      imageGeneration: imageGenerationMetadata,
+    },
+  }
+}
+
+function normalizeImageGenerationMetadata(
+  value: NonNullable<TurnStartParams['options']>['imageGeneration'],
+  turnInput: TurnInput,
+): CoreJsonObject | undefined {
+  if (value === undefined || value === false) {
+    return undefined
+  }
+  if (value === true) {
+    return {
+      enabled: true,
+      prompt: extractTurnInputText(turnInput),
+    }
+  }
+  return compactObject({
+    enabled: value.enabled !== false,
+    prompt: value.prompt?.trim() || extractTurnInputText(turnInput),
+    model: value.model?.trim(),
+    size: value.size?.trim(),
+    quality: value.quality?.trim(),
+    outputFormat: value.outputFormat?.trim(),
+    responseFormat: value.responseFormat,
+    n: value.n,
+    metadata: value.metadata,
+  })
+}
+
+function extractTurnInputText(input: TurnInput): string {
+  if (input.type === 'text') {
+    return input.text
+  }
+  return input.content
+    .filter((block): block is Extract<TurnContentBlock, { type: 'text' }> =>
+      block.type === 'text',
+    )
+    .map(block => block.text)
+    .join('\n')
+}
+
 function countModalities(
   blocks: readonly TurnContentBlock[],
 ): Record<LlmInputModality, number> {
@@ -272,7 +342,7 @@ function countModalities(
       counts[block.type] += 1
       return counts
     },
-    { text: 0, image: 0, file: 0, audio: 0 } satisfies Record<
+    { text: 0, image: 0, file: 0, audio: 0, video: 0 } satisfies Record<
       LlmInputModality,
       number
     >,

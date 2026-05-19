@@ -36,6 +36,8 @@ runNpm(['run', 'desktop:build']);
 runNpm(['run', 'smoke:desktop-auto-update']);
 runNpm(['run', 'smoke:desktop-branding']);
 runNpm(['run', 'smoke:desktop-display-events']);
+runNpm(['run', 'smoke:generated-output-provider']);
+runNpm(['run', 'smoke:provider-output-fixtures']);
 runNpm(['run', 'smoke:desktop-github-actions-release']);
 runNpm(['run', 'smoke:desktop-shell-cards']);
 runNpm(['run', 'smoke:desktop-signing-readiness']);

@@ -1354,15 +1354,32 @@ h1 {
   padding: 10px 12px;
 }
 
+.models-provider-item.locked,
+.models-provider-item:disabled {
+  border-color: rgba(204, 198, 192, 0.9);
+  color: #8d7f73;
+  background: rgba(244, 241, 237, 0.92);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
+.models-provider-item.locked.active,
+.models-provider-item:disabled.active {
+  border-color: rgba(204, 198, 192, 0.9);
+  background: rgba(244, 241, 237, 0.92);
+  box-shadow: none;
+}
+
 .models-profile-item {
   display: grid;
   min-height: 92px;
   padding: 13px 14px;
 }
 
-.models-provider-item:not(.active):hover,
-.models-profile-item:not(.active):hover,
-.models-model-item:not(.active):hover {
+.models-provider-item:not(.active):not(.locked):not(:disabled):hover,
+.models-profile-item:not(.active):not(:disabled):hover,
+.models-model-item:not(.active):not(:disabled):hover {
   border-color: rgba(239, 151, 0, 0.42);
   background: #fff8ea;
 }

@@ -9,6 +9,10 @@ import type {
   LlmModelProfileSaveInput,
   LlmModelProviderCatalog,
 } from '../../domain/displayTypes.js'
+import {
+  getProviderLockState,
+  isProviderLocked,
+} from '../../domain/providerLockPolicy.js'
 
 type ConnectionProfile = {
   id: string
@@ -85,8 +89,23 @@ export function ModelsPage(props: {
     if (providers.length === 0) {
       return
     }
-    if (!providers.some(provider => provider.id === selectedProviderId)) {
-      setSelectedProviderId(currentProviderId ?? providers[0]!.id)
+    const currentProviderUnlocked =
+      currentProviderId &&
+      providers.some(
+        provider =>
+          provider.id === currentProviderId &&
+          !isProviderLocked(provider),
+      )
+    const fallbackProviderId =
+      (currentProviderUnlocked ? currentProviderId : undefined) ??
+      providers.find(provider => !isProviderLocked(provider))?.id ??
+      providers[0]!.id
+    const selectedProviderUnlocked = providers.some(
+      provider =>
+        provider.id === selectedProviderId && !isProviderLocked(provider),
+    )
+    if (!selectedProviderUnlocked) {
+      setSelectedProviderId(fallbackProviderId)
     }
   }, [currentProviderId, providers, selectedProviderId])
 
@@ -187,7 +206,11 @@ export function ModelsPage(props: {
   ])
 
   useEffect(() => {
-    if (!selectedProvider?.id || !rawSelectedProfile?.id) {
+    if (
+      !selectedProvider?.id ||
+      !rawSelectedProfile?.id ||
+      isProviderLocked(selectedProvider)
+    ) {
       return
     }
     props.onRefreshAvailability(
@@ -218,6 +241,9 @@ export function ModelsPage(props: {
   const canDeleteProfile =
     rawSelectedProfile?.source === 'file' &&
     rawSelectedProfile.id !== currentProfileId
+  const selectedProviderLockState = getProviderLockState(selectedProvider)
+  const isSelectedProviderLocked = selectedProviderLockState.locked
+  const isProviderActionBlocked = props.busy || isSelectedProviderLocked
   const providerDisplayName = getProviderDisplayName(selectedProvider)
   const currentProfileLabel =
     currentProfile?.name ?? (currentProviderId && currentModel ? currentProviderId : '未配置模型')
@@ -232,14 +258,17 @@ export function ModelsPage(props: {
     : hasSelectedConnection
       ? selectedProfile?.displayName ?? providerDisplayName
       : providerDisplayName
+  const selectedProviderLockLabel = isSelectedProviderLocked
+    ? ` · 已锁定${selectedProviderLockState.reason ? `（${selectedProviderLockState.reason}）` : ''}`
+    : ''
   const detailSubtitle = profileEditor
     ? `${providerDisplayName} · ${getApiModeLabel(selectedProvider?.apiMode)} · ${getAuthStrategyLabel(
         selectedProvider?.authStrategy,
-      )}`
+      )}${selectedProviderLockLabel}`
     : hasSelectedConnection
       ? `${providerDisplayName} · ${getApiModeLabel(selectedProvider?.apiMode)} · ${getAvailabilityLabel(
           effectiveAvailability,
-        )}`
+        )}${selectedProviderLockLabel}`
       : '无连接配置'
   const canSaveProfileEditor =
     Boolean(selectedProvider?.id) &&
@@ -250,7 +279,14 @@ export function ModelsPage(props: {
     )
   const showTitleCreateAction = Boolean(selectedProvider) && !profileEditor
 
+  function shouldBlockSelectedProviderAction(): boolean {
+    return isSelectedProviderLocked
+  }
+
   function chooseProvider(provider: LlmModelProviderCatalog): void {
+    if (isProviderLocked(provider)) {
+      return
+    }
     setProfileEditor(null)
     setSelectedProviderId(provider.id)
     const nextProfile =
@@ -269,6 +305,9 @@ export function ModelsPage(props: {
   }
 
   function chooseProfile(profile: LlmModelProfile): void {
+    if (shouldBlockSelectedProviderAction()) {
+      return
+    }
     setProfileEditor(null)
     const nextModels = getProfileModelEntries(profile, selectedProvider)
     setSelectedProfileId(profile.id)
@@ -277,7 +316,7 @@ export function ModelsPage(props: {
   }
 
   function openCreateProfile(): void {
-    if (!selectedProvider) {
+    if (!selectedProvider || shouldBlockSelectedProviderAction()) {
       return
     }
     const providerModels = getProfileModelEntries(undefined, selectedProvider)
@@ -292,7 +331,12 @@ export function ModelsPage(props: {
   }
 
   function openEditProfile(): void {
-    if (!rawSelectedProfile || !selectedProvider || !canEditProfile) {
+    if (
+      !rawSelectedProfile ||
+      !selectedProvider ||
+      !canEditProfile ||
+      shouldBlockSelectedProviderAction()
+    ) {
       return
     }
     const modelIds = getProfileModelEntries(rawSelectedProfile, selectedProvider).map(
@@ -309,7 +353,7 @@ export function ModelsPage(props: {
   }
 
   function saveProfileEditor(): void {
-    if (!profileEditor || !selectedProvider) {
+    if (!profileEditor || !selectedProvider || shouldBlockSelectedProviderAction()) {
       return
     }
     const models = parseModelsText(profileEditor.modelsText)
@@ -354,7 +398,7 @@ export function ModelsPage(props: {
           {showTitleCreateAction ? (
             <button
               className="primary-action"
-              disabled={props.busy || !selectedProvider}
+              disabled={props.busy || !selectedProvider || isSelectedProviderLocked}
               type="button"
               onClick={openCreateProfile}
             >
@@ -373,27 +417,29 @@ export function ModelsPage(props: {
           </div>
           <div className="models-provider-list">
             {providers.length > 0 ? (
-              providers.map(provider => (
-                <button
-                  key={provider.id}
-                  className={
-                    provider.id === selectedProviderId
-                      ? 'models-provider-item active'
-                      : 'models-provider-item'
-                  }
-                  type="button"
-                  onClick={() => chooseProvider(provider)}
-                >
-                  <span>
-                    <strong>{getProviderDisplayName(provider)}</strong>
-                    <em>
-                      {getApiModeLabel(provider.apiMode)} ·{' '}
-                      {getAuthStrategyLabel(provider.authStrategy)}
-                    </em>
-                  </span>
-                  <small>{getProviderProfileCount(provider, profiles)}</small>
-                </button>
-              ))
+              providers.map(provider => {
+                const lockState = getProviderLockState(provider)
+                const isLocked = lockState.locked
+                return (
+                  <button
+                    key={provider.id}
+                    className={`${provider.id === selectedProviderId ? 'models-provider-item active' : 'models-provider-item'}${isLocked ? ' locked' : ''}`}
+                    disabled={isLocked}
+                    title={isLocked ? lockState.reason ?? '该供应商已锁定' : undefined}
+                    type="button"
+                    onClick={() => chooseProvider(provider)}
+                  >
+                    <span>
+                      <strong>{getProviderDisplayName(provider)}</strong>
+                      <em>
+                        {getApiModeLabel(provider.apiMode)} ·{' '}
+                        {getAuthStrategyLabel(provider.authStrategy)}
+                      </em>
+                    </span>
+                    <small>{isLocked ? '已锁定' : getProviderProfileCount(provider, profiles)}</small>
+                  </button>
+                )
+              })
             ) : (
               <div className="models-empty">模型列表加载中</div>
             )}
@@ -482,7 +528,7 @@ export function ModelsPage(props: {
               <div className="models-actions">
                 <button
                   className="ghost-action"
-                  disabled={props.busy || !canEditProfile}
+                  disabled={isProviderActionBlocked || !canEditProfile}
                   type="button"
                   onClick={openEditProfile}
                 >
@@ -490,9 +536,12 @@ export function ModelsPage(props: {
                 </button>
                 <button
                   className="ghost-action"
-                  disabled={props.busy || !rawSelectedProfile?.id}
+                  disabled={isProviderActionBlocked || !rawSelectedProfile?.id}
                   type="button"
                   onClick={() => {
+                    if (shouldBlockSelectedProviderAction()) {
+                      return
+                    }
                     if (rawSelectedProfile?.id) {
                       props.onCopyProfile(rawSelectedProfile.id)
                     }
@@ -502,9 +551,16 @@ export function ModelsPage(props: {
                 </button>
                 <button
                   className="ghost-action danger"
-                  disabled={props.busy || !canDeleteProfile || !rawSelectedProfile?.id}
+                  disabled={
+                    isProviderActionBlocked ||
+                    !canDeleteProfile ||
+                    !rawSelectedProfile?.id
+                  }
                   type="button"
                   onClick={() => {
+                    if (shouldBlockSelectedProviderAction()) {
+                      return
+                    }
                     if (rawSelectedProfile?.id) {
                       props.onDeleteProfile(rawSelectedProfile.id)
                     }
@@ -515,7 +571,7 @@ export function ModelsPage(props: {
                 <button
                   className="ghost-action"
                   disabled={
-                    props.busy ||
+                    isProviderActionBlocked ||
                     isSelectedTestConnectionPending ||
                     !hasSelectedConnection ||
                     !selectedProvider?.id ||
@@ -523,6 +579,9 @@ export function ModelsPage(props: {
                   }
                   type="button"
                   onClick={() => {
+                    if (shouldBlockSelectedProviderAction()) {
+                      return
+                    }
                     if (selectedProvider?.id && rawSelectedProfile?.id) {
                       props.onTestConnection(
                         selectedProvider.id,
@@ -537,7 +596,7 @@ export function ModelsPage(props: {
                 <button
                   className="primary-action"
                   disabled={
-                    props.busy ||
+                    isProviderActionBlocked ||
                     !hasSelectedConnection ||
                     !selectedProvider?.id ||
                     !selectedModel?.model ||
@@ -545,6 +604,9 @@ export function ModelsPage(props: {
                   }
                   type="button"
                   onClick={() => {
+                    if (shouldBlockSelectedProviderAction()) {
+                      return
+                    }
                     if (
                       selectedProvider?.id &&
                       selectedModel?.model &&
@@ -578,7 +640,7 @@ export function ModelsPage(props: {
                 <label>
                   <span>名称</span>
                   <input
-                    disabled={props.busy}
+                    disabled={isProviderActionBlocked}
                     value={profileEditor.name}
                     onChange={event =>
                       setProfileEditor(current =>
@@ -590,7 +652,7 @@ export function ModelsPage(props: {
                 <label>
                   <span>Base URL</span>
                   <input
-                    disabled={props.busy}
+                    disabled={isProviderActionBlocked}
                     placeholder="留空使用供应商默认地址"
                     value={profileEditor.baseUrl}
                     onChange={event =>
@@ -605,7 +667,7 @@ export function ModelsPage(props: {
                 <label>
                   <span>默认模型</span>
                   <input
-                    disabled={props.busy}
+                    disabled={isProviderActionBlocked}
                     value={profileEditor.defaultModel}
                     onChange={event =>
                       setProfileEditor(current =>
@@ -619,7 +681,7 @@ export function ModelsPage(props: {
                 <label className="profile-editor-models">
                   <span>模型列表</span>
                   <textarea
-                    disabled={props.busy}
+                    disabled={isProviderActionBlocked}
                     placeholder="每行一个模型 id"
                     value={profileEditor.modelsText}
                     onChange={event =>
@@ -635,7 +697,7 @@ export function ModelsPage(props: {
               <div className="models-actions">
                 <button
                   className="primary-action"
-                  disabled={props.busy || !canSaveProfileEditor}
+                  disabled={isProviderActionBlocked || !canSaveProfileEditor}
                   type="button"
                   onClick={saveProfileEditor}
                 >
@@ -643,7 +705,7 @@ export function ModelsPage(props: {
                 </button>
                 <button
                   className="ghost-action"
-                  disabled={props.busy}
+                  disabled={isProviderActionBlocked}
                   type="button"
                   onClick={() => setProfileEditor(null)}
                 >
@@ -686,8 +748,14 @@ export function ModelsPage(props: {
                     <button
                       className={selected ? 'models-model-item active' : 'models-model-item'}
                       key={`${selectedProvider?.id}:${model.model}`}
+                      disabled={isProviderActionBlocked}
                       type="button"
-                      onClick={() => setSelectedModelId(model.model)}
+                      onClick={() => {
+                        if (shouldBlockSelectedProviderAction()) {
+                          return
+                        }
+                        setSelectedModelId(model.model)
+                      }}
                     >
                       <span>
                         <strong>{displayName}</strong>
@@ -725,7 +793,7 @@ export function ModelsPage(props: {
               <div className="models-secret-form">
                 <input
                   autoComplete="off"
-                  disabled={props.busy}
+                  disabled={isProviderActionBlocked}
                   placeholder={
                     effectiveAvailability?.auth?.configured
                       ? '已配置，留空不会改变'
@@ -737,9 +805,14 @@ export function ModelsPage(props: {
                 />
                 <button
                   className="primary-action"
-                  disabled={props.busy || !canSaveApiKey || !selectedProvider?.id}
+                  disabled={
+                    isProviderActionBlocked || !canSaveApiKey || !selectedProvider?.id
+                  }
                   type="button"
                   onClick={() => {
+                    if (shouldBlockSelectedProviderAction()) {
+                      return
+                    }
                     if (selectedProvider?.id) {
                       props.onSaveApiKey(
                         selectedProvider.id,
@@ -755,9 +828,12 @@ export function ModelsPage(props: {
                 </button>
                 <button
                   className="ghost-action"
-                  disabled={props.busy || !selectedProvider?.id}
+                  disabled={isProviderActionBlocked || !selectedProvider?.id}
                   type="button"
                   onClick={() => {
+                    if (shouldBlockSelectedProviderAction()) {
+                      return
+                    }
                     if (selectedProvider?.id) {
                       props.onClearApiKey(
                         selectedProvider.id,
@@ -776,10 +852,15 @@ export function ModelsPage(props: {
                 <button
                   className="primary-action"
                   disabled={
-                    props.busy || isSelectedAuthLoginPending || !selectedProvider?.id
+                    isProviderActionBlocked ||
+                    isSelectedAuthLoginPending ||
+                    !selectedProvider?.id
                   }
                   type="button"
                   onClick={() => {
+                    if (shouldBlockSelectedProviderAction()) {
+                      return
+                    }
                     if (selectedProvider?.id && rawSelectedProfile?.id) {
                       props.onLoginAuth(
                         selectedProvider.id,
@@ -798,6 +879,7 @@ export function ModelsPage(props: {
                 {isSelectedAuthLoginPending ? (
                   <button
                     className="ghost-action"
+                    disabled={isProviderActionBlocked}
                     type="button"
                     onClick={props.onCancelLogin}
                   >

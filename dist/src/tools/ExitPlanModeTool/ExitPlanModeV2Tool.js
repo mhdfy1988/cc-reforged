@@ -34,7 +34,9 @@ const permissionSetupModule = feature('TRANSCRIPT_CLASSIFIER')
  * Used by Claude to request semantic permissions when exiting plan mode.
  */
 const allowedPromptSchema = lazySchema(() => z.object({
-    tool: z.enum(['Bash']).describe('The tool this prompt applies to'),
+    tool: z
+        .string()
+        .describe('The tool this prompt applies to. Only Bash prompt permissions are currently applied.'),
     prompt: z
         .string()
         .describe('Semantic description of the action, e.g. "run tests", "install dependencies"'),

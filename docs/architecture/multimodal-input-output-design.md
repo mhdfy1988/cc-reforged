@@ -100,8 +100,8 @@
 
 ```ts
 type LlmModelCapabilities = {
-  inputModalities: Array<'text' | 'image' | 'file' | 'audio'>
-  outputModalities: Array<'text' | 'image' | 'audio'>
+  inputModalities: Array<'text' | 'image' | 'file' | 'audio' | 'video'>
+  outputModalities: Array<'text' | 'image' | 'audio' | 'file' | 'video'>
   tools: boolean
   structuredOutput: boolean
   source: 'builtin' | 'profile_override' | 'default'
@@ -165,7 +165,11 @@ Provider adapter：把 blocks 转成 Anthropic Messages 对应请求格式
 | --- | --- | --- |
 | `codex-oauth` | `gpt-5.5` 声明 `text + image`、tools；`gpt-5.4` / `gpt-5.4-mini` 暂按文本模型处理 | 图片只在 provider adapter 边界读取为 base64 并映射成 pi-ai `image` block；未声明图片能力的模型继续阻止 |
 | `deepseek` 官方 | `text`、tools；默认不声明图片 | 图片发送前阻止 |
-| `minimax` | 按内置模型目录声明 | 只启用已确认能力 |
+| `minimax` | 文本模型按文本输入；图片模型按文本生图输出 | 只启用已确认能力 |
+| `kimi-api` | `kimi-k2.6` 声明 `text + image + video`、tools | 图片/视频走 OpenAI Chat compatible `image_url` / `video_url`；真实 probe 仍需补 |
+| `kimi-code` | 统一模型标识，第一版按文本输入 | 不从 `kimi-for-coding` 推断底层多模态能力 |
+| `glm-api` | `glm-5.1` 文本；`glm-5v-turbo` 声明 `text + image + video`，官方文件输入 pending | 图片/视频走 OpenAI Chat compatible；文件输入需要单独设计 URL / 上传策略 |
+| `glm-coding` | Coding Plan 第一版按文本输入 | 不从通用 API 模型能力反推 Coding Plan |
 | `openai-compatible` | 默认只支持文本 | 需要 Profile 覆盖才启用图片/文件 |
 | 后续官方 OpenAI | 按模型目录声明 `input/output` | OpenAI Responses 和 Chat Completions adapter 分别映射 |
 | 后续 Anthropic | 按模型目录声明图片理解能力 | 第一版只做图片输入，不把 Claude 当图片生成模型 |
@@ -195,13 +199,20 @@ Provider adapter：把 blocks 转成 Anthropic Messages 对应请求格式
 | `codex-oauth` | `gpt-5.4` / `gpt-5.4-mini` | 文本输入，文本输出，支持工具 |
 | `deepseek` | `deepseek-v4-flash` / `deepseek-v4-pro` | 文本输入，文本输出，支持工具 |
 | `minimax` / `minimax-cn` | `MiniMax-M2.7` / `MiniMax-M2.7-highspeed` | 文本输入，文本输出，支持工具 |
+| `minimax` / `minimax-cn` | `image-01` / `image-01-live` | 文本输入，图片输出 |
+| `kimi-api` | `kimi-k2.6` | 文本、图片、视频输入，文本输出，支持工具 |
+| `kimi-code` | `kimi-for-coding` | 文本输入，文本输出，支持工具 |
+| `glm-api` | `glm-5.1` | 文本输入，文本输出，支持工具 |
+| `glm-api` | `glm-5v-turbo` | 文本、图片、视频输入，文本输出，支持工具；官方文件输入待设计 |
+| `glm-api` | `glm-image` | 文本输入，图片输出 |
+| `glm-coding` | `glm-5.1` | 文本输入，文本输出，支持工具 |
 | `anthropic` | 当前默认 Claude 系列 | 代码里暂按 `text + image` 输入处理，后续需要细化到具体模型目录 |
 | 未知 provider / 未知模型 | 任意 | 默认纯文本输入 / 纯文本输出，不默认启用图片、文件或音频 |
 
 当前缺口：
 
 - `capabilityOverrides` 已有 schema，但本机配置暂未写入覆盖项。
-- 内置目录还没有覆盖官方 OpenAI、Gemini、更多 Claude 版本、结构化输出、音频、文件输入、图片生成等能力。
+- 内置目录还没有覆盖官方 OpenAI、Gemini、更多 Claude 版本、结构化输出、音频输入、GLM 文件输入、视频生成等能力。
 - `tools` 目前是布尔值，工具 strict schema、并行工具调用、deferred tool search 等细节已转入 [CCR Provider 工具协议统一化标准](./provider-tool-protocol-normalization.md) 继续细化。
 - Desktop 需要把解析后的 `modelCapabilities` 用到发送前校验和附件草稿状态，而不是只在顶部展示模型名。
 
@@ -365,6 +376,7 @@ CCR file  -> file / input_file / text fallback
 ```text
 CCR text  -> content text part
 CCR image -> image_url part
+CCR video -> video_url part
 CCR file  -> text fallback 或提示不支持
 ```
 
@@ -376,7 +388,8 @@ CCR file  -> text fallback 或提示不支持
 - 文本按 `text` part 发送。
 - 本地图片在 adapter 发请求前读取为 data URL，并放入 `image_url.url`。
 - URL 图片保持 URL 形式放入 `image_url.url`。
-- Provider 错误诊断只记录 content part 数、图片 part 数和文本长度，不输出 base64 或本地路径。
+- 本地视频在 adapter 发请求前读取为 data URL，并放入 `video_url.url`；URL 视频保持 URL 形式。
+- Provider 错误诊断只记录 content part 数、图片 / 视频 part 数和文本长度，不输出 base64 或本地路径。
 
 ### 6.3 Anthropic Messages
 

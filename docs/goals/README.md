@@ -1,6 +1,6 @@
 # CCR 阶段目标目录
 
-这里存放每个阶段开始前整理出来的 Goal 文档。
+这里存放每个阶段开始前整理出来的 Goal 文档。Goal 是阶段目标和验收记录，不是长期技术接入文档。
 
 Goal 文档只回答：
 
@@ -12,6 +12,8 @@ Goal 文档只回答：
 
 实时任务状态仍然以 `docs/stages/*-todo.md` 为准，Goal 不替代 Todo。
 
+长期技术方案、provider 接入方案和接口契约应同步沉淀到 `docs/architecture/`；Goal 中只保留本阶段为什么做、做了什么和如何验收。
+
 命名格式：
 
 ```text
@@ -20,6 +22,15 @@ YYYY-MM-DD-p<阶段号>-<简短主题>.md
 
 当前 Goal：
 
+- [2026-05-19 STD-PROVIDER-01 Kimi / GLM Provider 接入](./2026-05-19-std-provider-01-kimi-glm-openai-chat-compatible.md)
+- [2026-05-18 STD-OUTPUT-09 会话流生成图片输出闭环](./2026-05-18-std-output-09-session-generated-image-flow.md)
+- [2026-05-18 STD-OUTPUT-08 通用图片生成归一化与 MiniMax 接入](./2026-05-18-std-output-08-provider-neutral-minimax-image-generation.md)
+- [2026-05-18 STD-OUTPUT-07 OpenAI Responses image_generation 真实 API 接入](./2026-05-18-std-output-07-openai-responses-image-generation-api.md)
+- [2026-05-18 STD-OUTPUT-06 OpenAI 生成路径数据一致性](./2026-05-18-std-output-06-openai-generation-consistency.md)
+- [2026-05-18 STD-OUTPUT-05 真实 provider 生成 API 接入](./2026-05-18-std-output-05-real-provider-generation-api.md)
+- [2026-05-18 STD-OUTPUT-04 Codex 对齐的生成物落盘与恢复](./2026-05-18-std-output-04-generated-artifact-persistence.md)
+- [2026-05-18 STD-OUTPUT-03 生成型多模态输出设计](./2026-05-18-std-output-03-generated-multimodal-output.md)
+- [2026-05-18 STD-DISPLAY-02 Provider 输出 fixture 与历史恢复 smoke](./2026-05-18-std-display-02-provider-output-fixtures.md)
 - [2026-05-18 STD-DISPLAY-01 CcrContentBlock 共享类型](./2026-05-18-std-display-01-ccr-content-block.md)
 - [2026-05-18 STD-PROTOCOL-02 Provider 协议盘点与官方文档对照](./2026-05-18-std-protocol-02-provider-protocol-inventory.md)
 - [2026-05-18 STD-PROTOCOL-01 CCR 标准 LLM 协议文档](./2026-05-18-std-protocol-01-ccr-standard-llm-protocol.md)

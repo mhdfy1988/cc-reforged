@@ -229,8 +229,8 @@ npm.cmd run smoke:app-server
 - [settingsSync/types.ts](D:/agent_project/claude-code-reforged/src/services/settingsSync/types.ts)
   - sync key 切到 `.ccr`。
 - 文档
-  - 更新 [ccr-home-layout.md](D:/agent_project/claude-code-reforged/docs/ccr-home-layout.md) 的项目级私有配置说明。
-  - 更新 [ccr-conflict-isolation-migration.md](D:/agent_project/claude-code-reforged/docs/stages/ccr-conflict-isolation-migration.md) 第三轮状态。
+  - 更新 [CCR 用户目录与安装布局](../architecture/ccr-home-layout.md) 的项目级私有配置说明。
+  - 更新 [CCR 防冲突迁移清单](../architecture/ccr-conflict-isolation-migration.md) 第三轮状态。
 
 验收命令：
 
@@ -251,8 +251,8 @@ npm.cmd run smoke:permissions
 - [worktree.ts](D:/agent_project/claude-code-reforged/src/utils/worktree.ts) 的 post creation setup 已只复制 `.ccr/settings.local.json`。
 - [settingsSync/types.ts](D:/agent_project/claude-code-reforged/src/services/settingsSync/types.ts) 的 sync key 已切到 `.ccr`。
 - [settingsSync/index.ts](D:/agent_project/claude-code-reforged/src/services/settingsSync/index.ts) 上传和下载都只使用 `.ccr` key。
-- [ccr-home-layout.md](D:/agent_project/claude-code-reforged/docs/ccr-home-layout.md) 已补项目 `.ccr/settings*.json` 目录口径。
-- [ccr-conflict-isolation-migration.md](D:/agent_project/claude-code-reforged/docs/stages/ccr-conflict-isolation-migration.md) 已补第 3 轮项目级 settings 迁移进展。
+- [CCR 用户目录与安装布局](../architecture/ccr-home-layout.md) 已补项目 `.ccr/settings*.json` 目录口径。
+- [CCR 防冲突迁移清单](../architecture/ccr-conflict-isolation-migration.md) 已补第 3 轮项目级 settings 迁移进展。
 - [smoke-settings-isolation.mjs](D:/agent_project/claude-code-reforged/scripts/smoke-settings-isolation.mjs) 已覆盖 settings sync `.ccr` key 断言。
 
 验证：

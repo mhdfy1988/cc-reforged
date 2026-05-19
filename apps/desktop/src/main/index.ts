@@ -1,8 +1,8 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, screen, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
+import { appendFile, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   AppServerClientError,
@@ -169,11 +169,17 @@ type DesktopTurnAttachmentInput = {
   text?: string
 }
 
+type DesktopImageGenerationOption =
+  NonNullable<TurnStartParams['options']>['imageGeneration']
+
 type DesktopStartTurnInput =
   | string
   | {
       text?: string
       attachments?: DesktopTurnAttachmentInput[]
+      options?: {
+        imageGeneration?: DesktopImageGenerationOption
+      }
     }
 
 const DESKTOP_MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -551,11 +557,15 @@ function summarizeLogPayload(type: string, payload: unknown): Record<string, unk
 
   const object = payload as Record<string, unknown>
   if (type === 'notification') {
+    const params = getObjectValue(object, 'params')
     return {
       method: object.method,
-      turnId: getNestedValue(object, 'params', 'turnId'),
-      itemId: getNestedValue(object, 'params', 'itemId'),
-      permissionRequestId: getNestedValue(object, 'params', 'permissionRequestId'),
+      turnId: params?.turnId,
+      itemId: params?.itemId,
+      permissionRequestId: params?.permissionRequestId,
+      toolName: getNotificationToolName(params),
+      contentTypes: getNotificationContentTypes(params),
+      toolUseIds: getNotificationToolUseIds(params),
     }
   }
 
@@ -572,16 +582,81 @@ function summarizeLogPayload(type: string, payload: unknown): Record<string, unk
   }
 }
 
-function getNestedValue(
+function getObjectValue(
   object: Record<string, unknown>,
   key: string,
-  childKey: string,
-): unknown {
-  const child = object[key]
-  if (!child || typeof child !== 'object') {
+): Record<string, unknown> | undefined {
+  const value = object[key]
+  return value && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : undefined
+}
+
+function getNotificationToolName(
+  params: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!params) {
     return undefined
   }
-  return (child as Record<string, unknown>)[childKey]
+
+  const tool = getObjectValue(params, 'tool')
+  if (typeof tool?.name === 'string') {
+    return tool.name
+  }
+  if (typeof params.toolName === 'string') {
+    return params.toolName
+  }
+  if (typeof params.tool_name === 'string') {
+    return params.tool_name
+  }
+
+  const content = Array.isArray(params.content) ? params.content : []
+  for (const block of content) {
+    if (
+      block &&
+      typeof block === 'object' &&
+      typeof (block as Record<string, unknown>).name === 'string'
+    ) {
+      return (block as Record<string, unknown>).name as string
+    }
+  }
+  return undefined
+}
+
+function getNotificationContentTypes(
+  params: Record<string, unknown> | undefined,
+): string[] | undefined {
+  const content = params && Array.isArray(params.content) ? params.content : []
+  const types = content.flatMap(block => {
+    if (!block || typeof block !== 'object') {
+      return []
+    }
+    const type = (block as Record<string, unknown>).type
+    return typeof type === 'string' ? [type] : []
+  })
+  return types.length > 0 ? Array.from(new Set(types)) : undefined
+}
+
+function getNotificationToolUseIds(
+  params: Record<string, unknown> | undefined,
+): string[] | undefined {
+  const content = params && Array.isArray(params.content) ? params.content : []
+  const ids = content.flatMap(block => {
+    if (!block || typeof block !== 'object') {
+      return []
+    }
+    const object = block as Record<string, unknown>
+    const id =
+      object.id ??
+      object.toolUseId ??
+      object.toolUseID ??
+      object.tool_use_id ??
+      object.parentToolUseId ??
+      object.parentToolUseID ??
+      object.parent_tool_use_id
+    return typeof id === 'string' ? [id] : []
+  })
+  return ids.length > 0 ? Array.from(new Set(ids)) : undefined
 }
 
 function redactLogText(text: string): string {
@@ -1234,12 +1309,14 @@ async function startTurn(input: DesktopStartTurnInput): Promise<TurnStartResult>
   }
 
   const turnInput = normalizeDesktopStartTurnInput(input)
+  const imageGeneration = resolveDesktopImageGenerationOption(input)
   const thread = status.thread ?? (await startThread()).thread
   const result = await managedClient.client.startTurn({
     threadId: thread.threadId,
     input: turnInput,
     options: {
       stream: true,
+      ...(imageGeneration ? { imageGeneration } : {}),
     },
   })
   status.lastTurn = result.turn
@@ -1254,6 +1331,42 @@ async function startTurn(input: DesktopStartTurnInput): Promise<TurnStartResult>
   await refreshRuntimeSnapshots()
   broadcast('state', { message: 'turn queued', turn: result.turn })
   return result
+}
+
+function resolveDesktopImageGenerationOption(
+  input: DesktopStartTurnInput,
+): DesktopImageGenerationOption | undefined {
+  if (typeof input !== 'string' && input.options?.imageGeneration !== undefined) {
+    return input.options.imageGeneration
+  }
+  const attachments = typeof input === 'string' ? [] : (input.attachments ?? [])
+  if (attachments.length > 0) {
+    return undefined
+  }
+  const prompt = extractImageGenerationPrompt(
+    typeof input === 'string' ? input : (input.text ?? ''),
+  )
+  return prompt ? { enabled: true, prompt } : undefined
+}
+
+function extractImageGenerationPrompt(text: string): string | undefined {
+  const normalized = text.trim()
+  if (!normalized) {
+    return undefined
+  }
+  const patterns = [
+    /^\/(?:image|imagine)\s+(.+)$/iu,
+    /^(?:生成图片|生成一张图|画一张|帮我画|请画)\s*[:：]\s*(.+)$/iu,
+    /^(?:draw|generate image)\s*[:：]\s*(.+)$/iu,
+  ]
+  for (const pattern of patterns) {
+    const match = normalized.match(pattern)
+    const prompt = match?.[1]?.trim()
+    if (prompt) {
+      return prompt
+    }
+  }
+  return undefined
 }
 
 function normalizeDesktopStartTurnInput(
@@ -1420,7 +1533,7 @@ function pathsEqual(left: string, right: string): boolean {
 }
 
 async function confirmOutsideWorkspaceAccess(
-  action: 'open' | 'reveal',
+  action: 'open' | 'reveal' | 'save',
   targetPath: string,
 ): Promise<boolean> {
   if (isInsideWorkspace(targetPath)) {
@@ -1429,7 +1542,7 @@ async function confirmOutsideWorkspaceAccess(
 
   const result = await dialog.showMessageBox(mainWindow ?? undefined, {
     type: 'warning',
-    buttons: ['取消', action === 'open' ? '仍然打开' : '仍然定位'],
+    buttons: ['取消', getOutsideWorkspaceConfirmLabel(action)],
     defaultId: 0,
     cancelId: 0,
     title: '路径位于工作区外',
@@ -1437,6 +1550,19 @@ async function confirmOutsideWorkspaceAccess(
     detail: targetPath,
   })
   return result.response === 1
+}
+
+function getOutsideWorkspaceConfirmLabel(
+  action: 'open' | 'reveal' | 'save',
+): string {
+  switch (action) {
+    case 'open':
+      return '仍然打开'
+    case 'reveal':
+      return '仍然定位'
+    case 'save':
+      return '仍然另存'
+  }
 }
 
 async function openLocalPath(targetPath: string): Promise<{ opened: boolean }> {
@@ -1462,6 +1588,26 @@ async function showLocalPathInFolder(
 
   shell.showItemInFolder(resolvedPath)
   return { revealed: true }
+}
+
+async function saveLocalPathAs(
+  targetPath: string,
+): Promise<{ saved: boolean; path?: string }> {
+  const resolvedPath = resolveWorkspacePath(targetPath)
+  if (!(await confirmOutsideWorkspaceAccess('save', resolvedPath))) {
+    return { saved: false }
+  }
+
+  const result = await dialog.showSaveDialog(mainWindow ?? undefined, {
+    title: '另存生成物',
+    defaultPath: basename(resolvedPath),
+  })
+  if (result.canceled || !result.filePath) {
+    return { saved: false }
+  }
+
+  await copyFile(resolvedPath, result.filePath)
+  return { saved: true, path: result.filePath }
 }
 
 async function prepareDesktopAttachments(
@@ -2429,6 +2575,10 @@ ipcMain.handle('ccr:open-path', async (_event, path: string) => {
 
 ipcMain.handle('ccr:show-item-in-folder', async (_event, path: string) => {
   return showLocalPathInFolder(path)
+})
+
+ipcMain.handle('ccr:save-path-as', async (_event, path: string) => {
+  return saveLocalPathAs(path)
 })
 
 ipcMain.handle('ccr:copy-text', async (_event, text: string) => {

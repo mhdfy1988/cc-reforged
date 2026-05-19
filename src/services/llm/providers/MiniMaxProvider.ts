@@ -9,10 +9,15 @@ import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js'
 import {
   AnthropicMessagesAdapter,
 } from '../protocols/anthropicMessagesAdapter.js'
+import {
+  MiniMaxImageGenerationAdapter,
+} from '../protocols/minimaxImageGenerationAdapter.js'
 import type {
   LlmGenerateEvent,
   LlmGenerateRequest,
   LlmGenerateResponse,
+  LlmImageGenerationRequest,
+  LlmImageGenerationResponse,
   LlmProvider,
   LlmProviderId,
 } from '../types.js'
@@ -32,6 +37,7 @@ interface MiniMaxProviderPreset {
   label: string
   baseUrl: string
   defaultModel: string
+  defaultImageModel: string
   envNames: readonly string[]
   baseUrlEnvNames: readonly string[]
 }
@@ -42,6 +48,7 @@ const MINIMAX_PROVIDER_PRESETS: Record<MiniMaxProviderId, MiniMaxProviderPreset>
     label: 'MiniMax 国际版',
     baseUrl: 'https://api.minimax.io/anthropic',
     defaultModel: 'MiniMax-M2.7',
+    defaultImageModel: 'image-01',
     envNames: ['CCR_MINIMAX_API_KEY', 'MINIMAX_API_KEY'],
     baseUrlEnvNames: ['CCR_MINIMAX_BASE_URL', 'MINIMAX_BASE_URL'],
   },
@@ -50,6 +57,7 @@ const MINIMAX_PROVIDER_PRESETS: Record<MiniMaxProviderId, MiniMaxProviderPreset>
     label: 'MiniMax 国内版',
     baseUrl: 'https://api.minimaxi.com/anthropic',
     defaultModel: 'MiniMax-M2.7',
+    defaultImageModel: 'image-01',
     envNames: [
       'CCR_MINIMAX_CN_API_KEY',
       'MINIMAX_CN_API_KEY',
@@ -82,6 +90,47 @@ export class MiniMaxProvider implements LlmProvider {
   }
 
   #createAdapter(request: LlmGenerateRequest): AnthropicMessagesAdapter {
+    const connection = this.#resolveConnection(request)
+    return new AnthropicMessagesAdapter({
+      providerId: this.name,
+      providerLabel: this.#preset.label,
+      apiKey: connection.apiKey,
+      baseUrl: normalizeMiniMaxAnthropicBaseUrl(
+        connection.baseUrl,
+        this.#preset.providerId,
+      ),
+      defaultModel: connection.defaultModel,
+      missingApiKeyMessage:
+        `${this.#preset.label} API key is missing. Set ${this.#preset.envNames.join(' or ')}.`,
+      fetchImpl: this.#options.fetchImpl,
+    })
+  }
+
+  #createImageAdapter(
+    request: LlmImageGenerationRequest,
+  ): MiniMaxImageGenerationAdapter {
+    const connection = this.#resolveConnection(request)
+    return new MiniMaxImageGenerationAdapter({
+      providerId: this.name,
+      providerLabel: this.#preset.label,
+      apiKey: connection.apiKey,
+      baseUrl: normalizeMiniMaxImageBaseUrl(
+        connection.baseUrl,
+        this.#preset.providerId,
+      ),
+      defaultModel: connection.defaultImageModel,
+      missingApiKeyMessage:
+        `${this.#preset.label} API key is missing. Set ${this.#preset.envNames.join(' or ')}.`,
+      fetchImpl: this.#options.fetchImpl,
+    })
+  }
+
+  #resolveConnection(request: { profileId?: string }): {
+    apiKey?: string
+    baseUrl: string
+    defaultModel: string
+    defaultImageModel: string
+  } {
     const resolvedConfig = loadLlmConfig()
     const config = getLlmProviderConfig(this.name, resolvedConfig)
     const profile = getMiniMaxProfileForRequest(
@@ -108,24 +157,29 @@ export class MiniMaxProvider implements LlmProvider {
       profile?.defaultModel ||
       config?.defaultModel ||
       this.#preset.defaultModel
-
-    return new AnthropicMessagesAdapter({
-      providerId: this.name,
-      providerLabel: this.#preset.label,
+    return {
       apiKey,
-      baseUrl: normalizeMiniMaxAnthropicBaseUrl(
-        baseUrl,
-        this.#preset.providerId,
-      ),
+      baseUrl,
       defaultModel,
-      missingApiKeyMessage:
-        `${this.#preset.label} API key is missing. Set ${this.#preset.envNames.join(' or ')}.`,
-      fetchImpl: this.#options.fetchImpl,
-    })
+      defaultImageModel:
+        getDefaultImageModelFromMetadata(config?.metadata) ||
+        this.#preset.defaultImageModel,
+    }
   }
 
   async generate(request: LlmGenerateRequest): Promise<LlmGenerateResponse> {
     return this.#createAdapter(request).generate(request)
+  }
+
+  async generateImage(
+    request: LlmImageGenerationRequest,
+  ): Promise<LlmImageGenerationResponse> {
+    const model =
+      request.model?.trim() || this.#resolveConnection(request).defaultImageModel
+    return this.#createImageAdapter(request).generateImage({
+      ...request,
+      model,
+    })
   }
 
   stream(request: LlmGenerateRequest): AsyncIterable<LlmGenerateEvent> {
@@ -186,4 +240,37 @@ function normalizeMiniMaxAnthropicBaseUrl(
     return 'https://api.minimaxi.com/anthropic'
   }
   return normalized
+}
+
+function normalizeMiniMaxImageBaseUrl(
+  baseUrl: string,
+  providerId: MiniMaxProviderId,
+): string {
+  const normalized = baseUrl.trim().replace(/\/+$/u, '')
+  if (normalized.endsWith('/image_generation')) {
+    return normalized
+  }
+  if (normalized.endsWith('/anthropic')) {
+    return `${normalized.slice(0, -'/anthropic'.length)}/v1`
+  }
+  if (
+    providerId === 'minimax' &&
+    normalized === 'https://api.minimax.io'
+  ) {
+    return 'https://api.minimax.io/v1'
+  }
+  if (
+    providerId === 'minimax-cn' &&
+    normalized === 'https://api.minimaxi.com'
+  ) {
+    return 'https://api.minimaxi.com/v1'
+  }
+  return normalized
+}
+
+function getDefaultImageModelFromMetadata(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): string | undefined {
+  const value = metadata?.defaultImageModel
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }

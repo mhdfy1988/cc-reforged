@@ -6,8 +6,20 @@ import { getFsImplementation } from '../../utils/fsOperations.js';
 import { safeParseJSON } from '../../utils/json.js';
 import { getDefaultSonnetModel } from '../../utils/model/model.js';
 import { getBuiltinLlmProviderDefinition } from './providerDefinitions.js';
-const llmInputModalitySchema = z.enum(['text', 'image', 'file', 'audio']);
-const llmOutputModalitySchema = z.enum(['text', 'image', 'audio']);
+const llmInputModalitySchema = z.enum([
+    'text',
+    'image',
+    'file',
+    'audio',
+    'video',
+]);
+const llmOutputModalitySchema = z.enum([
+    'text',
+    'image',
+    'audio',
+    'file',
+    'video',
+]);
 const llmImageCapabilityLimitsSchema = z
     .object({
     maxImages: z.number().int().positive().optional(),
@@ -156,6 +168,20 @@ const DEFAULT_ANTHROPIC_PROVIDER_CONFIG = {
     supportsReasoning: getBuiltinLlmProviderDefinition('anthropic').capabilities.reasoning,
     supportsUsage: getBuiltinLlmProviderDefinition('anthropic').capabilities.usage,
 };
+const DEFAULT_OPENAI_PROVIDER_CONFIG = {
+    defaultModel: 'gpt-5.4',
+    displayName: getBuiltinLlmProviderDefinition('openai').displayName,
+    authStrategy: getBuiltinLlmProviderDefinition('openai').authStrategy,
+    apiMode: getBuiltinLlmProviderDefinition('openai').apiMode,
+    baseUrl: 'https://api.openai.com/v1',
+    supportsStreaming: getBuiltinLlmProviderDefinition('openai').capabilities.streaming,
+    supportsTools: getBuiltinLlmProviderDefinition('openai').capabilities.tools,
+    supportsReasoning: getBuiltinLlmProviderDefinition('openai').capabilities.reasoning,
+    supportsUsage: getBuiltinLlmProviderDefinition('openai').capabilities.usage,
+    metadata: {
+        defaultImageModel: 'gpt-image-1',
+    },
+};
 const DEFAULT_CODEX_OAUTH_PROVIDER_CONFIG = {
     defaultModel: 'gpt-5.4',
     displayName: getBuiltinLlmProviderDefinition('codex-oauth').displayName,
@@ -187,6 +213,64 @@ const DEFAULT_DEEPSEEK_PROVIDER_CONFIG = {
     supportsReasoning: getBuiltinLlmProviderDefinition('deepseek').capabilities.reasoning,
     supportsUsage: getBuiltinLlmProviderDefinition('deepseek').capabilities.usage,
 };
+const DEFAULT_KIMI_API_PROVIDER_CONFIG = {
+    defaultModel: 'kimi-k2.6',
+    displayName: getBuiltinLlmProviderDefinition('kimi-api').displayName,
+    authStrategy: getBuiltinLlmProviderDefinition('kimi-api').authStrategy,
+    apiMode: getBuiltinLlmProviderDefinition('kimi-api').apiMode,
+    baseUrl: 'https://api.moonshot.cn/v1',
+    supportsStreaming: getBuiltinLlmProviderDefinition('kimi-api').capabilities.streaming,
+    supportsTools: getBuiltinLlmProviderDefinition('kimi-api').capabilities.tools,
+    supportsReasoning: getBuiltinLlmProviderDefinition('kimi-api').capabilities.reasoning,
+    supportsUsage: getBuiltinLlmProviderDefinition('kimi-api').capabilities.usage,
+    metadata: {
+        platform: 'kimi-open-platform',
+    },
+};
+const DEFAULT_KIMI_CODE_PROVIDER_CONFIG = {
+    defaultModel: 'kimi-for-coding',
+    displayName: getBuiltinLlmProviderDefinition('kimi-code').displayName,
+    authStrategy: getBuiltinLlmProviderDefinition('kimi-code').authStrategy,
+    apiMode: getBuiltinLlmProviderDefinition('kimi-code').apiMode,
+    baseUrl: 'https://api.kimi.com/coding',
+    supportsStreaming: getBuiltinLlmProviderDefinition('kimi-code').capabilities.streaming,
+    supportsTools: getBuiltinLlmProviderDefinition('kimi-code').capabilities.tools,
+    supportsReasoning: getBuiltinLlmProviderDefinition('kimi-code').capabilities.reasoning,
+    supportsUsage: getBuiltinLlmProviderDefinition('kimi-code').capabilities.usage,
+    metadata: {
+        platform: 'kimi-code',
+        modelIdentifierKind: 'unified',
+    },
+};
+const DEFAULT_GLM_API_PROVIDER_CONFIG = {
+    defaultModel: 'glm-5.1',
+    displayName: getBuiltinLlmProviderDefinition('glm-api').displayName,
+    authStrategy: getBuiltinLlmProviderDefinition('glm-api').authStrategy,
+    apiMode: getBuiltinLlmProviderDefinition('glm-api').apiMode,
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    supportsStreaming: getBuiltinLlmProviderDefinition('glm-api').capabilities.streaming,
+    supportsTools: getBuiltinLlmProviderDefinition('glm-api').capabilities.tools,
+    supportsReasoning: getBuiltinLlmProviderDefinition('glm-api').capabilities.reasoning,
+    supportsUsage: getBuiltinLlmProviderDefinition('glm-api').capabilities.usage,
+    metadata: {
+        platform: 'glm-open-platform',
+        defaultImageModel: 'glm-image',
+    },
+};
+const DEFAULT_GLM_CODING_PROVIDER_CONFIG = {
+    defaultModel: 'glm-5.1',
+    displayName: getBuiltinLlmProviderDefinition('glm-coding').displayName,
+    authStrategy: getBuiltinLlmProviderDefinition('glm-coding').authStrategy,
+    apiMode: getBuiltinLlmProviderDefinition('glm-coding').apiMode,
+    baseUrl: 'https://open.bigmodel.cn/api/coding/paas/v4',
+    supportsStreaming: getBuiltinLlmProviderDefinition('glm-coding').capabilities.streaming,
+    supportsTools: getBuiltinLlmProviderDefinition('glm-coding').capabilities.tools,
+    supportsReasoning: getBuiltinLlmProviderDefinition('glm-coding').capabilities.reasoning,
+    supportsUsage: getBuiltinLlmProviderDefinition('glm-coding').capabilities.usage,
+    metadata: {
+        platform: 'glm-coding-plan',
+    },
+};
 const DEFAULT_MINIMAX_PROVIDER_CONFIG = {
     defaultModel: 'MiniMax-M2.7',
     displayName: getBuiltinLlmProviderDefinition('minimax').displayName,
@@ -197,6 +281,9 @@ const DEFAULT_MINIMAX_PROVIDER_CONFIG = {
     supportsTools: getBuiltinLlmProviderDefinition('minimax').capabilities.tools,
     supportsReasoning: getBuiltinLlmProviderDefinition('minimax').capabilities.reasoning,
     supportsUsage: getBuiltinLlmProviderDefinition('minimax').capabilities.usage,
+    metadata: {
+        defaultImageModel: 'image-01',
+    },
 };
 const DEFAULT_MINIMAX_CN_PROVIDER_CONFIG = {
     defaultModel: 'MiniMax-M2.7',
@@ -208,12 +295,20 @@ const DEFAULT_MINIMAX_CN_PROVIDER_CONFIG = {
     supportsTools: getBuiltinLlmProviderDefinition('minimax-cn').capabilities.tools,
     supportsReasoning: getBuiltinLlmProviderDefinition('minimax-cn').capabilities.reasoning,
     supportsUsage: getBuiltinLlmProviderDefinition('minimax-cn').capabilities.usage,
+    metadata: {
+        defaultImageModel: 'image-01',
+    },
 };
 function getDefaultProviders() {
     return {
         anthropic: { ...DEFAULT_ANTHROPIC_PROVIDER_CONFIG },
+        openai: { ...DEFAULT_OPENAI_PROVIDER_CONFIG },
         'codex-oauth': { ...DEFAULT_CODEX_OAUTH_PROVIDER_CONFIG },
         deepseek: { ...DEFAULT_DEEPSEEK_PROVIDER_CONFIG },
+        'kimi-api': { ...DEFAULT_KIMI_API_PROVIDER_CONFIG },
+        'kimi-code': { ...DEFAULT_KIMI_CODE_PROVIDER_CONFIG },
+        'glm-api': { ...DEFAULT_GLM_API_PROVIDER_CONFIG },
+        'glm-coding': { ...DEFAULT_GLM_CODING_PROVIDER_CONFIG },
         minimax: { ...DEFAULT_MINIMAX_PROVIDER_CONFIG },
         'minimax-cn': { ...DEFAULT_MINIMAX_CN_PROVIDER_CONFIG },
     };

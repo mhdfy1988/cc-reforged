@@ -189,6 +189,47 @@ try {
     },
   });
 
+  await runTurnStartScenario({
+    label: 'video allowed by profile override',
+    config: createDeepSeekConfig({
+      capabilityOverrides: {
+        default: {
+          inputModalities: ['text', 'video'],
+          outputModalities: ['text'],
+          tools: true,
+          structuredOutput: false,
+          reason: 'smoke profile enables video input',
+        },
+      },
+    }),
+    input: {
+      type: 'content',
+      content: [
+        { type: 'text', text: 'please inspect this video' },
+        {
+          type: 'video',
+          displayName: 'clip.mp4',
+          mimeType: 'video/mp4',
+          sizeBytes: 2048,
+          source: { kind: 'file', path: join(workspacePath, 'clip.mp4') },
+        },
+      ],
+    },
+    assertResponse(response) {
+      assert.equal(response.result.turn.status, 'queued');
+      assert.equal(response.result.turn.input.type, 'content');
+      assert.match(response.result.turn.input.text, /please inspect this video/);
+      assert.match(response.result.turn.input.text, /\[视频附件：clip\.mp4\]/);
+      assert.equal(response.result.turn.input.content[1].type, 'video');
+      assert.equal(response.result.turn.input.content[1].displayName, 'clip.mp4');
+      assert.equal(response.result.turn.metadata.multimodalInput.deferred, true);
+      assert.equal(
+        response.result.turn.metadata.multimodalInput.modalityCounts.video,
+        1,
+      );
+    },
+  });
+
   assert.throws(
     () =>
       normalizeContentInput(
@@ -228,6 +269,7 @@ try {
           'turn_start_text_file_converted_to_text_block',
           'turn_start_image_blocked_by_default_text_model',
           'turn_start_image_allowed_with_file_source_by_profile_override',
+          'turn_start_video_allowed_with_file_source_by_profile_override',
           'normalize_content_input_defaults_to_text_only',
           'core_turn_preserves_content_blocks',
         ],

@@ -24,6 +24,7 @@ import {
   loadAllProjectsMessageLogsProgressive,
   loadSameRepoMessageLogsProgressive,
 } from '../../utils/sessionStorage.js'
+import { sanitizeGeneratedArtifactsForResume } from '../../utils/generatedArtifacts.js'
 import { basename } from 'node:path'
 
 export function handleThreadStart(
@@ -352,18 +353,22 @@ function getThreadMessageReplayContent(
 ): unknown {
   switch (message.type) {
     case 'user':
-      return message.message?.content
+      return sanitizeGeneratedArtifactsForResume(message.message?.content)
     case 'assistant':
-      return annotateUnresolvedToolUseBlocks(
-        message.message?.content,
-        unresolvedToolUseIds,
+      return sanitizeGeneratedArtifactsForResume(
+        annotateUnresolvedToolUseBlocks(
+          message.message?.content,
+          unresolvedToolUseIds,
+        ),
       )
     case 'system':
-      return message.content
+      return sanitizeGeneratedArtifactsForResume(message.content)
     case 'attachment':
-      return [{ type: 'attachment', attachment: message.attachment }]
+      return sanitizeGeneratedArtifactsForResume([
+        { type: 'attachment', attachment: message.attachment },
+      ])
     case 'progress':
-      return [
+      return sanitizeGeneratedArtifactsForResume([
         {
           type: 'progress',
           data: message.data,
@@ -374,7 +379,7 @@ function getThreadMessageReplayContent(
           parentToolUseID: message.parentToolUseID,
           parent_tool_use_id: message.parentToolUseID,
         },
-      ]
+      ])
     case 'tool_use_summary':
       return [{ type: 'tool_use_summary', summary: message.summary }]
   }
@@ -515,6 +520,12 @@ function extractContentBlockDisplayText(block: unknown): string {
   if (type === 'audio' || type === 'input_audio') {
     return '[音频]'
   }
+  if (type === 'video' || type === 'video_url' || type === 'input_video') {
+    return '[视频]'
+  }
+  if (type === 'image_generation_call') {
+    return getGeneratedArtifactDisplayText(object)
+  }
   if (
     type === 'thinking' ||
     type === 'redacted_thinking' ||
@@ -559,6 +570,9 @@ function extractUnknownDisplayText(value: unknown, depth = 0): string {
   }
 
   const object = value as Record<string, unknown>
+  if (isGeneratedArtifactSummaryObject(object)) {
+    return getGeneratedArtifactDisplayText(object)
+  }
   const preferredKeys = [
     'text',
     'content',
@@ -583,6 +597,46 @@ function extractUnknownDisplayText(value: unknown, depth = 0): string {
     }
   }
   return parts.join('\n')
+}
+
+function isGeneratedArtifactSummaryObject(
+  object: Record<string, unknown>,
+): boolean {
+  const type = typeof object.type === 'string' ? object.type : ''
+  const kind = typeof object.kind === 'string' ? object.kind : ''
+  const origin = typeof object.origin === 'string' ? object.origin : ''
+  return (
+    type === 'image_generation_call' ||
+    kind === 'image_generation_call' ||
+    origin === 'model_output' ||
+    Boolean(object.generatedArtifact) ||
+    Boolean(object.generated_artifact) ||
+    Boolean(object.savedPath) ||
+    Boolean(object.saved_path)
+  )
+}
+
+function getGeneratedArtifactDisplayText(
+  object: Record<string, unknown>,
+): string {
+  const savedPath =
+    typeof object.savedPath === 'string'
+      ? object.savedPath
+      : typeof object.saved_path === 'string'
+        ? object.saved_path
+        : undefined
+  if (savedPath) {
+    return `生成物：${savedPath}`
+  }
+  const id =
+    typeof object.id === 'string'
+      ? object.id
+      : typeof object.outputId === 'string'
+        ? object.outputId
+        : typeof object.output_id === 'string'
+          ? object.output_id
+          : undefined
+  return id ? `生成物：${id}` : '生成物'
 }
 
 function stripSystemReminders(value: string): string {

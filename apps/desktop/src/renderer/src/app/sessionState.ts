@@ -230,13 +230,19 @@ export function sessionReducer(
       }
 
     case 'add-permission':
-      return {
-        ...state,
-        permissions: [action.permission, ...state.permissions],
-        displayEvents: markToolPermissionRequested(
+      {
+        const resolvedPermission = resolvePermissionAnchorFromEvents(
           state.displayEvents,
           action.permission,
-        ),
+        )
+        return {
+          ...state,
+          permissions: [resolvedPermission, ...state.permissions],
+          displayEvents: markToolPermissionRequested(
+            state.displayEvents,
+            resolvedPermission,
+          ),
+        }
       }
 
     case 'remove-permission':
@@ -707,6 +713,57 @@ function markToolPermissionRequested(
       },
     }
   })
+}
+
+function resolvePermissionAnchorFromEvents(
+  events: DisplayEvent[],
+  permission: PermissionCard,
+): PermissionCard {
+  if (permission.toolUseId) {
+    return permission
+  }
+
+  const matchedToolUseId = findRecentMatchingToolUseId(events, permission)
+  if (!matchedToolUseId) {
+    return permission
+  }
+
+  return {
+    ...permission,
+    toolUseId: matchedToolUseId,
+  }
+}
+
+function findRecentMatchingToolUseId(
+  events: DisplayEvent[],
+  permission: PermissionCard,
+): string | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    const snapshot = event.toolSnapshot
+    if (
+      event.type !== 'tool_call' ||
+      snapshot?.kind !== 'call' ||
+      !snapshot.name
+    ) {
+      continue
+    }
+    if (
+      permission.turnId &&
+      event.identity?.turnId &&
+      permission.turnId !== event.identity.turnId
+    ) {
+      continue
+    }
+    if (snapshot.name !== permission.toolName) {
+      continue
+    }
+    const toolUseId = getToolUseId(event)
+    if (toolUseId) {
+      return toolUseId
+    }
+  }
+  return undefined
 }
 
 function markPendingPermissionsOnEvents(

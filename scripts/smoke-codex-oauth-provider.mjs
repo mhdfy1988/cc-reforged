@@ -280,6 +280,86 @@ assert.equal(events[6]?.response?.stopReason, 'tool_use');
 assert.equal(events[6]?.response?.usage?.totalTokens, 30);
 assert.equal(events[6]?.response?.output[2]?.type, 'tool_call');
 
+let retryCalls = 0;
+let savedRetryCredential;
+const retryProvider = new CodexOAuthProvider({
+  session: {
+    async getAvailability() {
+      return {
+        available: true,
+        configured: true,
+        reason: 'ready',
+      };
+    },
+    async getValidCredential() {
+      return {
+        access: 'stale-access-token',
+        refresh: 'refresh-token',
+        accountId: 'account-1',
+      };
+    },
+    async refreshCredential(credential) {
+      assert.equal(credential.access, 'stale-access-token');
+      assert.equal(credential.refresh, 'refresh-token');
+      return {
+        access: 'fresh-access-token',
+        refresh: 'fresh-refresh-token',
+        accountId: 'account-1',
+      };
+    },
+    async saveCredential(credential) {
+      savedRetryCredential = credential;
+    },
+  },
+  completeImpl: async (_model, _context, options) => {
+    retryCalls += 1;
+    if (retryCalls === 1) {
+      throw new Error(
+        'Your authentication token has been invalidated. Please try signing in again.',
+      );
+    }
+    assert.equal(options?.apiKey, 'fresh-access-token');
+    return {
+      role: 'assistant',
+      api: 'openai-codex-responses',
+      provider: 'openai-codex',
+      model: 'gpt-5.4',
+      content: [{ type: 'text', text: 'retry ok' }],
+      usage: {
+        input: 1,
+        output: 1,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 2,
+        cost: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          total: 0,
+        },
+      },
+      stopReason: 'stop',
+      timestamp: Date.now(),
+    };
+  },
+});
+
+const retryResult = await retryProvider.generate({
+  provider: 'codex-oauth',
+  model: 'gpt-5.4',
+  messages: [
+    {
+      role: 'user',
+      parts: [{ type: 'text', text: 'retry once' }],
+    },
+  ],
+});
+assert.equal(retryCalls, 2);
+assert.equal(savedRetryCredential?.access, 'fresh-access-token');
+assert.equal(retryResult.output[0]?.type, 'text');
+assert.equal(retryResult.output[0]?.text, 'retry ok');
+
 const tempDir = await mkdtemp(join(tmpdir(), 'ccr-codex-oauth-image-'));
 const imagePath = join(tempDir, 'tiny.png');
 const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]);
@@ -385,6 +465,7 @@ console.log(
       provider: result.provider,
       model: result.model,
       stopReason: result.stopReason,
+      retryCalls,
       imageModel: imageResult?.model,
       streamEvents: events.map(event => event.type),
     },

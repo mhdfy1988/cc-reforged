@@ -59,6 +59,13 @@ export class LlmRuntime {
         const [provider, normalizedRequest] = this.resolveRequest(request);
         return provider.generate(normalizedRequest);
     }
+    async generateImage(request) {
+        const [provider, normalizedRequest] = this.resolveImageGenerationRequest(request);
+        if (typeof provider.generateImage !== 'function') {
+            throw new Error(`LLM provider '${provider.name}' does not support image generation.`);
+        }
+        return provider.generateImage(normalizedRequest);
+    }
     async *stream(request) {
         const [provider, normalizedRequest] = this.resolveRequest(request);
         const startEvent = {
@@ -108,6 +115,19 @@ export class LlmRuntime {
             };
             throw error;
         }
+    }
+    resolveImageGenerationRequest(request) {
+        const providerName = resolveRequiredProviderName(request.provider, this.#defaultProvider);
+        const provider = this.#registry.getRequired(providerName);
+        const model = resolveRequiredModel(request.model, this.#defaultModel);
+        return [
+            provider,
+            {
+                ...request,
+                provider: provider.name,
+                model,
+            },
+        ];
     }
 }
 export function createLlmRuntime(options = {}) {

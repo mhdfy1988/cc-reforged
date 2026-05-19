@@ -9,6 +9,8 @@
 - 完成 P23 多模态输入第一版：模型能力目录、Profile 覆盖、发送前校验、`turn/start` 内容块协议、Core 内容块保存和 provider adapter 图片映射已串通。
 - Desktop 输入框支持图片/文件选择与粘贴；图片可生成缩略图、发送后展示、点开预览，小文本文件可受限读取后进入上下文。
 - `codex-oauth / gpt-5.5` 已支持真实图片请求；文本模型发送图片会在发送前被拦截，避免静默漏发。
+- 新增 OpenAI、Kimi、GLM 与 OpenAI-compatible provider 接入，补齐模型目录、Profile 配置、API Key 管理和 provider probe 入口。
+- 新增 provider-neutral 图片生成输出链路，支持 OpenAI / Codex OAuth / MiniMax 等生成适配器、会话内生成图片事件和生成产物持久化。
 - 重做 Desktop 日志页为“日志文件 / 事件列表 / 事件详情”三栏工作台，支持不同日志文件切换、事件化阅读、原始 JSON 查看和搜索。
 - 日志页新增轻量实时刷新开关，复用现有日志读取入口，不扩展为告警、统计图或监控面板。
 
@@ -24,6 +26,8 @@
 - 新增 Provider 工具协议能力声明，DeepSeek / OpenAI-compatible / Anthropic 工具 schema、结果回填、strict、deferred tool search 能力有统一查询入口。
 - 为日志页及其它原始数据展示区增加统一复制按钮，便于复制 JSON、日志片段和工具详情。
 - 优化上下文压缩后的附件恢复展示，明确标识压缩携带附件并隐藏重复附件通知，避免压缩恢复内容显得像无来源的普通附件消息。
+- 扩展 provider、生成输出、会话图片流、Desktop 展示事件和模型能力 smoke，`ci:smoke` 会覆盖更多标准协议回归。
+- 整理文档结构，将架构、恢复清单、阶段 todo、provider 集成说明和源码证据索引归并到更明确的目录入口。
 - 项目级 settings 已统一切换到 `.ccr/settings*.json`，不再运行时兼容读取旧 `.claude/settings*.json`。
 - Desktop、App Server、CLI/TUI 文案、worktree 复制、settings sync、权限保护和 sandbox 禁写已同步使用 `.ccr` 项目配置路径。
 
@@ -31,6 +35,7 @@
 
 - 修复 OpenAI-compatible / DeepSeek 场景下工具调用中断、缺失工具结果、TodoWrite schema 未常驻导致的会话卡死和参数校验问题。
 - 修复 OpenAI-compatible / DeepSeek 历史中延迟或孤立 tool result 可能再次污染请求的问题，发送前会丢弃不合法 tool result 并补齐 synthetic 结果。
+- 修复 `ExitPlanMode` 和 `TaskOutput` 异常展示口径，避免不存在的 task id 或权限类工具失败时展示成吓人的通用工具执行失败。
 - 修复历史恢复中内部合成消息被展示的问题，不再显示 `No response requested.`。
 - 新增 settings 隔离 smoke，防止项目级 settings 路径后续回退到 `.claude`。
 

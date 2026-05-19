@@ -1,5 +1,5 @@
 import { createDefaultLlmRuntime } from './defaultRuntime.js';
-import { normalizeImageMimeType } from './imageContent.js';
+import { normalizeImageMimeType, normalizeVideoMimeType } from './imageContent.js';
 import { loadLlmConfig } from './llmConfig.js';
 import { errorMessage } from '../../utils/errors.js';
 import { createAssistantAPIErrorMessage, createAssistantMessage, } from '../../utils/messages.js';
@@ -241,6 +241,10 @@ function toLlmMessages(message) {
             userParts.push(toLlmImagePart(block));
             continue;
         }
+        if (block.type === 'video') {
+            userParts.push(toLlmVideoPart(block));
+            continue;
+        }
         if (isToolResultBlock(block)) {
             toolParts.push({
                 type: 'tool_result',
@@ -264,7 +268,7 @@ function toLlmMessages(message) {
     return mapped;
 }
 function toLlmImagePart(block) {
-    const source = toLlmImageSource(block.source);
+    const source = toLlmMediaSource(block.source);
     const data = typeof block.data === 'string' ? block.data.trim() : undefined;
     if (!source && !data) {
         throw new Error('Builtin LLM runtime requires image content blocks to include a file, URL, contentRef, or base64 data source.');
@@ -285,7 +289,27 @@ function toLlmImagePart(block) {
             : {}),
     };
 }
-function toLlmImageSource(value) {
+function toLlmVideoPart(block) {
+    const source = toLlmMediaSource(block.source);
+    if (!source) {
+        throw new Error('Builtin LLM runtime requires video content blocks to include a file or URL source.');
+    }
+    return {
+        type: 'video',
+        mimeType: normalizeVideoMimeType(typeof block.mimeType === 'string' ? block.mimeType : undefined),
+        source,
+        ...(typeof block.attachmentId === 'string'
+            ? { attachmentId: block.attachmentId }
+            : {}),
+        ...(typeof block.displayName === 'string'
+            ? { displayName: block.displayName }
+            : {}),
+        ...(typeof block.sizeBytes === 'number'
+            ? { sizeBytes: block.sizeBytes }
+            : {}),
+    };
+}
+function toLlmMediaSource(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return undefined;
     }

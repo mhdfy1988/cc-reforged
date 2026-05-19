@@ -355,7 +355,7 @@ Error: require is not defined
 
 - 当前仍有 26 个字符串字面量 `require('...')` 指向源码 / dist 中不存在的本地目标。
 - 这些缺失目标主要集中在关闭或专有 feature gate 下，例如 `commands/agents-platform`、`commands/proactive`、`commands/assistant`、`commands/remoteControlServer`、若干专有工具和若干 bundled skill；`yolo-classifier-prompts/*.txt` 已由 CCR 自研兼容 prompt 补齐。
-- 详细清单已经拆到 `docs/runtime-missing-targets.md`，后续修复以该文档作为剩余问题入口。
+- 详细清单已经拆到 [runtime-missing-targets.md](./runtime-missing-targets.md)，后续修复以该文档作为剩余问题入口。
 - 默认路径与当前 smoke 覆盖范围不会触发这些目标；一旦打开对应 feature，需要先恢复模块或显式保持 feature 关闭。
 
 已确认的特殊风险：

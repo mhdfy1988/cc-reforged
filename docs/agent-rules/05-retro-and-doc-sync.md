@@ -10,8 +10,8 @@
 
 1. 每轮审查有结论后，先更新文档再进入下一轮。
 2. 默认同步：
-   - [current-repair-backlog.md](D:/agent_project/claude-code-reforged/docs/current-repair-backlog.md)
-   - 阶段边界变化时再同步 [recovery-repair-plan.md](D:/agent_project/claude-code-reforged/docs/recovery-repair-plan.md)
+   - [current-repair-backlog.md](../stages/current-repair-backlog.md)
+   - 阶段边界变化时再同步 [recovery-repair-plan.md](../recovery/recovery-repair-plan.md)
 3. 每轮至少写清：
    - 该轮是否通过
    - 新增完成文件或切片

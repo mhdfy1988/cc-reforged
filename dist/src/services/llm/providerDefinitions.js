@@ -17,6 +17,18 @@ const BUILTIN_PROVIDER_DEFINITION_MAP = {
             usage: true,
         },
     },
+    openai: {
+        id: 'openai',
+        displayName: 'OpenAI',
+        apiMode: 'openai-chat',
+        authStrategy: 'api_key',
+        capabilities: {
+            streaming: true,
+            tools: true,
+            reasoning: true,
+            usage: true,
+        },
+    },
     'codex-oauth': {
         id: 'codex-oauth',
         displayName: 'Codex OAuth',
@@ -32,6 +44,54 @@ const BUILTIN_PROVIDER_DEFINITION_MAP = {
     deepseek: {
         id: 'deepseek',
         displayName: 'DeepSeek',
+        apiMode: 'openai-chat',
+        authStrategy: 'api_key',
+        capabilities: {
+            streaming: true,
+            tools: true,
+            reasoning: true,
+            usage: true,
+        },
+    },
+    'kimi-api': {
+        id: 'kimi-api',
+        displayName: 'Kimi API',
+        apiMode: 'openai-chat',
+        authStrategy: 'api_key',
+        capabilities: {
+            streaming: true,
+            tools: true,
+            reasoning: true,
+            usage: true,
+        },
+    },
+    'kimi-code': {
+        id: 'kimi-code',
+        displayName: 'Kimi Code',
+        apiMode: 'anthropic-messages',
+        authStrategy: 'api_key',
+        capabilities: {
+            streaming: true,
+            tools: true,
+            reasoning: true,
+            usage: true,
+        },
+    },
+    'glm-api': {
+        id: 'glm-api',
+        displayName: 'GLM API',
+        apiMode: 'openai-chat',
+        authStrategy: 'api_key',
+        capabilities: {
+            streaming: true,
+            tools: true,
+            reasoning: true,
+            usage: true,
+        },
+    },
+    'glm-coding': {
+        id: 'glm-coding',
+        displayName: 'GLM Coding Plan',
         apiMode: 'openai-chat',
         authStrategy: 'api_key',
         capabilities: {

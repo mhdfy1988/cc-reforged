@@ -130,9 +130,11 @@ export const ModelProfileSetCurrentParamsSchema = z
 const ModelCapabilityOverrideSchema = z
   .object({
     inputModalities: z
-      .array(z.enum(['text', 'image', 'file', 'audio']))
+      .array(z.enum(['text', 'image', 'file', 'audio', 'video']))
       .optional(),
-    outputModalities: z.array(z.enum(['text', 'image', 'audio'])).optional(),
+    outputModalities: z
+      .array(z.enum(['text', 'image', 'audio', 'file', 'video']))
+      .optional(),
     tools: z.boolean().optional(),
     structuredOutput: z.boolean().optional(),
     image: z
@@ -325,11 +327,16 @@ export const TurnAudioContentBlockSchema = TurnAttachmentMetadataSchema.extend({
   type: z.literal('audio'),
 }).strict()
 
+export const TurnVideoContentBlockSchema = TurnAttachmentMetadataSchema.extend({
+  type: z.literal('video'),
+}).strict()
+
 export const TurnContentBlockSchema = z.discriminatedUnion('type', [
   TurnTextContentBlockSchema,
   TurnImageContentBlockSchema,
   TurnFileContentBlockSchema,
   TurnAudioContentBlockSchema,
+  TurnVideoContentBlockSchema,
 ])
 
 export const TurnInputSchema = z.discriminatedUnion('type', [
@@ -347,6 +354,25 @@ export const TurnInputSchema = z.discriminatedUnion('type', [
     .strict(),
 ])
 
+export const TurnImageGenerationOptionsSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    prompt: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    size: z.string().min(1).optional(),
+    quality: z.string().min(1).optional(),
+    outputFormat: z.string().min(1).optional(),
+    responseFormat: z.enum(['b64_json', 'url']).optional(),
+    n: z.number().int().positive().optional(),
+    metadata: z.record(z.unknown()).optional(),
+  })
+  .strict()
+
+export const TurnImageGenerationOptionSchema = z.union([
+  z.boolean(),
+  TurnImageGenerationOptionsSchema,
+])
+
 export const TurnStartParamsSchema = z
   .object({
     threadId: z.string().min(1),
@@ -354,6 +380,7 @@ export const TurnStartParamsSchema = z
     options: z
       .object({
         stream: z.boolean().optional(),
+        imageGeneration: TurnImageGenerationOptionSchema.optional(),
       })
       .strict()
       .optional(),
@@ -473,6 +500,7 @@ export type TurnStartParams = {
   input: TurnInput
   options?: {
     stream?: boolean
+    imageGeneration?: boolean | z.infer<typeof TurnImageGenerationOptionsSchema>
   }
 }
 export type PermissionRespondParams = z.infer<
@@ -714,11 +742,16 @@ export type TurnAudioContentBlock = TurnAttachmentMetadata & {
   type: 'audio'
 }
 
+export type TurnVideoContentBlock = TurnAttachmentMetadata & {
+  type: 'video'
+}
+
 export type TurnContentBlock =
   | TurnTextContentBlock
   | TurnImageContentBlock
   | TurnFileContentBlock
   | TurnAudioContentBlock
+  | TurnVideoContentBlock
 
 export type TurnInput =
   | {

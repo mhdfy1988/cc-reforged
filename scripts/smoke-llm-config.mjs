@@ -40,6 +40,28 @@ try {
   assert.equal(emptyConfig.providers.deepseek.authStrategy, 'api_key');
   assert.equal(emptyConfig.providers.deepseek.apiMode, 'openai-chat');
   assert.equal(emptyConfig.providers.deepseek.defaultModel, 'deepseek-v4-flash');
+  assert.equal(emptyConfig.providers['kimi-api'].authStrategy, 'api_key');
+  assert.equal(emptyConfig.providers['kimi-api'].apiMode, 'openai-chat');
+  assert.equal(emptyConfig.providers['kimi-api'].defaultModel, 'kimi-k2.6');
+  assert.equal(emptyConfig.providers['kimi-api'].baseUrl, 'https://api.moonshot.cn/v1');
+  assert.equal(emptyConfig.providers['kimi-code'].authStrategy, 'api_key');
+  assert.equal(emptyConfig.providers['kimi-code'].apiMode, 'anthropic-messages');
+  assert.equal(emptyConfig.providers['kimi-code'].defaultModel, 'kimi-for-coding');
+  assert.equal(emptyConfig.providers['kimi-code'].baseUrl, 'https://api.kimi.com/coding');
+  assert.equal(
+    emptyConfig.providers['kimi-code'].metadata.modelIdentifierKind,
+    'unified',
+  );
+  assert.equal(emptyConfig.providers['glm-api'].authStrategy, 'api_key');
+  assert.equal(emptyConfig.providers['glm-api'].apiMode, 'openai-chat');
+  assert.equal(emptyConfig.providers['glm-api'].defaultModel, 'glm-5.1');
+  assert.equal(emptyConfig.providers['glm-coding'].authStrategy, 'api_key');
+  assert.equal(emptyConfig.providers['glm-coding'].apiMode, 'openai-chat');
+  assert.equal(emptyConfig.providers['glm-coding'].defaultModel, 'glm-5.1');
+  assert.equal(
+    emptyConfig.providers['glm-coding'].baseUrl,
+    'https://open.bigmodel.cn/api/coding/paas/v4',
+  );
 
   writeFileSync(
     configPath,

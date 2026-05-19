@@ -154,6 +154,67 @@ await writeFile(
     assert.equal(historyTool.toolSnapshot.status, 'interrupted')
     assert.equal(historyTool.toolSnapshot.statusLabel, '已中断')
 
+    const planMessage = createDisplayEventFromCompletedItem(
+      'plan-message',
+      'assistant_message',
+      [{ type: 'text', text: '计划已生成。' }],
+      'completed',
+      {
+        itemId: 'plan-message',
+        params: { source: 'history', threadId: 'thread-1', turnId: 'turn-1' },
+      },
+    )
+    const exitPlanCall = createDisplayEventFromCompletedItem(
+      'plan-exit-call',
+      'assistant',
+      [
+        {
+          type: 'tool_use',
+          id: 'call_00_exit_plan_anchor',
+          name: 'ExitPlanMode',
+          input: { plan: '实施计划' },
+        },
+      ],
+      'completed',
+      {
+        itemId: 'plan-exit-call',
+        params: { source: 'history', threadId: 'thread-1', turnId: 'turn-1' },
+      },
+    )
+    const anchoredPermissionState = sessionReducer(
+      {
+        displayEvents: [planMessage, exitPlanCall],
+        permissions: [],
+        activeTurnId: 'turn-1',
+        turnMetadata: null,
+      },
+      {
+        type: 'add-permission',
+        permission: {
+          permissionRequestId: 'perm-exit-plan',
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          toolName: 'ExitPlanMode',
+          interactionKind: 'plan_approval',
+          input: { plan: '实施计划' },
+          status: 'pending',
+        },
+      },
+    )
+    assert.equal(
+      anchoredPermissionState.permissions[0].toolUseId,
+      'call_00_exit_plan_anchor',
+      'plan approval permission should recover toolUseId from latest matching tool_call',
+    )
+    const waitingExitCall = anchoredPermissionState.displayEvents.find(
+      event => event.id === 'plan-exit-call',
+    )
+    assert.equal(waitingExitCall?.status, 'waiting_permission')
+    assert.equal(
+      waitingExitCall?.toolSnapshot?.permissionRequestId,
+      'perm-exit-plan',
+    )
+
     const hiddenSyntheticMessage = createDisplayEventFromCompletedItem(
       'synthetic-no-response',
       'assistant_message',

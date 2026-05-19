@@ -1,0 +1,20 @@
+{
+  "providers": {
+    "anthropic": {
+      "locked": true,
+      "reason": "暂时锁定，待后续统一联调后放开。"
+    },
+    "openai": {
+      "locked": true,
+      "reason": "暂时锁定，待后续统一联调后放开。"
+    },
+    "glm-coding": {
+      "locked": true,
+      "reason": "暂时锁定，待后续统一联调后放开。"
+    },
+    "minimax": {
+      "locked": true,
+      "reason": "暂时锁定，待后续统一联调后放开。"
+    }
+  }
+}

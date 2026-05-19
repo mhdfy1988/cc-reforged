@@ -6,6 +6,8 @@ import type {
   LlmGenerateEvent,
   LlmGenerateRequest,
   LlmGenerateResponse,
+  LlmImageGenerationRequest,
+  LlmImageGenerationResponse,
   LlmModelId,
   LlmProvider,
   LlmProviderDefinition,
@@ -20,6 +22,12 @@ export interface LlmRuntimeOptions {
 
 export interface LlmRuntimeGenerateRequest
   extends Omit<LlmGenerateRequest, 'provider' | 'model'> {
+  provider?: LlmProviderId
+  model?: LlmModelId
+}
+
+export interface LlmRuntimeImageGenerationRequest
+  extends Omit<LlmImageGenerationRequest, 'provider' | 'model'> {
   provider?: LlmProviderId
   model?: LlmModelId
 }
@@ -111,6 +119,18 @@ export class LlmRuntime {
     return provider.generate(normalizedRequest)
   }
 
+  async generateImage(
+    request: LlmRuntimeImageGenerationRequest,
+  ): Promise<LlmImageGenerationResponse> {
+    const [provider, normalizedRequest] = this.resolveImageGenerationRequest(request)
+    if (typeof provider.generateImage !== 'function') {
+      throw new Error(
+        `LLM provider '${provider.name}' does not support image generation.`,
+      )
+    }
+    return provider.generateImage(normalizedRequest)
+  }
+
   async *stream(
     request: LlmRuntimeGenerateRequest,
   ): AsyncIterable<LlmGenerateEvent> {
@@ -162,6 +182,25 @@ export class LlmRuntime {
       }
       throw error
     }
+  }
+
+  resolveImageGenerationRequest(
+    request: LlmRuntimeImageGenerationRequest,
+  ): [LlmProvider, LlmImageGenerationRequest] {
+    const providerName = resolveRequiredProviderName(
+      request.provider,
+      this.#defaultProvider,
+    )
+    const provider = this.#registry.getRequired(providerName)
+    const model = resolveRequiredModel(request.model, this.#defaultModel)
+    return [
+      provider,
+      {
+        ...request,
+        provider: provider.name,
+        model,
+      },
+    ]
   }
 }
 

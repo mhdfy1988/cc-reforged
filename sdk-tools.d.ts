@@ -345,9 +345,9 @@ export interface ExitPlanModeInput {
    */
   allowedPrompts?: {
     /**
-     * The tool this prompt applies to
+     * The tool this prompt applies to. Only Bash prompt permissions are currently applied.
      */
-    tool: "Bash";
+    tool: string;
     /**
      * Semantic description of the action, e.g. "run tests", "install dependencies"
      */

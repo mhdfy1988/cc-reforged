@@ -104,6 +104,7 @@ export function cloneCcrContentSource(source) {
     return source ? { ...source } : undefined;
 }
 function normalizeAttachmentBlock(type, block) {
+    const generatedArtifact = getGeneratedArtifactSnapshot(type, block);
     return {
         type,
         attachmentId: getString(block.attachmentId) ?? getString(block.attachment_id),
@@ -114,6 +115,19 @@ function normalizeAttachmentBlock(type, block) {
         sizeBytes: getNumber(block.sizeBytes) ?? getNumber(block.size_bytes),
         source: getContentSource(block.source),
         previewDataUrl: getString(block.previewDataUrl) ?? getString(block.preview_data_url),
+        origin: getGeneratedOutputOrigin(block.origin),
+        lifecycle: getGeneratedOutputLifecycle(block.lifecycle),
+        safety: getGeneratedOutputSafety(block.safety),
+        provider: getString(block.provider),
+        model: getString(block.model),
+        outputId: getString(block.outputId) ?? getString(block.output_id),
+        savedPath: getString(block.savedPath) ??
+            getString(block.saved_path) ??
+            generatedArtifact?.savedPath,
+        prompt: getString(block.prompt),
+        revisedPrompt: getString(block.revisedPrompt) ?? getString(block.revised_prompt),
+        expiresAt: getString(block.expiresAt) ?? getString(block.expires_at),
+        generatedArtifact,
         ...(type === 'image' && getString(block.data)
             ? { data: getString(block.data) }
             : {}),
@@ -141,7 +155,82 @@ function getContentSource(value) {
         const contentRef = getString(source.contentRef);
         return contentRef ? { kind, contentRef } : undefined;
     }
+    if (kind === 'providerFile') {
+        const provider = getString(source.provider);
+        const fileId = getString(source.fileId) ?? getString(source.file_id);
+        return provider && fileId
+            ? {
+                kind,
+                provider,
+                fileId,
+                ...(getString(source.url) ? { url: getString(source.url) } : {}),
+                ...(getString(source.expiresAt) || getString(source.expires_at)
+                    ? {
+                        expiresAt: getString(source.expiresAt) ?? getString(source.expires_at),
+                    }
+                    : {}),
+            }
+            : undefined;
+    }
     return undefined;
+}
+function getGeneratedArtifactSnapshot(type, block) {
+    const explicit = getRecord(block.generatedArtifact) ?? getRecord(block.generated_artifact);
+    const shouldInfer = getGeneratedOutputOrigin(block.origin) === 'model_output' ||
+        Boolean(getString(block.savedPath) ?? getString(block.saved_path)) ||
+        Boolean(getString(block.outputId) ?? getString(block.output_id));
+    const source = explicit ?? (shouldInfer ? block : undefined);
+    if (!source) {
+        return undefined;
+    }
+    const savedPath = getString(source.savedPath) ??
+        getString(source.saved_path) ??
+        getString(block.savedPath) ??
+        getString(block.saved_path);
+    const outputId = getString(source.outputId) ??
+        getString(source.output_id) ??
+        getString(block.outputId) ??
+        getString(block.output_id);
+    const id = getString(source.id) ??
+        getString(source.artifactId) ??
+        getString(source.artifact_id) ??
+        outputId ??
+        getString(block.attachmentId) ??
+        getString(block.attachment_id);
+    if (!id) {
+        return undefined;
+    }
+    const status = getGeneratedArtifactStatus(source.status) ??
+        (savedPath ? 'saved' : getGeneratedArtifactStatus(block.status)) ??
+        'unknown';
+    return {
+        id,
+        type: getGeneratedArtifactType(source.type) ??
+            getGeneratedArtifactType(block.type) ??
+            type,
+        status,
+        savedPath,
+        mimeType: getString(source.mimeType) ??
+            getString(source.mime_type) ??
+            getString(source.mediaType) ??
+            getString(block.mimeType) ??
+            getString(block.mime_type) ??
+            getString(block.mediaType),
+        provider: getString(source.provider) ?? getString(block.provider),
+        model: getString(source.model) ?? getString(block.model),
+        outputId,
+        prompt: getString(source.prompt) ?? getString(block.prompt),
+        revisedPrompt: getString(source.revisedPrompt) ??
+            getString(source.revised_prompt) ??
+            getString(block.revisedPrompt) ??
+            getString(block.revised_prompt),
+        lifecycle: getGeneratedOutputLifecycle(source.lifecycle) ??
+            getGeneratedOutputLifecycle(block.lifecycle),
+        safety: getGeneratedOutputSafety(source.safety) ??
+            getGeneratedOutputSafety(block.safety),
+        error: getString(source.error) ?? getString(block.error),
+        ...(explicit ? { raw: explicit } : {}),
+    };
 }
 function getString(value) {
     return typeof value === 'string' ? value : undefined;
@@ -151,6 +240,40 @@ function getNumber(value) {
 }
 function getRecord(value) {
     return value && typeof value === 'object' && !Array.isArray(value)
+        ? value
+        : undefined;
+}
+function getGeneratedOutputOrigin(value) {
+    return isOneOf(value, [
+        'user_upload',
+        'tool_result',
+        'model_output',
+        'mcp',
+        'browser',
+        'unknown',
+    ]);
+}
+function getGeneratedOutputLifecycle(value) {
+    return isOneOf(value, [
+        'inline',
+        'referenced',
+        'temporary',
+        'persisted',
+        'expired',
+        'unknown',
+    ]);
+}
+function getGeneratedOutputSafety(value) {
+    return isOneOf(value, ['trusted', 'needs_review', 'blocked', 'unknown']);
+}
+function getGeneratedArtifactType(value) {
+    return isOneOf(value, ['image', 'file', 'audio', 'video', 'unknown']);
+}
+function getGeneratedArtifactStatus(value) {
+    return isOneOf(value, ['saving', 'saved', 'failed', 'expired', 'unknown']);
+}
+function isOneOf(value, options) {
+    return typeof value === 'string' && options.includes(value)
         ? value
         : undefined;
 }

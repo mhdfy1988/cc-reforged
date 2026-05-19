@@ -4,6 +4,7 @@ import { getLlmModelCatalogEntry } from '../modelCatalog.js';
 import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js';
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js';
 import { toBase64ImageContent } from '../imageContent.js';
+import { CodexOAuthImageGenerationAdapter } from '../protocols/codexOAuthImageGenerationAdapter.js';
 import { CodexOAuthSession, } from '../sessions/CodexOAuthSession.js';
 import { createDefaultCodexOAuthSession } from '../sessions/defaultCodexOAuthSession.js';
 const DEFAULT_BASE_URL = 'https://chatgpt.com/backend-api';
@@ -37,6 +38,7 @@ export class CodexOAuthProvider {
     #completeImpl;
     #streamImpl;
     #getModelImpl;
+    #fetchImpl;
     #hasCustomSession;
     constructor(options = {}) {
         const config = getLlmProviderConfig('codex-oauth');
@@ -61,12 +63,48 @@ export class CodexOAuthProvider {
         this.#completeImpl = options.completeImpl || piComplete;
         this.#streamImpl = options.streamImpl || piStream;
         this.#getModelImpl = options.getModelImpl || piGetModel;
+        this.#fetchImpl = options.fetchImpl || fetch;
     }
     async getAvailability() {
         return this.#session.getAvailability();
     }
+    async generateImage(request) {
+        configureGlobalFetchDispatcher();
+        const profile = getCodexProfileForRequest(request.profileId);
+        const session = request.profileId && !this.#hasCustomSession
+            ? createDefaultCodexOAuthSession({ profileId: request.profileId })
+            : this.#session;
+        const credential = await session.getValidCredential();
+        const baseUrl = normalizeBaseUrl(profile?.baseUrl || this.#baseUrl);
+        const model = request.model?.trim() || profile?.defaultModel || this.#defaultModel;
+        const adapter = new CodexOAuthImageGenerationAdapter({
+            providerId: this.name,
+            providerLabel: 'Codex OAuth',
+            credential,
+            baseUrl,
+            defaultModel: model,
+            systemPrompt: this.#defaultSystemPrompt,
+            fetchImpl: this.#fetchImpl,
+        });
+        return adapter.generateImage({
+            ...request,
+            model,
+        });
+    }
     async generate(request) {
         const prepared = await this.#prepareRequest(request);
+        try {
+            return await this.#generatePrepared(request, prepared);
+        }
+        catch (error) {
+            const refreshed = await this.#refreshPreparedRequestAfterAuthFailure(error, prepared, request);
+            if (!refreshed) {
+                throw error;
+            }
+            return this.#generatePrepared(request, refreshed);
+        }
+    }
+    async #generatePrepared(request, prepared) {
         const message = await this.#completeImpl(resolvePiAiModel({
             model: prepared.model,
             baseUrl: prepared.baseUrl,
@@ -88,6 +126,28 @@ export class CodexOAuthProvider {
     }
     async *stream(request) {
         const prepared = await this.#prepareRequest(request);
+        let yieldedEvent = false;
+        try {
+            for await (const event of this.#streamPrepared(request, prepared)) {
+                yieldedEvent = true;
+                yield event;
+            }
+            return;
+        }
+        catch (error) {
+            if (yieldedEvent) {
+                throw error;
+            }
+            const refreshed = await this.#refreshPreparedRequestAfterAuthFailure(error, prepared, request);
+            if (!refreshed) {
+                throw error;
+            }
+            for await (const event of this.#streamPrepared(request, refreshed)) {
+                yield event;
+            }
+        }
+    }
+    async *#streamPrepared(request, prepared) {
         const messageStream = this.#streamImpl(resolvePiAiModel({
             model: prepared.model,
             baseUrl: prepared.baseUrl,
@@ -124,13 +184,14 @@ export class CodexOAuthProvider {
             response,
         };
     }
-    async #prepareRequest(request) {
+    async #prepareRequest(request, override = {}) {
         configureGlobalFetchDispatcher();
         const profile = getCodexProfileForRequest(request.profileId);
-        const session = request.profileId && !this.#hasCustomSession
-            ? createDefaultCodexOAuthSession({ profileId: request.profileId })
-            : this.#session;
-        const credential = await session.getValidCredential();
+        const session = override.session ||
+            (request.profileId && !this.#hasCustomSession
+                ? createDefaultCodexOAuthSession({ profileId: request.profileId })
+                : this.#session);
+        const credential = override.credential ?? await session.getValidCredential();
         const baseUrl = normalizeBaseUrl(profile?.baseUrl || this.#baseUrl);
         const model = request.model?.trim() || profile?.defaultModel || this.#defaultModel;
         const reasoningEffort = normalizeReasoningEffort(getReasoningEffort(request.metadata) || this.#defaultReasoningEffort);
@@ -156,6 +217,7 @@ export class CodexOAuthProvider {
             reasoningEffort,
         };
         return {
+            session,
             credential,
             baseUrl,
             model,
@@ -164,6 +226,18 @@ export class CodexOAuthProvider {
             context,
             options,
         };
+    }
+    async #refreshPreparedRequestAfterAuthFailure(error, prepared, request) {
+        if (!isCodexOAuthInvalidatedTokenError(error) ||
+            !canRefreshCodexCredential(prepared.session, prepared.credential)) {
+            return null;
+        }
+        const refreshed = await prepared.session.refreshCredential(prepared.credential);
+        await prepared.session.saveCredential(refreshed).catch(() => undefined);
+        return this.#prepareRequest(request, {
+            session: prepared.session,
+            credential: refreshed,
+        });
     }
 }
 function normalizeReasoningEffort(value) {
@@ -523,6 +597,21 @@ function extractMessageError(message) {
         return null;
     }
     return message.errorMessage?.trim() || 'Codex OAuth request failed.';
+}
+function isCodexOAuthInvalidatedTokenError(error) {
+    const message = error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+            ? error
+            : '';
+    const normalized = message.toLowerCase();
+    return (normalized.includes('authentication token has been invalidated') ||
+        normalized.includes('could not validate your token') ||
+        normalized.includes('token_expired'));
+}
+function canRefreshCodexCredential(session, credential) {
+    return (Boolean(credential.refresh?.trim()) &&
+        typeof session.refreshCredential === 'function');
 }
 function mapStreamingEvent(input) {
     switch (input.event.type) {

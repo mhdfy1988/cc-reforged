@@ -18,11 +18,14 @@ import { getLlmModelCatalogEntry } from '../modelCatalog.js'
 import { getBuiltinLlmProviderDefinition } from '../providerDefinitions.js'
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js'
 import { toBase64ImageContent } from '../imageContent.js'
+import { CodexOAuthImageGenerationAdapter } from '../protocols/codexOAuthImageGenerationAdapter.js'
 import type {
   LlmContentPart,
   LlmGenerateEvent,
   LlmGenerateRequest,
   LlmGenerateResponse,
+  LlmImageGenerationRequest,
+  LlmImageGenerationResponse,
   LlmMessage,
   LlmProvider,
   LlmToolDefinition,
@@ -32,6 +35,7 @@ import type {
 import {
   CodexOAuthSession,
   type CodexOAuthAvailability,
+  type CodexOAuthCredential,
   type CodexOAuthSessionOptions,
 } from '../sessions/CodexOAuthSession.js'
 import { createDefaultCodexOAuthSession } from '../sessions/defaultCodexOAuthSession.js'
@@ -76,9 +80,11 @@ export interface CodexOAuthProviderOptions {
   completeImpl?: PiAiComplete
   streamImpl?: PiAiStream
   getModelImpl?: PiAiGetModel
+  fetchImpl?: typeof fetch
 }
 
 type PreparedRequest = {
+  session: CodexOAuthSession
   credential: Awaited<ReturnType<CodexOAuthSession['getValidCredential']>>
   baseUrl: string
   model: string
@@ -102,6 +108,7 @@ export class CodexOAuthProvider implements LlmProvider {
   readonly #completeImpl: PiAiComplete
   readonly #streamImpl: PiAiStream
   readonly #getModelImpl: PiAiGetModel
+  readonly #fetchImpl: typeof fetch
   readonly #hasCustomSession: boolean
 
   constructor(options: CodexOAuthProviderOptions = {}) {
@@ -131,16 +138,63 @@ export class CodexOAuthProvider implements LlmProvider {
     this.#completeImpl = options.completeImpl || piComplete
     this.#streamImpl = options.streamImpl || piStream
     this.#getModelImpl = options.getModelImpl || piGetModel
+    this.#fetchImpl = options.fetchImpl || fetch
   }
 
   async getAvailability(): Promise<CodexOAuthAvailability> {
     return this.#session.getAvailability()
   }
 
+  async generateImage(
+    request: LlmImageGenerationRequest,
+  ): Promise<LlmImageGenerationResponse> {
+    configureGlobalFetchDispatcher()
+    const profile = getCodexProfileForRequest(request.profileId)
+    const session =
+      request.profileId && !this.#hasCustomSession
+        ? createDefaultCodexOAuthSession({ profileId: request.profileId })
+        : this.#session
+    const credential = await session.getValidCredential()
+    const baseUrl = normalizeBaseUrl(profile?.baseUrl || this.#baseUrl)
+    const model = request.model?.trim() || profile?.defaultModel || this.#defaultModel
+    const adapter = new CodexOAuthImageGenerationAdapter({
+      providerId: this.name,
+      providerLabel: 'Codex OAuth',
+      credential,
+      baseUrl,
+      defaultModel: model,
+      systemPrompt: this.#defaultSystemPrompt,
+      fetchImpl: this.#fetchImpl,
+    })
+    return adapter.generateImage({
+      ...request,
+      model,
+    })
+  }
+
   async generate(
     request: LlmGenerateRequest,
   ): Promise<LlmGenerateResponse> {
     const prepared = await this.#prepareRequest(request)
+    try {
+      return await this.#generatePrepared(request, prepared)
+    } catch (error) {
+      const refreshed = await this.#refreshPreparedRequestAfterAuthFailure(
+        error,
+        prepared,
+        request,
+      )
+      if (!refreshed) {
+        throw error
+      }
+      return this.#generatePrepared(request, refreshed)
+    }
+  }
+
+  async #generatePrepared(
+    request: LlmGenerateRequest,
+    prepared: PreparedRequest,
+  ): Promise<LlmGenerateResponse> {
     const message = await this.#completeImpl(
       resolvePiAiModel({
         model: prepared.model,
@@ -169,6 +223,35 @@ export class CodexOAuthProvider implements LlmProvider {
     request: LlmGenerateRequest,
   ): AsyncIterable<LlmGenerateEvent> {
     const prepared = await this.#prepareRequest(request)
+    let yieldedEvent = false
+    try {
+      for await (const event of this.#streamPrepared(request, prepared)) {
+        yieldedEvent = true
+        yield event
+      }
+      return
+    } catch (error) {
+      if (yieldedEvent) {
+        throw error
+      }
+      const refreshed = await this.#refreshPreparedRequestAfterAuthFailure(
+        error,
+        prepared,
+        request,
+      )
+      if (!refreshed) {
+        throw error
+      }
+      for await (const event of this.#streamPrepared(request, refreshed)) {
+        yield event
+      }
+    }
+  }
+
+  async *#streamPrepared(
+    request: LlmGenerateRequest,
+    prepared: PreparedRequest,
+  ): AsyncIterable<LlmGenerateEvent> {
     const messageStream = this.#streamImpl(
       resolvePiAiModel({
         model: prepared.model,
@@ -215,14 +298,19 @@ export class CodexOAuthProvider implements LlmProvider {
 
   async #prepareRequest(
     request: LlmGenerateRequest,
+    override: {
+      session?: CodexOAuthSession
+      credential?: CodexOAuthCredential
+    } = {},
   ): Promise<PreparedRequest> {
     configureGlobalFetchDispatcher()
     const profile = getCodexProfileForRequest(request.profileId)
     const session =
-      request.profileId && !this.#hasCustomSession
+      override.session ||
+      (request.profileId && !this.#hasCustomSession
         ? createDefaultCodexOAuthSession({ profileId: request.profileId })
-        : this.#session
-    const credential = await session.getValidCredential()
+        : this.#session)
+    const credential = override.credential ?? await session.getValidCredential()
     const baseUrl = normalizeBaseUrl(profile?.baseUrl || this.#baseUrl)
     const model = request.model?.trim() || profile?.defaultModel || this.#defaultModel
     const reasoningEffort = normalizeReasoningEffort(
@@ -254,6 +342,7 @@ export class CodexOAuthProvider implements LlmProvider {
     }
 
     return {
+      session,
       credential,
       baseUrl,
       model,
@@ -262,6 +351,28 @@ export class CodexOAuthProvider implements LlmProvider {
       context,
       options,
     }
+  }
+
+  async #refreshPreparedRequestAfterAuthFailure(
+    error: unknown,
+    prepared: PreparedRequest,
+    request: LlmGenerateRequest,
+  ): Promise<PreparedRequest | null> {
+    if (
+      !isCodexOAuthInvalidatedTokenError(error) ||
+      !canRefreshCodexCredential(prepared.session, prepared.credential)
+    ) {
+      return null
+    }
+
+    const refreshed = await prepared.session.refreshCredential(
+      prepared.credential,
+    )
+    await prepared.session.saveCredential(refreshed).catch(() => undefined)
+    return this.#prepareRequest(request, {
+      session: prepared.session,
+      credential: refreshed,
+    })
   }
 }
 
@@ -709,6 +820,31 @@ function extractMessageError(message: PiAiAssistantMessage): string | null {
     return null
   }
   return message.errorMessage?.trim() || 'Codex OAuth request failed.'
+}
+
+function isCodexOAuthInvalidatedTokenError(error: unknown): boolean {
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : ''
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('authentication token has been invalidated') ||
+    normalized.includes('could not validate your token') ||
+    normalized.includes('token_expired')
+  )
+}
+
+function canRefreshCodexCredential(
+  session: CodexOAuthSession,
+  credential: CodexOAuthCredential,
+): boolean {
+  return (
+    Boolean(credential.refresh?.trim()) &&
+    typeof session.refreshCredential === 'function'
+  )
 }
 
 function mapStreamingEvent(input: {

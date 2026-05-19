@@ -102,10 +102,11 @@ export function buildPermissionUpdates(mode, allowedPrompts) {
             destination: 'session'
         }];
     // Add prompt-based permission rules if provided (Ant-only feature)
-    if (isClassifierPermissionsEnabled() && allowedPrompts && allowedPrompts.length > 0) {
+    const bashAllowedPrompts = allowedPrompts?.filter(p => p.tool === 'Bash') ?? [];
+    if (isClassifierPermissionsEnabled() && bashAllowedPrompts.length > 0) {
         updates.push({
             type: 'addRules',
-            rules: allowedPrompts.map(p => ({
+            rules: bashAllowedPrompts.map(p => ({
                 toolName: p.tool,
                 ruleContent: createPromptRuleContent(p.prompt)
             })),

@@ -49,7 +49,7 @@ type TaskOutput = {
   result?: string;
 };
 type TaskOutputToolOutput = {
-  retrieval_status: 'success' | 'timeout' | 'not_ready';
+  retrieval_status: 'success' | 'timeout' | 'not_ready' | 'not_found';
   task: TaskOutput | null;
 };
 
@@ -178,7 +178,8 @@ export const TaskOutputTool: Tool<InputSchema, TaskOutputToolOutput> = buildTool
 - Use block=true (default) to wait for task completion
 - Use block=false for non-blocking check of current status
 - Task IDs can be found using the /tasks command
-- Works with all task types: background shells, async agents, and remote sessions`;
+- Works with all task types: background shells, async agents, and remote sessions
+- Only use a real task_id returned by a background task launch or shown in a task notification. Do not invent task IDs such as "check", "test", "verify", or "run".`;
   },
   async validateInput({
     task_id
@@ -190,15 +191,6 @@ export const TaskOutputTool: Tool<InputSchema, TaskOutputToolOutput> = buildTool
         result: false,
         message: 'Task ID is required',
         errorCode: 1
-      };
-    }
-    const appState = getAppState();
-    const task = appState.tasks?.[task_id] as TaskState | undefined;
-    if (!task) {
-      return {
-        result: false,
-        message: `No task found with ID: ${task_id}`,
-        errorCode: 2
       };
     }
     return {
@@ -214,7 +206,12 @@ export const TaskOutputTool: Tool<InputSchema, TaskOutputToolOutput> = buildTool
     const appState = toolUseContext.getAppState();
     const task = appState.tasks?.[task_id] as TaskState | undefined;
     if (!task) {
-      throw new Error(`No task found with ID: ${task_id}`);
+      return {
+        data: {
+          retrieval_status: 'not_found' as const,
+          task: null
+        }
+      };
     }
     if (!block) {
       // Non-blocking: return current state
@@ -283,6 +280,9 @@ export const TaskOutputTool: Tool<InputSchema, TaskOutputToolOutput> = buildTool
   mapToolResultToToolResultBlockParam(data, toolUseID) {
     const parts: string[] = [];
     parts.push(`<retrieval_status>${data.retrieval_status}</retrieval_status>`);
+    if (data.retrieval_status === 'not_found') {
+      parts.push('<error>Task not found. Use only a real task_id returned by a background task launch or task notification.</error>');
+    }
     if (data.task) {
       parts.push(`<task_id>${data.task.task_id}</task_id>`);
       parts.push(`<task_type>${data.task.task_type}</task_type>`);

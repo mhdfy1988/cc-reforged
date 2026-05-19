@@ -4,9 +4,18 @@ import { AnthropicProvider } from './providers/AnthropicProvider.js'
 import { CodexOAuthProvider } from './providers/CodexOAuthProvider.js'
 import { DeepSeekProvider } from './providers/DeepSeekProvider.js'
 import {
+  GlmApiProvider,
+  GlmCodingProvider,
+} from './providers/GlmProvider.js'
+import {
+  KimiApiProvider,
+  KimiCodeProvider,
+} from './providers/KimiProvider.js'
+import {
   MiniMaxChinaProvider,
   MiniMaxInternationalProvider,
 } from './providers/MiniMaxProvider.js'
+import { OpenAiProvider } from './providers/OpenAiProvider.js'
 
 let defaultLlmRuntime: LlmRuntime | undefined
 
@@ -17,8 +26,13 @@ export function createDefaultLlmRuntime(): LlmRuntime {
     defaultModel: llmConfig.model,
   })
   runtime.registerProvider(new AnthropicProvider())
+  runtime.registerProvider(new OpenAiProvider())
   runtime.registerProvider(new CodexOAuthProvider())
   runtime.registerProvider(new DeepSeekProvider())
+  runtime.registerProvider(new KimiApiProvider())
+  runtime.registerProvider(new KimiCodeProvider())
+  runtime.registerProvider(new GlmApiProvider())
+  runtime.registerProvider(new GlmCodingProvider())
   runtime.registerProvider(new MiniMaxInternationalProvider())
   runtime.registerProvider(new MiniMaxChinaProvider())
   return runtime

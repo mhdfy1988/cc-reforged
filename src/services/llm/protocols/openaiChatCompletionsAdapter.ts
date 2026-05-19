@@ -1,6 +1,7 @@
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js'
+import { createCombinedAbortSignal } from '../../../utils/combinedAbortSignal.js'
 import { validateLlmHistoryForProvider } from '../historyValidator.js'
-import { toOpenAiImageUrl } from '../imageContent.js'
+import { toOpenAiImageUrl, toOpenAiVideoUrl } from '../imageContent.js'
 import {
   isOpenAiChatToolResultProfile,
   resolveProviderToolProfile,
@@ -42,6 +43,12 @@ type OpenAiChatContentPart =
   | {
       type: 'image_url'
       image_url: {
+        url: string
+      }
+    }
+  | {
+      type: 'video_url'
+      video_url: {
         url: string
       }
     }
@@ -188,175 +195,201 @@ export class OpenAiChatCompletionsAdapter {
   }
 
   async *stream(request: LlmGenerateRequest): AsyncIterable<LlmGenerateEvent> {
-    const response = await this.#postChatCompletion(request, true)
-    if (!response.body) {
-      throw new Error(
-        `${this.#providerLabel} streaming response did not include a body.`,
-      )
-    }
+    const streamTimeoutMs = getOpenAiChatStreamTimeoutMs()
+    const timeoutSignalContext =
+      streamTimeoutMs > 0
+        ? createCombinedAbortSignal(request.signal, {
+            timeoutMs: streamTimeoutMs,
+          })
+        : null
+    const streamRequest: LlmGenerateRequest = timeoutSignalContext
+      ? { ...request, signal: timeoutSignalContext.signal }
+      : request
 
-    const output: LlmContentPart[] = []
-    const toolCalls = new Map<number, OpenAiChatToolCallDraft>()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let responseId: string | undefined
-    let responseModel = request.model || this.#defaultModel
-    let usage: LlmUsage | undefined
-    let stopReason: LlmStopReason = 'other'
-    let thinking = ''
-    let content = ''
-    let thinkingStarted = false
-    let thinkingEnded = false
-    let contentIndex = 0
-
-    const endThinking = (): LlmGenerateEvent | null => {
-      if (!thinkingStarted || thinkingEnded) {
-        return null
+    try {
+      const response = await this.#postChatCompletion(streamRequest, true)
+      if (!response.body) {
+        throw new Error(
+          `${this.#providerLabel} streaming response did not include a body.`,
+        )
       }
-      thinkingEnded = true
-      output.push({ type: 'thinking', thinking })
-      contentIndex = 1
-      return {
-        type: 'thinking_end',
-        provider: this.#providerId,
-        model: responseModel,
-        contentIndex: 0,
-        content: thinking,
+
+      const output: LlmContentPart[] = []
+      const toolCalls = new Map<number, OpenAiChatToolCallDraft>()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let responseId: string | undefined
+      let responseModel = request.model || this.#defaultModel
+      let usage: LlmUsage | undefined
+      let stopReason: LlmStopReason = 'other'
+      let thinking = ''
+      let content = ''
+      let thinkingStarted = false
+      let thinkingEnded = false
+      let contentIndex = 0
+
+      const endThinking = (): LlmGenerateEvent | null => {
+        if (!thinkingStarted || thinkingEnded) {
+          return null
+        }
+        thinkingEnded = true
+        output.push({ type: 'thinking', thinking })
+        contentIndex = 1
+        return {
+          type: 'thinking_end',
+          provider: this.#providerId,
+          model: responseModel,
+          contentIndex: 0,
+          content: thinking,
+        }
       }
-    }
 
-    for await (const chunkText of readSseChunks(response.body, decoder)) {
-      buffer += chunkText
-      const lines = buffer.split(/\r?\n/u)
-      buffer = lines.pop() ?? ''
+      for await (const chunkText of readSseChunks(response.body, decoder)) {
+        buffer += chunkText
+        const lines = buffer.split(/\r?\n/u)
+        buffer = lines.pop() ?? ''
 
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed.startsWith('data:')) {
-          continue
-        }
-        const data = trimmed.slice('data:'.length).trim()
-        if (!data || data === '[DONE]') {
-          continue
-        }
-
-        const chunk = JSON.parse(data) as OpenAiChatStreamChunk
-        responseId = chunk.id || responseId
-        responseModel = chunk.model || responseModel
-        if (chunk.usage) {
-          usage = toLlmUsage(chunk.usage)
-        }
-
-        for (const choice of chunk.choices ?? []) {
-          if (choice.finish_reason) {
-            stopReason = mapStopReason(choice.finish_reason)
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data:')) {
+            continue
           }
-          const delta = choice.delta
-          if (!delta) {
+          const data = trimmed.slice('data:'.length).trim()
+          if (!data || data === '[DONE]') {
             continue
           }
 
-          if (delta.reasoning_content) {
-            if (!thinkingStarted) {
-              thinkingStarted = true
+          const chunk = JSON.parse(data) as OpenAiChatStreamChunk
+          responseId = chunk.id || responseId
+          responseModel = chunk.model || responseModel
+          if (chunk.usage) {
+            usage = toLlmUsage(chunk.usage)
+          }
+
+          for (const choice of chunk.choices ?? []) {
+            if (choice.finish_reason) {
+              stopReason = mapStopReason(choice.finish_reason)
+            }
+            const delta = choice.delta
+            if (!delta) {
+              continue
+            }
+
+            if (delta.reasoning_content) {
+              if (!thinkingStarted) {
+                thinkingStarted = true
+                yield {
+                  type: 'thinking_start',
+                  provider: this.#providerId,
+                  model: responseModel,
+                  contentIndex: 0,
+                }
+              }
+              thinking += delta.reasoning_content
               yield {
-                type: 'thinking_start',
+                type: 'thinking_delta',
                 provider: this.#providerId,
                 model: responseModel,
                 contentIndex: 0,
+                delta: delta.reasoning_content,
               }
             }
-            thinking += delta.reasoning_content
-            yield {
-              type: 'thinking_delta',
-              provider: this.#providerId,
-              model: responseModel,
-              contentIndex: 0,
-              delta: delta.reasoning_content,
-            }
-          }
 
-          if (delta.content) {
-            const thinkingEndEvent = endThinking()
-            if (thinkingEndEvent) {
-              yield thinkingEndEvent
+            if (delta.content) {
+              const thinkingEndEvent = endThinking()
+              if (thinkingEndEvent) {
+                yield thinkingEndEvent
+              }
+              content += delta.content
+              yield {
+                type: 'content_part',
+                provider: this.#providerId,
+                model: responseModel,
+                contentIndex,
+                part: {
+                  type: 'text',
+                  text: delta.content,
+                },
+              }
             }
-            content += delta.content
-            yield {
-              type: 'content_part',
-              provider: this.#providerId,
-              model: responseModel,
-              contentIndex,
-              part: {
-                type: 'text',
-                text: delta.content,
-              },
-            }
-          }
 
-          for (const toolCall of delta.tool_calls ?? []) {
-            const index = toolCall.index ?? toolCalls.size
-            const draft =
-              toolCalls.get(index) ??
-              ({
-                id: toolCall.id || `call_${index}`,
-                name: '',
-                argumentsText: '',
-              } satisfies OpenAiChatToolCallDraft)
-            draft.id = toolCall.id || draft.id
-            draft.name = toolCall.function?.name || draft.name
-            draft.argumentsText += toolCall.function?.arguments ?? ''
-            toolCalls.set(index, draft)
+            for (const toolCall of delta.tool_calls ?? []) {
+              const index = toolCall.index ?? toolCalls.size
+              const draft =
+                toolCalls.get(index) ??
+                ({
+                  id: toolCall.id || `call_${index}`,
+                  name: '',
+                  argumentsText: '',
+                } satisfies OpenAiChatToolCallDraft)
+              draft.id = toolCall.id || draft.id
+              draft.name = toolCall.function?.name || draft.name
+              draft.argumentsText += toolCall.function?.arguments ?? ''
+              toolCalls.set(index, draft)
+            }
           }
         }
       }
-    }
 
-    const thinkingEndEvent = endThinking()
-    if (thinkingEndEvent) {
-      yield thinkingEndEvent
-    }
-    if (content) {
-      output.push({ type: 'text', text: content })
-    }
-
-    let nextIndex = output.length
-    for (const draft of Array.from(toolCalls.values())) {
-      const part: LlmContentPart = {
-        type: 'tool_call',
-        id: draft.id,
-        name: draft.name || 'unknown_tool',
-        input: parseToolArguments(draft.argumentsText),
+      const thinkingEndEvent = endThinking()
+      if (thinkingEndEvent) {
+        yield thinkingEndEvent
       }
-      output.push(part)
+      if (content) {
+        output.push({ type: 'text', text: content })
+      }
+
+      let nextIndex = output.length
+      for (const draft of Array.from(toolCalls.values())) {
+        const part: LlmContentPart = {
+          type: 'tool_call',
+          id: draft.id,
+          name: draft.name || 'unknown_tool',
+          input: parseToolArguments(draft.argumentsText),
+        }
+        output.push(part)
+        yield {
+          type: 'content_part',
+          provider: this.#providerId,
+          model: responseModel,
+          contentIndex: nextIndex++,
+          part,
+        }
+      }
+
       yield {
-        type: 'content_part',
+        type: 'response_complete',
         provider: this.#providerId,
         model: responseModel,
-        contentIndex: nextIndex++,
-        part,
-      }
-    }
-
-    yield {
-      type: 'response_complete',
-      provider: this.#providerId,
-      model: responseModel,
-      response: {
-        provider: this.#providerId,
-        model: responseModel,
-        output,
-        stopReason,
-        usage,
-        raw: {
-          id: responseId,
-          diagnostics: {
-            baseUrl: this.#baseUrl,
-            protocol: 'openai-chat',
-            toolCount: request.tools?.length || 0,
+        response: {
+          provider: this.#providerId,
+          model: responseModel,
+          output,
+          stopReason,
+          usage,
+          raw: {
+            id: responseId,
+            diagnostics: {
+              baseUrl: this.#baseUrl,
+              protocol: 'openai-chat',
+              toolCount: request.tools?.length || 0,
+            },
           },
         },
-      },
+      }
+    } catch (error) {
+      if (
+        timeoutSignalContext &&
+        timeoutSignalContext.signal.aborted &&
+        !request.signal?.aborted
+      ) {
+        throw new Error(
+          `${this.#providerLabel} streaming request timed out after ${formatTimeoutDuration(streamTimeoutMs)}. The provider may still be reasoning on a large context. Try /compact or switch to a faster model and retry.`,
+        )
+      }
+      throw error
+    } finally {
+      timeoutSignalContext?.cleanup()
     }
   }
 
@@ -703,7 +736,7 @@ async function toOpenAiUserContent(
 ): Promise<OpenAiChatMessageContent | undefined> {
   const contentParts: OpenAiChatContentPart[] = []
   let textBuffer = ''
-  let hasImage = false
+  let hasAttachmentPart = false
 
   const flushText = () => {
     const text = textBuffer.trim()
@@ -719,7 +752,7 @@ async function toOpenAiUserContent(
       continue
     }
     if (part.type === 'image') {
-      hasImage = true
+      hasAttachmentPart = true
       flushText()
       contentParts.push({
         type: 'image_url',
@@ -727,10 +760,21 @@ async function toOpenAiUserContent(
           url: await toOpenAiImageUrl(part),
         },
       })
+      continue
+    }
+    if (part.type === 'video') {
+      hasAttachmentPart = true
+      flushText()
+      contentParts.push({
+        type: 'video_url',
+        video_url: {
+          url: await toOpenAiVideoUrl(part),
+        },
+      })
     }
   }
 
-  if (!hasImage) {
+  if (!hasAttachmentPart) {
     const text = textBuffer.trim()
     return text || undefined
   }
@@ -900,6 +944,32 @@ function getMetadataReasoningEffort(
   return typeof value === 'string' ? value : undefined
 }
 
+const DEFAULT_OPENAI_CHAT_STREAM_TIMEOUT_MS = 10 * 60_000
+
+function getOpenAiChatStreamTimeoutMs(): number {
+  const raw = process.env.CCR_OPENAI_CHAT_STREAM_TIMEOUT_MS?.trim()
+  if (!raw) {
+    return DEFAULT_OPENAI_CHAT_STREAM_TIMEOUT_MS
+  }
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_OPENAI_CHAT_STREAM_TIMEOUT_MS
+  }
+  return parsed
+}
+
+function formatTimeoutDuration(timeoutMs: number): string {
+  if (timeoutMs % 60_000 === 0) {
+    const minutes = timeoutMs / 60_000
+    return `${minutes} minute${minutes === 1 ? '' : 's'}`
+  }
+  if (timeoutMs % 1000 === 0) {
+    const seconds = timeoutMs / 1000
+    return `${seconds} second${seconds === 1 ? '' : 's'}`
+  }
+  return `${timeoutMs}ms`
+}
+
 async function getProviderErrorMessage(
   response: Response,
   providerLabel: string,
@@ -944,6 +1014,7 @@ function toSafeRequestDiagnostics(
   let nonStringContentCount = 0
   let contentPartCount = 0
   let imageContentPartCount = 0
+  let videoContentPartCount = 0
   let assistantToolCallCount = 0
   let toolMessageCount = 0
   let reasoningContentCount = 0
@@ -985,6 +1056,9 @@ function toSafeRequestDiagnostics(
         if (type === 'image_url') {
           imageContentPartCount += 1
         }
+        if (type === 'video_url') {
+          videoContentPartCount += 1
+        }
       }
       continue
     }
@@ -1023,6 +1097,7 @@ function toSafeRequestDiagnostics(
     nonStringContentCount,
     contentPartCount,
     imageContentPartCount,
+    videoContentPartCount,
     assistantToolCallCount,
     toolMessageCount,
     reasoningContentCount,

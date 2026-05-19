@@ -5,7 +5,7 @@
 
 ## 1. 转存来源
 
-- `2026-04-23` 时点的 [current-repair-backlog.md](D:/agent_project/claude-code-reforged/docs/current-repair-backlog.md) 第 4 节“最近闭环（近几轮）”完整明细。
+- `2026-04-23` 时点的 [current-repair-backlog.md](../stages/current-repair-backlog.md) 第 4 节“最近闭环（近几轮）”完整明细。
 
 ## 2. 详细闭环记录
 

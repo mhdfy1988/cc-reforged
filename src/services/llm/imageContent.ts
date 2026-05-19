@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises'
-import type { LlmImagePart } from './types.js'
+import type { LlmImagePart, LlmVideoPart } from './types.js'
 
 const DEFAULT_IMAGE_MIME_TYPE = 'image/png'
+const DEFAULT_VIDEO_MIME_TYPE = 'video/mp4'
 
 export type AnthropicImageSource =
   | {
@@ -19,12 +20,26 @@ export function normalizeImageMimeType(value: string | undefined): string {
   return mimeType?.startsWith('image/') ? mimeType : DEFAULT_IMAGE_MIME_TYPE
 }
 
+export function normalizeVideoMimeType(value: string | undefined): string {
+  const mimeType = value?.trim().toLowerCase()
+  return mimeType?.startsWith('video/') ? mimeType : DEFAULT_VIDEO_MIME_TYPE
+}
+
 export async function toOpenAiImageUrl(part: LlmImagePart): Promise<string> {
   if (part.source?.kind === 'url') {
     return part.source.url
   }
 
   const { mediaType, data } = await readImageAsBase64(part)
+  return `data:${mediaType};base64,${data}`
+}
+
+export async function toOpenAiVideoUrl(part: LlmVideoPart): Promise<string> {
+  if (part.source?.kind === 'url') {
+    return part.source.url
+  }
+
+  const { mediaType, data } = await readVideoAsBase64(part)
   return `data:${mediaType};base64,${data}`
 }
 
@@ -79,5 +94,28 @@ async function readImageAsBase64(
 
   throw new Error(
     `Image '${part.displayName ?? part.attachmentId ?? 'attachment'}' has no readable source.`,
+  )
+}
+
+async function readVideoAsBase64(
+  part: LlmVideoPart,
+): Promise<{ mediaType: string; data: string }> {
+  const mediaType = normalizeVideoMimeType(part.mimeType)
+  if (part.source?.kind === 'file') {
+    const buffer = await readFile(part.source.path)
+    return {
+      mediaType,
+      data: buffer.toString('base64'),
+    }
+  }
+
+  if (part.source?.kind === 'contentRef') {
+    throw new Error(
+      `Video contentRef '${part.source.contentRef}' is not resolvable by provider adapters yet.`,
+    )
+  }
+
+  throw new Error(
+    `Video '${part.displayName ?? part.attachmentId ?? 'attachment'}' has no readable source.`,
   )
 }

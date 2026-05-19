@@ -92,6 +92,8 @@
 5. 真实登录凭据、token、refresh token 和 credential JSON 绝不打印、不贴回复、不写入文档；验证只输出脱敏状态和路径。
 6. 这类接入验证失败时，先回到资料对照和实际 payload/transport 差异排查，不得优先猜测网络、代理或环境问题。
 7. 模型可见的系统身份、产品说明和归因头必须按 provider 隔离：官方 Anthropic / Bedrock / Vertex / Foundry 链路可保留 Claude Code 兼容信息；`codex-oauth`、BigModel、OpenAI-compatible 或其他 Anthropic-compatible 代理不得注入 `cc_version`、`x-anthropic-billing-header` 或 “You are Claude Code” 这类会被模型复述的身份信息。
+8. `CodexOAuthSession` 属于 OAuth 登录与凭据生命周期链路，不属于普通 provider 请求链路；`beginAuthorization`、`exchangeAuthorizationCode`、`refreshCredential`、`saveCredential` 默认冻结。不得为了统一 provider 网络策略、统一 probe、图片生成、stream 或普通模型请求，顺手把 `configureGlobalFetchDispatcher()`、全局 undici dispatcher、provider retry/proxy 封装塞进 token exchange / refresh / save 路径。
+9. 凡是修改 `src/services/llm/sessions/CodexOAuthSession.ts` 中授权码换 token、refresh token 刷新或凭据写回行为，必须同时完成：`npm.cmd run smoke:codex-oauth-session`、`npm.cmd run smoke:codex-oauth-provider`、真实 Desktop 浏览器登录回归，并确认 `llm.credentials.local.json` 对应 profile 的凭据实际写入或更新时间变化；mock smoke 不能替代真实登录验证。
 
 ## 10. 已有能力与成熟方案复用护栏
 

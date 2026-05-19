@@ -5,6 +5,7 @@ import { loadLlmConfig, } from '../services/llm/llmConfig.js';
 import { getLlmModelCatalogEntry } from '../services/llm/modelCatalog.js';
 import { createLlmProviderDefinition, getBuiltinLlmProviderDefinition, } from '../services/llm/providerDefinitions.js';
 import { createCoreQueryRuntime, runCoreQueryTurn, } from './coreQueryTurnRunner.js';
+import { runCoreImageGenerationTurn, shouldRunCoreImageGenerationTurn, } from './coreImageGenerationTurnRunner.js';
 import { CoreError } from './errors.js';
 import { collectContextData } from '../commands/context/context-noninteractive.js';
 import { call as compactCommandCall } from '../commands/compact/compact.js';
@@ -484,6 +485,7 @@ export class CoreSessionService {
         try {
             turn.status = 'running';
             turn.startedAt = new Date().toISOString();
+            turn.metadata = mergeTurnMetadata(turn.metadata, this.createContextMetadata(thread.threadId));
             thread.updatedAt = turn.startedAt;
             this.options.emit({
                 type: 'turn_started',
@@ -499,20 +501,30 @@ export class CoreSessionService {
             if (!workspace) {
                 throw new CoreError('workspace_not_open', 'Workspace is not open.');
             }
-            const runner = this.options.runQueryTurn ?? runCoreQueryTurn;
-            const runtimeMetadata = await runner({
-                turn,
-                workspace,
-                signal: abortController.signal,
-                emit: this.options.emit,
-                historyMessages: threadMessages,
-                readFileState,
-                runtimeState,
-                recordMessage: message => {
-                    return this.recordThreadMessage(thread.threadId, message);
-                },
-                createCanUseTool: this.options.createCanUseTool,
-            });
+            const runtimeMetadata = shouldRunCoreImageGenerationTurn(turn.metadata)
+                ? await (this.options.runImageGenerationTurn ??
+                    runCoreImageGenerationTurn)({
+                    turn,
+                    workspace,
+                    signal: abortController.signal,
+                    emit: this.options.emit,
+                    recordMessage: message => {
+                        return this.recordThreadMessage(thread.threadId, message);
+                    },
+                })
+                : await (this.options.runQueryTurn ?? runCoreQueryTurn)({
+                    turn,
+                    workspace,
+                    signal: abortController.signal,
+                    emit: this.options.emit,
+                    historyMessages: threadMessages,
+                    readFileState,
+                    runtimeState,
+                    recordMessage: message => {
+                        return this.recordThreadMessage(thread.threadId, message);
+                    },
+                    createCanUseTool: this.options.createCanUseTool,
+                });
             if (!isTurnCancelled(turn)) {
                 turn.status = 'completed';
                 turn.completedAt = new Date().toISOString();

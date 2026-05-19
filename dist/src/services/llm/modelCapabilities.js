@@ -12,6 +12,10 @@ const IMAGE_INPUT_LIMITS = {
 const BUILTIN_TEXT_PROVIDER_IDS = new Set([
     'codex-oauth',
     'deepseek',
+    'glm-api',
+    'glm-coding',
+    'kimi-api',
+    'kimi-code',
     'minimax',
     'minimax-cn',
 ]);
@@ -35,6 +39,13 @@ export function createDefaultLlmModelCapabilities(model) {
     });
 }
 function resolveBuiltinLlmModelCapabilities(input) {
+    if (input.catalogEntry?.modelCapabilities) {
+        return normalizeModelCapabilities({
+            ...input.catalogEntry.modelCapabilities,
+            reason: input.catalogEntry.modelCapabilities.reason ||
+                `Builtin catalog capability entry matched '${input.model}'.`,
+        });
+    }
     if (input.providerId === 'anthropic') {
         return normalizeModelCapabilities({
             inputModalities: input.catalogEntry?.inputModalities ?? TEXT_AND_IMAGE_INPUT_MODALITIES,
@@ -115,7 +126,8 @@ function applyCapabilityOverride(base, override, input) {
 function normalizeModelCapabilities(input) {
     const inputModalities = normalizeInputModalities(input.inputModalities);
     const outputModalities = normalizeOutputModalities(input.outputModalities);
-    const image = inputModalities.includes('image') && input.image
+    const hasImageModality = inputModalities.includes('image') || outputModalities.includes('image');
+    const image = hasImageModality && input.image
         ? normalizeImageLimits(input.image)
         : undefined;
     return {

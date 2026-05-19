@@ -2,6 +2,14 @@ import type { DisplayEventIdentity } from './eventContract.js'
 import type { JsonObject } from './displayTypes.js'
 import type { ToolSnapshot } from './toolEvents.js'
 import { isNullRenderingAttachmentType } from '../../../../../../src/utils/nullRenderingAttachmentTypes.js'
+import type {
+  CcrGeneratedArtifactSnapshot,
+  CcrGeneratedArtifactStatus,
+  CcrGeneratedArtifactType,
+  CcrGeneratedOutputLifecycle,
+  CcrGeneratedOutputOrigin,
+  CcrGeneratedOutputSafety,
+} from '../../../../../../src/types/contentBlocks.js'
 
 export type FileSnapshotSource =
   | 'Read'
@@ -13,6 +21,7 @@ export type FileSnapshotSource =
   | 'MCP'
   | 'Browser'
   | 'UserUpload'
+  | 'ModelOutput'
   | 'Unknown'
 
 export type FileSnapshotKind =
@@ -57,12 +66,13 @@ export type AttachmentSnapshotStatus =
   | 'ready'
   | 'uploading'
   | 'attached'
+  | 'generated'
   | 'failed'
   | 'removed'
 
 export type AttachmentSnapshot = {
   id: string
-  source: 'UserUpload' | 'ToolResult' | 'MCP' | 'Browser'
+  source: 'UserUpload' | 'ToolResult' | 'MCP' | 'Browser' | 'ModelOutput'
   status: AttachmentSnapshotStatus
   name: string
   path?: string
@@ -73,6 +83,17 @@ export type AttachmentSnapshot = {
   sizeBytes?: number
   previewKind?: 'image' | 'text' | 'binary' | 'audio' | 'video' | 'unknown'
   previewDataUrl?: string
+  origin?: CcrGeneratedOutputOrigin
+  outputLifecycle?: CcrGeneratedOutputLifecycle
+  outputSafety?: CcrGeneratedOutputSafety
+  provider?: string
+  model?: string
+  outputId?: string
+  savedPath?: string
+  prompt?: string
+  revisedPrompt?: string
+  expiresAt?: string
+  generatedArtifact?: CcrGeneratedArtifactSnapshot
   identity?: DisplayEventIdentity
   raw?: unknown
 }
@@ -201,7 +222,7 @@ function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
   const collected: JsonObject[] = []
   for (const block of blocks) {
     const type = typeof block.type === 'string' ? block.type : ''
-    if (type === 'image' || type === 'file' || type === 'audio') {
+    if (type === 'image' || type === 'file' || type === 'audio' || type === 'video') {
       collected.push(block)
       continue
     }
@@ -239,13 +260,17 @@ function createAttachmentSnapshotFromBlock(input: {
   source: AttachmentSnapshot['source']
   identity?: DisplayEventIdentity
 }): AttachmentSnapshot {
-  const path = getAttachmentPath(input.block)
+  const generatedArtifact = getGeneratedArtifactSnapshotFromBlock(input.block)
+  const path = getAttachmentPath(input.block, generatedArtifact)
   const name = getAttachmentName(input.block, path, input.index)
   const pathFields = path ? getPathFields(path) : { safety: 'unknown' as const }
+  const origin = getAttachmentOrigin(input.block)
+  const source =
+    origin === 'model_output' ? 'ModelOutput' : input.source
   return {
     id: getAttachmentId(input.block, input.eventId, input.index),
-    source: input.source,
-    status: 'attached',
+    source,
+    status: source === 'ModelOutput' ? 'generated' : 'attached',
     name,
     path,
     ...pathFields,
@@ -258,6 +283,25 @@ function createAttachmentSnapshotFromBlock(input: {
       'thumbnailDataUrl',
       'thumbnail_data_url',
     ]),
+    origin,
+    outputLifecycle:
+      getAttachmentLifecycle(input.block) ?? generatedArtifact?.lifecycle,
+    outputSafety:
+      getAttachmentOutputSafety(input.block) ?? generatedArtifact?.safety,
+    provider: getString(input.block, ['provider']) ?? generatedArtifact?.provider,
+    model: getString(input.block, ['model']) ?? generatedArtifact?.model,
+    outputId:
+      getString(input.block, ['outputId', 'output_id']) ??
+      generatedArtifact?.outputId,
+    savedPath:
+      getString(input.block, ['savedPath', 'saved_path']) ??
+      generatedArtifact?.savedPath,
+    prompt: getString(input.block, ['prompt']) ?? generatedArtifact?.prompt,
+    revisedPrompt:
+      getString(input.block, ['revisedPrompt', 'revised_prompt']) ??
+      generatedArtifact?.revisedPrompt,
+    expiresAt: getString(input.block, ['expiresAt', 'expires_at']),
+    generatedArtifact,
     identity: input.identity,
     raw: input.block,
   }
@@ -295,22 +339,82 @@ function getAttachmentName(
   )
 }
 
-function getAttachmentPath(block: JsonObject): string | undefined {
+function getAttachmentPath(
+  block: JsonObject,
+  generatedArtifact?: CcrGeneratedArtifactSnapshot,
+): string | undefined {
   const source = getJsonObject(block.source)
   const nestedFile = getJsonObject(block.file)
   return (
+    getString(block, ['savedPath', 'saved_path']) ??
+    generatedArtifact?.savedPath ??
     (source?.kind === 'file' ? getString(source, ['path']) : undefined) ??
     (source?.kind === 'url' ? getString(source, ['url']) : undefined) ??
+    (source?.kind === 'providerFile' ? getString(source, ['url']) : undefined) ??
     getString(block, ['path', 'absolutePath', 'url']) ??
     getString(nestedFile, ['filePath', 'path'])
   )
+}
+
+function getGeneratedArtifactSnapshotFromBlock(
+  block: JsonObject,
+): CcrGeneratedArtifactSnapshot | undefined {
+  const explicit =
+    getJsonObject(block.generatedArtifact) ?? getJsonObject(block.generated_artifact)
+  const savedPath =
+    getString(explicit, ['savedPath', 'saved_path']) ??
+    getString(block, ['savedPath', 'saved_path'])
+  const outputId =
+    getString(explicit, ['outputId', 'output_id']) ??
+    getString(block, ['outputId', 'output_id'])
+  const id =
+    getString(explicit, ['id', 'artifactId', 'artifact_id']) ??
+    outputId ??
+    getString(block, ['attachmentId', 'attachment_id', 'id'])
+
+  if (!id) {
+    return undefined
+  }
+
+  const lifecycle =
+    getAttachmentLifecycle(explicit ?? {}) ?? getAttachmentLifecycle(block)
+  const safety =
+    getAttachmentOutputSafety(explicit ?? {}) ?? getAttachmentOutputSafety(block)
+  const status =
+    getGeneratedArtifactStatus(getString(explicit, ['status'])) ??
+    (savedPath ? 'saved' : undefined) ??
+    'unknown'
+
+  return {
+    id,
+    type:
+      getGeneratedArtifactType(getString(explicit, ['type'])) ??
+      getGeneratedArtifactType(getString(block, ['type'])) ??
+      'unknown',
+    status,
+    savedPath,
+    mimeType:
+      getString(explicit, ['mimeType', 'mime_type', 'mediaType']) ??
+      getString(block, ['mimeType', 'mime_type', 'mediaType']),
+    provider: getString(explicit, ['provider']) ?? getString(block, ['provider']),
+    model: getString(explicit, ['model']) ?? getString(block, ['model']),
+    outputId,
+    prompt: getString(explicit, ['prompt']) ?? getString(block, ['prompt']),
+    revisedPrompt:
+      getString(explicit, ['revisedPrompt', 'revised_prompt']) ??
+      getString(block, ['revisedPrompt', 'revised_prompt']),
+    lifecycle,
+    safety,
+    error: getString(explicit, ['error']) ?? getString(block, ['error']),
+    ...(explicit ? { raw: explicit } : {}),
+  }
 }
 
 function getAttachmentPreviewKind(
   block: JsonObject,
 ): AttachmentSnapshot['previewKind'] {
   const type = getString(block, ['type'])
-  if (type === 'image' || type === 'audio') {
+  if (type === 'image' || type === 'audio' || type === 'video') {
     return type
   }
   if (type === 'file') {
@@ -321,6 +425,75 @@ function getAttachmentPreviewKind(
     return mimeType ? 'binary' : 'unknown'
   }
   return 'unknown'
+}
+
+function getAttachmentOrigin(
+  block: JsonObject,
+): AttachmentSnapshot['origin'] {
+  const origin = getString(block, ['origin'])
+  return isAttachmentOrigin(origin) ? origin : undefined
+}
+
+function getAttachmentLifecycle(
+  block: JsonObject,
+): AttachmentSnapshot['outputLifecycle'] {
+  const lifecycle = getString(block, ['lifecycle'])
+  return isOutputLifecycle(lifecycle) ? lifecycle : undefined
+}
+
+function getAttachmentOutputSafety(
+  block: JsonObject,
+): AttachmentSnapshot['outputSafety'] {
+  const safety = getString(block, ['safety'])
+  return isOutputSafety(safety) ? safety : undefined
+}
+
+function isAttachmentOrigin(
+  value: string | undefined,
+): value is NonNullable<AttachmentSnapshot['origin']> {
+  return [
+    'user_upload',
+    'tool_result',
+    'model_output',
+    'mcp',
+    'browser',
+    'unknown',
+  ].includes(value ?? '')
+}
+
+function isOutputLifecycle(
+  value: string | undefined,
+): value is NonNullable<AttachmentSnapshot['outputLifecycle']> {
+  return [
+    'inline',
+    'referenced',
+    'temporary',
+    'persisted',
+    'expired',
+    'unknown',
+  ].includes(value ?? '')
+}
+
+function isOutputSafety(
+  value: string | undefined,
+): value is NonNullable<AttachmentSnapshot['outputSafety']> {
+  return ['trusted', 'needs_review', 'blocked', 'unknown'].includes(value ?? '')
+}
+
+function getGeneratedArtifactType(
+  value: string | undefined,
+): CcrGeneratedArtifactType | undefined {
+  return ['image', 'file', 'audio', 'video', 'unknown'].includes(value ?? '')
+    ? (value as CcrGeneratedArtifactType)
+    : undefined
+}
+
+function getGeneratedArtifactStatus(
+  value: string | undefined,
+): CcrGeneratedArtifactStatus | undefined {
+  return ['saving', 'saved', 'failed', 'expired', 'unknown'].includes(value ?? '')
+    ? (value as CcrGeneratedArtifactStatus)
+    : undefined
 }
 
 function isTextMimeType(mimeType: string | undefined): boolean {

@@ -159,6 +159,132 @@ try {
   assert.deepEqual(codexOAuthText.inputModalities, ['text']);
   assert.equal(codexOAuthText.image, undefined);
 
+  const minimaxDefinition = getBuiltinLlmProviderDefinition('minimax');
+  const minimaxImageCatalog = getLlmModelCatalogEntry({
+    providerId: 'minimax',
+    model: 'image-01',
+    providerDefinition: minimaxDefinition,
+  });
+  const minimaxImage = resolveLlmModelCapabilities({
+    providerId: 'minimax',
+    apiMode: 'custom',
+    model: 'image-01',
+    providerCapabilities: minimaxDefinition.capabilities,
+    catalogEntry: minimaxImageCatalog,
+  });
+  assert.equal(minimaxImage.source, 'builtin');
+  assert.deepEqual(minimaxImage.inputModalities, ['text']);
+  assert.deepEqual(minimaxImage.outputModalities, ['image']);
+  assert.equal(minimaxImage.tools, false);
+  assert.equal(minimaxImage.image?.mimeTypes?.includes('image/png'), true);
+
+  const kimiCodeDefinition = getBuiltinLlmProviderDefinition('kimi-code');
+  const kimiApiDefinition = getBuiltinLlmProviderDefinition('kimi-api');
+  const kimiApiCatalog = getLlmModelCatalogEntry({
+    providerId: 'kimi-api',
+    model: 'kimi-k2.6',
+    providerDefinition: kimiApiDefinition,
+  });
+  const kimiApiCapabilities = resolveLlmModelCapabilities({
+    providerId: 'kimi-api',
+    apiMode: 'openai-chat',
+    model: 'kimi-k2.6',
+    providerCapabilities: kimiApiDefinition.capabilities,
+    catalogEntry: kimiApiCatalog,
+  });
+  assert.equal(kimiApiCapabilities.source, 'builtin');
+  assert.equal(kimiApiCapabilities.inputModalities.includes('image'), true);
+  assert.equal(kimiApiCapabilities.inputModalities.includes('video'), true);
+  assert.equal(kimiApiCapabilities.tools, true);
+
+  const kimiCodeCatalog = getLlmModelCatalogEntry({
+    providerId: 'kimi-code',
+    model: 'kimi-for-coding',
+    providerDefinition: kimiCodeDefinition,
+  });
+  assert.equal(kimiCodeCatalog.metadata.modelIdentifierKind, 'unified');
+  assert.equal(kimiCodeCatalog.metadata.protocol, 'anthropic-messages');
+  const kimiCodeCapabilities = resolveLlmModelCapabilities({
+    providerId: 'kimi-code',
+    apiMode: 'anthropic-messages',
+    model: 'kimi-for-coding',
+    providerCapabilities: kimiCodeDefinition.capabilities,
+    catalogEntry: kimiCodeCatalog,
+  });
+  assert.equal(kimiCodeCapabilities.source, 'builtin');
+  assert.deepEqual(kimiCodeCapabilities.inputModalities, ['text']);
+  assert.equal(kimiCodeCapabilities.tools, true);
+
+  const glmCodingDefinition = getBuiltinLlmProviderDefinition('glm-coding');
+  const glmApiDefinition = getBuiltinLlmProviderDefinition('glm-api');
+  const glmApiTextCatalog = getLlmModelCatalogEntry({
+    providerId: 'glm-api',
+    model: 'glm-5.1',
+    providerDefinition: glmApiDefinition,
+  });
+  const glmApiTextCapabilities = resolveLlmModelCapabilities({
+    providerId: 'glm-api',
+    apiMode: 'openai-chat',
+    model: 'glm-5.1',
+    providerCapabilities: glmApiDefinition.capabilities,
+    catalogEntry: glmApiTextCatalog,
+  });
+  assert.equal(glmApiTextCatalog.model, 'glm-5.1');
+  assert.equal(glmApiTextCatalog.metadata.protocol, 'openai-chat');
+  assert.equal(
+    glmApiTextCatalog.metadata.baseUrl,
+    'https://open.bigmodel.cn/api/paas/v4',
+  );
+  assert.deepEqual(glmApiTextCapabilities.inputModalities, ['text']);
+
+  const glmImageCatalog = getLlmModelCatalogEntry({
+    providerId: 'glm-api',
+    model: 'glm-image',
+    providerDefinition: glmApiDefinition,
+  });
+  const glmImageCapabilities = resolveLlmModelCapabilities({
+    providerId: 'glm-api',
+    apiMode: 'openai-chat',
+    model: 'glm-image',
+    providerCapabilities: glmApiDefinition.capabilities,
+    catalogEntry: glmImageCatalog,
+  });
+  assert.equal(glmImageCatalog.model, 'glm-image');
+  assert.equal(glmImageCatalog.metadata.protocol, 'openai-images');
+  assert.equal(glmImageCatalog.metadata.endpoint, '/images/generations');
+  assert.deepEqual(glmImageCapabilities.inputModalities, ['text']);
+  assert.deepEqual(glmImageCapabilities.outputModalities, ['image']);
+  assert.equal(glmImageCapabilities.tools, false);
+
+  const glmVisionCatalog = getLlmModelCatalogEntry({
+    providerId: 'glm-api',
+    model: 'glm-5v-turbo',
+    providerDefinition: glmApiDefinition,
+  });
+  const glmVisionCapabilities = resolveLlmModelCapabilities({
+    providerId: 'glm-api',
+    apiMode: 'openai-chat',
+    model: 'glm-5v-turbo',
+    providerCapabilities: glmApiDefinition.capabilities,
+    catalogEntry: glmVisionCatalog,
+  });
+  assert.equal(glmVisionCapabilities.source, 'builtin');
+  assert.equal(glmVisionCapabilities.inputModalities.includes('image'), true);
+  assert.equal(glmVisionCapabilities.inputModalities.includes('video'), true);
+  assert.equal(glmVisionCatalog.metadata.officialFileInput, true);
+  assert.equal(glmVisionCatalog.metadata.ccrFileInput, 'pending-provider-file-upload-or-url-only-policy');
+
+  const glmCodingCatalog = getLlmModelCatalogEntry({
+    providerId: 'glm-coding',
+    model: 'glm-5.1',
+    providerDefinition: glmCodingDefinition,
+  });
+  assert.equal(glmCodingCatalog.metadata.protocol, 'openai-chat');
+  assert.equal(
+    glmCodingCatalog.metadata.baseUrl,
+    'https://open.bigmodel.cn/api/coding/paas/v4',
+  );
+
   const config = loadLlmConfig();
   const textProfile = config.profiles['gateway-text'];
   const visionProfile = config.profiles['gateway-vision'];
@@ -234,6 +360,13 @@ try {
         officialVision,
         codexOAuthVision,
         codexOAuthText,
+        minimaxImage,
+        kimiApiCapabilities,
+        kimiCodeCapabilities,
+        glmApiTextCapabilities,
+        glmImageCapabilities,
+        glmVisionCapabilities,
+        glmCodingCatalog,
         textProfileCapabilities,
         visionProfileCapabilities,
         unknown,

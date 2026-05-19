@@ -11,6 +11,66 @@ export type CcrContentSource =
       kind: 'contentRef'
       contentRef: string
     }
+  | {
+      kind: 'providerFile'
+      provider: string
+      fileId: string
+      url?: string
+      expiresAt?: string
+    }
+
+export type CcrGeneratedOutputOrigin =
+  | 'user_upload'
+  | 'tool_result'
+  | 'model_output'
+  | 'mcp'
+  | 'browser'
+  | 'unknown'
+
+export type CcrGeneratedOutputLifecycle =
+  | 'inline'
+  | 'referenced'
+  | 'temporary'
+  | 'persisted'
+  | 'expired'
+  | 'unknown'
+
+export type CcrGeneratedOutputSafety =
+  | 'trusted'
+  | 'needs_review'
+  | 'blocked'
+  | 'unknown'
+
+export type CcrGeneratedArtifactType =
+  | 'image'
+  | 'file'
+  | 'audio'
+  | 'video'
+  | 'unknown'
+
+export type CcrGeneratedArtifactStatus =
+  | 'saving'
+  | 'saved'
+  | 'failed'
+  | 'expired'
+  | 'unknown'
+
+export interface CcrGeneratedArtifactSnapshot {
+  id: string
+  type: CcrGeneratedArtifactType
+  status: CcrGeneratedArtifactStatus
+  savedPath?: string
+  mimeType?: string
+  provider?: string
+  model?: string
+  outputId?: string
+  prompt?: string
+  revisedPrompt?: string
+  lifecycle?: CcrGeneratedOutputLifecycle
+  safety?: CcrGeneratedOutputSafety
+  error?: string
+  raw?: unknown
+}
 
 export type CcrContentBlockType =
   | 'text'
@@ -50,6 +110,17 @@ export interface CcrAttachmentContentBlockBase {
   sizeBytes?: number
   source?: CcrContentSource
   previewDataUrl?: string
+  origin?: CcrGeneratedOutputOrigin
+  lifecycle?: CcrGeneratedOutputLifecycle
+  safety?: CcrGeneratedOutputSafety
+  provider?: string
+  model?: string
+  outputId?: string
+  savedPath?: string
+  prompt?: string
+  revisedPrompt?: string
+  expiresAt?: string
+  generatedArtifact?: CcrGeneratedArtifactSnapshot
 }
 
 export interface CcrImageContentBlock
@@ -284,6 +355,7 @@ function normalizeAttachmentBlock(
   type: 'image' | 'file' | 'audio' | 'video',
   block: Record<string, unknown>,
 ): CcrAttachmentContentBlock {
+  const generatedArtifact = getGeneratedArtifactSnapshot(type, block)
   return {
     type,
     attachmentId: getString(block.attachmentId) ?? getString(block.attachment_id),
@@ -296,6 +368,21 @@ function normalizeAttachmentBlock(
     source: getContentSource(block.source),
     previewDataUrl:
       getString(block.previewDataUrl) ?? getString(block.preview_data_url),
+    origin: getGeneratedOutputOrigin(block.origin),
+    lifecycle: getGeneratedOutputLifecycle(block.lifecycle),
+    safety: getGeneratedOutputSafety(block.safety),
+    provider: getString(block.provider),
+    model: getString(block.model),
+    outputId: getString(block.outputId) ?? getString(block.output_id),
+    savedPath:
+      getString(block.savedPath) ??
+      getString(block.saved_path) ??
+      generatedArtifact?.savedPath,
+    prompt: getString(block.prompt),
+    revisedPrompt:
+      getString(block.revisedPrompt) ?? getString(block.revised_prompt),
+    expiresAt: getString(block.expiresAt) ?? getString(block.expires_at),
+    generatedArtifact,
     ...(type === 'image' && getString(block.data)
       ? { data: getString(block.data) }
       : {}),
@@ -324,7 +411,102 @@ function getContentSource(value: unknown): CcrContentSource | undefined {
     const contentRef = getString(source.contentRef)
     return contentRef ? { kind, contentRef } : undefined
   }
+  if (kind === 'providerFile') {
+    const provider = getString(source.provider)
+    const fileId = getString(source.fileId) ?? getString(source.file_id)
+    return provider && fileId
+      ? {
+          kind,
+          provider,
+          fileId,
+          ...(getString(source.url) ? { url: getString(source.url) } : {}),
+          ...(getString(source.expiresAt) || getString(source.expires_at)
+            ? {
+                expiresAt:
+                  getString(source.expiresAt) ?? getString(source.expires_at),
+              }
+            : {}),
+        }
+      : undefined
+  }
   return undefined
+}
+
+function getGeneratedArtifactSnapshot(
+  type: 'image' | 'file' | 'audio' | 'video',
+  block: Record<string, unknown>,
+): CcrGeneratedArtifactSnapshot | undefined {
+  const explicit =
+    getRecord(block.generatedArtifact) ?? getRecord(block.generated_artifact)
+  const shouldInfer =
+    getGeneratedOutputOrigin(block.origin) === 'model_output' ||
+    Boolean(getString(block.savedPath) ?? getString(block.saved_path)) ||
+    Boolean(getString(block.outputId) ?? getString(block.output_id))
+  const source = explicit ?? (shouldInfer ? block : undefined)
+  if (!source) {
+    return undefined
+  }
+
+  const savedPath =
+    getString(source.savedPath) ??
+    getString(source.saved_path) ??
+    getString(block.savedPath) ??
+    getString(block.saved_path)
+  const outputId =
+    getString(source.outputId) ??
+    getString(source.output_id) ??
+    getString(block.outputId) ??
+    getString(block.output_id)
+  const id =
+    getString(source.id) ??
+    getString(source.artifactId) ??
+    getString(source.artifact_id) ??
+    outputId ??
+    getString(block.attachmentId) ??
+    getString(block.attachment_id)
+
+  if (!id) {
+    return undefined
+  }
+
+  const status =
+    getGeneratedArtifactStatus(source.status) ??
+    (savedPath ? 'saved' : getGeneratedArtifactStatus(block.status)) ??
+    'unknown'
+
+  return {
+    id,
+    type:
+      getGeneratedArtifactType(source.type) ??
+      getGeneratedArtifactType(block.type) ??
+      type,
+    status,
+    savedPath,
+    mimeType:
+      getString(source.mimeType) ??
+      getString(source.mime_type) ??
+      getString(source.mediaType) ??
+      getString(block.mimeType) ??
+      getString(block.mime_type) ??
+      getString(block.mediaType),
+    provider: getString(source.provider) ?? getString(block.provider),
+    model: getString(source.model) ?? getString(block.model),
+    outputId,
+    prompt: getString(source.prompt) ?? getString(block.prompt),
+    revisedPrompt:
+      getString(source.revisedPrompt) ??
+      getString(source.revised_prompt) ??
+      getString(block.revisedPrompt) ??
+      getString(block.revised_prompt),
+    lifecycle:
+      getGeneratedOutputLifecycle(source.lifecycle) ??
+      getGeneratedOutputLifecycle(block.lifecycle),
+    safety:
+      getGeneratedOutputSafety(source.safety) ??
+      getGeneratedOutputSafety(block.safety),
+    error: getString(source.error) ?? getString(block.error),
+    ...(explicit ? { raw: explicit } : {}),
+  }
 }
 
 function getString(value: unknown): string | undefined {
@@ -338,6 +520,59 @@ function getNumber(value: unknown): number | undefined {
 function getRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
+    : undefined
+}
+
+function getGeneratedOutputOrigin(
+  value: unknown,
+): CcrGeneratedOutputOrigin | undefined {
+  return isOneOf(value, [
+    'user_upload',
+    'tool_result',
+    'model_output',
+    'mcp',
+    'browser',
+    'unknown',
+  ])
+}
+
+function getGeneratedOutputLifecycle(
+  value: unknown,
+): CcrGeneratedOutputLifecycle | undefined {
+  return isOneOf(value, [
+    'inline',
+    'referenced',
+    'temporary',
+    'persisted',
+    'expired',
+    'unknown',
+  ])
+}
+
+function getGeneratedOutputSafety(
+  value: unknown,
+): CcrGeneratedOutputSafety | undefined {
+  return isOneOf(value, ['trusted', 'needs_review', 'blocked', 'unknown'])
+}
+
+function getGeneratedArtifactType(
+  value: unknown,
+): CcrGeneratedArtifactType | undefined {
+  return isOneOf(value, ['image', 'file', 'audio', 'video', 'unknown'])
+}
+
+function getGeneratedArtifactStatus(
+  value: unknown,
+): CcrGeneratedArtifactStatus | undefined {
+  return isOneOf(value, ['saving', 'saved', 'failed', 'expired', 'unknown'])
+}
+
+function isOneOf<T extends string>(
+  value: unknown,
+  options: readonly T[],
+): T | undefined {
+  return typeof value === 'string' && options.includes(value as T)
+    ? (value as T)
     : undefined
 }
 

@@ -35,6 +35,8 @@ Provider 文档和模型能力变化很快。表中链接是本次盘点使用�
 | DeepSeek OpenAI-compatible | [Create Chat Completion](https://api-docs.deepseek.com/api/create-chat-completion)、[Function Calling](https://api-docs.deepseek.com/guides/function_calling)、[JSON Output](https://api-docs.deepseek.com/guides/json_mode/)、[Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode) | OpenAI Chat 兼容外壳；工具 strict 是 beta；JSON Output 只有 `json_object`；thinking 有 OpenAI / Anthropic 两套控制参数。 |
 | DeepSeek Anthropic-compatible | [DeepSeek Anthropic API](https://api-docs.deepseek.com/guides/anthropic_api) | Claude Code / Anthropic 兼容入口；需要单独 profile，不能简单等同 Anthropic 官方。 |
 | MiniMax | [接口概览](https://platform.minimaxi.com/docs/api-reference/api-overview)、[Anthropic API 兼容](https://platform.minimaxi.com/docs/api-reference/text-anthropic-api)、[文本对话 Anthropic 兼容](https://platform.minimaxi.com/docs/api-reference/text-chat-anthropic)、[OpenAI API 兼容](https://platform.minimaxi.com/docs/api-reference/text-openai-api)、[文本对话 OpenAI 兼容](https://platform.minimaxi.com/docs/api-reference/text-chat-openai)、[工具使用与交错思维链](https://platform.minimaxi.com/docs/guides/text-m2-function-call)、[模型列表 OpenAI 兼容](https://platform.minimaxi.com/docs/api-reference/models/openai/list-models) | MiniMax 同时提供 Anthropic / OpenAI 兼容协议；M2.7 重点是 agent、tool use、interleaved thinking。 |
+| Kimi API / Moonshot | [Kimi Chat Completions](https://platform.kimi.ai/docs/api/chat) | 通用开放平台走 OpenAI Chat compatible，`kimi-k2.6` 的图片 / 视频输入必须走内容块映射和真实 probe。 |
+| Kimi Code | [Provider / Model](https://www.kimi.com/code/docs/en/kimi-code-cli/configuration/providers-and-models.html)、[第三方 Coding Agent](https://www.kimi.com/code/docs/third-party-tools/other-coding-agents.html)、[错误说明](https://www.kimi.com/code/docs/kimi-code/error-reference.html) | Coding 平台是会员权益和统一模型标识；CCR 走 Anthropic Messages `/v1/messages`，不再用 OpenAI Chat 兼容路径调用 `kimi-for-coding`。 |
 | OpenRouter | [Structured Outputs](https://openrouter.ai/docs/features/structured-outputs)、[Multimodal Capabilities](https://openrouter.ai/docs/guides/overview/multimodal/overview) | Gateway 不是单一模型协议；能力取决于路由模型、provider 和模型页参数，必须 profile / probe。 |
 | Vercel AI Gateway | [AI Gateway](https://vercel.com/docs/ai-gateway/)、[OpenAI-compatible API](https://vercel.com/docs/ai-gateway/openai-compat)、[Chat Completions](https://vercel.com/docs/ai-gateway/openai-compat/chat-completions)、[Capabilities](https://vercel.com/docs/ai-gateway/capabilities)、[Models & Providers](https://vercel.com/docs/ai-gateway/models-and-providers/) | 统一 gateway；支持 OpenAI Chat compatible、attachments、tools、structured outputs、reasoning、usage 和模型目录。 |
 
@@ -45,8 +47,8 @@ Provider 文档和模型能力变化很快。表中链接是本次盘点使用�
 | 协议族 | 当前代表 | CCR `apiMode` 建议 | 第一版态度 |
 | --- | --- | --- | --- |
 | OpenAI Responses | OpenAI 官方、部分 gateway | `openai-responses` | 必须登记，Codex OAuth / GPT 系列主线优先保持稳定。 |
-| OpenAI Chat Completions | DeepSeek、OpenAI-compatible、Vercel、OpenRouter、MiniMax OpenAI 兼容 | `openai-chat` | 必须支持；第三方兼容不能默认继承 OpenAI 全能力。 |
-| Anthropic Messages | Anthropic 官方、MiniMax Anthropic 兼容、DeepSeek Anthropic 兼容 | `anthropic-messages` | 必须支持；工具结果和 thinking 历史规则要单独处理。 |
+| OpenAI Chat Completions | DeepSeek、Kimi API、GLM API / Coding、OpenAI-compatible、Vercel、OpenRouter、MiniMax OpenAI 兼容 | `openai-chat` | 必须支持；第三方兼容不能默认继承 OpenAI 全能力。 |
+| Anthropic Messages | Anthropic 官方、MiniMax Anthropic 兼容、DeepSeek Anthropic 兼容、Kimi Code | `anthropic-messages` | 必须支持；工具结果和 thinking 历史规则要单独处理。 |
 | Gemini GenerateContent | Gemini 官方 | `gemini-generate-content` | 需要设计 profile 和 adapter；不应塞进 OpenAI Chat。 |
 | Gateway OpenAI-compatible | Vercel AI Gateway、OpenRouter、NewAPI、其它中转 | `openai-chat` + `gatewayProfile` | 必须支持 profile 覆盖和 probe；能力以 gateway 返回和用户配置为准。 |
 | Provider 原生文件 API | OpenAI Files、Anthropic Files、Gemini Files、MiniMax Files | `provider-files` | 第一版只登记生命周期；发送图片/小文本仍优先用本地附件引用。 |
@@ -121,7 +123,7 @@ Provider 文档和模型能力变化很快。表中链接是本次盘点使用�
 后续任务：
 
 - 继续保留 `LlmProviderToolProfile`。
-- 对 gateway / DeepSeek / MiniMax OpenAI-compatible 分别建 profile，不共享“OpenAI 官方完整能力”。
+- 对 gateway / DeepSeek / Kimi API / GLM / MiniMax OpenAI-compatible 分别建 profile，不共享“OpenAI 官方完整能力”。
 - 发送前校验历史中悬空 `tool_calls`。
 
 ### 5.3 Anthropic Messages / Anthropic-compatible
@@ -137,7 +139,7 @@ Provider 文档和模型能力变化很快。表中链接是本次盘点使用�
 
 后续任务：
 
-- Anthropic-compatible profile 必须区分官方 Anthropic、MiniMax、DeepSeek。
+- Anthropic-compatible profile 必须区分官方 Anthropic、MiniMax、DeepSeek、Kimi Code。
 - `ThinkingPart` 历史策略要在 adapter 层明确，不由 UI 决定。
 - 错误展示要区分 `stop_reason` 和 HTTP/API error。
 

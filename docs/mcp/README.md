@@ -21,7 +21,7 @@
 - [MCP 验证与排查手册](./verification-runbook.md)：按命令验证配置、连接、工具发现和只读 smoke。
 - [Playwright MCP 接入设计](./playwright-integration-design.md)：浏览器 MCP 的第一条正式接入路线。
 - [MCP 示例配置](../examples/mcp/README.md)：当前可直接复制的 JSON 配置。
-- [CCR 用户目录与安装布局](../ccr-home-layout.md)：`~/.ccr` 下 MCP、skill、plugin、配置、缓存的默认落点。
+- [CCR 用户目录与安装布局](../architecture/ccr-home-layout.md)：`~/.ccr` 下 MCP、skill、plugin、配置、缓存的默认落点。
 
 ## 接入原则
 

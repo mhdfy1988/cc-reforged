@@ -494,8 +494,13 @@ async function assertToolErrorClassifications() {
     entryPath,
     `
       import assert from 'node:assert/strict'
+      import { readFile } from 'node:fs/promises'
       import { createDisplayEventFromCompletedItem, createErrorDisplayEvent } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
+      import { createErrorDiagnostics, getErrorActionViewModels, getPolicyBoundaryHint, getPolicyBoundaryLabel, getQuotaHint, getRateLimitHint } from '../../apps/desktop/src/renderer/src/components/chat/ErrorCard.tsx'
       import { createCcrErrorSnapshot } from '../../src/types/errorSnapshot.ts'
+      import { persistGeneratedArtifactFromBase64, prepareGeneratedImageCallForModelReplay, sanitizeGeneratedArtifactsForResume, shouldIncludeGeneratedImageResultForReplay } from '../../src/utils/generatedArtifacts.ts'
+
+      const generatedArtifactsHome = ${JSON.stringify(join(tempDir, 'generated-artifacts-home'))}
 
       const providerError = createErrorDisplayEvent(
         'fixture-provider-auth-error',
@@ -517,6 +522,261 @@ async function assertToolErrorClassifications() {
       assert.equal(sanitizedError.safeDetails?.authorization, '[REDACTED]')
       assert.equal(sanitizedError.safeDetails?.nested?.apiKey, '[REDACTED]')
       assert.equal(sanitizedError.message.includes('sk-secretvalue123456'), true)
+
+      const rateLimitError = createCcrErrorSnapshot({
+        message: 'Provider request failed.',
+        error: {
+          status: 429,
+          error: { type: 'rate_limit_error', message: 'Too many requests.' },
+          retry_after: '12',
+        },
+      })
+      assert.equal(rateLimitError.category, 'rate_limited')
+      assert.equal(rateLimitError.source, 'provider')
+      assert.equal(rateLimitError.retryable, true)
+      assert.equal(rateLimitError.retryAfterMs, 12000)
+      assert.match(getRateLimitHint(rateLimitError) ?? '', /12s/)
+
+      const quotaError = createCcrErrorSnapshot({
+        message: 'Provider request failed.',
+        safeDetails: {
+          status: 402,
+          error: { type: 'insufficient_quota', message: 'Credit balance is too low.' },
+          remainingCredits: 0,
+          billingState: 'past_due',
+        },
+      })
+      assert.equal(quotaError.category, 'quota_exceeded')
+      assert.equal(quotaError.source, 'provider')
+      assert.match(getQuotaHint(quotaError) ?? '', /剩余额度 0/)
+      assert.match(getQuotaHint(quotaError) ?? '', /账单状态 past_due/)
+
+      const refusalError = createCcrErrorSnapshot({
+        message: 'Assistant stopped without normal text.',
+        safeDetails: { stopReason: 'refusal' },
+      })
+      assert.equal(refusalError.category, 'model_refusal')
+      assert.equal(getPolicyBoundaryLabel(refusalError), '模型拒答')
+      assert.match(getPolicyBoundaryHint(refusalError) ?? '', /模型主动返回拒答信号/)
+
+      const safetyError = createCcrErrorSnapshot({
+        message: 'Provider request failed.',
+        safeDetails: {
+          error: { type: 'content_filter', code: 'safety_blocked' },
+        },
+      })
+      assert.equal(safetyError.category, 'safety_blocked')
+      assert.equal(getPolicyBoundaryLabel(safetyError), 'Provider 安全策略')
+      assert.match(getPolicyBoundaryHint(safetyError) ?? '', /provider 的内容安全策略/)
+
+      const localSafetyError = createCcrErrorSnapshot({
+        message: 'Blocked by CCR local safety policy.',
+        source: 'core',
+        safeDetails: {
+          policySource: 'ccr_local',
+          reason: 'workspace boundary',
+        },
+      })
+      assert.equal(localSafetyError.category, 'safety_blocked')
+      assert.equal(localSafetyError.source, 'core')
+      assert.equal(getPolicyBoundaryLabel(localSafetyError), 'CCR 本地安全策略')
+      assert.match(getPolicyBoundaryHint(localSafetyError) ?? '', /本地安全策略/)
+
+      const permissionDeniedError = createCcrErrorSnapshot({
+        message: 'Permission denied by user.',
+        source: 'tool',
+        permissionRequestId: 'perm_fixture',
+        safeDetails: {
+          errorClass: 'permission_denied',
+          status: 'denied',
+        },
+      })
+      assert.equal(permissionDeniedError.category, 'tool_error')
+      assert.equal(getPolicyBoundaryLabel(permissionDeniedError), '工具权限拒绝')
+      assert.match(getPolicyBoundaryHint(permissionDeniedError) ?? '', /工具没有拿到执行权限/)
+
+      const networkCause = Object.assign(new Error('fetch failed'), {
+        code: 'ENOTFOUND',
+      })
+      const networkError = createCcrErrorSnapshot({
+        error: Object.assign(new Error('Connection error.'), {
+          cause: networkCause,
+        }),
+      })
+      assert.equal(networkError.category, 'network_error')
+      assert.equal(networkError.source, 'network')
+
+      const protocolError = createCcrErrorSnapshot({
+        message: 'JSON-RPC request failed.',
+        safeDetails: {
+          code: -32602,
+          kind: 'invalid_params',
+          errorType: 'invalid_request_error',
+        },
+      })
+      assert.equal(protocolError.category, 'protocol_error')
+      assert.equal(protocolError.source, 'app_server')
+
+      const appServerAuthError = createCcrErrorSnapshot({
+        message: 'Authentication is required.',
+        source: 'app_server',
+        safeDetails: {
+          code: -32006,
+          kind: 'auth_required',
+        },
+      })
+      assert.equal(appServerAuthError.category, 'auth_expired')
+      assert.equal(appServerAuthError.source, 'app_server')
+
+      const unknownError = createCcrErrorSnapshot({
+        message: 'Something odd happened without a known code.',
+      })
+      assert.equal(unknownError.category, 'unknown_error')
+      assert.equal(
+        unknownError.recommendedActions.includes('open_logs'),
+        true,
+      )
+
+      const p24ErrorFixtures = [
+        {
+          name: 'auth',
+          snapshot: appServerAuthError,
+          category: 'auth_expired',
+          source: 'app_server',
+        },
+        {
+          name: 'rate limit',
+          snapshot: rateLimitError,
+          category: 'rate_limited',
+          source: 'provider',
+        },
+        {
+          name: 'quota',
+          snapshot: quotaError,
+          category: 'quota_exceeded',
+          source: 'provider',
+        },
+        {
+          name: 'tool permission',
+          snapshot: permissionDeniedError,
+          category: 'tool_error',
+          source: 'tool',
+        },
+        {
+          name: 'network',
+          snapshot: networkError,
+          category: 'network_error',
+          source: 'network',
+        },
+        {
+          name: 'protocol',
+          snapshot: protocolError,
+          category: 'protocol_error',
+          source: 'app_server',
+        },
+        {
+          name: 'safety',
+          snapshot: safetyError,
+          category: 'safety_blocked',
+          source: 'provider',
+        },
+        {
+          name: 'unknown',
+          snapshot: unknownError,
+          category: 'unknown_error',
+          source: 'unknown',
+        },
+      ]
+      for (const fixture of p24ErrorFixtures) {
+        assert.equal(fixture.snapshot?.category, fixture.category, fixture.name)
+        assert.equal(fixture.snapshot?.source, fixture.source, fixture.name)
+      }
+
+      const authActionViews = getErrorActionViewModels(appServerAuthError, {
+        canOpenLogs: true,
+        canOpenModels: true,
+      })
+      assert.equal(
+        authActionViews.find(action => action.action === 'reauth')?.disabledReason,
+        undefined,
+      )
+      assert.equal(
+        authActionViews.find(action => action.action === 'copy_diagnostics')?.disabledReason,
+        undefined,
+      )
+
+      const retryActionViews = getErrorActionViewModels(rateLimitError, {
+        canOpenLogs: true,
+      })
+      assert.match(
+        retryActionViews.find(action => action.action === 'retry')?.disabledReason ?? '',
+        /可重放输入快照/,
+      )
+
+      const modelActionViews = getErrorActionViewModels(quotaError, {
+        canOpenLogs: true,
+        canOpenModels: true,
+      })
+      assert.equal(
+        modelActionViews.find(action => action.action === 'switch_model')?.disabledReason,
+        undefined,
+      )
+
+      const diagnosticSnapshot = {
+        ...sanitizedError,
+        message:
+          'Provider API request failed: Bearer sk-secretvalue123456 refresh_token=refresh_secret at C:\\\\Users\\\\luoji\\\\.ccr\\\\tokens.json',
+        rawRef:
+          'C:\\\\Users\\\\luoji\\\\.ccr\\\\logs\\\\error.log?access_token=raw_access_secret',
+        safeDetails: {
+          authorization: 'Bearer sk-secretvalue123456',
+          cookie: 'session_cookie=abc',
+          homePath: 'C:\\\\Users\\\\luoji\\\\.ccr\\\\tokens.json',
+          nested: {
+            apiKey: 'sk-secretvalue123456',
+            refresh_token: 'refresh_secret',
+            raw: '{"access_token":"raw_access_secret","cookie":"raw_cookie_secret"}',
+            unixHome: '/home/luoji/.config/ccr/tokens.json',
+          },
+        },
+      }
+      const diagnostics = createErrorDiagnostics(
+        {
+          id: 'fixture-secret-error',
+          type: 'error',
+          text: 'Provider API request failed: Bearer sk-secretvalue123456',
+          identity: {
+            threadId: 'thread_fixture',
+            turnId: 'turn_fixture',
+          },
+        },
+        diagnosticSnapshot,
+      )
+      const diagnosticsJson = JSON.stringify(diagnostics)
+      assert.equal(
+        diagnosticsJson.includes('sk-secretvalue123456'),
+        false,
+      )
+      assert.equal(
+        diagnosticsJson.includes('refresh_secret'),
+        false,
+      )
+      assert.equal(
+        diagnosticsJson.includes('session_cookie'),
+        false,
+      )
+      assert.equal(
+        diagnosticsJson.includes('raw_access_secret'),
+        false,
+      )
+      assert.equal(
+        diagnosticsJson.includes('luoji'),
+        false,
+      )
+      assert.equal(diagnosticsJson.includes('C:\\\\\\\\Users\\\\\\\\[USER]'), true)
+      assert.equal(diagnosticsJson.includes('/home/[USER]'), true)
+      assert.equal(diagnosticsJson.includes('[REDACTED]'), true)
+      assert.equal(diagnostics.threadId, 'thread_fixture')
 
       const event = createDisplayEventFromCompletedItem(
         'fixture-read-too-large',
@@ -612,6 +872,128 @@ async function assertToolErrorClassifications() {
       assert.equal(userEvent?.contentBlocks?.[0]?.type, 'text')
       assert.equal(userEvent?.contentBlocks?.[1]?.type, 'image')
       assert.equal(userEvent?.attachmentSnapshots?.[0]?.previewKind, 'image')
+
+      const persistedArtifact = await persistGeneratedArtifactFromBase64({
+        ccrHome: generatedArtifactsHome,
+        sessionId: 'thread_fixture',
+        outputId: 'out_img_1',
+        mimeType: 'image/png',
+        artifactType: 'image',
+        base64Data: 'aGVsbG8=',
+        provider: 'openai',
+        model: 'gpt-image-1',
+        prompt: '画一张日出图片',
+        revisedPrompt: 'A clean sunrise over water.',
+      })
+      assert.match(persistedArtifact.savedPath ?? '', /generated_outputs/)
+      assert.equal(await readFile(persistedArtifact.savedPath, 'utf8'), 'hello')
+
+      const generatedImageEvent = createDisplayEventFromCompletedItem(
+        'fixture-model-generated-image',
+        'assistant_message',
+        [
+          {
+            type: 'text',
+            text: '已生成一张图片。',
+          },
+          {
+            type: 'image',
+            origin: 'model_output',
+            lifecycle: 'temporary',
+            safety: 'needs_review',
+            attachmentId: 'generated-image-1',
+            displayName: 'sunrise.png',
+            mimeType: 'image/png',
+            sizeBytes: 2048,
+            provider: 'openai',
+            model: 'gpt-image-1',
+            outputId: 'out_img_1',
+            savedPath: persistedArtifact.savedPath,
+            prompt: '画一张日出图片',
+            revisedPrompt: 'A clean sunrise over water.',
+            expiresAt: '2026-05-18T12:00:00Z',
+            generatedArtifact: persistedArtifact,
+            source: {
+              kind: 'file',
+              path: persistedArtifact.savedPath,
+            },
+          },
+        ],
+        'completed',
+        {
+          itemId: 'fixture-model-generated-image',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+        },
+      )
+
+      assert.equal(generatedImageEvent?.type, 'assistant_message')
+      assert.match(generatedImageEvent?.text ?? '', /模型生成图片/)
+      assert.match(generatedImageEvent?.text ?? '', /已保存/)
+      assert.equal(generatedImageEvent?.contentBlocks?.[1]?.type, 'image')
+      assert.equal(generatedImageEvent?.contentBlocks?.[1]?.origin, 'model_output')
+      assert.equal(generatedImageEvent?.contentBlocks?.[1]?.lifecycle, 'temporary')
+      assert.equal(generatedImageEvent?.contentBlocks?.[1]?.safety, 'needs_review')
+      assert.equal(generatedImageEvent?.contentBlocks?.[1]?.source?.kind, 'file')
+      assert.equal(generatedImageEvent?.contentBlocks?.[1]?.savedPath, persistedArtifact.savedPath)
+      assert.equal(generatedImageEvent?.contentBlocks?.[1]?.prompt, '画一张日出图片')
+      assert.equal(generatedImageEvent?.contentBlocks?.[1]?.generatedArtifact?.status, 'saved')
+      const generatedAttachment = generatedImageEvent?.attachmentSnapshots?.[0]
+      assert.equal(generatedAttachment?.source, 'ModelOutput')
+      assert.equal(generatedAttachment?.status, 'generated')
+      assert.equal(generatedAttachment?.previewKind, 'image')
+      assert.equal(generatedAttachment?.origin, 'model_output')
+      assert.equal(generatedAttachment?.outputLifecycle, 'temporary')
+      assert.equal(generatedAttachment?.outputSafety, 'needs_review')
+      assert.equal(generatedAttachment?.provider, 'openai')
+      assert.equal(generatedAttachment?.model, 'gpt-image-1')
+      assert.equal(generatedAttachment?.outputId, 'out_img_1')
+      assert.equal(generatedAttachment?.savedPath, persistedArtifact.savedPath)
+      assert.equal(generatedAttachment?.path, persistedArtifact.savedPath)
+      assert.equal(generatedAttachment?.prompt, '画一张日出图片')
+      assert.equal(generatedAttachment?.generatedArtifact?.savedPath, persistedArtifact.savedPath)
+
+      const resumePayload = sanitizeGeneratedArtifactsForResume({
+        image: {
+          type: 'image',
+          origin: 'model_output',
+          previewDataUrl: 'data:image/png;base64,AAAA',
+          data: 'data:image/png;base64,BBBB',
+          savedPath: persistedArtifact.savedPath,
+          generatedArtifact: persistedArtifact,
+        },
+        call: {
+          type: 'image_generation_call',
+          id: 'ig_fixture',
+          result: 'data:image/png;base64,CCCC',
+        },
+      })
+      const resumePayloadJson = JSON.stringify(resumePayload)
+      assert.equal(resumePayloadJson.includes('base64,'), false)
+      assert.equal(resumePayload.image.savedPath, persistedArtifact.savedPath)
+      assert.equal(resumePayload.image.previewDataUrl, undefined)
+      assert.equal(resumePayload.image.data, undefined)
+      assert.equal(resumePayload.call.id, 'ig_fixture')
+      assert.equal(resumePayload.call.result, '')
+
+      const replayForTextModel = prepareGeneratedImageCallForModelReplay(
+        {
+          type: 'image_generation_call',
+          id: 'ig_fixture',
+          result: 'data:image/png;base64,DDDD',
+        },
+        { includeResult: false },
+      )
+      assert.equal(replayForTextModel.id, 'ig_fixture')
+      assert.equal(replayForTextModel.result, '')
+      assert.equal(
+        shouldIncludeGeneratedImageResultForReplay({ outputModalities: ['text'] }),
+        false,
+      )
+      assert.equal(
+        shouldIncludeGeneratedImageResultForReplay({ outputModalities: ['text', 'image'] }),
+        true,
+      )
     `,
     'utf8',
   )

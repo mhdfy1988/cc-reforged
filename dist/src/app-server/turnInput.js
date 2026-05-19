@@ -2,20 +2,24 @@ import { CoreError } from '../core/errors.js';
 import { createDefaultLlmModelCapabilities } from '../services/llm/modelCapabilities.js';
 export function normalizeTurnStartInputForCurrentModel(input) {
     const turnInput = input.params.input;
+    const imageGenerationMetadata = normalizeImageGenerationMetadata(input.params.options?.imageGeneration, turnInput);
     if (turnInput.type === 'text') {
         return {
             input: {
                 type: 'text',
                 text: turnInput.text,
             },
+            ...(imageGenerationMetadata
+                ? { metadata: { imageGeneration: imageGenerationMetadata } }
+                : {}),
         };
     }
     const requiresCapabilityCheck = turnInput.content.some(block => block.type !== 'text');
     if (!requiresCapabilityCheck) {
-        return normalizeContentInput(turnInput);
+        return mergeNormalizedInputMetadata(normalizeContentInput(turnInput), imageGenerationMetadata);
     }
     const availability = input.model.getAvailability({});
-    return normalizeContentInput(turnInput, availability);
+    return mergeNormalizedInputMetadata(normalizeContentInput(turnInput, availability), imageGenerationMetadata);
 }
 export function normalizeContentInput(input, availability) {
     const capabilities = availability?.modelCapabilities ??
@@ -121,6 +125,9 @@ function createAttachmentSummary(block) {
     if (block.type === 'audio') {
         return `[音频附件：${label}]`;
     }
+    if (block.type === 'video') {
+        return `[视频附件：${label}]`;
+    }
     return `[文件附件：${label}]`;
 }
 function toCoreUserContentBlocks(blocks) {
@@ -165,11 +172,54 @@ function createMultimodalMetadata(blocks, capabilities) {
         }),
     };
 }
+function mergeNormalizedInputMetadata(input, imageGenerationMetadata) {
+    if (!imageGenerationMetadata) {
+        return input;
+    }
+    return {
+        ...input,
+        metadata: {
+            ...(input.metadata ?? {}),
+            imageGeneration: imageGenerationMetadata,
+        },
+    };
+}
+function normalizeImageGenerationMetadata(value, turnInput) {
+    if (value === undefined || value === false) {
+        return undefined;
+    }
+    if (value === true) {
+        return {
+            enabled: true,
+            prompt: extractTurnInputText(turnInput),
+        };
+    }
+    return compactObject({
+        enabled: value.enabled !== false,
+        prompt: value.prompt?.trim() || extractTurnInputText(turnInput),
+        model: value.model?.trim(),
+        size: value.size?.trim(),
+        quality: value.quality?.trim(),
+        outputFormat: value.outputFormat?.trim(),
+        responseFormat: value.responseFormat,
+        n: value.n,
+        metadata: value.metadata,
+    });
+}
+function extractTurnInputText(input) {
+    if (input.type === 'text') {
+        return input.text;
+    }
+    return input.content
+        .filter((block) => block.type === 'text')
+        .map(block => block.text)
+        .join('\n');
+}
 function countModalities(blocks) {
     return blocks.reduce((counts, block) => {
         counts[block.type] += 1;
         return counts;
-    }, { text: 0, image: 0, file: 0, audio: 0 });
+    }, { text: 0, image: 0, file: 0, audio: 0, video: 0 });
 }
 function summarizeCapabilities(capabilities) {
     return compactObject({

@@ -844,6 +844,16 @@ function App({ initialStatus = null }: AppProps) {
     void runAction(() => window.ccr.checkForUpdates())
   }
 
+  function openLogsFromErrorCard(): void {
+    void refreshLogs().catch(() => undefined)
+    navigatePage('logs')
+  }
+
+  function openModelsFromErrorCard(): void {
+    void refreshModelList().catch(() => undefined)
+    navigatePage('models')
+  }
+
   function navigatePage(nextPage: PageId): void {
     if (nextPage === 'settings') {
       if (page !== 'settings') {
@@ -947,6 +957,8 @@ function App({ initialStatus = null }: AppProps) {
                 }
                 onHistoryReload={() => void loadThreadHistory()}
                 onInterrupt={interruptCurrentTurn}
+                onOpenLogs={openLogsFromErrorCard}
+                onOpenModels={openModelsFromErrorCard}
                 onPrepareAttachments={prepareComposerAttachments}
                 onRespondPermission={respondPermission}
                 onResumeHistoryThread={resumeThreadFromHistory}

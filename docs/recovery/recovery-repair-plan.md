@@ -6,7 +6,7 @@
 
 当前执行顺序和实时 TODO 清单见：
 
-- [current-repair-backlog.md](D:/agent_project/claude-code-reforged/docs/current-repair-backlog.md)
+- [current-repair-backlog.md](../stages/current-repair-backlog.md)
 
 它解决的不是“某个单点 bug 怎么修”，而是下面四个更核心的问题：
 
