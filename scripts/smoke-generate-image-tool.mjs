@@ -8,11 +8,43 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const bundleDir = join(repoRoot, '.tmp', 'smoke-generate-image-tool')
 const entryPath = join(bundleDir, 'entry.mjs')
 const outputPath = join(bundleDir, 'bundle.mjs')
+const configPath = join(bundleDir, 'llm.config.local.json')
 
 rmSync(bundleDir, { recursive: true, force: true })
 mkdirSync(bundleDir, { recursive: true })
 
 try {
+  process.env.CCR_LLM_CONFIG_PATH = configPath
+  delete process.env.CCR_LLM_PROVIDER
+  delete process.env.CCR_LLM_MODEL
+  writeFileSync(
+    configPath,
+    JSON.stringify(
+      {
+        schemaVersion: 2,
+        current: {
+          profileId: 'deepseek-no-image',
+          model: 'deepseek-v4-flash',
+        },
+        profiles: {
+          'deepseek-no-image': {
+            name: 'DeepSeek no image smoke',
+            providerType: 'deepseek',
+            apiMode: 'openai-chat',
+            auth: {
+              strategy: 'api_key',
+            },
+            defaultModel: 'deepseek-v4-flash',
+            models: ['deepseek-v4-flash'],
+          },
+        },
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  )
+
   const { GenerateImageTool, GENERATE_IMAGE_TOOL_NAME } = await import(
     '../dist/src/tools/GenerateImageTool/GenerateImageTool.js'
   )
@@ -36,6 +68,15 @@ try {
     true,
     'GenerateImage should be visible without a ToolSearch round trip',
   )
+
+  const unsupportedProviderValidation = await GenerateImageTool.validateInput({
+    prompt: 'a racing horse in a meadow',
+  })
+  assert.equal(unsupportedProviderValidation.result, false)
+  assert.match(unsupportedProviderValidation.message, /当前供应商不支持生图/)
+  assert.match(unsupportedProviderValidation.message, /deepseek/)
+  assert.match(unsupportedProviderValidation.message, /GLM API/)
+  assert.match(unsupportedProviderValidation.message, /Codex OAuth/)
 
   const generatedArtifact = {
     id: 'out_generate_image_smoke',
@@ -155,6 +196,7 @@ try {
         ok: true,
         checked: [
           'generate_image_tool_visible',
+          'unsupported_provider_returns_friendly_validation',
           'generate_image_tool_result_text_only_for_model',
           'desktop_extracts_generated_image_from_tool_result_data',
         ],
@@ -164,5 +206,8 @@ try {
     ),
   )
 } finally {
+  delete process.env.CCR_LLM_CONFIG_PATH
+  delete process.env.CCR_LLM_PROVIDER
+  delete process.env.CCR_LLM_MODEL
   rmSync(bundleDir, { recursive: true, force: true })
 }

@@ -98,6 +98,32 @@ export const GenerateImageTool = buildTool({
     toAutoClassifierInput(input) {
         return input.prompt;
     },
+    async validateInput(input) {
+        const config = loadLlmConfig();
+        const runtime = createDefaultLlmRuntime();
+        let providerName = config.provider;
+        let supportsImageGeneration = false;
+        try {
+            const provider = runtime.getProvider(config.provider);
+            providerName = provider.name;
+            supportsImageGeneration = typeof provider.generateImage === 'function';
+        }
+        catch {
+            supportsImageGeneration = false;
+        }
+        if (supportsImageGeneration) {
+            return { result: true };
+        }
+        const model = input.model?.trim() || resolveDefaultImageModel(config);
+        return {
+            result: false,
+            errorCode: 20,
+            message: [
+                `当前供应商不支持生图：${providerName} / ${model}。`,
+                '请切换到支持生图的供应商后再试，例如 GLM API（glm-image）、OpenAI（gpt-image-1）或 Codex OAuth。',
+            ].join(''),
+        };
+    },
     async call(input, context) {
         const prompt = input.prompt.trim();
         const config = loadLlmConfig();
