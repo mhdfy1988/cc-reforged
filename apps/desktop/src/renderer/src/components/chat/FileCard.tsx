@@ -1,4 +1,9 @@
 import { useState } from 'react'
+import {
+  AttachmentImagePreview,
+  getAttachmentActionPath,
+  getAttachmentDisplayPath,
+} from './AttachmentImagePreview.js'
 import type { DisplayEvent } from '../../domain/displayEvents.js'
 import type {
   AttachmentSnapshot,
@@ -48,10 +53,27 @@ export function FileSnapshotPanel(props: {
   const actionPath = getActionPath(snapshot)
   const variant = props.variant ?? 'default'
   const fileToolSnapshot = props.event.fileToolSnapshot
+  const imageAttachment = getImageAttachment(snapshot)
   const compactActions = getCompactActions(fileToolSnapshot, {
     actionPath,
     referenceText,
   })
+  const pathNode = (
+    <p className="file-card-path" title={path}>
+      {path}
+    </p>
+  )
+  const metaNode = (
+    <div className="file-card-meta">
+      {referenceText ? <span>引用：{referenceText}</span> : null}
+      {workspaceRelativePath ? (
+        <span>工作区：{workspaceRelativePath}</span>
+      ) : null}
+      {absolutePath ? <span>绝对路径：{absolutePath}</span> : null}
+      {getMimeType(snapshot) ? <span>类型：{getMimeType(snapshot)}</span> : null}
+      {getRangeText(snapshot) ? <span>{getRangeText(snapshot)}</span> : null}
+    </div>
+  )
 
   async function runAction(action: 'open' | 'copyPath' | 'copyReference' | 'reveal') {
     try {
@@ -81,12 +103,18 @@ export function FileSnapshotPanel(props: {
       <div className="file-card-body file-card-body-compact">
         <div className="file-card-compact-row">
           <div className="file-card-compact-main">
-            <strong>
-              {getCompactActionText(snapshot, props.event, fileToolSnapshot)}
-            </strong>
-            <p className="file-card-path" title={path}>
-              {path}
-            </p>
+            {imageAttachment ? (
+              <AttachmentImagePreview
+                className="is-compact"
+                snapshot={imageAttachment}
+              />
+            ) : null}
+            <div className="file-card-compact-text">
+              <strong>
+                {getCompactActionText(snapshot, props.event, fileToolSnapshot)}
+              </strong>
+              {pathNode}
+            </div>
           </div>
           <div className="file-card-actions file-card-actions-compact">
             {compactActions.map(action => (
@@ -123,18 +151,20 @@ export function FileSnapshotPanel(props: {
           {getSafetyText(safety)}
         </span>
       </div>
-      <p className="file-card-path" title={path}>
-        {path}
-      </p>
-      <div className="file-card-meta">
-        {referenceText ? <span>引用：{referenceText}</span> : null}
-        {workspaceRelativePath ? (
-          <span>工作区：{workspaceRelativePath}</span>
-        ) : null}
-        {absolutePath ? <span>绝对路径：{absolutePath}</span> : null}
-        {getMimeType(snapshot) ? <span>类型：{getMimeType(snapshot)}</span> : null}
-        {getRangeText(snapshot) ? <span>{getRangeText(snapshot)}</span> : null}
-      </div>
+      {imageAttachment ? (
+        <div className="file-card-image-row">
+          <AttachmentImagePreview snapshot={imageAttachment} />
+          <div className="file-card-image-main">
+            {pathNode}
+            {metaNode}
+          </div>
+        </div>
+      ) : (
+        <>
+          {pathNode}
+          {metaNode}
+        </>
+      )}
       {safety === 'outside_workspace' ? (
         <p className="file-card-warning">
           该路径可能位于工作区外，后续打开前需要二次确认。
@@ -365,7 +395,7 @@ function getActionLabel(action: FileToolAction): string {
 
 function getDisplayPath(snapshot: FileCardSnapshot): string {
   if (snapshot.type === 'attachment') {
-    return snapshot.value.path ?? snapshot.value.name
+    return getAttachmentDisplayPath(snapshot.value)
   }
   if (snapshot.type === 'reference') {
     return snapshot.value.path ?? snapshot.value.url ?? snapshot.value.label ?? '未知引用'
@@ -445,10 +475,18 @@ function getActionPath(snapshot: FileCardSnapshot): string | undefined {
   }
 
   if (snapshot.type === 'attachment') {
-    return snapshot.value.absolutePath ?? snapshot.value.path
+    return getAttachmentActionPath(snapshot.value)
   }
 
   return snapshot.value.absolutePath ?? snapshot.value.path
+}
+
+function getImageAttachment(
+  snapshot: FileCardSnapshot,
+): AttachmentSnapshot | undefined {
+  return snapshot.type === 'attachment' && snapshot.value.previewKind === 'image'
+    ? snapshot.value
+    : undefined
 }
 
 function getSafetyText(safety: string): string {

@@ -304,6 +304,14 @@
   gap: 10px;
 }
 
+.file-card-compact-text {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
 .file-card-compact-main strong {
   flex: 0 0 auto;
   color: #0b715d;
@@ -333,6 +341,19 @@
   font-size: 10px;
   font-weight: 900;
   padding: 2px 7px;
+}
+
+.file-card-image-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.file-card-image-main {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
 }
 
 .file-card-head .file-safety-outside_workspace {

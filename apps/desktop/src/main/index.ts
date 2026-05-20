@@ -11,6 +11,7 @@ import {
 } from '../../../../src/app-server/client/index.js'
 import { DesktopUpdateService } from './updateService.js'
 import type { DesktopUpdateState, DesktopUpdateStatus } from './updateState.js'
+import { extractImageGenerationPrompt } from './imageGenerationIntent.js'
 import type {
   AuthStatusResult,
   AuthLoginParams,
@@ -1347,27 +1348,6 @@ function resolveDesktopImageGenerationOption(
     typeof input === 'string' ? input : (input.text ?? ''),
   )
   return prompt ? { enabled: true, prompt } : undefined
-}
-
-function extractImageGenerationPrompt(text: string): string | undefined {
-  const normalized = text.trim()
-  if (!normalized) {
-    return undefined
-  }
-  const patterns = [
-    /^\/(?:image|imagine)\s+(.+)$/iu,
-    /^(?:帮我|请|给我)?(?:生成|创建|做)(?:一张|一个|一幅)?(?:图片|图像|图|画面|插画|海报|照片)\s*[:：]?\s*(.+)$/iu,
-    /^(?:帮我|请|给我)?(?:画|绘制)(?:一张|一个|一幅)?(?:图片|图像|图|画面|插画|海报|照片)?\s*[:：]?\s*(.+)$/iu,
-    /^(?:draw|generate image)\s*[:：]?\s*(.+)$/iu,
-  ]
-  for (const pattern of patterns) {
-    const match = normalized.match(pattern)
-    const prompt = match?.[1]?.trim()
-    if (prompt) {
-      return prompt
-    }
-  }
-  return undefined
 }
 
 function normalizeDesktopStartTurnInput(

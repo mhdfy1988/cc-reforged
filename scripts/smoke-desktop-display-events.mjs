@@ -496,6 +496,7 @@ async function assertToolErrorClassifications() {
       import assert from 'node:assert/strict'
       import { readFile } from 'node:fs/promises'
       import { createDisplayEventFromCompletedItem, createErrorDisplayEvent } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
+      import { getAttachmentImagePreviewSrc } from '../../apps/desktop/src/renderer/src/components/chat/AttachmentImagePreview.tsx'
       import { createErrorDiagnostics, getErrorActionViewModels, getPolicyBoundaryHint, getPolicyBoundaryLabel, getQuotaHint, getRateLimitHint } from '../../apps/desktop/src/renderer/src/components/chat/ErrorCard.tsx'
       import { createCcrErrorSnapshot } from '../../src/types/errorSnapshot.ts'
       import { persistGeneratedArtifactFromBase64, prepareGeneratedImageCallForModelReplay, sanitizeGeneratedArtifactsForResume, shouldIncludeGeneratedImageResultForReplay } from '../../src/utils/generatedArtifacts.ts'
@@ -952,6 +953,43 @@ async function assertToolErrorClassifications() {
       assert.equal(generatedAttachment?.path, persistedArtifact.savedPath)
       assert.equal(generatedAttachment?.prompt, '画一张日出图片')
       assert.equal(generatedAttachment?.generatedArtifact?.savedPath, persistedArtifact.savedPath)
+
+      const generatedImageUrl = 'https://example.com/generated/sunrise.png'
+      const generatedUrlImageEvent = createDisplayEventFromCompletedItem(
+        'fixture-model-generated-image-url',
+        'assistant_message',
+        [
+          {
+            type: 'image',
+            origin: 'model_output',
+            lifecycle: 'temporary',
+            safety: 'needs_review',
+            attachmentId: 'generated-image-url',
+            displayName: 'remote-sunrise.png',
+            mimeType: 'image/png',
+            provider: 'glm-api',
+            model: 'glm-image',
+            outputId: 'out_img_url',
+            prompt: '画一张远程 URL 图片',
+            source: {
+              kind: 'url',
+              url: generatedImageUrl,
+            },
+          },
+        ],
+        'completed',
+        {
+          itemId: 'fixture-model-generated-image-url',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+        },
+      )
+      const generatedUrlAttachment = generatedUrlImageEvent?.attachmentSnapshots?.[0]
+      assert.equal(generatedUrlAttachment?.source, 'ModelOutput')
+      assert.equal(generatedUrlAttachment?.previewKind, 'image')
+      assert.equal(generatedUrlAttachment?.safety, 'remote')
+      assert.equal(generatedUrlAttachment?.path, generatedImageUrl)
+      assert.equal(getAttachmentImagePreviewSrc(generatedUrlAttachment), generatedImageUrl)
 
       const resumePayload = sanitizeGeneratedArtifactsForResume({
         image: {

@@ -300,6 +300,13 @@
   cursor: zoom-in;
 }
 
+.message-attachment-preview.is-compact {
+  width: 58px;
+  height: 40px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
 .message-attachment-preview img {
   display: block;
   width: 100%;
