@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
@@ -51,6 +51,9 @@ try {
   const { getAllBaseTools, ASYNC_AGENT_ALLOWED_TOOLS } = await import(
     '../dist/src/tools.js'
   )
+  const { normalizeGeneratedImageOutputs } = await import(
+    '../dist/src/services/llm/protocols/generatedImageOutputAdapter.js'
+  )
 
   assert.equal(GENERATE_IMAGE_TOOL_NAME, 'GenerateImage')
   assert.equal(
@@ -77,6 +80,40 @@ try {
   assert.match(unsupportedProviderValidation.message, /deepseek/)
   assert.match(unsupportedProviderValidation.message, /GLM API/)
   assert.match(unsupportedProviderValidation.message, /Codex OAuth/)
+
+  const downloadedImage = await normalizeGeneratedImageOutputs(
+    [
+      {
+        outputId: 'out_generate_image_url_smoke',
+        url: 'https://example.test/generated-image-download',
+      },
+    ],
+    {
+      provider: 'glm-api',
+      model: 'glm-image',
+      sessionId: 'generate-image-url-smoke',
+      prompt: 'a desk under warm light',
+      ccrHome: bundleDir,
+      outputFormat: 'png',
+      fetchImpl: async () =>
+        new Response(Buffer.from('smoke-downloaded-image'), {
+          status: 200,
+          headers: {
+            'content-type': 'application/octet-stream',
+            'content-disposition': 'attachment; filename="generated.png"',
+          },
+        }),
+    },
+  )
+  assert.equal(downloadedImage.output.length, 1)
+  assert.equal(downloadedImage.generatedArtifacts.length, 1)
+  assert.equal(downloadedImage.output[0].source.kind, 'file')
+  assert.equal(downloadedImage.output[0].lifecycle, 'persisted')
+  assert.equal(downloadedImage.output[0].mimeType, 'image/png')
+  assert.equal(
+    readFileSync(downloadedImage.output[0].savedPath, 'utf8'),
+    'smoke-downloaded-image',
+  )
 
   const generatedArtifact = {
     id: 'out_generate_image_smoke',
@@ -197,6 +234,7 @@ try {
         checked: [
           'generate_image_tool_visible',
           'unsupported_provider_returns_friendly_validation',
+          'download_url_outputs_are_persisted_for_preview',
           'generate_image_tool_result_text_only_for_model',
           'desktop_extracts_generated_image_from_tool_result_data',
         ],

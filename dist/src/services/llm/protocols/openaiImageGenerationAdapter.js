@@ -49,6 +49,7 @@ export class OpenAiImageGenerationAdapter {
             request,
             fallbackModel: requestBody.model,
             providerId: this.#providerId,
+            fetchImpl: this.#fetchImpl,
         });
     }
 }
@@ -88,6 +89,8 @@ export async function normalizeOpenAiImageGenerationResponse(raw, context) {
         outputId: context.request.outputId,
         ccrHome: context.request.ccrHome,
         outputFormat: context.request.outputFormat,
+        fetchImpl: context.fetchImpl,
+        signal: context.request.signal,
         raw: toSafeOpenAiImageGenerationRaw(raw),
     });
 }

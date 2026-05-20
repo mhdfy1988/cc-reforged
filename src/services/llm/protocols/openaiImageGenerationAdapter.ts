@@ -107,6 +107,7 @@ export class OpenAiImageGenerationAdapter {
       request,
       fallbackModel: requestBody.model,
       providerId: this.#providerId,
+      fetchImpl: this.#fetchImpl,
     })
   }
 }
@@ -144,6 +145,7 @@ export async function normalizeOpenAiImageGenerationResponse(
     request: LlmImageGenerationRequest
     fallbackModel: string
     providerId?: string
+    fetchImpl?: typeof fetch
   },
 ): Promise<LlmImageGenerationResponse> {
   const provider = context.providerId ?? context.request.provider
@@ -163,6 +165,8 @@ export async function normalizeOpenAiImageGenerationResponse(
       outputId: context.request.outputId,
       ccrHome: context.request.ccrHome,
       outputFormat: context.request.outputFormat,
+      fetchImpl: context.fetchImpl,
+      signal: context.request.signal,
       raw: toSafeOpenAiImageGenerationRaw(raw),
     },
   )

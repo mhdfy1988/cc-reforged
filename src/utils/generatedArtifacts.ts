@@ -30,6 +30,18 @@ export interface PersistGeneratedArtifactInput
   safety?: CcrGeneratedOutputSafety
 }
 
+export interface PersistGeneratedArtifactBytesInput
+  extends GeneratedArtifactPathInput {
+  bytes: Uint8Array
+  provider?: string
+  model?: string
+  prompt?: string
+  revisedPrompt?: string
+  lifecycle?: CcrGeneratedOutputLifecycle
+  safety?: CcrGeneratedOutputSafety
+  raw?: unknown
+}
+
 export type ImageGenerationReplayCall = Record<string, unknown> & {
   id?: string
   call_id?: string
@@ -51,10 +63,18 @@ export function getGeneratedArtifactPath(
 export async function persistGeneratedArtifactFromBase64(
   input: PersistGeneratedArtifactInput,
 ): Promise<CcrGeneratedArtifactSnapshot> {
+  return persistGeneratedArtifactFromBytes({
+    ...input,
+    bytes: Buffer.from(stripDataUrlPrefix(input.base64Data), 'base64'),
+  })
+}
+
+export async function persistGeneratedArtifactFromBytes(
+  input: PersistGeneratedArtifactBytesInput,
+): Promise<CcrGeneratedArtifactSnapshot> {
   const savedPath = getGeneratedArtifactPath(input)
   await mkdir(dirname(savedPath), { recursive: true })
-  const bytes = Buffer.from(stripDataUrlPrefix(input.base64Data), 'base64')
-  await writeFile(savedPath, bytes)
+  await writeFile(savedPath, input.bytes)
 
   return {
     id: input.outputId,
@@ -69,6 +89,7 @@ export async function persistGeneratedArtifactFromBase64(
     revisedPrompt: input.revisedPrompt,
     lifecycle: input.lifecycle ?? 'persisted',
     safety: input.safety ?? 'needs_review',
+    raw: input.raw,
   }
 }
 

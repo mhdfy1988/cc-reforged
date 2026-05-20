@@ -496,7 +496,7 @@ async function assertToolErrorClassifications() {
       import assert from 'node:assert/strict'
       import { readFile } from 'node:fs/promises'
       import { createDisplayEventFromCompletedItem, createErrorDisplayEvent } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
-      import { getAttachmentImagePreviewSrc } from '../../apps/desktop/src/renderer/src/components/chat/AttachmentImagePreview.tsx'
+      import { getAttachmentActionPath, getAttachmentImagePreviewSrc } from '../../apps/desktop/src/renderer/src/components/chat/AttachmentImagePreview.tsx'
       import { createErrorDiagnostics, getErrorActionViewModels, getPolicyBoundaryHint, getPolicyBoundaryLabel, getQuotaHint, getRateLimitHint } from '../../apps/desktop/src/renderer/src/components/chat/ErrorCard.tsx'
       import { createCcrErrorSnapshot } from '../../src/types/errorSnapshot.ts'
       import { persistGeneratedArtifactFromBase64, prepareGeneratedImageCallForModelReplay, sanitizeGeneratedArtifactsForResume, shouldIncludeGeneratedImageResultForReplay } from '../../src/utils/generatedArtifacts.ts'
@@ -989,7 +989,8 @@ async function assertToolErrorClassifications() {
       assert.equal(generatedUrlAttachment?.previewKind, 'image')
       assert.equal(generatedUrlAttachment?.safety, 'remote')
       assert.equal(generatedUrlAttachment?.path, generatedImageUrl)
-      assert.equal(getAttachmentImagePreviewSrc(generatedUrlAttachment), generatedImageUrl)
+      assert.equal(getAttachmentActionPath(generatedUrlAttachment), generatedImageUrl)
+      assert.equal(getAttachmentImagePreviewSrc(generatedUrlAttachment), '')
 
       const resumePayload = sanitizeGeneratedArtifactsForResume({
         image: {

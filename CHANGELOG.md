@@ -45,6 +45,8 @@
 - 修复 GLM / OpenAI-compatible 工具调用间空文本 delta 被显示成 `暂无内容` 的问题。
 - 修复模型生成图片和工具图片附件展示不一致的问题，GLM URL 图片与本地生成图都会复用同一套缩略图和预览 UI。
 - 优化 `GenerateImage` 在当前供应商不支持生图时的反馈，改为提示切换到 GLM API、OpenAI 或 Codex OAuth，而不是暴露底层 provider 异常。
+- 优化 Desktop 历史会话入口，历史列表会始终展示当前会话；当前会话不可重复切换，运行中显示“运行中”，其他历史会话在任务完成前显示“需等待”且不可切换。
+- 修复 GLM / OpenAI 生图返回下载 URL 时缩略图破图的问题；URL 输出会先由后端下载并持久化为本地生成物，历史里已保存的远程 URL 也会由 Desktop 主进程下载后生成缩略图。
 - 修复历史恢复中内部合成消息被展示的问题，不再显示 `No response requested.`。
 - 新增 settings 隔离 smoke，防止项目级 settings 路径后续回退到 `.claude`。
 

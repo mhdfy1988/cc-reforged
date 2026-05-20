@@ -447,7 +447,7 @@ function App({ initialStatus = null }: AppProps) {
         scope,
         query: query.trim() || undefined,
         limit: 80,
-        includeCurrent: false,
+        includeCurrent: true,
       })
       const groups = Array.isArray(result?.groups) ? result.groups : []
       const threads = groups.flatMap(group =>

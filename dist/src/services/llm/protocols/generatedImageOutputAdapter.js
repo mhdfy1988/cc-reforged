@@ -1,5 +1,5 @@
 import { basename } from 'node:path';
-import { persistGeneratedArtifactFromBase64 } from '../../../utils/generatedArtifacts.js';
+import { persistGeneratedArtifactFromBase64, persistGeneratedArtifactFromBytes, } from '../../../utils/generatedArtifacts.js';
 export async function normalizeGeneratedImageOutputs(items, context) {
     const output = [];
     const generatedArtifacts = [];
@@ -54,11 +54,52 @@ export async function normalizeGeneratedImageOutputs(items, context) {
             continue;
         }
         if (item.url) {
+            const mimeType = getMimeTypeForOutputFormat(context.outputFormat);
+            const artifact = await tryPersistGeneratedImageUrl({
+                url: item.url,
+                fetchImpl: context.fetchImpl,
+                signal: context.signal,
+                ccrHome: context.ccrHome,
+                sessionId: context.sessionId,
+                outputId,
+                mimeType,
+                provider: context.provider,
+                model: context.model,
+                prompt,
+                revisedPrompt,
+            });
+            if (artifact?.savedPath) {
+                generatedArtifacts.push(artifact);
+                output.push({
+                    type: 'image',
+                    attachmentId: outputId,
+                    displayName: basename(artifact.savedPath),
+                    mimeType: artifact.mimeType ?? mimeType,
+                    origin: 'model_output',
+                    lifecycle: 'persisted',
+                    safety: 'needs_review',
+                    provider: context.provider,
+                    model: context.model,
+                    outputId,
+                    savedPath: artifact.savedPath,
+                    prompt,
+                    revisedPrompt,
+                    generatedArtifact: artifact,
+                    source: {
+                        kind: 'file',
+                        path: artifact.savedPath,
+                    },
+                    raw: {
+                        sourceUrl: item.url,
+                    },
+                });
+                continue;
+            }
             output.push({
                 type: 'image',
                 attachmentId: outputId,
                 displayName: `${outputId}${getExtensionForOutputFormat(context.outputFormat)}`,
-                mimeType: getMimeTypeForOutputFormat(context.outputFormat),
+                mimeType,
                 origin: 'model_output',
                 lifecycle: 'temporary',
                 safety: 'needs_review',
@@ -91,6 +132,46 @@ export async function normalizeGeneratedImageOutputs(items, context) {
             })),
         },
     };
+}
+async function tryPersistGeneratedImageUrl(input) {
+    try {
+        const response = await (input.fetchImpl ?? fetch)(input.url, {
+            signal: input.signal,
+        });
+        if (!response.ok) {
+            return null;
+        }
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.byteLength === 0) {
+            return null;
+        }
+        const responseMimeType = getImageMimeTypeFromHeaders(response.headers);
+        return await persistGeneratedArtifactFromBytes({
+            ccrHome: input.ccrHome,
+            sessionId: input.sessionId,
+            outputId: input.outputId,
+            mimeType: responseMimeType ?? input.mimeType,
+            artifactType: 'image',
+            bytes,
+            provider: input.provider,
+            model: input.model,
+            prompt: input.prompt,
+            revisedPrompt: input.revisedPrompt,
+            lifecycle: 'persisted',
+            safety: 'needs_review',
+            raw: {
+                sourceUrl: input.url,
+                downloadedMimeType: responseMimeType,
+            },
+        });
+    }
+    catch {
+        return null;
+    }
+}
+function getImageMimeTypeFromHeaders(headers) {
+    const contentType = headers.get('content-type')?.split(';', 1)[0]?.trim();
+    return contentType?.startsWith('image/') ? contentType : undefined;
 }
 function getImageOutputId(requestedOutputId, index, total) {
     const base = requestedOutputId?.trim() || `generated_image_${Date.now()}`;

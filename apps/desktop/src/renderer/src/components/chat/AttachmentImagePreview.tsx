@@ -56,16 +56,14 @@ function AttachmentImagePreviewButton(props: {
     }
 
     const actionPath = getAttachmentActionPath(snapshot)
-    const localPath =
-      actionPath && !isRemotePath(actionPath) ? actionPath : undefined
-    if (!localPath) {
+    if (!actionPath) {
       return () => {
         cancelled = true
       }
     }
 
     void window.ccr
-      .getImagePreview({ path: localPath })
+      .getImagePreview({ path: actionPath })
       .then(result => {
         if (!cancelled && result.previewDataUrl) {
           setPreviewSrc(result.previewDataUrl)
@@ -83,8 +81,6 @@ function AttachmentImagePreviewButton(props: {
   }
 
   const actionPath = getAttachmentActionPath(snapshot)
-  const localPath =
-    actionPath && !isRemotePath(actionPath) ? actionPath : undefined
   const className = ['message-attachment-preview', props.className]
     .filter(Boolean)
     .join(' ')
@@ -97,7 +93,7 @@ function AttachmentImagePreviewButton(props: {
         props.onOpen({
           name: snapshot.name,
           src: previewSrc,
-          path: localPath,
+          path: actionPath,
         })
       }
       title="查看图片"
@@ -242,8 +238,7 @@ export function getAttachmentImagePreviewSrc(
   if (snapshot.previewDataUrl) {
     return snapshot.previewDataUrl
   }
-  const actionPath = getAttachmentActionPath(snapshot)
-  return actionPath && isRemotePath(actionPath) ? actionPath : ''
+  return ''
 }
 
 function getAttachmentKindLabel(snapshot: AttachmentSnapshot): string {

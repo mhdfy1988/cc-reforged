@@ -704,7 +704,8 @@ export type SessionHistoryItem = {
   projectPath?: string
   transcriptPath?: string
   isCurrentSession: boolean
-  status: 'closed' | 'current'
+  activeTurnId?: string | null
+  status: 'closed' | 'current' | 'running'
 }
 
 export type SessionHistoryWorkspaceGroup = {

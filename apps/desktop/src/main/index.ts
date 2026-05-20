@@ -184,6 +184,7 @@ type DesktopStartTurnInput =
     }
 
 const DESKTOP_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const DESKTOP_MAX_REMOTE_IMAGE_PREVIEW_BYTES = 20 * 1024 * 1024
 const DESKTOP_MAX_TEXT_FILE_BYTES = 128 * 1024
 const DESKTOP_IMAGE_MIME_TYPES = new Set([
   'image/png',
@@ -1970,6 +1971,21 @@ function createImagePreviewDataUrl(
   maxEdge = 96,
 ): string | undefined {
   const image = nativeImage.createFromPath(path)
+  return createImagePreviewDataUrlFromNativeImage(image, maxEdge)
+}
+
+function createImagePreviewDataUrlFromBuffer(
+  buffer: Buffer,
+  maxEdge = 96,
+): string | undefined {
+  const image = nativeImage.createFromBuffer(buffer)
+  return createImagePreviewDataUrlFromNativeImage(image, maxEdge)
+}
+
+function createImagePreviewDataUrlFromNativeImage(
+  image: Electron.NativeImage,
+  maxEdge = 96,
+): string | undefined {
   if (image.isEmpty()) {
     return undefined
   }
@@ -1993,19 +2009,58 @@ function normalizeImagePreviewMaxEdge(value: unknown): number {
   return Math.max(64, Math.min(1600, Math.round(value)))
 }
 
-function createDesktopImagePreview(
+async function createRemoteImagePreviewDataUrl(
+  url: string,
+  maxEdge: number,
+): Promise<string | undefined> {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      return undefined
+    }
+
+    const contentLength = Number.parseInt(
+      response.headers.get('content-length') ?? '',
+      10,
+    )
+    if (
+      Number.isFinite(contentLength) &&
+      contentLength > DESKTOP_MAX_REMOTE_IMAGE_PREVIEW_BYTES
+    ) {
+      return undefined
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    if (arrayBuffer.byteLength > DESKTOP_MAX_REMOTE_IMAGE_PREVIEW_BYTES) {
+      return undefined
+    }
+
+    return createImagePreviewDataUrlFromBuffer(Buffer.from(arrayBuffer), maxEdge)
+  } catch {
+    return undefined
+  }
+}
+
+function isRemoteImagePreviewPath(path: string): boolean {
+  return /^https?:\/\//i.test(path)
+}
+
+async function createDesktopImagePreview(
   input: DesktopImagePreviewInput,
-): DesktopImagePreviewResult {
+): Promise<DesktopImagePreviewResult> {
   const path = normalizeOptionalString(input.path)
-  if (!path || /^https?:\/\//i.test(path)) {
+  if (!path) {
     return {}
+  }
+  const maxEdge = normalizeImagePreviewMaxEdge(input.maxEdge)
+  if (isRemoteImagePreviewPath(path)) {
+    return {
+      previewDataUrl: await createRemoteImagePreviewDataUrl(path, maxEdge),
+    }
   }
   const resolvedPath = resolveWorkspacePath(path)
   return {
-    previewDataUrl: createImagePreviewDataUrl(
-      resolvedPath,
-      normalizeImagePreviewMaxEdge(input.maxEdge),
-    ),
+    previewDataUrl: createImagePreviewDataUrl(resolvedPath, maxEdge),
   }
 }
 

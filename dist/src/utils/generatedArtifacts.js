@@ -7,10 +7,15 @@ export function getGeneratedArtifactPath(input) {
     return join(input.ccrHome ?? getClaudeConfigHomeDir(), GENERATED_OUTPUTS_DIR, sanitizePathComponent(input.sessionId), `${sanitizePathComponent(input.outputId)}${extension}`);
 }
 export async function persistGeneratedArtifactFromBase64(input) {
+    return persistGeneratedArtifactFromBytes({
+        ...input,
+        bytes: Buffer.from(stripDataUrlPrefix(input.base64Data), 'base64'),
+    });
+}
+export async function persistGeneratedArtifactFromBytes(input) {
     const savedPath = getGeneratedArtifactPath(input);
     await mkdir(dirname(savedPath), { recursive: true });
-    const bytes = Buffer.from(stripDataUrlPrefix(input.base64Data), 'base64');
-    await writeFile(savedPath, bytes);
+    await writeFile(savedPath, input.bytes);
     return {
         id: input.outputId,
         type: input.artifactType ?? inferArtifactType(input.mimeType),
@@ -24,6 +29,7 @@ export async function persistGeneratedArtifactFromBase64(input) {
         revisedPrompt: input.revisedPrompt,
         lifecycle: input.lifecycle ?? 'persisted',
         safety: input.safety ?? 'needs_review',
+        raw: input.raw,
     };
 }
 export function sanitizeGeneratedArtifactsForResume(value) {

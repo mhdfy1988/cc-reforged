@@ -22,13 +22,13 @@ export async function handleSessionHistoryList(context, params) {
     const limit = parsedParams.limit ?? 50;
     const cursorOffset = parseCursorOffset(parsedParams.cursor);
     const query = normalizeSearchText(parsedParams.query);
-    const currentSessionIds = getCurrentSessionIds(context);
+    const currentSessions = getCurrentSessionStatuses(context);
     const initialEnrichCount = Math.min(Math.max(cursorOffset + limit + 1, query ? 200 : limit + 1), 500);
     const result = parsedParams.scope === 'allProjects'
         ? await loadAllProjectsMessageLogsProgressive(undefined, initialEnrichCount)
         : await loadSameRepoMessageLogsProgressive(await getWorktreePaths(getOriginalCwd()).catch(() => [getOriginalCwd()]), undefined, initialEnrichCount);
     const historyItems = result.logs
-        .map(log => logToHistoryItem(log, currentSessionIds))
+        .map(log => logToHistoryItem(log, currentSessions))
         .filter((item) => item !== null)
         .filter(item => parsedParams.includeCurrent || !item.isCurrentSession)
         .filter(item => historyItemMatchesQuery(item, query));
@@ -500,13 +500,15 @@ function truncateThreadMessageText(text) {
         ? `${normalized.slice(0, maxLength).trim()}\n\n[历史消息过长，已截断显示]`
         : normalized;
 }
-function logToHistoryItem(log, currentSessionIds) {
+function logToHistoryItem(log, currentSessions) {
     const sessionId = getSessionIdFromLog(log) ?? extractSessionIdFromPath(log.fullPath);
     if (!sessionId) {
         return null;
     }
     const titleParts = selectHistoryTitle(log, sessionId);
-    const isCurrentSession = currentSessionIds.has(sessionId);
+    const currentSession = currentSessions.get(sessionId);
+    const isCurrentSession = Boolean(currentSession);
+    const activeTurnId = currentSession?.activeTurnId ?? null;
     const firstPrompt = normalizeTitle(log.firstPrompt);
     return {
         sessionId,
@@ -524,7 +526,8 @@ function logToHistoryItem(log, currentSessionIds) {
         ...(log.projectPath ? { projectPath: log.projectPath } : {}),
         ...(log.fullPath ? { transcriptPath: log.fullPath } : {}),
         isCurrentSession,
-        status: isCurrentSession ? 'current' : 'closed',
+        ...(isCurrentSession ? { activeTurnId } : {}),
+        status: activeTurnId ? 'running' : isCurrentSession ? 'current' : 'closed',
     };
 }
 function selectHistoryTitle(log, sessionId) {
@@ -601,8 +604,8 @@ function groupHistoryItems(items, currentWorkspacePath) {
         return Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
     });
 }
-function getCurrentSessionIds(context) {
-    const ids = new Set();
+function getCurrentSessionStatuses(context) {
+    const sessions = new Map();
     for (const thread of context.core.session.listThreads()) {
         if (thread.status !== 'active') {
             continue;
@@ -610,11 +613,11 @@ function getCurrentSessionIds(context) {
         for (const key of ['sessionId', 'resumedFromSessionId']) {
             const value = thread.metadata[key];
             if (typeof value === 'string' && value.trim()) {
-                ids.add(value);
+                sessions.set(value, { activeTurnId: thread.activeTurnId ?? null });
             }
         }
     }
-    return ids;
+    return sessions;
 }
 function getWorkspaceName(workspacePath) {
     if (workspacePath === '未知工作区') {

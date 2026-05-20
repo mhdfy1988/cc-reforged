@@ -55,7 +55,7 @@ export async function handleSessionHistoryList(
   const limit = parsedParams.limit ?? 50
   const cursorOffset = parseCursorOffset(parsedParams.cursor)
   const query = normalizeSearchText(parsedParams.query)
-  const currentSessionIds = getCurrentSessionIds(context)
+  const currentSessions = getCurrentSessionStatuses(context)
   const initialEnrichCount = Math.min(
     Math.max(cursorOffset + limit + 1, query ? 200 : limit + 1),
     500,
@@ -69,7 +69,7 @@ export async function handleSessionHistoryList(
           initialEnrichCount,
         )
   const historyItems = result.logs
-    .map(log => logToHistoryItem(log, currentSessionIds))
+    .map(log => logToHistoryItem(log, currentSessions))
     .filter((item): item is SessionHistoryItem => item !== null)
     .filter(item => parsedParams.includeCurrent || !item.isCurrentSession)
     .filter(item => historyItemMatchesQuery(item, query))
@@ -664,7 +664,7 @@ function truncateThreadMessageText(text: string): string {
 
 function logToHistoryItem(
   log: LogOption,
-  currentSessionIds: Set<string>,
+  currentSessions: Map<string, { activeTurnId: string | null }>,
 ): SessionHistoryItem | null {
   const sessionId = getSessionIdFromLog(log) ?? extractSessionIdFromPath(log.fullPath)
   if (!sessionId) {
@@ -672,7 +672,9 @@ function logToHistoryItem(
   }
 
   const titleParts = selectHistoryTitle(log, sessionId)
-  const isCurrentSession = currentSessionIds.has(sessionId)
+  const currentSession = currentSessions.get(sessionId)
+  const isCurrentSession = Boolean(currentSession)
+  const activeTurnId = currentSession?.activeTurnId ?? null
   const firstPrompt = normalizeTitle(log.firstPrompt)
   return {
     sessionId,
@@ -690,7 +692,8 @@ function logToHistoryItem(
     ...(log.projectPath ? { projectPath: log.projectPath } : {}),
     ...(log.fullPath ? { transcriptPath: log.fullPath } : {}),
     isCurrentSession,
-    status: isCurrentSession ? 'current' : 'closed',
+    ...(isCurrentSession ? { activeTurnId } : {}),
+    status: activeTurnId ? 'running' : isCurrentSession ? 'current' : 'closed',
   }
 }
 
@@ -787,8 +790,10 @@ function groupHistoryItems(
     })
 }
 
-function getCurrentSessionIds(context: AppServerContext): Set<string> {
-  const ids = new Set<string>()
+function getCurrentSessionStatuses(
+  context: AppServerContext,
+): Map<string, { activeTurnId: string | null }> {
+  const sessions = new Map<string, { activeTurnId: string | null }>()
   for (const thread of context.core.session.listThreads()) {
     if (thread.status !== 'active') {
       continue
@@ -796,11 +801,11 @@ function getCurrentSessionIds(context: AppServerContext): Set<string> {
     for (const key of ['sessionId', 'resumedFromSessionId']) {
       const value = thread.metadata[key]
       if (typeof value === 'string' && value.trim()) {
-        ids.add(value)
+        sessions.set(value, { activeTurnId: thread.activeTurnId ?? null })
       }
     }
   }
-  return ids
+  return sessions
 }
 
 function getWorkspaceName(workspacePath: string): string {

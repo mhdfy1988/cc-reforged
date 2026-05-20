@@ -94,10 +94,10 @@ export function ChatPage(props: {
               <button
                 aria-label="历史会话"
                 className="head-btn head-icon-btn"
-                disabled={props.busy || Boolean(props.activeTurnId)}
+                disabled={props.busy}
                 title={
                   props.activeTurnId
-                    ? '当前 turn 运行中，完成后才能切换历史会话。'
+                    ? '当前 turn 运行中，可查看历史会话，完成后才能切换。'
                     : '查看当前 App Server 已知会话，并选择一个会话恢复。'
                 }
                 onClick={props.onShowHistory}
@@ -133,6 +133,7 @@ export function ChatPage(props: {
       <ThreadHistoryModal
         busy={props.busy}
         history={props.threadHistory}
+        activeTurnId={props.activeTurnId}
         onClose={props.onCloseHistory}
         onQueryChange={props.onHistoryQueryChange}
         onReload={props.onHistoryReload}
@@ -155,6 +156,7 @@ export function ChatPage(props: {
 }
 
 function ThreadHistoryModal(props: {
+  activeTurnId: string | null
   busy: boolean
   history: ThreadHistoryState
   onClose: () => void
@@ -266,34 +268,41 @@ function ThreadHistoryModal(props: {
               {activeGroup ? (
                 <>
                   <div className="thread-history-group-items">
-                    {activeGroup.sessions.map((thread, index) => (
-                      <button
-                        disabled={props.busy || thread.isCurrentSession}
-                        key={getThreadHistoryKey(thread, index)}
-                        onClick={() => props.onResumeThread(thread)}
-                        type="button"
-                      >
-                        <span>
-                          <strong>{formatThreadHistoryTitle(thread)}</strong>
-                          <small>
+                    {activeGroup.sessions.map((thread, index) => {
+                      const disabledReason = getThreadHistoryDisabledReason(
+                        thread,
+                        props,
+                      )
+                      return (
+                        <button
+                          disabled={Boolean(disabledReason)}
+                          key={getThreadHistoryKey(thread, index)}
+                          onClick={() => props.onResumeThread(thread)}
+                          title={disabledReason ?? '恢复这个历史会话'}
+                          type="button"
+                        >
+                          <span>
+                            <strong>{formatThreadHistoryTitle(thread)}</strong>
+                            <small>
+                              {[
+                                shortThreadId(thread.sessionId ?? thread.threadId),
+                                formatMessageCount(thread.messageCount),
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </small>
+                          </span>
+                          <em>
                             {[
-                              shortThreadId(thread.sessionId ?? thread.threadId),
-                              formatMessageCount(thread.messageCount),
+                              formatThreadHistoryStatus(thread, props.activeTurnId),
+                              formatHistoryTime(thread.updatedAt),
                             ]
                               .filter(Boolean)
                               .join(' · ')}
-                          </small>
-                        </span>
-                        <em>
-                          {[
-                            thread.isCurrentSession ? '当前' : '可恢复',
-                            formatHistoryTime(thread.updatedAt),
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </em>
-                      </button>
-                    ))}
+                          </em>
+                        </button>
+                      )
+                    })}
                   </div>
                   {history.nextCursor ? (
                     <p className="thread-history-more">
@@ -385,6 +394,37 @@ function getThreadHistoryKey(
   index: number,
 ): string {
   return thread.threadId ?? `${thread.title ?? 'thread'}-${index}`
+}
+
+function getThreadHistoryDisabledReason(
+  thread: ThreadHistoryItem,
+  input: { activeTurnId: string | null; busy: boolean },
+): string | null {
+  if (input.busy) {
+    return '当前正在处理其他操作，稍后才能恢复历史会话。'
+  }
+  if (thread.isCurrentSession) {
+    return thread.activeTurnId || thread.status === 'running'
+      ? '该会话正在运行中。'
+      : '该会话已经是当前会话。'
+  }
+  if (input.activeTurnId) {
+    return '当前 turn 运行中，完成后才能切换历史会话。'
+  }
+  return null
+}
+
+function formatThreadHistoryStatus(
+  thread: ThreadHistoryItem,
+  activeTurnId: string | null,
+): string {
+  if (thread.activeTurnId || thread.status === 'running') {
+    return '运行中'
+  }
+  if (thread.isCurrentSession) {
+    return '当前'
+  }
+  return activeTurnId ? '需等待' : '可恢复'
 }
 
 function formatMessageCount(value: unknown): string | null {
