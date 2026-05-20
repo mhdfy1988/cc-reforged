@@ -54,10 +54,10 @@
 
 ## 当前指针
 
-- 已完成：STD-PROVIDER-01 Kimi / GLM Provider 接入第一版。
-- 当前正在做：STD-PROVIDER-02 已接 provider 成熟化与真实使用闭环，先把 Codex OAuth、DeepSeek、MiniMax、Kimi、GLM 做成熟。
+- 已完成：`0.5.0` 多 provider 第一版，包含 Codex OAuth、OpenAI、DeepSeek、MiniMax、Kimi、GLM API / Coding Plan 的配置、凭据、模型目录、测试连接和核心请求链路。
+- 当前正在做：`0.5.x` 已接 provider 成熟化与真实使用闭环，先把 Codex OAuth、OpenAI、DeepSeek、MiniMax、Kimi、GLM 做成熟。
 - 当前进展：Core、App Server、SDK、Desktop、CLI 和 TUI 的多 Profile / 多模型第一版已经打通。Desktop 左侧已新增“模型”一级页面，按“供应商类型 / 连接配置 / 配置详情”三栏管理 Profile。顶部快速切换已拆成“模型切换”和“连接配置切换”两个入口。`llm.config.local.json` 已支持 `schemaVersion + current + providerOverrides + profiles`，写回不再保留旧顶层字段。全新安装没有默认 Profile；登录、保存 API Key 或新增连接配置时才生成 `providerType-数字` Profile。敏感凭据统一写入 `llm.credentials.local.json` 的 `profileCredentials[profileId]`，不再使用 `credentialRef` 或单独 `codex-oauth.json`。Profile 新增、编辑、复制、删除已从 Core -> App Server -> Desktop IPC -> 模型页接通。每轮 turn metadata 已记录 `profileId/profileName/provider/providerDisplayName/apiMode/authStrategy/model/requestedModel/contextWindow`，App Server SDK smoke 已覆盖。CLI 已新增 `ccr model status/list/set/profile`，TUI `/model` 已支持 `profile <profileId> [modelId]`。DeepSeek、Kimi API 和 GLM 复用 OpenAI Chat 公共适配器；MiniMax 国际版 / 国内版和 Kimi Code 已切到 Anthropic Messages 公共适配器，测试连接和普通聊天链路已接通。
-- 下一步：先建立已接 provider 成熟度矩阵和真实 probe 清单；MP-06g OpenAI-compatible / Gateway profile 能力覆盖后置，不急于新增入口。
+- 下一步：先建立已接 provider 成熟度矩阵和真实 probe 清单；继续补图片生成、错误分类、能力目录和工具协议回归。MP-06g OpenAI-compatible / Gateway profile 能力覆盖后置，不急于新增入口。
 - 后续新增：补 MP-13，把“智能：低 / 中 / 高 / 超高”作为模型能力接入，而不是全局固定开关。该项需要同时覆盖能力目录、Profile 覆盖、顶部入口、provider adapter 参数映射和 turn metadata 记录。
 
 ## 接下来安排

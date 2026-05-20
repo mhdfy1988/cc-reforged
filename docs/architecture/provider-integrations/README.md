@@ -23,6 +23,19 @@
 | OpenAI | [openai.md](./openai.md) |
 | OpenAI Chat 兼容说明 | [openai-chat-compatible-notes.md](./openai-chat-compatible-notes.md) |
 
+## 当前生成图片接入口径
+
+生成图片不再由模型猜测应该写 SVG、调用 shell，或把远程 URL 直接丢给 UI。`0.5.0` 起，CCR 使用统一 `GenerateImage` 工具和 provider-neutral 生成物模型。
+
+| Provider | 默认图片模型 / 路径 | 归一化结果 |
+| --- | --- | --- |
+| Codex OAuth | Responses hosted `image_generation` tool | `CcrImageContentBlock` + `generatedArtifact` |
+| OpenAI | `gpt-image-1` / `/images/generations`，可选 Responses hosted tool | `CcrImageContentBlock` + `generatedArtifact` |
+| MiniMax 国际版 / 国内版 | `image-01` / 原生 `image_generation` | `CcrImageContentBlock` + `generatedArtifact` |
+| GLM API | `glm-image` / `/images/generations` | 先下载 URL，再落盘为本地生成物 |
+
+不支持图片生成的当前供应商调用 `GenerateImage` 时，应返回友好错误：当前模型不支持生图，请切换到 GLM API、OpenAI 或 Codex OAuth。
+
 ## 能力分类
 
 | 能力 | 总体标准 | 单厂商接入记录 |

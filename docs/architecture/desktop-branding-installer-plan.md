@@ -114,7 +114,7 @@ npm.cmd run smoke:desktop-branding
 - `icon.ico` 是有效 ICO。
 - `build.win.icon` 指向生成的 `.ico`。
 - NSIS installer / uninstaller icon 指向生成的 `.ico`。
-- `productName` 仍然是 `CCR Desktop`。
+- `productName` 仍然是 `CCR`。
 
 ## 7. 当前边界
 

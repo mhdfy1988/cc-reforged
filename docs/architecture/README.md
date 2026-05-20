@@ -4,6 +4,7 @@
 
 ## 架构总览
 
+- [CCR 版本路线图](./version-roadmap.md)
 - [CCR 多入口与 App Server 总体方案](./entrypoints-runtime-app-server-desktop-vscode.md)
 - [CCR Core 统一对外接口边界](./ccr-core-interface-boundary.md)
 - [CCR 升级管理策略](./upgrade-management-strategy.md)

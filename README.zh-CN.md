@@ -6,7 +6,7 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.4.7-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.5.0-orange?style=flat-square)
 
 CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留终端优先的工作方式，同时把配置、LLM 运行时、App Server 和 Desktop 客户端逐步收敛到 CCR 自己的边界内。
 
@@ -14,8 +14,9 @@ CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留
 
 - `ccr` CLI / TUI 运行时，支持 Codex OAuth。
 - CCR Windows 客户端，负责本地 App Server 管理、历史会话、权限设置、自动更新和安装包发布。
-- 内置 LLM Runtime，逐步支持多供应商、多连接配置档案、多协议和每轮模型元数据。
-- 默认支持 Codex OAuth、DeepSeek 官方 API、MiniMax 国际版 / 国内版，并抽出 OpenAI Chat Completions 与 Anthropic Messages 两条公共协议适配器。
+- 内置 LLM Runtime，逐步支持多供应商、多连接配置档案、多协议、多模态内容块、生成物和每轮模型元数据。
+- 默认支持 Codex OAuth、OpenAI、DeepSeek 官方 API、MiniMax 国际版 / 国内版、Kimi、GLM API / Coding Plan，并抽出 OpenAI Chat Completions 与 Anthropic Messages 两条公共协议适配器。
+- 通过统一 `GenerateImage` 工具提供跨供应商生图入口，生成图片先持久化，再由 Desktop 展示缩略图和预览。
 - 项目级 `.ccr` 设置隔离，避免和本机 Claude Code、Codex、OpenClaw 等工具互相污染。
 
 ![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
@@ -23,7 +24,7 @@ CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留
 ## 当前状态
 
 - npm 包名：`cc-reforged`
-- 当前版本：`0.4.7`
+- 当前版本：`0.5.0`
 - CLI 命令：`ccr`
 - 桌面应用：`CCR`
 - 运行时要求：Node.js `>=24.0.0`
@@ -33,6 +34,8 @@ CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留
 - 发布入口：[`mhdfy1988/cc-reforged` GitHub Releases](https://github.com/mhdfy1988/cc-reforged/releases)
 
 主分支可能包含最新版本之后的开发中改动。面向用户的版本变化见 [CHANGELOG.md](CHANGELOG.md)。
+
+`0.5.x` 版本线继续收敛多模态、多模型和工具调用体验；后续 `0.6.0` 主线进入 MCP、Skill、Plugin 与外部能力治理。
 
 ## 安装
 
@@ -112,12 +115,16 @@ CCR 已新增一级“模型”页面，用于管理供应商 / Profile、填写
 
 当前内置供应商：
 
-| 供应商 | 协议 | 认证 |
-| --- | --- | --- |
-| Codex OAuth | OpenAI Responses | OAuth |
-| DeepSeek | OpenAI Chat Completions | API Key |
-| MiniMax 国际版 | Anthropic Messages | API Key |
-| MiniMax 国内版 | Anthropic Messages | API Key |
+| 供应商 | 协议 | 认证 | 备注 |
+| --- | --- | --- | --- |
+| Codex OAuth | OpenAI Responses | OAuth | 文本、图片输入、hosted image generation |
+| OpenAI | OpenAI Chat / Images / Responses | API Key | 文本、图片输入、图片生成 |
+| DeepSeek | OpenAI Chat Completions | API Key | 文本与工具调用 |
+| MiniMax 国际版 | Anthropic Messages + 原生图片接口 | API Key | 文本、工具调用、图片生成 |
+| MiniMax 国内版 | Anthropic Messages + 原生图片接口 | API Key | 文本、工具调用、图片生成 |
+| Kimi API / Kimi Code | OpenAI Chat / Anthropic Messages compatible | API Key | 文本与工具调用 |
+| GLM API | OpenAI Chat compatible + Images | API Key | 文本、视觉模型、`glm-image` 生图 |
+| GLM Coding Plan | OpenAI Chat compatible | API Key | Coding Plan 专用端点 |
 
 ## Desktop 能力
 
@@ -126,6 +133,7 @@ CCR 已新增一级“模型”页面，用于管理供应商 / Profile、填写
 - 按工作区分组的历史会话。
 - 一级“模型”页面，支持供应商 Profile、凭据、模型和测试连接管理。
 - 顶部当前模型和连接配置快速切换。
+- 多模态输入卡片、模型生成图片卡片、本地缩略图 / 预览和生成物持久化。
 - 本地 / 项目 / 用户级权限设置页面。
 - 通过 GitHub Releases 检查自动更新。
 - Windows 安装器打包、发布资产校验和 unsigned 发布提示。
@@ -144,6 +152,9 @@ npm.cmd run smoke:codex-oauth-session
 npm.cmd run smoke:codex-oauth-provider
 npm.cmd run smoke:deepseek-provider
 npm.cmd run smoke:minimax-provider
+npm.cmd run smoke:generated-output-provider
+npm.cmd run smoke:generate-image-tool
+npm.cmd run smoke:session-generated-image-flow
 npm.cmd run smoke:app-server
 npm.cmd run smoke:app-server-client
 npm.cmd run smoke:cli-model
@@ -155,6 +166,7 @@ npm.cmd run desktop:build
 ## 发布
 
 - 版本更新日志：[CHANGELOG.md](CHANGELOG.md)
+- 版本路线图：[docs/architecture/version-roadmap.md](docs/architecture/version-roadmap.md)
 - Desktop 发布验收 Runbook：[docs/architecture/desktop-release-acceptance-runbook.md](docs/architecture/desktop-release-acceptance-runbook.md)
 - GitHub Release 发布流程：[docs/architecture/desktop-github-release-workflow.md](docs/architecture/desktop-github-release-workflow.md)
 - npm 发布流程：[docs/release/npm-publish-workflow.md](docs/release/npm-publish-workflow.md)

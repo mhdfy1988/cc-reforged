@@ -2,12 +2,12 @@
 
 ## 1. 目标
 
-这一阶段把 Desktop 安装器从“本机有产物”推进到“可以安全整理为 GitHub Release 草稿”的状态。
+本文记录 Desktop 安装器从本地产物到 GitHub Release 的发布流程。
 
-当前默认只做发布准备，不自动创建 GitHub Release。真正触网发布有两条路径：
+当前触网发布有两条路径：
 
 - 正式路径：GitHub Actions `Desktop Release` workflow。
-- 辅助路径：本地 `release:desktop:draft`。
+- 辅助路径：本地 `release:desktop:draft` / `release:desktop:public`。
 
 本地路径适合临时验证或应急补发；长期正式发布应优先走 GitHub Actions。
 
@@ -91,8 +91,8 @@ npm.cmd run release:desktop:public
 - `package.json` 的 `version`。
 - `package.json` 的 `build.publish` GitHub owner/repo。
 - `release/desktop/latest.yml`。
-- `release/desktop/CCR-Desktop-<version>-win-x64.exe`。
-- `release/desktop/CCR-Desktop-<version>-win-x64.exe.blockmap`。
+- `release/desktop/CCR-<version>-win-x64.exe`。
+- `release/desktop/CCR-<version>-win-x64.exe.blockmap`。
 
 输出：
 
@@ -148,19 +148,19 @@ v<package.json version>
 例如：
 
 ```text
-v0.2.0
+v0.5.0
 ```
 
 如果需要临时改 tag，可设置：
 
 ```powershell
-$env:CCR_DESKTOP_RELEASE_TAG = 'v0.2.0-desktop-test'
+$env:CCR_DESKTOP_RELEASE_TAG = 'v0.5.0-desktop-test'
 ```
 
 如果需要改 release 标题，可设置：
 
 ```powershell
-$env:CCR_DESKTOP_RELEASE_TITLE = 'CCR Desktop v0.2.0'
+$env:CCR_DESKTOP_RELEASE_TITLE = 'CCR v0.5.0'
 ```
 
 ## 8. 正式发布前建议顺序
@@ -171,8 +171,8 @@ npm.cmd run smoke:desktop-release-artifacts
 npm.cmd run smoke:desktop-signing-readiness
 npm.cmd run release:desktop:check
 git status --short --branch
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.5.0
+git push origin v0.5.0
 npm.cmd run release:desktop:draft
 ```
 

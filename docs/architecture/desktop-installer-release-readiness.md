@@ -2,9 +2,9 @@
 
 ## 1. 目标
 
-P16 的目标是把 Desktop 从“能打出未安装目录”继续推进到“安装器、品牌、签名、更新通道都有明确边界”。
+本文记录 Desktop 安装器、品牌、签名、更新通道和发布准备边界。
 
-这一阶段仍然不做正式公开发布，原因是正式发布必须有代码签名、release note、hash、更新元数据和回滚策略配合。
+当前 `0.5.0` 已完成公开 GitHub Release。短期仍允许 unsigned 安装包发布，但必须保留 release note、hash、更新元数据和回滚说明。
 
 ## 2. 当前安装器方案
 
@@ -31,10 +31,10 @@ release/desktop/
 Windows x64 安装器文件名固定为：
 
 ```text
-CCR-Desktop-<version>-win-x64.exe
+CCR-<version>-win-x64.exe
 ```
 
-这里刻意不用 `productName` 占位，也不在文件名里放空格。原因是 `electron-builder` 的更新元数据会把下载 URL 写成连字符形式；如果磁盘文件仍然是 `CCR Desktop-*.exe`，`latest.yml` 会指向不存在的文件。
+这里刻意不用 `productName` 占位，也不在文件名里放空格。当前 `package.json` 使用 `artifactName = "CCR-${version}-${os}-${arch}.${ext}"`，确保安装器、`.blockmap` 和 `latest.yml` 指向一致。
 
 生成安装器后必须运行：
 
@@ -49,19 +49,19 @@ npm.cmd run smoke:desktop-release-artifacts
 应用显示名：
 
 ```text
-CCR Desktop
+CCR
 ```
 
 main process 已显式调用：
 
 ```ts
-app.setName("CCR Desktop")
+app.setName("CCR")
 ```
 
 这样日志与 Desktop 自身状态会进入：
 
 ```text
-%APPDATA%/CCR Desktop/
+%APPDATA%/CCR/
 ```
 
 CCR Core 配置仍然保持：
@@ -214,14 +214,13 @@ up-to-date
 
 ## 7. 发布前清单
 
-正式公开发布前至少补齐：
+公开发布前至少确认：
 
 - 正式图标。
-- Windows 代码签名。
 - `desktop:dist` 安装器验证。
 - `smoke:desktop-release-artifacts` 通过。
 - `smoke:desktop-branding` 通过。
-- `smoke:desktop-signing-readiness` 在 `CCR_REQUIRE_SIGNED=1` 下通过。
+- `smoke:desktop-signing-readiness` 通过；短期允许 unsigned。
 - GitHub Release artifact。
 - SHA256 校验。
 - release note。
@@ -234,15 +233,14 @@ up-to-date
 当前可以认为完成的是：
 
 - 安装器工具链已接入。
-- 未安装目录可以打包并运行内置 App Server。
+- 未安装目录和安装器可以运行内置 App Server。
 - 日志目录和应用名已拆清。
-- 图标有占位源文件。
+- 图标、安装器命名和发布资产校验已接入。
 - 未签名与正式签名边界已写清。
 - 更新通道策略已有文档。
+- `0.5.0` 已公开发布，发布资产包含安装器、`.blockmap` 和 `latest.yml`。
 
 还不能认为完成的是：
 
 - 正式签名发布。
-- 自动更新。
-- 图标最终设计。
 - VS Code 插件接入。

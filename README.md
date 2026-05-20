@@ -6,7 +6,7 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.4.7-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.5.0-orange?style=flat-square)
 
 CCR is a recovery and evolution build of a terminal coding agent. It keeps the original terminal-first workflow, adds a CCR-owned configuration/runtime boundary, and is growing a Desktop client around a stable App Server protocol.
 
@@ -14,8 +14,9 @@ The current main line focuses on:
 
 - `ccr` CLI / TUI runtime with Codex OAuth support.
 - CCR for Windows, including local App Server orchestration, session history, permission settings, auto-update, and release packaging.
-- Built-in LLM runtime abstractions for multiple providers, profiles, protocols, and per-turn model metadata.
-- Codex OAuth, DeepSeek official API, MiniMax International / China, and shared OpenAI Chat Completions plus Anthropic Messages protocol adapters.
+- Built-in LLM runtime abstractions for multiple providers, profiles, protocols, multimodal content blocks, generated artifacts, and per-turn model metadata.
+- Codex OAuth, OpenAI, DeepSeek official API, MiniMax International / China, Kimi, GLM API / Coding Plan, and shared OpenAI Chat Completions plus Anthropic Messages protocol adapters.
+- Provider-neutral image generation through `GenerateImage`, with generated images persisted before Desktop thumbnail / preview rendering.
 - Project-local `.ccr` settings isolation, avoiding conflicts with Claude Code, Codex, or OpenClaw on the same machine.
 
 ![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
@@ -23,7 +24,7 @@ The current main line focuses on:
 ## Current Status
 
 - Package: `cc-reforged`
-- Version: `0.4.7`
+- Version: `0.5.0`
 - CLI command: `ccr`
 - Desktop app: `CCR`
 - Runtime requirement: Node.js `>=24.0.0`
@@ -33,6 +34,8 @@ The current main line focuses on:
 - Release feed: GitHub Releases under [`mhdfy1988/cc-reforged`](https://github.com/mhdfy1988/cc-reforged/releases)
 
 The repository may contain unreleased work after the latest tagged version. See [CHANGELOG.md](CHANGELOG.md) for user-facing changes.
+
+The `0.5.x` line continues to harden multimodal, multi-provider, and tool-calling behavior. The next larger line, `0.6.0`, is planned for MCP, Skill, Plugin, and external capability governance work.
 
 ## Install
 
@@ -112,12 +115,16 @@ CCR also includes a first-level **Models** page for provider/profile management,
 
 Built-in providers:
 
-| Provider | Protocol | Auth |
-| --- | --- | --- |
-| Codex OAuth | OpenAI Responses | OAuth |
-| DeepSeek | OpenAI Chat Completions | API Key |
-| MiniMax International | Anthropic Messages | API Key |
-| MiniMax China | Anthropic Messages | API Key |
+| Provider | Protocol | Auth | Notes |
+| --- | --- | --- | --- |
+| Codex OAuth | OpenAI Responses | OAuth | Text, image input, hosted image generation |
+| OpenAI | OpenAI Chat / Images / Responses | API Key | Text, image input, image generation |
+| DeepSeek | OpenAI Chat Completions | API Key | Text and tools |
+| MiniMax International | Anthropic Messages + native image API | API Key | Text, tools, image generation |
+| MiniMax China | Anthropic Messages + native image API | API Key | Text, tools, image generation |
+| Kimi API / Kimi Code | OpenAI Chat / Anthropic Messages compatible | API Key | Text and tools |
+| GLM API | OpenAI Chat compatible + Images | API Key | Text, vision models, `glm-image` generation |
+| GLM Coding Plan | OpenAI Chat compatible | API Key | Coding Plan endpoint |
 
 ## Desktop Features
 
@@ -126,6 +133,7 @@ Built-in providers:
 - Session history grouped by workspace.
 - First-level Models page for provider profiles, credentials, models, and connection testing.
 - Current model and profile quick switching in the top bar.
+- Multimodal input cards, generated image cards, local thumbnail / preview flow, and persisted generated outputs.
 - Permission settings UI for local / project / user settings.
 - Automatic update checks through GitHub Releases.
 - Packaged Windows installer with release artifact validation.
@@ -144,6 +152,9 @@ npm.cmd run smoke:codex-oauth-session
 npm.cmd run smoke:codex-oauth-provider
 npm.cmd run smoke:deepseek-provider
 npm.cmd run smoke:minimax-provider
+npm.cmd run smoke:generated-output-provider
+npm.cmd run smoke:generate-image-tool
+npm.cmd run smoke:session-generated-image-flow
 npm.cmd run smoke:app-server
 npm.cmd run smoke:app-server-client
 npm.cmd run smoke:cli-model
@@ -155,6 +166,7 @@ Do not run runtime smoke scripts with plain `node scripts/...` unless you know t
 ## Release
 
 - Version history: [CHANGELOG.md](CHANGELOG.md)
+- Version roadmap: [docs/architecture/version-roadmap.md](docs/architecture/version-roadmap.md)
 - Desktop release runbook: [docs/architecture/desktop-release-acceptance-runbook.md](docs/architecture/desktop-release-acceptance-runbook.md)
 - GitHub Release workflow: [docs/architecture/desktop-github-release-workflow.md](docs/architecture/desktop-github-release-workflow.md)
 - npm publish workflow: [docs/release/npm-publish-workflow.md](docs/release/npm-publish-workflow.md)

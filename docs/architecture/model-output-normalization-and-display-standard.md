@@ -252,14 +252,17 @@ Provider adapter 的任务是把 CCR 内容块映射到目标协议，或把目�
 | --- | --- |
 | 模型文本输出 | 已纳入 `assistant_message` |
 | 模型返回媒体引用 | 归一化为 `AttachmentSnapshot` 或 `ReferenceSnapshot` |
-| 模型生成图片 / 音频 | 不在第一版默认范围，后续单独做生成型输出标准 |
+| 模型生成图片 | 已进入 `0.5.0` 第一版，通过 `GenerateImage` 和 `generatedArtifact` 统一展示 |
+| 模型生成音频 / 文件 | 不在第一版默认范围，后续单独做生成型输出标准 |
 
-因此第一版不是承诺所有模型都能“生成图片”。当前目标是：
+第一版不是承诺所有模型都能“生成图片”。当前目标是：
 
 - 用户能发图片给支持视觉的模型。
 - 工具 / MCP / 浏览器产生的图片、文件能在聊天区展示。
 - 历史恢复后这些附件仍可见。
-- 如果未来 provider 返回图片 URL、文件 ID 或音频引用，先作为附件 / 引用展示，不直接塞进普通 Markdown。
+- 支持图片生成的 provider 通过 `GenerateImage` 或会话 `imageGeneration` metadata 输出标准 `CcrImageContentBlock` 和 `generatedArtifact`。
+- provider 返回图片 URL 时，后端应先下载并持久化，再交给 Desktop 渲染缩略图和预览；UI 不直接依赖远程临时 URL。
+- 如果未来 provider 返回文件 ID、音频引用或其它生成物，先作为附件 / 引用展示，不直接塞进普通 Markdown。
 
 ## 8. 回归样例要求
 
@@ -274,6 +277,8 @@ Provider adapter 的任务是把 CCR 内容块映射到目标协议，或把目�
 | `anthropic-tool-use-result` | `tool_use` / `tool_result` 进入工具卡 |
 | `user-image-attachment-history` | 用户图片附件恢复为附件条 |
 | `tool-image-output` | 工具返回图片展示在工具卡内 |
+| `model-generated-image` | 模型生成图片展示为附件卡，缩略图和预览可用 |
+| `remote-generated-image-url` | 远程图片 URL 先下载持久化，再展示本地生成物 |
 | `unknown-json-fallback` | 未知结构不打断时间线 |
 | `text-only-model-with-image` | 不支持图片模型发送前阻止 |
 
@@ -295,23 +300,22 @@ npm.cmd run desktop:build
 - 历史恢复已能识别 `text` / `input_text` / `output_text`。
 - 用户附件展示和图片预览已经进入聊天区。
 - App Server 线程消息已经向 renderer 提供 `content` 作为历史回放依据。
+- 图片生成输出已经统一为 `generatedArtifact`，GLM URL 图片、OpenAI / Codex OAuth / MiniMax 图片都会进入同一套附件缩略图和预览 UI。
 
 仍需补齐：
 
-- 把 CCR 标准内容块抽成更明确的共享类型，而不是分散在 Desktop / App Server / Runtime。
 - 补 provider 输出样例 fixture，覆盖 OpenAI、Anthropic、Gemini、DeepSeek、OpenAI Compatible。
 - 结构化输出标准仍缺，不能长期只当 JSON 文本展示。
-- 模型生成图片、音频、文件这类生成型多模态输出，需要单独设计生命周期和安全策略。
+- 音频、文件这类生成型多模态输出，需要单独设计生命周期和安全策略。
 - 日志页和聊天详情页应共用同一套 raw 内容复制组件，避免各自展示 raw JSON。
 
 ## 10. 后续执行顺序
 
 建议后续按这个顺序推进：
 
-1. 抽 `CcrContentBlock` 共享类型。
-2. 把 provider adapter 输入输出都改成标准内容块。
-3. 补 OpenAI / Anthropic / Gemini / DeepSeek 样例 fixture。
-4. 把历史恢复样例纳入 smoke。
-5. 再做结构化输出和生成型媒体输出。
+1. 继续补 OpenAI / Anthropic / Gemini / DeepSeek / OpenAI Compatible 样例 fixture。
+2. 把历史恢复样例纳入更稳定的 smoke。
+3. 继续把图片生成输出的 URL 下载、落盘、恢复和预览失败兜底固化。
+4. 再做结构化输出和音频 / 文件生成型媒体输出。
 
 这样做的收益是：后续新增 provider 或模型能力时，只需要补一层 adapter 和样例，不需要改 UI 主链路。

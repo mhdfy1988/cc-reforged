@@ -2,9 +2,9 @@
 
 ## 1. 目标
 
-这份 Runbook 用来把 Desktop 从“能打包”推进到“可以被人工验收和后续发布”的状态。
+这份 Runbook 用来把 Desktop 从“能打包”推进到“可以被人工验收、公开发布和后续回归”的状态。
 
-当前阶段只做发布验收准备，不默认安装到用户环境，不启用自动更新，不做正式代码签名。真正执行安装器前，需要明确告知会影响当前机器的开始菜单、安装目录和 Desktop `userData`。
+当前 `0.5.0` 已公开发布。真正执行安装器前，仍需要明确告知会影响当前机器的开始菜单、安装目录和 Desktop `userData`。
 
 ## 2. 当前产物
 
@@ -23,7 +23,7 @@ release/desktop/
 当前 Windows x64 安装器命名固定为：
 
 ```text
-CCR-Desktop-<version>-win-x64.exe
+CCR-<version>-win-x64.exe
 ```
 
 命名里不再使用空格。原因是 `electron-builder` 生成 `latest.yml` 时会把下载 URL 写成连字符形式，如果磁盘文件仍然带空格，后续自动更新 metadata 会指向不存在的文件。
@@ -66,9 +66,9 @@ npm.cmd run smoke:desktop-signing-readiness
 
 如果安装器没有有效签名，该命令会失败。
 
-## 3.2 GitHub Release 草稿预检
+## 3.2 GitHub Release 预检
 
-当前 GitHub Release 发布流程默认不触网，先生成本地发布清单：
+GitHub Release 发布流程默认先生成本地发布清单：
 
 ```powershell
 npm.cmd run release:desktop:check
@@ -105,6 +105,28 @@ npm.cmd run release:desktop:public
 npm.cmd run smoke:desktop-auto-update-feed
 ```
 
+## 3.3 `0.5.0` 发布记录
+
+`0.5.0` 已公开发布：
+
+```text
+https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.5.0
+```
+
+发布资产：
+
+- `CCR-0.5.0-win-x64.exe`
+- `CCR-0.5.0-win-x64.exe.blockmap`
+- `latest.yml`
+
+SHA256：
+
+| 文件 | SHA256 |
+| --- | --- |
+| `CCR-0.5.0-win-x64.exe` | `b93afa325a295c6eaf88fbe146cdf492b7d94ad9dbd1dabaf133643430782186` |
+| `CCR-0.5.0-win-x64.exe.blockmap` | `5ba248675c6d7a0f67ecf96aeb92926d2cf733296dcff41138e5433057a46f01` |
+| `latest.yml` | `98f4de5afc6bb6c43b5eadd12d060461fc825a83d5c99cf7a43a23ca46c3c55d` |
+
 如果要模拟旧版本升级，例如从 `0.4.0` 升到当前版本：
 
 ```powershell
@@ -121,7 +143,7 @@ GitHub -> Actions -> Desktop Release -> Run workflow
 第一版推荐输入：
 
 ```text
-tag = v0.2.0
+tag = v0.5.0
 draft = true
 signed = false
 require_signed = false
@@ -146,14 +168,14 @@ npm.cmd run smoke:desktop-packaged
 
 人工安装步骤：
 
-1. 打开 `release/desktop/CCR-Desktop-<version>-win-x64.exe`。
-2. 确认安装器显示应用名为 `CCR Desktop`。
+1. 打开 `release/desktop/CCR-<version>-win-x64.exe`。
+2. 确认安装器显示应用名为 `CCR`。
 3. 选择当前用户安装，不要求管理员权限。
 4. 完成安装后从开始菜单或桌面快捷方式启动。
 5. 确认主窗口可打开，并显示 App Server 就绪。
 6. 确认窗口、任务栏、开始菜单或卸载项不再显示默认 Electron 图标。
 7. 打开日志页，确认没有 token / refresh token / API key 明文。
-8. 关闭窗口后确认没有残留 `CCR Desktop.exe cli.js app-server --listen stdio` 子进程。
+8. 关闭窗口后确认没有残留 `CCR.exe cli.js app-server --listen stdio` 子进程。
 
 如果当前机器已经安装过旧版本，安装前先记录：
 
@@ -163,13 +185,13 @@ Get-Process | Where-Object { $_.ProcessName -like '*CCR*' }
 
 ## 5. 卸载验收
 
-卸载前先关闭 CCR Desktop。
+卸载前先关闭 CCR。
 
 人工卸载步骤：
 
-1. 从 Windows “应用和功能”卸载 `CCR Desktop`。
+1. 从 Windows “应用和功能”卸载 `CCR`。
 2. 确认安装目录被移除。
-3. 确认 `%APPDATA%\CCR Desktop\logs` 不被安装器强制删除。
+3. 确认 `%APPDATA%\CCR\logs` 不被安装器强制删除。
 4. 确认 `~\.ccr` 不被卸载流程删除。
 
 当前 NSIS 配置为：

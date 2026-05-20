@@ -9,10 +9,19 @@
 - [阶段任务目录](./stages/README.md)：todo、handoff、archive、当前指针。
 - [阶段目标目录](./goals/README.md)：阶段目标、验收标准和完成记录。
 
+## 当前版本与路线
+
+- 当前公开版本：`0.5.0`，发布于 2026-05-20。
+- 当前版本线：`0.5.x` 继续收敛多模态、多模型和工具调用。
+- 下一条主线：`0.6.0` 进入 MCP、Skill、Plugin 与外部能力治理。
+- 路线详情：[CCR 版本路线图](./architecture/version-roadmap.md)。
+- 逐版本变化：[CHANGELOG.md](../CHANGELOG.md)。
+
 ## 技术设计
 
 ### 架构与协议
 
+- [CCR 版本路线图](./architecture/version-roadmap.md)
 - [CCR 多入口与 App Server 总体方案](./architecture/entrypoints-runtime-app-server-desktop-vscode.md)
 - [CCR Core 统一对外接口边界](./architecture/ccr-core-interface-boundary.md)
 - [CCR App Server 协议详细设计](./architecture/app-server-protocol-design.md)

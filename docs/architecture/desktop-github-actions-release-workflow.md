@@ -61,7 +61,7 @@ workflow_dispatch
 
 | 参数 | 类型 | 默认值 | 作用 |
 | --- | --- | --- | --- |
-| `tag` | string | 必填 | 已存在的 git tag，例如 `v0.2.0` |
+| `tag` | string | 必填 | 已存在的 git tag，例如 `v0.5.0` |
 | `draft` | boolean | `true` | 是否创建 GitHub Release 草稿 |
 | `signed` | boolean | `false` | 是否使用签名打包入口 |
 | `require_signed` | boolean | `false` | 是否要求安装器 Authenticode 签名有效 |
@@ -82,7 +82,7 @@ permissions:
 输入：
 
 ```text
-tag = v0.2.0
+tag = v0.5.0
 draft = true
 signed = false
 require_signed = false
@@ -104,8 +104,8 @@ checkout tag
 输出：
 
 - GitHub Release draft。
-- `CCR-Desktop-<version>-win-x64.exe`。
-- `CCR-Desktop-<version>-win-x64.exe.blockmap`。
+- `CCR-<version>-win-x64.exe`。
+- `CCR-<version>-win-x64.exe.blockmap`。
 - `latest.yml`。
 - release notes。
 
@@ -114,7 +114,7 @@ checkout tag
 输入：
 
 ```text
-tag = v0.2.0
+tag = v0.5.0
 draft = false
 signed = false
 require_signed = false
@@ -133,7 +133,7 @@ npm.cmd run smoke:desktop-auto-update-feed
 ### 第 3 轮：未来签名发布
 
 ```text
-tag = v0.2.0
+tag = v0.5.0
 draft = false
 signed = true
 require_signed = true

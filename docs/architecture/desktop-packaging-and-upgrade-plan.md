@@ -100,7 +100,7 @@ npm.cmd run smoke:desktop-packaged
 ```json
 {
   "appId": "dev.ccr.desktop",
-  "productName": "CCR Desktop",
+  "productName": "CCR",
   "directories": {
     "output": "release/desktop"
   },
@@ -167,7 +167,7 @@ args = cli.js app-server --listen stdio
 Desktop 自己的应用状态应走 Electron 标准 `userData`：
 
 ```text
-Windows: %APPDATA%/CCR Desktop
+Windows: %APPDATA%/CCR
 ```
 
 CCR Core 的长期配置仍走 CCR 用户目录：
@@ -287,7 +287,7 @@ macOS 后续如果支持，必须考虑：
 P14 第一版完成应满足：
 
 - `desktop:pack` 可以构建未安装目录。
-- `smoke:desktop-packaged` 可以通过打包态 `CCR Desktop.exe + ELECTRON_RUN_AS_NODE=1` 启动内置 App Server，并完成 `initialize / shutdown`。
+- `smoke:desktop-packaged` 可以通过打包态 `CCR.exe + ELECTRON_RUN_AS_NODE=1` 启动内置 App Server，并完成 `initialize / shutdown`。
 - Desktop main process 有开发态 / 打包态 runtime 路径选择规则。
 - 打包配置明确包含 `out/`、`dist/`、`cli.js`、`vendor/`。
 - `release/desktop/` 不进入 git。

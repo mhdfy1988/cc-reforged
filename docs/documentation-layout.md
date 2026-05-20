@@ -6,7 +6,7 @@
 
 | 目录 | 类型 | 用途 | 示例 |
 | --- | --- | --- | --- |
-| `architecture/` | 长期技术文档 | 架构、协议、接口契约、状态机、接入方案、跨模块设计 | App Server 协议、模型输出标准、Desktop 事件契约 |
+| `architecture/` | 长期技术文档 | 架构、协议、接口契约、状态机、接入方案、跨模块设计、版本路线 | App Server 协议、模型输出标准、版本路线图 |
 | `architecture/provider-integrations/` | 厂商接入技术文档 | 不同模型厂商 / provider 的认证、协议、模型、请求链路和 smoke 不变式 | Codex OAuth、DeepSeek、MiniMax |
 | `mcp/` | MCP 技术文档 | MCP 接入规范、验证手册、具体 MCP 方案 | Playwright MCP、通用 MCP 接入 |
 | `references/` | 源码证据与外部参考 | 从成熟项目或官方源码确认的证据索引 | OpenAI Codex 生成物源码对照 |

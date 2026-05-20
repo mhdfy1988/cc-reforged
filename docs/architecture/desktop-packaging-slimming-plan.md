@@ -56,7 +56,7 @@
 当前 Desktop 打包态启动 App Server 的关键链路：
 
 ```text
-CCR Desktop.exe
+CCR.exe
   -> process.execPath + ELECTRON_RUN_AS_NODE=1
   -> app.asar.unpacked/cli.js
   -> cli.js app-server --listen stdio
