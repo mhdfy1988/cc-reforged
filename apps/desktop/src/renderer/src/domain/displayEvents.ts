@@ -400,7 +400,42 @@ function getChatKind(event: DisplayEvent): string | undefined {
 
 function shouldHideToolFromTimeline(snapshot: ToolSnapshot): boolean {
   return (
-    snapshot.kind === 'call' &&
-    (snapshot.category === 'control' || isControlToolName(snapshot.name))
+    (snapshot.kind === 'call' &&
+      (snapshot.category === 'control' || isControlToolName(snapshot.name))) ||
+    isInternalPlanDraftWrite(snapshot)
   )
+}
+
+function isInternalPlanDraftWrite(snapshot: ToolSnapshot): boolean {
+  if (snapshot.kind !== 'call' || snapshot.name !== 'Write') {
+    return false
+  }
+
+  const path = getToolPath(snapshot)
+  if (!path) {
+    return false
+  }
+
+  return /(?:^|\/)\.ccr\/plans\/[^/]+\.md$/i.test(
+    path.replace(/\\/g, '/'),
+  )
+}
+
+function getToolPath(snapshot: ToolSnapshot): string | undefined {
+  if (typeof snapshot.target === 'string' && snapshot.target.trim()) {
+    return snapshot.target
+  }
+
+  if (!snapshot.input || typeof snapshot.input !== 'object') {
+    return undefined
+  }
+
+  const input = snapshot.input as JsonObject
+  for (const key of ['file_path', 'filePath', 'path']) {
+    const value = input[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value
+    }
+  }
+  return undefined
 }

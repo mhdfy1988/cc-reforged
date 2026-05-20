@@ -37,6 +37,7 @@
 - 修复 OpenAI-compatible / DeepSeek 场景下工具调用中断、缺失工具结果、TodoWrite schema 未常驻导致的会话卡死和参数校验问题。
 - 修复 OpenAI-compatible / DeepSeek 历史中延迟或孤立 tool result 可能再次污染请求的问题，发送前会丢弃不合法 tool result 并补齐 synthetic 结果。
 - 修复 `ExitPlanMode` 和 `TaskOutput` 异常展示口径，避免不存在的 task id 或权限类工具失败时展示成吓人的通用工具执行失败。
+- 隐藏计划确认内部 `.ccr/plans/*.md` 草稿写入卡片，避免计划审批卡下方出现重复的“写入文件”事件。
 - 修复 GLM-Image 被普通 chat/SSE 路径调用的问题；Desktop 中文自然生图意图会走同一 `glm-api` 供应商下的 `/images/generations`，`glm-image` 误走聊天路径时会在本地拦截。
 - 修复 GLM / OpenAI-compatible 工具调用间空文本 delta 被显示成 `暂无内容` 的问题。
 - 修复模型生成图片和工具图片附件展示不一致的问题，GLM URL 图片与本地生成图都会复用同一套缩略图和预览 UI。

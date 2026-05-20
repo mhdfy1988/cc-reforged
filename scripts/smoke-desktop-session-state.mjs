@@ -216,6 +216,59 @@ await writeFile(
       'perm-exit-plan',
     )
 
+    const planDraftWriteCall = createDisplayEventFromCompletedItem(
+      'plan-draft-write-call',
+      'assistant',
+      [
+        {
+          type: 'tool_use',
+          id: 'toolu-plan-draft-write',
+          name: 'Write',
+          input: {
+            file_path: 'C:\\\\Users\\\\luoji\\\\.ccr\\\\plans\\\\delegated-prancing-rivest.md',
+            content: '计划内容',
+          },
+        },
+      ],
+      'completed',
+      {
+        itemId: 'plan-draft-write-call',
+        params: { source: 'history', threadId: 'thread-1', turnId: 'turn-1' },
+      },
+    )
+    assert.equal(
+      planDraftWriteCall?.timelineHidden,
+      true,
+      'internal .ccr/plans draft write should be hidden from the main timeline',
+    )
+
+    const planDraftWriteCompleted = sessionReducer(
+      {
+        displayEvents: [planDraftWriteCall],
+        permissions: [],
+        activeTurnId: 'turn-1',
+        turnMetadata: null,
+      },
+      {
+        type: 'upsert-completed-item-message',
+        itemId: 'plan-draft-write-result',
+        kind: 'user_message',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu-plan-draft-write',
+            content: '已写入',
+          },
+        ],
+        statusText: 'completed',
+      },
+    )
+    assert.equal(
+      planDraftWriteCompleted.displayEvents[0]?.timelineHidden,
+      true,
+      'successful internal plan draft write should stay hidden after result merge',
+    )
+
     const hiddenSyntheticMessage = createDisplayEventFromCompletedItem(
       'synthetic-no-response',
       'assistant_message',
