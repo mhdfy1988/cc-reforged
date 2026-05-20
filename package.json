@@ -7,6 +7,7 @@
   },
   "files": [
     "README.md",
+    "README.en.md",
     "README.zh-CN.md",
     "CHANGELOG.md",
     "LICENSE.md",
@@ -124,6 +125,7 @@
       "package.json",
       "LICENSE.md",
       "README.md",
+      "README.en.md",
       "README.zh-CN.md"
     ],
     "asar": true,

@@ -71,7 +71,7 @@ npm.cmd pack --dry-run --json
 
 - 包名是否是 `cc-reforged`。
 - 版本号是否正确。
-- 是否包含 `README.md`、`README.zh-CN.md`、`LICENSE.md`、`cli.js`、`bun-bundle-loader.mjs`、`dist/**/*.js`。
+- 是否包含 `README.md`、`README.en.md`、`README.zh-CN.md`、`LICENSE.md`、`cli.js`、`bun-bundle-loader.mjs`、`dist/**/*.js`。
 - 是否没有包含 sourcemap、临时日志、token、`.env`、本地配置、测试输出。
 - 包体积是否在预期范围内。
 
@@ -85,7 +85,7 @@ npm.cmd pack --dry-run --json
 
 ```powershell
 git status --short --branch
-git add package.json package-lock.json README.md README.zh-CN.md docs
+git add package.json package-lock.json README.md README.en.md README.zh-CN.md docs
 git commit -m "Prepare release v0.1.0"
 git tag v0.1.0
 git push
