@@ -253,7 +253,11 @@ function routeItemDelta(
   const delta = (params.delta ?? {}) as JsonObject
   const sessionActions: SessionAction[] = []
 
-  if (delta.type === 'text' && typeof delta.text === 'string') {
+  if (
+    delta.type === 'text' &&
+    typeof delta.text === 'string' &&
+    delta.text !== ''
+  ) {
     sessionActions.push({
       type: 'upsert-assistant-delta',
       itemId,

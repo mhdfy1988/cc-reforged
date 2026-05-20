@@ -513,6 +513,14 @@ function upsertCompletedItemMessage(
   )
 
   if (!nextEvent) {
+    const existing = events.find(event => event.id === itemId)
+    if (
+      existing?.type === 'assistant_message' &&
+      !existing.text.trim() &&
+      kind === 'assistant_message'
+    ) {
+      return events.filter(event => event.id !== itemId)
+    }
     return events.map(event =>
       event.id === itemId ? { ...event, status: statusText } : event,
     )

@@ -15,6 +15,7 @@ await writeFile(
   entryPath,
   `
     import assert from 'node:assert/strict'
+    import { routeDesktopEvent } from '../../apps/desktop/src/renderer/src/app/notificationRouter.ts'
     import { sessionReducer } from '../../apps/desktop/src/renderer/src/app/sessionState.ts'
     import { createDisplayEventFromCompletedItem } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
 
@@ -226,6 +227,54 @@ await writeFile(
       },
     )
     assert.equal(hiddenSyntheticMessage, null)
+
+    const emptyDeltaRoute = routeDesktopEvent(
+      {
+        type: 'notification',
+        at: 'fixture-empty-delta',
+        payload: {
+          method: 'item/delta',
+          params: {
+            itemId: 'assistant-empty-delta',
+            delta: { type: 'text', text: '' },
+          },
+        },
+      },
+      new Map(),
+    )
+    assert.equal(
+      emptyDeltaRoute.sessionActions.length,
+      0,
+      'empty assistant text delta should not create a visible message bubble',
+    )
+
+    const emptyAssistantCompleted = sessionReducer(
+      {
+        displayEvents: [
+          {
+            id: 'assistant-empty-delta',
+            type: 'assistant_message',
+            text: '',
+            status: 'streaming',
+          },
+        ],
+        permissions: [],
+        activeTurnId: 'turn-1',
+        turnMetadata: null,
+      },
+      {
+        type: 'upsert-completed-item-message',
+        itemId: 'assistant-empty-delta',
+        kind: 'assistant_message',
+        content: [{ type: 'text', text: '' }],
+        statusText: 'completed',
+      },
+    )
+    assert.equal(
+      emptyAssistantCompleted.displayEvents.length,
+      0,
+      'completed empty assistant item should remove an existing empty placeholder',
+    )
 
     console.log('smoke-desktop-session-state: ok')
   `,
