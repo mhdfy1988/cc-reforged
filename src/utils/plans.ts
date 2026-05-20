@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto'
 import { copyFile, writeFile } from 'fs/promises'
 import memoize from 'lodash-es/memoize.js'
-import { join, resolve, sep } from 'path'
+import { basename, join, resolve, sep } from 'path'
 import type { AgentId, SessionId } from 'src/types/ids.js'
 import type { LogOption } from 'src/types/logs.js'
 import type {
@@ -142,6 +142,37 @@ export function getPlanFilePath(agentId?: AgentId): string {
 
   // Subagents: include agent ID
   return join(getPlansDirectory(), `${planSlug}-agent-${agentId}.md`)
+}
+
+/**
+ * Stable identifier for the whole plan series in the current session.
+ *
+ * Multiple plan drafts and approvals can belong to the same series, so this
+ * deliberately tracks the plan file identity rather than one approval attempt.
+ */
+export function getPlanSeriesId(agentId?: AgentId): string {
+  const planSlug = getPlanSlug(getSessionId())
+  return agentId ? `${planSlug}:agent:${agentId}` : planSlug
+}
+
+export function getPlanSeriesIdFromFilePath(filePath: string): string | null {
+  const filename = basename(filePath).replace(/\.md$/i, '')
+  if (!filename) {
+    return null
+  }
+
+  const agentMarker = '-agent-'
+  const markerIndex = filename.indexOf(agentMarker)
+  if (markerIndex === -1) {
+    return filename
+  }
+
+  const planSlug = filename.slice(0, markerIndex)
+  const agentId = filename.slice(markerIndex + agentMarker.length)
+  if (!planSlug || !agentId) {
+    return filename
+  }
+  return `${planSlug}:agent:${agentId}`
 }
 
 /**

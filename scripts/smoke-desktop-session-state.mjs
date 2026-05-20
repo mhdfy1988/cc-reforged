@@ -269,6 +269,226 @@ await writeFile(
       'successful internal plan draft write should stay hidden after result merge',
     )
 
+    const planDraftPermissionState = sessionReducer(
+      {
+        displayEvents: [planDraftWriteCall],
+        permissions: [],
+        activeTurnId: 'turn-1',
+        turnMetadata: null,
+      },
+      {
+        type: 'add-permission',
+        permission: {
+          permissionRequestId: 'perm-exit-plan-draft',
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          toolName: 'ExitPlanMode',
+          interactionKind: 'plan_approval',
+          input: { plan: '实施计划' },
+          status: 'pending',
+        },
+      },
+    )
+    assert.equal(
+      planDraftPermissionState.permissions[0].input.internalPlanDraftPath,
+      'C:\\\\Users\\\\luoji\\\\.ccr\\\\plans\\\\delegated-prancing-rivest.md',
+      'plan approval permission should expose hidden internal plan draft path',
+    )
+    assert.equal(
+      planDraftPermissionState.permissions[0].input.internalPlanDraftStatus,
+      'completed',
+      'plan approval permission should expose hidden internal plan draft status',
+    )
+    assert.equal(
+      planDraftPermissionState.permissions[0].input.internalPlanSeriesId,
+      'delegated-prancing-rivest',
+      'plan approval permission should expose the plan series id derived from the internal draft path',
+    )
+
+    const firstPlanDraftWriteCall = createDisplayEventFromCompletedItem(
+      'plan-draft-write-call-one',
+      'assistant',
+      [
+        {
+          type: 'tool_use',
+          id: 'toolu-plan-draft-write-one',
+          name: 'Write',
+          input: {
+            file_path: 'C:\\\\Users\\\\luoji\\\\.ccr\\\\plans\\\\plan-one.md',
+            content: '计划一',
+          },
+        },
+      ],
+      'completed',
+      {
+        itemId: 'plan-draft-write-call-one',
+        params: { source: 'history', threadId: 'thread-1', turnId: 'turn-2' },
+      },
+    )
+    const firstExitPlanCall = createDisplayEventFromCompletedItem(
+      'plan-exit-call-one',
+      'assistant',
+      [
+        {
+          type: 'tool_use',
+          id: 'toolu-exit-plan-one',
+          name: 'ExitPlanMode',
+          input: { plan: '计划一' },
+        },
+      ],
+      'completed',
+      {
+        itemId: 'plan-exit-call-one',
+        params: { source: 'history', threadId: 'thread-1', turnId: 'turn-2' },
+      },
+    )
+    const secondPlanDraftWriteCall = createDisplayEventFromCompletedItem(
+      'plan-draft-write-call-two',
+      'assistant',
+      [
+        {
+          type: 'tool_use',
+          id: 'toolu-plan-draft-write-two',
+          name: 'Write',
+          input: {
+            file_path: 'C:\\\\Users\\\\luoji\\\\.ccr\\\\plans\\\\plan-two.md',
+            content: '计划二',
+          },
+        },
+      ],
+      'completed',
+      {
+        itemId: 'plan-draft-write-call-two',
+        params: { source: 'history', threadId: 'thread-1', turnId: 'turn-2' },
+      },
+    )
+    const secondExitPlanCall = createDisplayEventFromCompletedItem(
+      'plan-exit-call-two',
+      'assistant',
+      [
+        {
+          type: 'tool_use',
+          id: 'toolu-exit-plan-two',
+          name: 'ExitPlanMode',
+          input: { plan: '计划二' },
+        },
+      ],
+      'completed',
+      {
+        itemId: 'plan-exit-call-two',
+        params: { source: 'history', threadId: 'thread-1', turnId: 'turn-2' },
+      },
+    )
+    const twoPlanPermissionState = sessionReducer(
+      {
+        displayEvents: [
+          firstPlanDraftWriteCall,
+          firstExitPlanCall,
+          secondPlanDraftWriteCall,
+          secondExitPlanCall,
+        ],
+        permissions: [
+          {
+            permissionRequestId: 'perm-plan-one',
+            threadId: 'thread-1',
+            turnId: 'turn-2',
+            toolUseId: 'toolu-exit-plan-one',
+            toolName: 'ExitPlanMode',
+            interactionKind: 'plan_approval',
+            input: { plan: '计划一' },
+            status: 'pending',
+          },
+        ],
+        activeTurnId: 'turn-2',
+        turnMetadata: null,
+      },
+      {
+        type: 'add-permission',
+        permission: {
+          permissionRequestId: 'perm-plan-two',
+          threadId: 'thread-1',
+          turnId: 'turn-2',
+          toolName: 'ExitPlanMode',
+          interactionKind: 'plan_approval',
+          input: { plan: '计划二' },
+          status: 'pending',
+        },
+      },
+    )
+    const firstPlanPermission = twoPlanPermissionState.permissions.find(
+      permission => permission.permissionRequestId === 'perm-plan-one',
+    )
+    const secondPlanPermission = twoPlanPermissionState.permissions.find(
+      permission => permission.permissionRequestId === 'perm-plan-two',
+    )
+    assert.equal(
+      firstPlanPermission?.input.internalPlanDraftPath,
+      'C:\\\\Users\\\\luoji\\\\.ccr\\\\plans\\\\plan-one.md',
+      'first plan approval permission should use the nearest unconsumed draft before its own ExitPlanMode call',
+    )
+    assert.equal(
+      secondPlanPermission?.toolUseId,
+      'toolu-exit-plan-two',
+      'fallback plan permission anchor should skip tool_use ids already used by existing permissions',
+    )
+    assert.equal(
+      secondPlanPermission?.input.internalPlanDraftPath,
+      'C:\\\\Users\\\\luoji\\\\.ccr\\\\plans\\\\plan-two.md',
+      'second plan approval permission should use a distinct draft from the same turn',
+    )
+
+    const unorderedPlanSeriesState = sessionReducer(
+      {
+        displayEvents: [
+          secondExitPlanCall,
+          firstExitPlanCall,
+          secondPlanDraftWriteCall,
+          firstPlanDraftWriteCall,
+        ],
+        permissions: [
+          {
+            permissionRequestId: 'perm-series-one',
+            threadId: 'thread-1',
+            turnId: 'turn-2',
+            toolUseId: 'toolu-exit-plan-one',
+            toolName: 'ExitPlanMode',
+            interactionKind: 'plan_approval',
+            input: { plan: '计划一', planSeriesId: 'plan-one' },
+            status: 'pending',
+          },
+        ],
+        activeTurnId: 'turn-2',
+        turnMetadata: null,
+      },
+      {
+        type: 'add-permission',
+        permission: {
+          permissionRequestId: 'perm-series-two',
+          threadId: 'thread-1',
+          turnId: 'turn-2',
+          toolUseId: 'toolu-exit-plan-two',
+          toolName: 'ExitPlanMode',
+          interactionKind: 'plan_approval',
+          input: { plan: '计划二', planSeriesId: 'plan-two' },
+          status: 'pending',
+        },
+      },
+    )
+    assert.equal(
+      unorderedPlanSeriesState.permissions.find(
+        permission => permission.permissionRequestId === 'perm-series-one',
+      )?.input.internalPlanDraftPath,
+      'C:\\\\Users\\\\luoji\\\\.ccr\\\\plans\\\\plan-one.md',
+      'explicit planSeriesId should match the right draft even when event order is not chronological',
+    )
+    assert.equal(
+      unorderedPlanSeriesState.permissions.find(
+        permission => permission.permissionRequestId === 'perm-series-two',
+      )?.input.internalPlanDraftPath,
+      'C:\\\\Users\\\\luoji\\\\.ccr\\\\plans\\\\plan-two.md',
+      'explicit planSeriesId should keep different plan series separated without relying on order',
+    )
+
     const hiddenSyntheticMessage = createDisplayEventFromCompletedItem(
       'synthetic-no-response',
       'assistant_message',

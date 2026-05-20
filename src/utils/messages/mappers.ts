@@ -18,7 +18,7 @@ import type { AssistantMessage, Message } from 'src/types/message.js'
 import type { DeepImmutable } from 'src/types/utils.js'
 import stripAnsi from 'strip-ansi'
 import { createAssistantMessage } from '../messages.js'
-import { getPlan } from '../plans.js'
+import { getPlan, getPlanFilePath, getPlanSeriesId } from '../plans.js'
 import { validateUuid } from '../uuid.js'
 
 export function toInternalMessages(
@@ -353,7 +353,12 @@ function normalizeAssistantMessageForSDK(
       if (plan) {
         return {
           ...block,
-          input: { ...(block.input as Record<string, unknown>), plan },
+          input: {
+            ...(block.input as Record<string, unknown>),
+            plan,
+            planFilePath: getPlanFilePath(),
+            planSeriesId: getPlanSeriesId(),
+          },
         }
       }
     }

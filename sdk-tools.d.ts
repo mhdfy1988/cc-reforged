@@ -353,6 +353,10 @@ export interface ExitPlanModeInput {
      */
     prompt: string;
   }[];
+  /**
+   * Stable identifier for the current task plan series
+   */
+  planSeriesId?: string;
   [k: string]: unknown;
 }
 export interface FileEditInput {
@@ -2225,6 +2229,10 @@ export interface ExitPlanModeOutput {
    * The file path where the plan was saved
    */
   filePath?: string;
+  /**
+   * Stable identifier for the task plan series
+   */
+  planSeriesId?: string;
   /**
    * Whether the Agent tool is available in the current context
    */

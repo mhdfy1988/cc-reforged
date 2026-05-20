@@ -7,6 +7,7 @@ import {
 } from '../domain/displayEvents.js'
 import type {
   ChatMessage,
+  JsonObject,
   PermissionCard,
   TurnRuntimeMetadata,
 } from '../domain/displayTypes.js'
@@ -170,9 +171,8 @@ export function sessionReducer(
       }
 
     case 'upsert-completed-item-message':
-      return {
-        ...state,
-        displayEvents: markPendingPermissionsOnEvents(
+      {
+        const displayEvents = markPendingPermissionsOnEvents(
           upsertCompletedItemMessage(
             state.displayEvents,
             action.itemId,
@@ -182,7 +182,15 @@ export function sessionReducer(
             action.context,
           ),
           state.permissions,
-        ),
+        )
+        return {
+          ...state,
+          displayEvents,
+          permissions: syncInternalPlanDraftsWithPermissions(
+            displayEvents,
+            state.permissions,
+          ),
+        }
       }
 
     case 'set-active-turn':
@@ -234,10 +242,15 @@ export function sessionReducer(
         const resolvedPermission = resolvePermissionAnchorFromEvents(
           state.displayEvents,
           action.permission,
+          state.permissions,
+        )
+        const permissions = syncInternalPlanDraftsWithPermissions(
+          state.displayEvents,
+          [resolvedPermission, ...state.permissions],
         )
         return {
           ...state,
-          permissions: [resolvedPermission, ...state.permissions],
+          permissions,
           displayEvents: markToolPermissionRequested(
             state.displayEvents,
             resolvedPermission,
@@ -337,6 +350,428 @@ function shouldKeepAfterTurnCompleted(permission: PermissionCard): boolean {
     permission.toolName === 'ExitPlanModeV2' ||
     permission.toolName === 'EnterPlanMode'
   )
+}
+
+type InternalPlanDraft = {
+  path: string
+  status: string
+  planSeriesId?: string
+  toolUseId?: string
+  eventIndex: number
+  threadId?: string
+  turnId?: string
+}
+
+type PlanPermissionAnchor = {
+  permission: PermissionCard
+  permissionIndex: number
+  anchorIndex: number
+  planSeriesId?: string
+}
+
+function syncInternalPlanDraftsWithPermissions(
+  events: DisplayEvent[],
+  permissions: PermissionCard[],
+): PermissionCard[] {
+  const draftAssignments = assignInternalPlanDrafts(events, permissions)
+  return permissions.map(permission =>
+    applyInternalPlanDraftToPermission(
+      permission,
+      draftAssignments.get(permission.permissionRequestId),
+    ),
+  )
+}
+
+function applyInternalPlanDraftToPermission(
+  permission: PermissionCard,
+  draft: InternalPlanDraft | undefined,
+): PermissionCard {
+  if (!draft) {
+    return permission
+  }
+  const nextInput = {
+    ...permission.input,
+    internalPlanDraftPath: draft.path,
+    internalPlanDraftStatus: draft.status,
+    ...(draft.planSeriesId ? { internalPlanSeriesId: draft.planSeriesId } : {}),
+    ...(draft.toolUseId ? { internalPlanDraftToolUseId: draft.toolUseId } : {}),
+  }
+  if (
+    nextInput.internalPlanDraftPath === permission.input.internalPlanDraftPath &&
+    nextInput.internalPlanDraftStatus ===
+      permission.input.internalPlanDraftStatus &&
+    nextInput.internalPlanSeriesId === permission.input.internalPlanSeriesId &&
+    nextInput.internalPlanDraftToolUseId ===
+      permission.input.internalPlanDraftToolUseId
+  ) {
+    return permission
+  }
+
+  return {
+    ...permission,
+    input: nextInput,
+  }
+}
+
+function isPlanApprovalPermission(permission: PermissionCard): boolean {
+  return (
+    permission.interactionKind === 'plan_approval' ||
+    permission.toolName === 'ExitPlanMode' ||
+    permission.toolName === 'ExitPlanModeV2'
+  )
+}
+
+function assignInternalPlanDrafts(
+  events: DisplayEvent[],
+  permissions: PermissionCard[],
+): Map<string, InternalPlanDraft> {
+  const drafts = collectInternalPlanDrafts(events)
+  const anchors = permissions
+    .map((permission, permissionIndex): PlanPermissionAnchor | null => {
+      if (!isPlanApprovalPermission(permission)) {
+        return null
+      }
+      const anchorIndex = getPlanPermissionAnchorIndex(events, permission)
+      return {
+        permission,
+        permissionIndex,
+        anchorIndex,
+        planSeriesId:
+          getPermissionPlanSeriesId(permission) ??
+          getPlanSeriesIdFromEvent(events[anchorIndex]),
+      }
+    })
+    .filter((anchor): anchor is PlanPermissionAnchor => Boolean(anchor))
+    .sort(
+      (left, right) =>
+        left.anchorIndex - right.anchorIndex ||
+        left.permissionIndex - right.permissionIndex,
+    )
+
+  if (drafts.length === 0 || anchors.length === 0) {
+    return new Map()
+  }
+
+  const assignments = new Map<string, InternalPlanDraft>()
+  const usedDraftIndexes = new Set<number>()
+  const lastAnchorIndexByScope = new Map<string, number>()
+
+  for (const anchor of anchors) {
+    if (anchor.planSeriesId) {
+      const draftIndex = findDraftIndexByPlanSeriesId(
+        drafts,
+        anchor.permission,
+        anchor.planSeriesId,
+      )
+      if (draftIndex !== -1) {
+        assignments.set(
+          anchor.permission.permissionRequestId,
+          drafts[draftIndex],
+        )
+        usedDraftIndexes.add(draftIndex)
+        continue
+      }
+    }
+
+    const scopeKey = getPermissionScopeKey(anchor.permission)
+    const lowerBound = lastAnchorIndexByScope.get(scopeKey) ?? -1
+    const draftIndex = findDraftIndexForPlanPermission(
+      drafts,
+      anchor.permission,
+      anchor.anchorIndex,
+      lowerBound,
+      usedDraftIndexes,
+    )
+    if (draftIndex !== -1) {
+      assignments.set(
+        anchor.permission.permissionRequestId,
+        drafts[draftIndex],
+      )
+      usedDraftIndexes.add(draftIndex)
+    }
+    lastAnchorIndexByScope.set(
+      scopeKey,
+      Math.max(lowerBound, anchor.anchorIndex),
+    )
+  }
+
+  return assignments
+}
+
+function collectInternalPlanDrafts(events: DisplayEvent[]): InternalPlanDraft[] {
+  return events.flatMap((event, eventIndex): InternalPlanDraft[] => {
+    const snapshot = event.toolSnapshot
+    if (!snapshot || !isInternalPlanDraftWrite(snapshot)) {
+      return []
+    }
+
+    const path = getInternalPlanDraftPath(event)
+    if (!path) {
+      return []
+    }
+    return [
+      {
+        path,
+        status: snapshot.status || event.status || 'unknown',
+        planSeriesId:
+          getPlanSeriesIdFromToolSnapshot(snapshot) ??
+          getPlanSeriesIdFromPath(path),
+        toolUseId: getToolUseId(event),
+        eventIndex,
+        threadId: event.identity?.threadId ?? snapshot.identity?.threadId,
+        turnId: event.identity?.turnId ?? snapshot.identity?.turnId,
+      },
+    ]
+  })
+}
+
+function findDraftIndexByPlanSeriesId(
+  drafts: InternalPlanDraft[],
+  permission: PermissionCard,
+  planSeriesId: string,
+): number {
+  for (let index = drafts.length - 1; index >= 0; index -= 1) {
+    const draft = drafts[index]
+    if (
+      draft.planSeriesId === planSeriesId &&
+      isDraftInPermissionScope(draft, permission)
+    ) {
+      return index
+    }
+  }
+  return -1
+}
+
+function findDraftIndexForPlanPermission(
+  drafts: InternalPlanDraft[],
+  permission: PermissionCard,
+  anchorIndex: number,
+  lowerBound: number,
+  usedDraftIndexes: Set<number>,
+): number {
+  for (let index = drafts.length - 1; index >= 0; index -= 1) {
+    const draft = drafts[index]
+    if (
+      usedDraftIndexes.has(index) ||
+      draft.eventIndex > anchorIndex ||
+      draft.eventIndex <= lowerBound ||
+      !isDraftInPermissionScope(draft, permission)
+    ) {
+      continue
+    }
+    return index
+  }
+  return -1
+}
+
+function getPlanPermissionAnchorIndex(
+  events: DisplayEvent[],
+  permission: PermissionCard,
+): number {
+  if (permission.toolUseId) {
+    const index = events.findIndex(
+      event => getToolUseId(event) === permission.toolUseId,
+    )
+    if (index !== -1) {
+      return index
+    }
+  }
+
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    const snapshot = event.toolSnapshot
+    if (
+      event.type === 'tool_call' &&
+      snapshot?.kind === 'call' &&
+      snapshot.name === permission.toolName &&
+      isInPermissionScope(event, permission)
+    ) {
+      return index
+    }
+  }
+  return events.length
+}
+
+function getPermissionScopeKey(permission: PermissionCard): string {
+  return [
+    permission.threadId ?? '*',
+    permission.turnId ?? '*',
+  ].join(':')
+}
+
+function getPermissionPlanSeriesId(
+  permission: PermissionCard,
+): string | undefined {
+  return getPlanSeriesIdFromInput(permission.input)
+}
+
+function getPlanSeriesIdFromEvent(
+  event: DisplayEvent | undefined,
+): string | undefined {
+  if (!event) {
+    return undefined
+  }
+  return (
+    getPlanSeriesIdFromToolSnapshot(event.toolSnapshot) ??
+    (event.fileToolSnapshot?.path
+      ? getPlanSeriesIdFromPath(event.fileToolSnapshot.path)
+      : undefined) ??
+    (event.fileSnapshot?.path
+      ? getPlanSeriesIdFromPath(event.fileSnapshot.path)
+      : undefined)
+  )
+}
+
+function getPlanSeriesIdFromToolSnapshot(
+  snapshot: ToolSnapshot | undefined,
+): string | undefined {
+  if (!snapshot?.input || typeof snapshot.input !== 'object') {
+    return snapshot?.target ? getPlanSeriesIdFromPath(snapshot.target) : undefined
+  }
+
+  const input = snapshot.input as JsonObject
+  return (
+    getPlanSeriesIdFromInput(input) ??
+    (snapshot.target ? getPlanSeriesIdFromPath(snapshot.target) : undefined)
+  )
+}
+
+function getPlanSeriesIdFromInput(input: JsonObject): string | undefined {
+  const explicit = getStringFromObject(input, [
+    'planSeriesId',
+    'plan_series_id',
+    'internalPlanSeriesId',
+  ])
+  if (explicit) {
+    return explicit
+  }
+
+  const path = getStringFromObject(input, [
+    'planFilePath',
+    'plan_file_path',
+    'internalPlanDraftPath',
+    'filePath',
+    'file_path',
+    'path',
+  ])
+  return path ? getPlanSeriesIdFromPath(path) : undefined
+}
+
+function getPlanSeriesIdFromPath(path: string): string | undefined {
+  const normalized = path.replace(/\\/g, '/')
+  if (!isInternalPlanDraftPath(normalized)) {
+    return undefined
+  }
+
+  const filename = normalized.split('/').filter(Boolean).at(-1) ?? ''
+  const stem = filename.replace(/\.md$/i, '')
+  if (!stem) {
+    return undefined
+  }
+
+  const agentMarker = '-agent-'
+  const markerIndex = stem.indexOf(agentMarker)
+  if (markerIndex === -1) {
+    return stem
+  }
+
+  const planSlug = stem.slice(0, markerIndex)
+  const agentId = stem.slice(markerIndex + agentMarker.length)
+  return planSlug && agentId ? `${planSlug}:agent:${agentId}` : stem
+}
+
+function isDraftInPermissionScope(
+  draft: InternalPlanDraft,
+  permission: PermissionCard,
+): boolean {
+  if (
+    permission.threadId &&
+    draft.threadId &&
+    permission.threadId !== draft.threadId
+  ) {
+    return false
+  }
+  if (permission.turnId && draft.turnId && permission.turnId !== draft.turnId) {
+    return false
+  }
+  return true
+}
+
+function isInPermissionScope(
+  event: DisplayEvent,
+  permission: PermissionCard,
+): boolean {
+  const eventThreadId =
+    event.identity?.threadId ?? event.toolSnapshot?.identity?.threadId
+  if (
+    permission.threadId &&
+    eventThreadId &&
+    permission.threadId !== eventThreadId
+  ) {
+    return false
+  }
+
+  const eventTurnId =
+    event.identity?.turnId ?? event.toolSnapshot?.identity?.turnId
+  if (
+    permission.turnId &&
+    eventTurnId &&
+    permission.turnId !== eventTurnId
+  ) {
+    return false
+  }
+
+  return true
+}
+
+function isInternalPlanDraftWrite(snapshot: ToolSnapshot): boolean {
+  if (snapshot.kind !== 'call' || snapshot.name !== 'Write') {
+    return false
+  }
+  const path = getToolPath(snapshot)
+  return Boolean(path && isInternalPlanDraftPath(path))
+}
+
+function getInternalPlanDraftPath(event: DisplayEvent): string | undefined {
+  return (
+    event.fileToolSnapshot?.path ??
+    event.fileSnapshot?.path ??
+    getToolPath(event.toolSnapshot)
+  )
+}
+
+function getToolPath(snapshot: ToolSnapshot | undefined): string | undefined {
+  if (!snapshot) {
+    return undefined
+  }
+
+  if (typeof snapshot.target === 'string' && snapshot.target.trim()) {
+    return snapshot.target
+  }
+
+  if (!snapshot.input || typeof snapshot.input !== 'object') {
+    return undefined
+  }
+
+  const input = snapshot.input as JsonObject
+  return getStringFromObject(input, ['file_path', 'filePath', 'path'])
+}
+
+function getStringFromObject(
+  input: JsonObject,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = input[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value
+    }
+  }
+  return undefined
+}
+
+function isInternalPlanDraftPath(path: string): boolean {
+  return /(?:^|\/)\.ccr\/plans\/[^/]+\.md$/i.test(path.replace(/\\/g, '/'))
 }
 
 function getTerminalToolStatus(
@@ -726,12 +1161,17 @@ function markToolPermissionRequested(
 function resolvePermissionAnchorFromEvents(
   events: DisplayEvent[],
   permission: PermissionCard,
+  existingPermissions: PermissionCard[] = [],
 ): PermissionCard {
   if (permission.toolUseId) {
     return permission
   }
 
-  const matchedToolUseId = findRecentMatchingToolUseId(events, permission)
+  const matchedToolUseId = findRecentMatchingToolUseId(
+    events,
+    permission,
+    existingPermissions,
+  )
   if (!matchedToolUseId) {
     return permission
   }
@@ -745,7 +1185,14 @@ function resolvePermissionAnchorFromEvents(
 function findRecentMatchingToolUseId(
   events: DisplayEvent[],
   permission: PermissionCard,
+  existingPermissions: PermissionCard[],
 ): string | undefined {
+  const usedToolUseIds = new Set(
+    existingPermissions
+      .map(existingPermission => existingPermission.toolUseId)
+      .filter((toolUseId): toolUseId is string => Boolean(toolUseId)),
+  )
+
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
     const snapshot = event.toolSnapshot
@@ -767,7 +1214,7 @@ function findRecentMatchingToolUseId(
       continue
     }
     const toolUseId = getToolUseId(event)
-    if (toolUseId) {
+    if (toolUseId && !usedToolUseIds.has(toolUseId)) {
       return toolUseId
     }
   }

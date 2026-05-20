@@ -157,6 +157,16 @@ export function PlanApprovalCard(props: {
     resolvePlanTextFallback(permission),
   )
   const planFilePath = extractPlanFilePath(permission.input)
+  const internalPlanDraft = extractInternalPlanDraft(permission.input)
+  const planDraft =
+    internalPlanDraft ??
+    (planFilePath
+      ? {
+          path: planFilePath,
+          seriesId: extractPlanSeriesId(permission.input, planFilePath),
+          status: undefined,
+        }
+      : null)
   const allowedPrompts = extractAllowedPrompts(permission.input)
 
   return (
@@ -188,7 +198,13 @@ export function PlanApprovalCard(props: {
         </>
       }
       className={`plan-approval-card exit-plan-card ${inline ? 'is-inline' : ''}`}
-      meta={planFilePath ? `计划文件：${planFilePath}` : null}
+      meta={
+        internalPlanDraft
+          ? null
+          : planFilePath
+            ? `计划文件：${planFilePath}`
+            : null
+      }
       status={formatPermissionStatus(permission.status, submitting)}
       title={title}
       typeLabel="计划确认"
@@ -206,6 +222,25 @@ export function PlanApprovalCard(props: {
             <h4>计划内容</h4>
             <div className="plan-card-markdown">{renderMessageBlocks(plan)}</div>
           </section>
+
+          {planDraft ? (
+            <section className="plan-card-draft">
+              <h4>{internalPlanDraft ? '内部计划草稿' : '计划文件'}</h4>
+              <div className="plan-card-draft-row">
+                <span
+                  className={`plan-card-draft-status ${getPlanDraftStatusClass(
+                    planDraft.status,
+                  )}`}
+                >
+                  {formatPlanDraftStatus(planDraft.status)}
+                </span>
+                <code>{planDraft.path}</code>
+              </div>
+              {planDraft.seriesId ? (
+                <small>计划系列：{planDraft.seriesId}</small>
+              ) : null}
+            </section>
+          ) : null}
 
           {allowedPrompts.length > 0 ? (
             <section className="plan-card-prompts">
@@ -332,6 +367,106 @@ function extractPlanFilePath(input: JsonObject): string | undefined {
     getString(input.filePath) ??
     getString(input.path)
   )
+}
+
+function extractInternalPlanDraft(
+  input: JsonObject,
+): { path: string; seriesId?: string; status?: string } | null {
+  const path =
+    getString(input.internalPlanDraftPath) ?? getString(input.planDraftFilePath)
+  if (!path) {
+    return null
+  }
+  return {
+    path,
+    seriesId: extractPlanSeriesId(input, path),
+    status:
+      getString(input.internalPlanDraftStatus) ??
+      getString(input.planDraftStatus),
+  }
+}
+
+function extractPlanSeriesId(
+  input: JsonObject,
+  path?: string,
+): string | undefined {
+  return (
+    getString(input.internalPlanSeriesId) ??
+    getString(input.planSeriesId) ??
+    getString(input.plan_series_id) ??
+    (path ? getPlanSeriesIdFromPath(path) : undefined)
+  )
+}
+
+function getPlanSeriesIdFromPath(path: string): string | undefined {
+  const normalized = path.replace(/\\/g, '/')
+  const filename = normalized.split('/').filter(Boolean).at(-1) ?? ''
+  const stem = filename.replace(/\.md$/i, '')
+  if (!stem || stem === filename) {
+    return undefined
+  }
+
+  const agentMarker = '-agent-'
+  const markerIndex = stem.indexOf(agentMarker)
+  if (markerIndex === -1) {
+    return stem
+  }
+
+  const planSlug = stem.slice(0, markerIndex)
+  const agentId = stem.slice(markerIndex + agentMarker.length)
+  return planSlug && agentId ? `${planSlug}:agent:${agentId}` : stem
+}
+
+function formatPlanDraftStatus(status: string | undefined): string {
+  const normalized = status?.trim().toLowerCase()
+  if (
+    normalized === 'completed' ||
+    normalized === 'success' ||
+    normalized === 'succeeded'
+  ) {
+    return '已保存'
+  }
+  if (
+    normalized === 'running' ||
+    normalized === 'streaming' ||
+    normalized === 'pending' ||
+    normalized === 'waiting_permission'
+  ) {
+    return '保存中'
+  }
+  if (
+    normalized === 'failed' ||
+    normalized === 'error' ||
+    normalized === 'timeout'
+  ) {
+    return '保存失败'
+  }
+  if (normalized === 'denied' || normalized === 'cancelled') {
+    return '未保存'
+  }
+  return '已记录'
+}
+
+function getPlanDraftStatusClass(status: string | undefined): string {
+  const normalized = status?.trim().toLowerCase()
+  if (
+    normalized === 'failed' ||
+    normalized === 'error' ||
+    normalized === 'timeout' ||
+    normalized === 'denied' ||
+    normalized === 'cancelled'
+  ) {
+    return 'is-problem'
+  }
+  if (
+    normalized === 'running' ||
+    normalized === 'streaming' ||
+    normalized === 'pending' ||
+    normalized === 'waiting_permission'
+  ) {
+    return 'is-saving'
+  }
+  return 'is-saved'
 }
 
 function extractAllowedPrompts(input: JsonObject): AllowedPrompt[] {

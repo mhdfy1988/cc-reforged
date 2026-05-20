@@ -29,6 +29,7 @@ import { logError } from '../../utils/log.js'
 import {
   getPlan,
   getPlanFilePath,
+  getPlanSeriesId,
   persistFileSnapshotIfRemote,
 } from '../../utils/plans.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
@@ -111,6 +112,10 @@ export const _sdkInputSchema = lazySchema(() =>
       .string()
       .optional()
       .describe('The plan file path (injected by normalizeToolInput)'),
+    planSeriesId: z
+      .string()
+      .optional()
+      .describe('Stable identifier for the current task plan series'),
   }),
 )
 
@@ -125,6 +130,10 @@ export const outputSchema = lazySchema(() =>
       .string()
       .optional()
       .describe('The file path where the plan was saved'),
+    planSeriesId: z
+      .string()
+      .optional()
+      .describe('Stable identifier for the task plan series'),
     hasTaskTool: z
       .boolean()
       .optional()
@@ -251,6 +260,7 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
     const isAgent = !!context.agentId
 
     const filePath = getPlanFilePath(context.agentId)
+    const planSeriesId = getPlanSeriesId(context.agentId)
     // CCR web UI may send an edited plan via permissionResult.updatedInput.
     // queryHelpers.ts full-replaces finalInput, so when CCR sends {} (no edit)
     // input.plan is undefined -> disk fallback. The internal inputSchema omits
@@ -313,6 +323,7 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
           plan,
           isAgent: true,
           filePath,
+          planSeriesId,
           awaitingLeaderApproval: true,
           requestId,
         },
@@ -418,6 +429,7 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
         plan,
         isAgent,
         filePath,
+        planSeriesId,
         hasTaskTool: hasTaskTool || undefined,
         planWasEdited: inputPlan !== undefined || undefined,
       },

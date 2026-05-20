@@ -55,6 +55,7 @@ import {
 import {
   getPlan,
   getPlanFilePath,
+  getPlanSeriesId,
   persistFileSnapshotIfRemote,
 } from './plans.js'
 import { getPlatform } from './platform.js'
@@ -574,9 +575,12 @@ export function normalizeToolInput<T extends Tool>(
       // The V2 tool reads plan from file instead of input, but hooks/SDK
       const plan = getPlan(agentId)
       const planFilePath = getPlanFilePath(agentId)
+      const planSeriesId = getPlanSeriesId(agentId)
       // Persist file snapshot for CCR sessions so the plan survives pod recycling
       void persistFileSnapshotIfRemote()
-      return plan !== null ? { ...input, plan, planFilePath } : input
+      return plan !== null
+        ? { ...input, plan, planFilePath, planSeriesId }
+        : input
     }
     case BashTool.name: {
       // Validated upstream, won't throw
@@ -692,9 +696,14 @@ export function normalizeToolInputForAPI<T extends Tool>(
       if (
         input &&
         typeof input === 'object' &&
-        ('plan' in input || 'planFilePath' in input)
+        ('plan' in input ||
+          'planFilePath' in input ||
+          'planSeriesId' in input)
       ) {
-        const { plan, planFilePath, ...rest } = input as Record<string, unknown>
+        const { plan, planFilePath, planSeriesId, ...rest } = input as Record<
+          string,
+          unknown
+        >
         return rest as z.infer<T['inputSchema']>
       }
       return input
