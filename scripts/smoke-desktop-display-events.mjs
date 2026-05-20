@@ -929,8 +929,8 @@ async function assertToolErrorClassifications() {
       )
 
       assert.equal(generatedImageEvent?.type, 'assistant_message')
-      assert.match(generatedImageEvent?.text ?? '', /模型生成图片/)
-      assert.match(generatedImageEvent?.text ?? '', /已保存/)
+      assert.equal(generatedImageEvent?.text, '已生成一张图片。')
+      assert.equal((generatedImageEvent?.text ?? '').includes('已保存'), false)
       assert.equal(generatedImageEvent?.contentBlocks?.[1]?.type, 'image')
       assert.equal(generatedImageEvent?.contentBlocks?.[1]?.origin, 'model_output')
       assert.equal(generatedImageEvent?.contentBlocks?.[1]?.lifecycle, 'temporary')
@@ -984,6 +984,8 @@ async function assertToolErrorClassifications() {
           turnId: 'turn_fixture',
         },
       )
+      assert.equal(generatedUrlImageEvent?.type, 'assistant_message')
+      assert.equal(generatedUrlImageEvent?.text, '')
       const generatedUrlAttachment = generatedUrlImageEvent?.attachmentSnapshots?.[0]
       assert.equal(generatedUrlAttachment?.source, 'ModelOutput')
       assert.equal(generatedUrlAttachment?.previewKind, 'image')

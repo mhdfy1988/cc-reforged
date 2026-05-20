@@ -21,14 +21,16 @@ export function MessageFrame(props: {
     Boolean(props.compactCarryover) &&
     isAttachmentNoticeText(message.text) &&
     Boolean(props.event.attachmentSnapshots?.length)
+  const hideEmptyAttachmentText =
+    !message.text.trim() && Boolean(props.event.attachmentSnapshots?.length)
+  const hideMessageText =
+    hideCompactAttachmentNoticeText || hideEmptyAttachmentText
 
   return (
     <div className={`message ${message.role} ${message.kind ?? ''}`}>
       <b>{props.label}</b>
       <div className="message-body">
-        {hideCompactAttachmentNoticeText ? null : (
-          <MessageContent message={message} />
-        )}
+        {hideMessageText ? null : <MessageContent message={message} />}
         <MessageAttachmentStrip
           attachments={props.event.attachmentSnapshots}
           compactCarryover={props.compactCarryover}

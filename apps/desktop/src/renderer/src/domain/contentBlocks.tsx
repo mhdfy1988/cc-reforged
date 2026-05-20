@@ -360,10 +360,11 @@ function formatGeneratedOutputBlock(
   block: JsonObject,
   type: string,
 ): string {
-  const title =
-    block.origin === 'model_output'
-      ? `模型生成${getAttachmentTypeText(type)}`
-      : getAttachmentTypeText(type)
+  if (block.origin === 'model_output') {
+    return ''
+  }
+
+  const title = getAttachmentTypeText(type)
   const name = getStringValue(
     block.displayName ?? block.display_name ?? block.name ?? block.filename,
     '未命名输出',

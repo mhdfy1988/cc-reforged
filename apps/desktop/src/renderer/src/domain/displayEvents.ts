@@ -211,18 +211,29 @@ export function createDisplayEventFromCompletedItem(
     }
   }
 
-  const message = createMessageFromCompletedItem(itemId, kind, blocks, statusText)
-  if (!message) {
-    return null
-  }
-
-  const event = chatMessageToDisplayEvent(message, identity)
   const attachmentSnapshots = extractAttachmentSnapshotsFromContentBlocks({
     eventId: itemId,
     blocks,
     source: kind === 'assistant_message' ? 'ModelOutput' : 'ToolResult',
     identity,
   })
+  const message = createMessageFromCompletedItem(itemId, kind, blocks, statusText)
+  if (!message) {
+    return attachmentSnapshots.length > 0
+      ? {
+          id: itemId,
+          type: kind === 'assistant_message' ? 'assistant_message' : 'system_notice',
+          text: '',
+          status: statusText,
+          sourceKind: kind,
+          identity,
+          attachmentSnapshots,
+          contentBlocks,
+        }
+      : null
+  }
+
+  const event = chatMessageToDisplayEvent(message, identity)
   return attachmentSnapshots.length > 0
     ? { ...event, attachmentSnapshots, contentBlocks }
     : { ...event, contentBlocks }
