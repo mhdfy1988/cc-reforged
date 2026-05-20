@@ -541,8 +541,9 @@ function messageKind(message) {
 function contentFromMessage(message) {
     switch (message.type) {
         case 'assistant':
-        case 'user':
             return contentBlocks(message.message.content);
+        case 'user':
+            return contentBlocks(message.message.content, getDisplayToolResult(message.toolUseResult));
         case 'system':
             return [
                 {
@@ -575,7 +576,7 @@ function contentFromMessage(message) {
             ];
     }
 }
-function contentBlocks(content) {
+function contentBlocks(content, displayToolResult) {
     if (typeof content === 'string') {
         return [{ type: 'text', text: content }];
     }
@@ -616,6 +617,7 @@ function contentBlocks(content) {
                 toolUseId: 'tool_use_id' in block ? block.tool_use_id : undefined,
                 isError: 'is_error' in block ? block.is_error : undefined,
                 content: 'content' in block ? block.content : undefined,
+                ...(displayToolResult ? { result: displayToolResult } : {}),
             };
         }
         if ('type' in block &&
@@ -627,6 +629,22 @@ function contentBlocks(content) {
         }
         return { type: String('type' in block ? block.type : 'json'), value: block };
     });
+}
+function getDisplayToolResult(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined;
+    }
+    const object = value;
+    const output = object.output;
+    if (Array.isArray(output) &&
+        output.some(block => block &&
+            typeof block === 'object' &&
+            !Array.isArray(block) &&
+            'type' in block &&
+            block.type === 'image')) {
+        return object;
+    }
+    return undefined;
 }
 function contentFromAssistantStream(stream) {
     if (stream.blockType === 'text') {

@@ -369,6 +369,18 @@ function extractToolCallMetadata(
   const risk = getString(input, ['risk', 'riskLevel', 'risk_level'])
   const provider = getString(input, ['provider'])
 
+  if (name === 'GenerateImage') {
+    return {
+      displayName: '生成图片',
+      summary: target ? `生成图片：${target}` : '生成图片',
+      description,
+      target,
+      cwd,
+      provider,
+      risk,
+    }
+  }
+
   if (category === 'shell') {
     return {
       displayName: name,
@@ -697,6 +709,7 @@ function getToolTarget(name: string, input: JsonObject | null): string | undefin
     'url',
     'pattern',
     'query',
+    'prompt',
   ])
   if (target) {
     return target

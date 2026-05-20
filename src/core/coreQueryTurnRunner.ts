@@ -731,8 +731,12 @@ function messageKind(message: Message): string {
 function contentFromMessage(message: Message): CoreJsonObject[] {
   switch (message.type) {
     case 'assistant':
-    case 'user':
       return contentBlocks(message.message.content)
+    case 'user':
+      return contentBlocks(
+        message.message.content,
+        getDisplayToolResult(message.toolUseResult),
+      )
     case 'system':
       return [
         {
@@ -766,7 +770,10 @@ function contentFromMessage(message: Message): CoreJsonObject[] {
   }
 }
 
-function contentBlocks(content: unknown): CoreJsonObject[] {
+function contentBlocks(
+  content: unknown,
+  displayToolResult?: CoreJsonObject,
+): CoreJsonObject[] {
   if (typeof content === 'string') {
     return [{ type: 'text', text: content }]
   }
@@ -807,6 +814,7 @@ function contentBlocks(content: unknown): CoreJsonObject[] {
         toolUseId: 'tool_use_id' in block ? block.tool_use_id : undefined,
         isError: 'is_error' in block ? block.is_error : undefined,
         content: 'content' in block ? block.content : undefined,
+        ...(displayToolResult ? { result: displayToolResult } : {}),
       }
     }
     if (
@@ -820,6 +828,28 @@ function contentBlocks(content: unknown): CoreJsonObject[] {
     }
     return { type: String('type' in block ? block.type : 'json'), value: block }
   })
+}
+
+function getDisplayToolResult(value: unknown): CoreJsonObject | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined
+  }
+  const object = value as CoreJsonObject
+  const output = object.output
+  if (
+    Array.isArray(output) &&
+    output.some(
+      block =>
+        block &&
+        typeof block === 'object' &&
+        !Array.isArray(block) &&
+        'type' in block &&
+        block.type === 'image',
+    )
+  ) {
+    return object
+  }
+  return undefined
 }
 
 function contentFromAssistantStream(stream: AssistantStream): CoreJsonObject[] {

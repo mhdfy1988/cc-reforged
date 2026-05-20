@@ -12,6 +12,7 @@
 - 新增 OpenAI、Kimi、GLM 与 OpenAI-compatible provider 接入，补齐模型目录、Profile 配置、API Key 管理和 provider probe 入口。
 - GLM API 模型目录新增 `glm-4.7`、`glm-4.6v` 和 `glm-4.5-air`，便于直接使用开放平台赠送资源包额度。
 - 新增 provider-neutral 图片生成输出链路，支持 OpenAI / Codex OAuth / MiniMax 等生成适配器、会话内生成图片事件和生成产物持久化。
+- 新增模型可见 `GenerateImage` 工具，GLM / OpenAI / Codex OAuth 等生图请求可走统一工具入口，不再依赖模型自行猜测文件或命令工具。
 - 重做 Desktop 日志页为“日志文件 / 事件列表 / 事件详情”三栏工作台，支持不同日志文件切换、事件化阅读、原始 JSON 查看和搜索。
 - 日志页新增轻量实时刷新开关，复用现有日志读取入口，不扩展为告警、统计图或监控面板。
 
@@ -28,6 +29,7 @@
 - 为日志页及其它原始数据展示区增加统一复制按钮，便于复制 JSON、日志片段和工具详情。
 - 优化上下文压缩后的附件恢复展示，明确标识压缩携带附件并隐藏重复附件通知，避免压缩恢复内容显得像无来源的普通附件消息。
 - 扩展 provider、生成输出、会话图片流、Desktop 展示事件和模型能力 smoke，`ci:smoke` 会覆盖更多标准协议回归。
+- 工具生图结果发回模型时保持文本摘要，App Server / Desktop 事件保留结构化图片块，复用现有附件缩略图和预览 UI。
 - 整理文档结构，将架构、恢复清单、阶段 todo、provider 集成说明和源码证据索引归并到更明确的目录入口。
 - 项目级 settings 已统一切换到 `.ccr/settings*.json`，不再运行时兼容读取旧 `.claude/settings*.json`。
 - Desktop、App Server、CLI/TUI 文案、worktree 复制、settings sync、权限保护和 sandbox 禁写已同步使用 `.ccr` 项目配置路径。

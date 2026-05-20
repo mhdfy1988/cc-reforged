@@ -4,7 +4,7 @@ import { LOCAL_COMMAND_STDERR_TAG, LOCAL_COMMAND_STDOUT_TAG, } from 'src/constan
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js';
 import stripAnsi from 'strip-ansi';
 import { createAssistantMessage } from '../messages.js';
-import { getPlan } from '../plans.js';
+import { getPlan, getPlanFilePath, getPlanSeriesId } from '../plans.js';
 import { validateUuid } from '../uuid.js';
 export function toInternalMessages(messages) {
     return messages.flatMap(message => {
@@ -288,7 +288,12 @@ function normalizeAssistantMessageForSDK(message) {
             if (plan) {
                 return {
                     ...block,
-                    input: { ...block.input, plan },
+                    input: {
+                        ...block.input,
+                        plan,
+                        planFilePath: getPlanFilePath(),
+                        planSeriesId: getPlanSeriesId(),
+                    },
                 };
             }
         }

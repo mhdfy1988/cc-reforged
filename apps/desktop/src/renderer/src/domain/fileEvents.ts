@@ -249,6 +249,20 @@ function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
         ),
       )
     }
+
+    if (type === 'tool_result') {
+      const result = getJsonObject(block.result)
+      if (Array.isArray(result?.output)) {
+        collected.push(
+          ...collectAttachmentBlocks(
+            result.output.filter(
+              (item): item is JsonObject =>
+                !!item && typeof item === 'object' && !Array.isArray(item),
+            ),
+          ),
+        )
+      }
+    }
   }
   return collected
 }

@@ -11,7 +11,7 @@ import { logForDebugging } from '../../utils/debug.js';
 import { findInProcessTeammateTaskId, setAwaitingPlanApproval, } from '../../utils/inProcessTeammateHelpers.js';
 import { lazySchema } from '../../utils/lazySchema.js';
 import { logError } from '../../utils/log.js';
-import { getPlan, getPlanFilePath, persistFileSnapshotIfRemote, } from '../../utils/plans.js';
+import { getPlan, getPlanFilePath, getPlanSeriesId, persistFileSnapshotIfRemote, } from '../../utils/plans.js';
 import { jsonStringify } from '../../utils/slowOperations.js';
 import { getAgentName, getTeamName, isPlanModeRequired, isTeammate, } from '../../utils/teammate.js';
 import { writeToMailbox } from '../../utils/teammateMailbox.js';
@@ -64,6 +64,10 @@ export const _sdkInputSchema = lazySchema(() => inputSchema().extend({
         .string()
         .optional()
         .describe('The plan file path (injected by normalizeToolInput)'),
+    planSeriesId: z
+        .string()
+        .optional()
+        .describe('Stable identifier for the current task plan series'),
 }));
 export const outputSchema = lazySchema(() => z.object({
     plan: z
@@ -75,6 +79,10 @@ export const outputSchema = lazySchema(() => z.object({
         .string()
         .optional()
         .describe('The file path where the plan was saved'),
+    planSeriesId: z
+        .string()
+        .optional()
+        .describe('Stable identifier for the task plan series'),
     hasTaskTool: z
         .boolean()
         .optional()
@@ -186,6 +194,7 @@ export const ExitPlanModeV2Tool = buildTool({
     async call(input, context) {
         const isAgent = !!context.agentId;
         const filePath = getPlanFilePath(context.agentId);
+        const planSeriesId = getPlanSeriesId(context.agentId);
         // CCR web UI may send an edited plan via permissionResult.updatedInput.
         // queryHelpers.ts full-replaces finalInput, so when CCR sends {} (no edit)
         // input.plan is undefined -> disk fallback. The internal inputSchema omits
@@ -232,6 +241,7 @@ export const ExitPlanModeV2Tool = buildTool({
                     plan,
                     isAgent: true,
                     filePath,
+                    planSeriesId,
                     awaitingLeaderApproval: true,
                     requestId,
                 },
@@ -322,6 +332,7 @@ export const ExitPlanModeV2Tool = buildTool({
                 plan,
                 isAgent,
                 filePath,
+                planSeriesId,
                 hasTaskTool: hasTaskTool || undefined,
                 planWasEdited: inputPlan !== undefined || undefined,
             },

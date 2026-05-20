@@ -75,6 +75,7 @@
     "smoke:generated-output-provider": "node ./scripts/smoke-generated-output-provider.mjs",
     "smoke:provider-output-fixtures": "node ./scripts/smoke-provider-output-fixtures.mjs",
     "smoke:session-generated-image-flow": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-session-generated-image-flow.mjs",
+    "smoke:generate-image-tool": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-generate-image-tool.mjs",
     "smoke:provider-tool-profile": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-provider-tool-profile.mjs",
     "smoke:llm-claude-adapter": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-claude-adapter.mjs",
     "smoke:llm-config": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-config.mjs",
