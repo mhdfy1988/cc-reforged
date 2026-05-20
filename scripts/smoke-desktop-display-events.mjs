@@ -497,6 +497,7 @@ async function assertToolErrorClassifications() {
       import { readFile } from 'node:fs/promises'
       import { createDisplayEventFromCompletedItem, createErrorDisplayEvent } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
       import { getAttachmentActionPath, getAttachmentImagePreviewSrc } from '../../apps/desktop/src/renderer/src/components/chat/AttachmentImagePreview.tsx'
+      import { getToolMetaItems } from '../../apps/desktop/src/renderer/src/components/chat/ToolCard.tsx'
       import { createErrorDiagnostics, getErrorActionViewModels, getPolicyBoundaryHint, getPolicyBoundaryLabel, getQuotaHint, getRateLimitHint } from '../../apps/desktop/src/renderer/src/components/chat/ErrorCard.tsx'
       import { createCcrErrorSnapshot } from '../../src/types/errorSnapshot.ts'
       import { persistGeneratedArtifactFromBase64, prepareGeneratedImageCallForModelReplay, sanitizeGeneratedArtifactsForResume, shouldIncludeGeneratedImageResultForReplay } from '../../src/utils/generatedArtifacts.ts'
@@ -509,6 +510,35 @@ async function assertToolErrorClassifications() {
       )
       assert.equal(providerError.errorSnapshot?.category, 'auth_expired')
       assert.equal(providerError.errorSnapshot?.recommendedActions?.includes('reauth'), true)
+
+      const imagePrompt = '一张真实自然的纪实摄影风格图片：中国国内小学操场上的小学生足球比赛'
+      const generateImageToolEvent = createDisplayEventFromCompletedItem(
+        'fixture-generate-image-tool-call',
+        'assistant_message',
+        [
+          {
+            type: 'tool_use',
+            id: 'toolu_generate_image',
+            name: 'GenerateImage',
+            input: {
+              prompt: imagePrompt,
+            },
+          },
+        ],
+        'running',
+        {
+          itemId: 'fixture-generate-image-tool-call',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_generate_image',
+        },
+      )
+      assert.equal(generateImageToolEvent?.toolSnapshot?.summary, \`生成图片：\${imagePrompt}\`)
+      assert.equal(generateImageToolEvent?.toolSnapshot?.target, imagePrompt)
+      assert.equal(
+        getToolMetaItems(generateImageToolEvent.toolSnapshot).some(item => item.label === '目标'),
+        false,
+      )
 
       const sanitizedError = createCcrErrorSnapshot({
         message: 'Provider API request failed: Bearer sk-secretvalue123456',

@@ -327,7 +327,7 @@ function getCategoryText(category: string): string {
   }
 }
 
-function getToolMetaItems(
+export function getToolMetaItems(
   snapshot: NonNullable<DisplayEvent['toolSnapshot']>,
   options: { hideTarget?: boolean } = {},
 ) {
@@ -335,13 +335,26 @@ function getToolMetaItems(
     shouldShowCommandMeta(snapshot)
       ? { label: '命令', value: snapshot.command }
       : null,
-    !options.hideTarget && snapshot.target && snapshot.target !== snapshot.command
+    shouldShowTargetMeta(snapshot, options)
       ? { label: '目标', value: snapshot.target }
       : null,
     snapshot.cwd ? { label: '工作目录', value: snapshot.cwd } : null,
     snapshot.risk ? { label: '风险', value: snapshot.risk } : null,
     snapshot.errorClass ? { label: '错误类型', value: snapshot.errorClass } : null,
   ].filter(Boolean) as Array<{ label: string; value: string }>
+}
+
+function shouldShowTargetMeta(
+  snapshot: NonNullable<DisplayEvent['toolSnapshot']>,
+  options: { hideTarget?: boolean },
+): snapshot is NonNullable<DisplayEvent['toolSnapshot']> & { target: string } {
+  if (options.hideTarget || !snapshot.target) {
+    return false
+  }
+  if (snapshot.target === snapshot.command) {
+    return false
+  }
+  return !snapshot.summary.includes(snapshot.target)
 }
 
 function getToolHints(
