@@ -1060,16 +1060,27 @@ h1 {
 
 .raw-data-block {
   position: relative;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .raw-data-block pre {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   min-width: 0;
+  overflow: auto;
   padding-right: 48px;
+  white-space: pre;
 }
 
 .raw-data-block code {
+  display: inline-block;
+  min-width: max-content;
   font: inherit;
 }
 

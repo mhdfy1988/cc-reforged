@@ -7,7 +7,8 @@
 .chat {
   height: 100%;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -16,6 +17,8 @@
 
 .chat-content {
   min-height: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .chat-scroll-bottom {
@@ -35,6 +38,8 @@
 
 .message,
 .event-card {
+  max-width: 100%;
+  box-sizing: border-box;
   margin-bottom: 14px;
   border: 1px solid rgba(208, 186, 158, 0.55);
   border-radius: 18px;
