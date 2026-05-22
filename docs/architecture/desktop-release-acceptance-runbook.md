@@ -4,7 +4,7 @@
 
 这份 Runbook 用来把 Desktop 从“能打包”推进到“可以被人工验收、公开发布和后续回归”的状态。
 
-当前 `0.5.0` 已公开发布。真正执行安装器前，仍需要明确告知会影响当前机器的开始菜单、安装目录和 Desktop `userData`。
+当前已生成 `0.5.1` 本地正式安装包；上一公开版本是 `0.5.0`。真正执行安装器前，仍需要明确告知会影响当前机器的开始菜单、安装目录和 Desktop `userData`。
 
 ## 2. 当前产物
 
@@ -105,7 +105,51 @@ npm.cmd run release:desktop:public
 npm.cmd run smoke:desktop-auto-update-feed
 ```
 
-## 3.3 `0.5.0` 发布记录
+## 3.3 `0.5.1` 本地正式包记录
+
+`0.5.1` 已完成本地正式打包，但尚未创建 Git tag，也尚未公开发布 GitHub Release。
+
+生成时间：2026-05-22
+
+本地验证：
+
+```powershell
+npm.cmd run ci:smoke
+npm.cmd run desktop:dist
+npm.cmd run smoke:desktop-release-artifacts
+npm.cmd run smoke:desktop-signing-readiness
+npm.cmd run release:desktop:check
+npm.cmd run smoke:desktop-github-actions-release
+npm.cmd run smoke:desktop-packaged
+```
+
+发布资产：
+
+- `CCR-0.5.1-win-x64.exe`
+- `CCR-0.5.1-win-x64.exe.blockmap`
+- `latest.yml`
+
+SHA256：
+
+| 文件 | SHA256 |
+| --- | --- |
+| `CCR-0.5.1-win-x64.exe` | `0ae0805da3d5703beea7b4e5c4212094058bf0820669690292c9b9c203288c10` |
+| `CCR-0.5.1-win-x64.exe.blockmap` | `9b3a2529b464708a9e7069f08a68c72eb1b00e011f42bbe7ae9e7ef2dd7e4973` |
+| `latest.yml` | `c0de4200054e9994b9055b813b16d33ff553d91d493e2a1b5d67727d9f9b913e` |
+
+签名状态：
+
+- 默认构建为 unsigned。
+- `smoke:desktop-signing-readiness` 通过。
+- 安装器 Authenticode 状态为 `NotSigned`，短期允许。
+
+公开发布前还需要：
+
+- 创建并推送 `v0.5.1` tag。
+- 确认工作区发布范围，避免把无关改动带入 release。
+- 根据需要运行 `npm.cmd run release:desktop:draft` 或 GitHub Actions Desktop Release。
+
+## 3.4 `0.5.0` 发布记录
 
 `0.5.0` 已公开发布：
 
@@ -143,7 +187,7 @@ GitHub -> Actions -> Desktop Release -> Run workflow
 第一版推荐输入：
 
 ```text
-tag = v0.5.0
+tag = v0.5.1
 draft = true
 signed = false
 require_signed = false

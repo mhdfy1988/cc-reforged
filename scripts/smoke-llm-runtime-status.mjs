@@ -77,6 +77,23 @@ try {
   assert.equal(deepSeekAuth.available, true);
   assert.equal(deepSeekAuth.source, 'CCR_DEEPSEEK_API_KEY');
 
+  process.env.ANTHROPIC_AUTH_TOKEN = 'anthropic-should-not-win';
+  process.env.CCR_LLM_PROVIDER = 'kimi-api';
+  process.env.CCR_LLM_MODEL = 'kimi-k2.6';
+  process.env.CCR_KIMI_API_KEY = 'kimi-test';
+
+  const kimiAuth = getLlmRuntimeAuthStatusSync();
+  assert.equal(kimiAuth.available, true);
+  assert.equal(kimiAuth.source, 'CCR_KIMI_API_KEY');
+
+  process.env.CCR_LLM_PROVIDER = 'glm-api';
+  process.env.CCR_LLM_MODEL = 'glm-5.1';
+  process.env.CCR_GLM_API_KEY = 'glm-test';
+
+  const glmAuth = getLlmRuntimeAuthStatusSync();
+  assert.equal(glmAuth.available, true);
+  assert.equal(glmAuth.source, 'CCR_GLM_API_KEY');
+
   console.log(
     JSON.stringify(
       {
@@ -84,6 +101,8 @@ try {
         status,
         deepSeekStatus,
         deepSeekAuth,
+        kimiAuth,
+        glmAuth,
       },
       null,
       2,
@@ -94,5 +113,8 @@ try {
   delete process.env.CCR_LLM_PROVIDER;
   delete process.env.CCR_LLM_MODEL;
   delete process.env.CCR_DEEPSEEK_API_KEY;
+  delete process.env.ANTHROPIC_AUTH_TOKEN;
+  delete process.env.CCR_KIMI_API_KEY;
+  delete process.env.CCR_GLM_API_KEY;
   rmSync(tempDir, { recursive: true, force: true });
 }

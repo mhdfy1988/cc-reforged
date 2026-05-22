@@ -12,8 +12,34 @@ import type {
   ContextStatusResult,
   InitializeParams,
   InitializeResult,
+  McpAddParams,
+  McpAddResult,
+  McpDisableParams,
+  McpDisableResult,
+  McpEnableParams,
+  McpEnableResult,
+  McpInstallApplyParams,
+  McpInstallApplyResult,
+  McpInstallListParams,
+  McpInstallListResult,
+  McpInstallPlanParams,
+  McpInstallPlanResult,
+  McpInstallSearchParams,
+  McpInstallSearchResult,
+  McpInstallUninstallParams,
+  McpInstallUninstallResult,
+  McpInspectParams,
+  McpInspectResult,
   McpListParams,
   McpListResult,
+  McpRemoveParams,
+  McpRemoveResult,
+  McpRestartParams,
+  McpRestartResult,
+  McpTestParams,
+  McpTestResult,
+  McpUpdateParams,
+  McpUpdateResult,
   MemorySessionStatusResult,
   ModelAvailabilityParams,
   ModelAvailabilityResult,
@@ -182,6 +208,97 @@ export class StdioAppServerClient {
     options?: RequestOptions,
   ): Promise<McpListResult> {
     return this.rpc.request('mcp/list', params, options)
+  }
+
+  inspectMcp(
+    params: McpInspectParams,
+    options?: RequestOptions,
+  ): Promise<McpInspectResult> {
+    return this.rpc.request('mcp/inspect', params, options)
+  }
+
+  addMcp(
+    params: McpAddParams,
+    options?: RequestOptions,
+  ): Promise<McpAddResult> {
+    return this.rpc.request('mcp/add', params, options)
+  }
+
+  updateMcp(
+    params: McpUpdateParams,
+    options?: RequestOptions,
+  ): Promise<McpUpdateResult> {
+    return this.rpc.request('mcp/update', params, options)
+  }
+
+  removeMcp(
+    params: McpRemoveParams,
+    options?: RequestOptions,
+  ): Promise<McpRemoveResult> {
+    return this.rpc.request('mcp/remove', params, options)
+  }
+
+  enableMcp(
+    params: McpEnableParams,
+    options?: RequestOptions,
+  ): Promise<McpEnableResult> {
+    return this.rpc.request('mcp/enable', params, options)
+  }
+
+  disableMcp(
+    params: McpDisableParams,
+    options?: RequestOptions,
+  ): Promise<McpDisableResult> {
+    return this.rpc.request('mcp/disable', params, options)
+  }
+
+  restartMcp(
+    params: McpRestartParams,
+    options?: RequestOptions,
+  ): Promise<McpRestartResult> {
+    return this.rpc.request('mcp/restart', params, options)
+  }
+
+  testMcp(
+    params: McpTestParams,
+    options?: RequestOptions,
+  ): Promise<McpTestResult> {
+    return this.rpc.request('mcp/test', params, options)
+  }
+
+  searchMcpInstalls(
+    params: McpInstallSearchParams = {},
+    options?: RequestOptions,
+  ): Promise<McpInstallSearchResult> {
+    return this.rpc.request('mcp/install/search', params, options)
+  }
+
+  planMcpInstall(
+    params: McpInstallPlanParams,
+    options?: RequestOptions,
+  ): Promise<McpInstallPlanResult> {
+    return this.rpc.request('mcp/install/plan', params, options)
+  }
+
+  applyMcpInstall(
+    params: McpInstallApplyParams,
+    options?: RequestOptions,
+  ): Promise<McpInstallApplyResult> {
+    return this.rpc.request('mcp/install/apply', params, options)
+  }
+
+  listMcpInstalls(
+    params: McpInstallListParams = {},
+    options?: RequestOptions,
+  ): Promise<McpInstallListResult> {
+    return this.rpc.request('mcp/install/list', params, options)
+  }
+
+  uninstallMcp(
+    params: McpInstallUninstallParams,
+    options?: RequestOptions,
+  ): Promise<McpInstallUninstallResult> {
+    return this.rpc.request('mcp/install/uninstall', params, options)
   }
 
   openWorkspace(

@@ -139,7 +139,7 @@ function isShellPermission(permission: PermissionCard): boolean {
   )
 }
 
-function createToolDetailBlocks(
+export function createToolDetailBlocks(
   snapshot: NonNullable<DisplayEvent['toolSnapshot']>,
   event: DisplayEvent,
 ): ToolDetailBlockView[] {
@@ -152,7 +152,12 @@ function createToolDetailBlocks(
       : formatToolDetail(snapshot.errorMessage)
 
   if (snapshot.input !== undefined) {
-    blocks.push({ kind: 'input', title: '调用参数', value: snapshot.input })
+    const inputDetail = createToolInputDetail(snapshot)
+    blocks.push({
+      kind: 'input',
+      title: inputDetail.title,
+      value: inputDetail.value,
+    })
   }
 
   if (event.fileToolSnapshot) {
@@ -203,6 +208,29 @@ function createToolDetailBlocks(
   }
 
   return blocks
+}
+
+function createToolInputDetail(
+  snapshot: NonNullable<DisplayEvent['toolSnapshot']>,
+): { title: string; value: unknown } {
+  const input = snapshot.input
+  if (!snapshot.detailKeys?.length || !input || typeof input !== 'object') {
+    return { title: '调用参数', value: input }
+  }
+
+  const inputRecord = input as Record<string, unknown>
+  const detail: Record<string, unknown> = {}
+  for (const key of snapshot.detailKeys) {
+    if (inputRecord[key] !== undefined) {
+      detail[key] = inputRecord[key]
+    }
+  }
+
+  if (Object.keys(detail).length === 0) {
+    return { title: '调用参数', value: input }
+  }
+
+  return { title: '关键参数', value: detail }
 }
 
 function isDuplicateErrorDetail(
@@ -320,6 +348,14 @@ function getCategoryText(category: string): string {
       return '浏览器'
     case 'search':
       return '搜索'
+    case 'web':
+      return '网页'
+    case 'agent':
+      return '任务'
+    case 'media':
+      return '图片'
+    case 'internal':
+      return '内部'
     case 'control':
       return '控制'
     default:

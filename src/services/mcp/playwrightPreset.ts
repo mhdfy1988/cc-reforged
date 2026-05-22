@@ -100,8 +100,8 @@ export function createPlaywrightNpxMcpServerConfig(options: {
   if (getPlatform() === 'windows') {
     return {
       type: 'stdio',
-      command: 'cmd',
-      args: ['/c', 'npx.cmd', ...args],
+      command: 'npx.cmd',
+      args,
     }
   }
 

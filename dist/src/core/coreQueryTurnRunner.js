@@ -6,8 +6,12 @@ import { query } from '../query.js';
 import { shouldUseBuiltinLlmRuntime } from '../services/llm/claudeApiAdapter.js';
 import { loadLlmConfig } from '../services/llm/llmConfig.js';
 import { getLlmRuntimeAuthStatus } from '../services/llm/runtimeStatus.js';
+import { getMcpToolsCommandsAndResources } from '../services/mcp/client.js';
+import { enableAppServerPlatformToolDefaults, filterAppServerPlatformTools, } from '../services/tools/appServerToolFilters.js';
 import { getDefaultAppState } from '../state/AppStateStore.js';
 import { assembleToolPool } from '../tools.js';
+import { errorMessage } from '../utils/errors.js';
+import { logMCPError } from '../utils/log.js';
 import { createUserMessage } from '../utils/messages.js';
 import { initialPermissionModeFromCLI, initializeToolPermissionContext, } from '../utils/permissions/permissionSetup.js';
 import { setCwd } from '../utils/Shell.js';
@@ -39,6 +43,7 @@ export const runCoreQueryTurn = async (input) => {
         messages: messagesForQuery,
         readFileState: input.readFileState,
         runtimeState: input.runtimeState,
+        mcpRuntime: await loadAppServerMcpRuntimeState(),
         toolPermissionContext: await createAppServerToolPermissionContext(),
     });
     const defaultSystemPrompt = await getSystemPrompt(runtime.toolUseContext.options.tools, turn.model, Array.from(runtime.getAppState().toolPermissionContext.additionalWorkingDirectories.keys()), runtime.toolUseContext.options.mcpClients);
@@ -253,8 +258,15 @@ function getNumber(value) {
 }
 export function createCoreQueryRuntime(input) {
     enableAppServerPlatformToolDefaults();
+    const defaultAppState = getDefaultAppState();
     let appState = {
-        ...getDefaultAppState(),
+        ...defaultAppState,
+        mcp: input.mcpRuntime
+            ? {
+                ...defaultAppState.mcp,
+                ...input.mcpRuntime,
+            }
+            : defaultAppState.mcp,
         ...(input.toolPermissionContext
             ? { toolPermissionContext: input.toolPermissionContext }
             : {}),
@@ -265,7 +277,7 @@ export function createCoreQueryRuntime(input) {
     };
     let inProgressToolUseIDs = new Set();
     let responseLength = 0;
-    const computeTools = () => filterAppServerPlatformTools(assembleToolPool(appState.toolPermissionContext, appState.mcp.tools), appState);
+    const computeTools = () => filterAppServerPlatformTools(assembleToolPool(appState.toolPermissionContext, appState.mcp.tools), { activeAgentCount: appState.agentDefinitions.activeAgents.length });
     const toolUseContext = {
         abortController: new AbortController(),
         options: {
@@ -314,6 +326,31 @@ export function createCoreQueryRuntime(input) {
     };
     return { toolUseContext, getAppState };
 }
+async function loadAppServerMcpRuntimeState() {
+    const clients = [];
+    const tools = [];
+    const commands = [];
+    const resources = {};
+    try {
+        await getMcpToolsCommandsAndResources(result => {
+            clients.push(result.client);
+            tools.push(...result.tools);
+            commands.push(...result.commands);
+            if (result.resources?.length) {
+                resources[result.client.name] = result.resources;
+            }
+        });
+    }
+    catch (error) {
+        logMCPError('app-server-runtime', `Failed to load MCP runtime tools: ${errorMessage(error)}`);
+    }
+    return {
+        clients,
+        tools,
+        commands,
+        resources,
+    };
+}
 async function createAppServerToolPermissionContext() {
     const { mode } = initialPermissionModeFromCLI({
         permissionModeCli: undefined,
@@ -352,32 +389,6 @@ function getAppServerPlatformToolInstructions() {
             '目录查看可以使用 PowerShell 的 Get-ChildItem；文件搜索和文件读取优先回退到 Glob、Grep、Read 等高层工具。',
         ].join(' '),
     ];
-}
-function enableAppServerPlatformToolDefaults() {
-    if (process.platform === 'win32' &&
-        process.env.CLAUDE_CODE_USE_POWERSHELL_TOOL === undefined) {
-        process.env.CLAUDE_CODE_USE_POWERSHELL_TOOL = '1';
-    }
-}
-function filterAppServerPlatformTools(tools, appState) {
-    if (process.platform !== 'win32') {
-        return tools;
-    }
-    return tools.filter(tool => {
-        // App Server 当前没有为 Windows 提供可用的 POSIX shell 运行环境。
-        // Windows 下默认启用 PowerShellTool，并移除 Bash，避免模型把
-        // Get-ChildItem/dir 这类 Windows 命令错误地交给 Bash 执行。
-        if (tool.name === 'Bash') {
-            return false;
-        }
-        // App Server 还没有像 TUI 那样加载内置/自定义 agent definitions。
-        // 没有可用 agent 时继续暴露 AgentTool，只会让模型绕路调用失败。
-        if (tool.name === 'Agent' &&
-            appState.agentDefinitions.activeAgents.length === 0) {
-            return false;
-        }
-        return true;
-    });
 }
 function handleStreamEvent(input) {
     const { event, emit, turn } = input;

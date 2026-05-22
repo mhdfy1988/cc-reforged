@@ -124,7 +124,7 @@ node --no-warnings --experimental-loader file:///D:/agent_project/claude-code-re
 ```text
 Checking MCP server health...
 
-playwright: cmd /c npx.cmd -y @playwright/mcp@latest - ✓ Connected
+playwright: npx.cmd -y @playwright/mcp@latest - ✓ Connected
 ```
 
 查看详情：
@@ -139,8 +139,8 @@ node --no-warnings --experimental-loader file:///D:/agent_project/claude-code-re
 Scope: Project config (shared via .mcp.json)
 Status: ✓ Connected
 Type: stdio
-Command: cmd
-Args: /c npx.cmd -y @playwright/mcp@latest
+Command: npx.cmd
+Args: -y @playwright/mcp@latest
 ```
 
 ## 5. CCR 用户级连接 smoke
@@ -175,8 +175,8 @@ node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js mcp ge
 ```text
 Scope: User config (available in all your projects)
 Status: ✓ Connected
-Command: cmd
-Args: /c npx.cmd -y @playwright/mcp@latest
+Command: npx.cmd
+Args: -y @playwright/mcp@latest
 ```
 
 验证结束后清理当前 PowerShell 会话里的临时目录变量：
@@ -255,7 +255,7 @@ node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js
 | 现象 | 可能原因 | 处理 |
 | --- | --- | --- |
 | `mcp list` 把 `mcp` / `list` 当成配置文件 | `--mcp-config` 是可变参数，位置不适合 | 用临时 `.mcp.json` 验证 |
-| Windows 找不到 `npx` 或被执行策略拦截 | 命中了 PowerShell 脚本入口 | 示例里使用 `cmd /c npx.cmd` |
+| Windows 找不到 `npx` 或被执行策略拦截 | 命中了 PowerShell 脚本入口 | 示例里使用明确的 `npx.cmd` |
 | Node loader 报 `ERR_UNSUPPORTED_ESM_URL_SCHEME` | 在非仓库目录传了 Windows 绝对路径 loader | 使用 `file:///D:/.../bun-bundle-loader.mjs` |
 | Playwright 首次启动很慢 | `npx` 首次下载包或浏览器依赖 | 等待完成，后续考虑 pin 版本或预安装 |
 | 模型 fetch failed | LLM provider/auth/network 问题 | 先用 MCP SDK 和 `mcp list/get` 排除 MCP 问题 |

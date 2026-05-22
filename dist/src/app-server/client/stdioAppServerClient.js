@@ -53,6 +53,45 @@ export class StdioAppServerClient {
     listMcp(params = {}, options) {
         return this.rpc.request('mcp/list', params, options);
     }
+    inspectMcp(params, options) {
+        return this.rpc.request('mcp/inspect', params, options);
+    }
+    addMcp(params, options) {
+        return this.rpc.request('mcp/add', params, options);
+    }
+    updateMcp(params, options) {
+        return this.rpc.request('mcp/update', params, options);
+    }
+    removeMcp(params, options) {
+        return this.rpc.request('mcp/remove', params, options);
+    }
+    enableMcp(params, options) {
+        return this.rpc.request('mcp/enable', params, options);
+    }
+    disableMcp(params, options) {
+        return this.rpc.request('mcp/disable', params, options);
+    }
+    restartMcp(params, options) {
+        return this.rpc.request('mcp/restart', params, options);
+    }
+    testMcp(params, options) {
+        return this.rpc.request('mcp/test', params, options);
+    }
+    searchMcpInstalls(params = {}, options) {
+        return this.rpc.request('mcp/install/search', params, options);
+    }
+    planMcpInstall(params, options) {
+        return this.rpc.request('mcp/install/plan', params, options);
+    }
+    applyMcpInstall(params, options) {
+        return this.rpc.request('mcp/install/apply', params, options);
+    }
+    listMcpInstalls(params = {}, options) {
+        return this.rpc.request('mcp/install/list', params, options);
+    }
+    uninstallMcp(params, options) {
+        return this.rpc.request('mcp/install/uninstall', params, options);
+    }
     openWorkspace(params, options) {
         return this.rpc.request('workspace/open', params, options);
     }

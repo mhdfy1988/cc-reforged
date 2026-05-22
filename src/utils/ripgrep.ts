@@ -1,5 +1,6 @@
 import type { ChildProcess, ExecFileException } from 'child_process'
 import { execFile, spawn } from 'child_process'
+import { existsSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import * as path from 'path'
@@ -11,6 +12,12 @@ import { isEnvDefinedFalsy } from './envUtils.js'
 import { execFileNoThrow } from './execFileNoThrow.js'
 import { findExecutable } from './findExecutable.js'
 import { logError } from './log.js'
+import {
+  isRipgrepUnavailableError,
+  isNativeFileSearchFallbackAvailable,
+  nativeRipGrep,
+  nativeRipGrepStream,
+} from './nativeFileSearch.js'
 import { getPlatform } from './platform.js'
 import { countCharInString } from './stringUtils.js'
 
@@ -28,6 +35,16 @@ type RipgrepConfig = {
   argv0?: string
 }
 
+function getSystemRipgrepConfig(): RipgrepConfig | null {
+  const { cmd: systemPath } = findExecutable('rg', [])
+  if (systemPath === 'rg') return null
+
+  // SECURITY: Use command name 'rg' instead of systemPath to prevent PATH hijacking.
+  // If we used systemPath, a malicious ./rg.exe in current directory could be executed.
+  // Using just 'rg' lets the OS resolve it safely with NoDefaultCurrentDirectoryInExePath protection.
+  return { mode: 'system', command: 'rg', args: [] }
+}
+
 const getRipgrepConfig = memoize((): RipgrepConfig => {
   const userWantsSystemRipgrep = isEnvDefinedFalsy(
     process.env.USE_BUILTIN_RIPGREP,
@@ -35,13 +52,8 @@ const getRipgrepConfig = memoize((): RipgrepConfig => {
 
   // Try system ripgrep if user wants it
   if (userWantsSystemRipgrep) {
-    const { cmd: systemPath } = findExecutable('rg', [])
-    if (systemPath !== 'rg') {
-      // SECURITY: Use command name 'rg' instead of systemPath to prevent PATH hijacking
-      // If we used systemPath, a malicious ./rg.exe in current directory could be executed
-      // Using just 'rg' lets the OS resolve it safely with NoDefaultCurrentDirectoryInExePath protection
-      return { mode: 'system', command: 'rg', args: [] }
-    }
+    const systemRipgrep = getSystemRipgrepConfig()
+    if (systemRipgrep) return systemRipgrep
   }
 
   // In bundled (native) mode, ripgrep is statically compiled into bun-internal
@@ -60,6 +72,16 @@ const getRipgrepConfig = memoize((): RipgrepConfig => {
     process.platform === 'win32'
       ? path.resolve(rgRoot, `${process.arch}-win32`, 'rg.exe')
       : path.resolve(rgRoot, `${process.arch}-${process.platform}`, 'rg')
+
+  if (!existsSync(command)) {
+    const systemRipgrep = getSystemRipgrepConfig()
+    if (systemRipgrep) {
+      logForDebugging(
+        `Bundled ripgrep not found at ${command}; falling back to system rg`,
+      )
+      return systemRipgrep
+    }
+  }
 
   return { mode: 'builtin', command, args: [] }
 })
@@ -301,45 +323,57 @@ export async function ripGrepStream(
   await codesignRipgrepIfNecessary()
   const { rgPath, rgArgs, argv0 } = ripgrepCommand()
 
-  return new Promise<void>((resolve, reject) => {
-    const child = spawn(rgPath, [...rgArgs, ...args, target], {
-      argv0,
-      signal: abortSignal,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(rgPath, [...rgArgs, ...args, target], {
+        argv0,
+        signal: abortSignal,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
 
-    const stripCR = (l: string) => (l.endsWith('\r') ? l.slice(0, -1) : l)
-    let remainder = ''
-    child.stdout?.on('data', (chunk: Buffer) => {
-      const data = remainder + chunk.toString()
-      const lines = data.split('\n')
-      remainder = lines.pop() ?? ''
-      if (lines.length) onLines(lines.map(stripCR))
-    })
+      const stripCR = (l: string) => (l.endsWith('\r') ? l.slice(0, -1) : l)
+      let remainder = ''
+      child.stdout?.on('data', (chunk: Buffer) => {
+        const data = remainder + chunk.toString()
+        const lines = data.split('\n')
+        remainder = lines.pop() ?? ''
+        if (lines.length) onLines(lines.map(stripCR))
+      })
 
-    // On Windows, both 'close' and 'error' can fire for the same process.
-    let settled = false
-    child.on('close', code => {
-      if (settled) return
-      // Abort races close — don't flush a torn tail from a killed process.
-      // Promise still settles: spawn's signal option fires 'error' with
-      // AbortError → reject below.
-      if (abortSignal.aborted) return
-      settled = true
-      if (code === 0 || code === 1) {
-        if (remainder) onLines([stripCR(remainder)])
-        resolve()
-      } else {
-        reject(new Error(`ripgrep exited with code ${code}`))
-      }
+      // On Windows, both 'close' and 'error' can fire for the same process.
+      let settled = false
+      child.on('close', code => {
+        if (settled) return
+        // Abort races close — don't flush a torn tail from a killed process.
+        // Promise still settles: spawn's signal option fires 'error' with
+        // AbortError → reject below.
+        if (abortSignal.aborted) return
+        settled = true
+        if (code === 0 || code === 1) {
+          if (remainder) onLines([stripCR(remainder)])
+          resolve()
+        } else {
+          reject(new Error(`ripgrep exited with code ${code}`))
+        }
+      })
+      child.on('error', err => {
+        if (settled) return
+        settled = true
+        reject(err)
+      })
     })
-    child.on('error', err => {
-      if (settled) return
-      settled = true
-      reject(err)
-    })
-  })
+  } catch (error) {
+    if (isRipgrepUnavailableError(error)) {
+      logForDebugging(
+        `ripgrep stream unavailable; using native file search fallback for target ${target}`,
+      )
+      rememberRipgrepFallbackStatus()
+      await nativeRipGrepStream(args, target, abortSignal, onLines)
+      return
+    }
+    throw error
+  }
 }
 
 export async function ripGrep(
@@ -383,7 +417,15 @@ export async function ripGrep(
       // These should be surfaced to the user rather than silently returning empty results
       const CRITICAL_ERROR_CODES = ['ENOENT', 'EACCES', 'EPERM']
       if (CRITICAL_ERROR_CODES.includes(error.code as string)) {
-        reject(error)
+        void nativeRipGrep(args, target, abortSignal)
+          .then(results => {
+            rememberRipgrepFallbackStatus()
+            logForDebugging(
+              `ripgrep unavailable; native file search fallback returned ${results.length} results for target ${target}`,
+            )
+            resolve(results)
+          })
+          .catch(reject)
         return
       }
 
@@ -462,6 +504,16 @@ export async function ripGrep(
   })
 }
 
+function rememberRipgrepFallbackStatus(): void {
+  const config = getRipgrepConfig()
+  ripgrepStatus = {
+    working: false,
+    fallbackAvailable: isNativeFileSearchFallbackAvailable(),
+    lastTested: Date.now(),
+    config,
+  }
+}
+
 /**
  * Count files in a directory recursively using ripgrep and round to the nearest power of 10 for privacy
  *
@@ -526,6 +578,7 @@ let ripgrepStatus: {
   working: boolean
   lastTested: number
   config: RipgrepConfig
+  fallbackAvailable: boolean
 } | null = null
 
 /**
@@ -536,12 +589,15 @@ export function getRipgrepStatus(): {
   mode: 'system' | 'builtin' | 'embedded'
   path: string
   working: boolean | null // null if not yet tested
+  fallbackAvailable: boolean
 } {
   const config = getRipgrepConfig()
   return {
     mode: config.mode,
     path: config.command,
     working: ripgrepStatus?.working ?? null,
+    fallbackAvailable:
+      ripgrepStatus?.fallbackAvailable ?? isNativeFileSearchFallbackAvailable(),
   }
 }
 
@@ -593,6 +649,7 @@ const testRipgrepOnFirstUse = memoize(async (): Promise<void> => {
 
     ripgrepStatus = {
       working,
+      fallbackAvailable: isNativeFileSearchFallbackAvailable(),
       lastTested: Date.now(),
       config,
     }
@@ -609,6 +666,7 @@ const testRipgrepOnFirstUse = memoize(async (): Promise<void> => {
   } catch (error) {
     ripgrepStatus = {
       working: false,
+      fallbackAvailable: isNativeFileSearchFallbackAvailable(),
       lastTested: Date.now(),
       config,
     }

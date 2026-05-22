@@ -248,6 +248,9 @@ export function buildLlmRuntimeProperties() {
         }, {
             label: 'LLM model profile',
             value: `${displayStatus.modelCatalogEntry.displayName} · ${formatNumber(displayStatus.modelCatalogEntry.contextWindow)} ctx · ${formatNumber(displayStatus.modelCatalogEntry.maxOutputTokens)} out`
+        }, {
+            label: 'LLM capability tools',
+            value: formatLlmCapabilityTools(displayStatus.capabilityTools)
         }];
     if (displayStatus.baseUrl) {
         properties.push({
@@ -256,6 +259,13 @@ export function buildLlmRuntimeProperties() {
         });
     }
     return properties;
+}
+function formatLlmCapabilityTools(capabilityTools) {
+    const imageGeneration = capabilityTools.imageGeneration;
+    if (imageGeneration.available) {
+        return `image generation: ${imageGeneration.providerDisplayName} / ${imageGeneration.model}`;
+    }
+    return `image generation unavailable: ${imageGeneration.reason ?? 'provider unsupported'}`;
 }
 export function buildAPIProviderProperties() {
     const apiProvider = getAPIProvider();

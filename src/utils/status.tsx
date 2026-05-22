@@ -256,6 +256,9 @@ export function buildLlmRuntimeProperties(): Property[] {
   }, {
     label: 'LLM model profile',
     value: `${displayStatus.modelCatalogEntry.displayName} · ${formatNumber(displayStatus.modelCatalogEntry.contextWindow)} ctx · ${formatNumber(displayStatus.modelCatalogEntry.maxOutputTokens)} out`
+  }, {
+    label: 'LLM capability tools',
+    value: formatLlmCapabilityTools(displayStatus.capabilityTools)
   }];
   if (displayStatus.baseUrl) {
     properties.push({
@@ -265,6 +268,17 @@ export function buildLlmRuntimeProperties(): Property[] {
   }
   return properties;
 }
+
+function formatLlmCapabilityTools(
+  capabilityTools: ReturnType<typeof getLlmRuntimeDisplayStatus>['capabilityTools'],
+): string {
+  const imageGeneration = capabilityTools.imageGeneration
+  if (imageGeneration.available) {
+    return `image generation: ${imageGeneration.providerDisplayName} / ${imageGeneration.model}`
+  }
+  return `image generation unavailable: ${imageGeneration.reason ?? 'provider unsupported'}`
+}
+
 export function buildAPIProviderProperties(): Property[] {
   const apiProvider = getAPIProvider();
   const properties: Property[] = [];

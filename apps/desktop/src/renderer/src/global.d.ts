@@ -1,6 +1,8 @@
 import type {
   CcrDesktopApi,
   CcrDesktopEvent,
+  DesktopConfirmRequest,
+  DesktopConfirmTone,
 } from '../../../preload/index.js'
 
 declare global {
@@ -9,4 +11,4 @@ declare global {
   }
 }
 
-export type { CcrDesktopEvent }
+export type { CcrDesktopEvent, DesktopConfirmRequest, DesktopConfirmTone }

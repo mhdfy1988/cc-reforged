@@ -65,6 +65,7 @@ export type DiagnosticInfo = {
   packageManager?: string
   ripgrepStatus: {
     working: boolean
+    fallbackAvailable: boolean
     mode: 'system' | 'builtin' | 'embedded'
     systemPath: string | null
   }
@@ -591,6 +592,7 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
   // Provide simple ripgrep status info
   const ripgrepStatus = {
     working: ripgrepStatusRaw.working ?? true, // Assume working if not yet tested
+    fallbackAvailable: ripgrepStatusRaw.fallbackAvailable,
     mode: ripgrepStatusRaw.mode,
     systemPath:
       ripgrepStatusRaw.mode === 'system' ? ripgrepStatusRaw.path : null,

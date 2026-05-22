@@ -1,12 +1,15 @@
 import memoize from 'lodash-es/memoize.js';
 import { z } from 'zod/v4';
 import { logEvent, } from '../../services/analytics/index.js';
+import { getCcrToolAvailability, } from '../../services/tools/toolAvailability.js';
+import { getCcrToolSearchCandidates } from '../../services/tools/toolSearchPolicy.js';
+import { buildCcrToolRegistry } from '../../services/tools/toolRegistry.js';
 import { buildTool, findToolByName, } from '../../Tool.js';
 import { logForDebugging } from '../../utils/debug.js';
 import { lazySchema } from '../../utils/lazySchema.js';
 import { escapeRegExp } from '../../utils/stringUtils.js';
 import { isToolSearchEnabledOptimistic } from '../../utils/toolSearch.js';
-import { getPrompt, isDeferredTool, TOOL_SEARCH_TOOL_NAME } from './prompt.js';
+import { getPrompt, TOOL_SEARCH_TOOL_NAME } from './prompt.js';
 export const inputSchema = lazySchema(() => z.object({
     query: z
         .string()
@@ -21,7 +24,35 @@ export const outputSchema = lazySchema(() => z.object({
     matches: z.array(z.string()),
     query: z.string(),
     total_deferred_tools: z.number(),
+    match_details: z
+        .array(z.object({
+        name: z.string(),
+        display_name: z.string(),
+        category: z.string(),
+        source: z.object({
+            kind: z.string(),
+            provider_id: z.string().optional(),
+            server_id: z.string().optional(),
+            server_name: z.string().optional(),
+            tool_name: z.string().optional(),
+            plugin_id: z.string().optional(),
+        }),
+        availability: z.object({
+            available: z.boolean(),
+            reason: z.string().optional(),
+            message: z.string().optional(),
+            mcp_state: z.string().optional(),
+        }),
+    }))
+        .optional(),
     pending_mcp_servers: z.array(z.string()).optional(),
+    unavailable_mcp_servers: z
+        .array(z.object({
+        name: z.string(),
+        state: z.string(),
+        reason: z.string().optional(),
+    }))
+        .optional(),
 }));
 // Track deferred tool names to detect when cache should be cleared
 let cachedDeferredToolNames = null;
@@ -74,14 +105,20 @@ export function clearToolSearchDescriptionCache() {
 /**
  * Build the search result output structure.
  */
-function buildSearchResult(matches, query, totalDeferredTools, pendingMcpServers) {
+function buildSearchResult(matches, query, totalDeferredTools, pendingMcpServers, matchDetails, unavailableMcpServers) {
     return {
         data: {
             matches,
             query,
             total_deferred_tools: totalDeferredTools,
+            ...(matchDetails && matchDetails.length > 0
+                ? { match_details: matchDetails }
+                : {}),
             ...(pendingMcpServers && pendingMcpServers.length > 0
                 ? { pending_mcp_servers: pendingMcpServers }
+                : {}),
+            ...(unavailableMcpServers && unavailableMcpServers.length > 0
+                ? { unavailable_mcp_servers: unavailableMcpServers }
                 : {}),
         },
     };
@@ -136,22 +173,21 @@ function compileTermPatterns(terms) {
  * - Action words when looking for functionality (e.g., "read", "list", "create")
  * - Tool-specific terms (e.g., "notebook", "shell", "kill")
  */
-async function searchToolsWithKeywords(query, deferredTools, tools, maxResults) {
+async function searchToolsWithKeywords(query, searchableTools, tools, maxResults) {
     const queryLower = query.toLowerCase().trim();
     // Fast path: if query matches a tool name exactly, return it directly.
     // Handles models using a bare tool name instead of select: prefix (seen
-    // from subagents/post-compaction). Checks deferred first, then falls back
-    // to the full tool set — selecting an already-loaded tool is a harmless
-    // no-op that lets the model proceed without retry churn.
-    const exactMatch = deferredTools.find(t => t.name.toLowerCase() === queryLower) ??
-        tools.find(t => t.name.toLowerCase() === queryLower);
+    // from subagents/post-compaction). Only searchable deferred tools are
+    // returned here; direct and internal tools are already visible through the
+    // normal tool list and should not be rediscovered through ToolSearch.
+    const exactMatch = searchableTools.find(t => t.name.toLowerCase() === queryLower);
     if (exactMatch) {
         return [exactMatch.name];
     }
     // If query looks like an MCP tool prefix (mcp__server), find matching tools.
     // Handles models searching by server name with mcp__ prefix.
     if (queryLower.startsWith('mcp__') && queryLower.length > 5) {
-        const prefixMatches = deferredTools
+        const prefixMatches = searchableTools
             .filter(t => t.name.toLowerCase().startsWith(queryLower))
             .slice(0, maxResults)
             .map(t => t.name);
@@ -174,9 +210,9 @@ async function searchToolsWithKeywords(query, deferredTools, tools, maxResults) 
     const allScoringTerms = requiredTerms.length > 0 ? [...requiredTerms, ...optionalTerms] : queryTerms;
     const termPatterns = compileTermPatterns(allScoringTerms);
     // Pre-filter to tools matching ALL required terms in name or description
-    let candidateTools = deferredTools;
+    let candidateTools = searchableTools;
     if (requiredTerms.length > 0) {
-        const matches = await Promise.all(deferredTools.map(async (tool) => {
+        const matches = await Promise.all(searchableTools.map(async (tool) => {
             const parsed = parseToolName(tool.name);
             const description = await getToolDescriptionMemoized(tool.name, tools);
             const descNormalized = description.toLowerCase();
@@ -254,13 +290,27 @@ export const ToolSearchTool = buildTool({
     },
     async call(input, { options: { tools }, getAppState }) {
         const { query, max_results = 5 } = input;
-        const deferredTools = tools.filter(isDeferredTool);
+        const appState = getAppState();
+        const availabilityContext = getToolSearchAvailabilityContext(appState);
+        const deferredTools = getCcrToolSearchCandidates(tools, availabilityContext);
         maybeInvalidateCache(deferredTools);
         // Check for MCP servers still connecting
         function getPendingServerNames() {
-            const appState = getAppState();
             const pending = appState.mcp.clients.filter(c => c.type === 'pending');
             return pending.length > 0 ? pending.map(s => s.name) : undefined;
+        }
+        function getUnavailableMcpServers() {
+            const unavailable = appState.mcp.clients
+                .filter(c => c.type !== 'connected' && c.type !== 'pending')
+                .map(c => {
+                const reason = mapMcpClientTypeToReason(c.type);
+                return {
+                    name: c.name,
+                    state: c.type,
+                    ...(reason ? { reason } : {}),
+                };
+            });
+            return unavailable.length > 0 ? unavailable : undefined;
         }
         // Helper to log search outcome
         function logSearchOutcome(matches, queryType) {
@@ -275,9 +325,8 @@ export const ToolSearchTool = buildTool({
         }
         // Check for select: prefix — direct tool selection.
         // Supports comma-separated multi-select: `select:A,B,C`.
-        // If a name isn't in the deferred set but IS in the full tool set,
-        // we still return it — the tool is already loaded, so "selecting" it
-        // is a harmless no-op that lets the model proceed without retry churn.
+        // Only return searchable deferred tools. Direct tools are already loaded;
+        // internal/control plumbing must not leak through ToolSearch results.
         const selectMatch = query.match(/^select:(.+)$/i);
         if (selectMatch) {
             const requested = selectMatch[1]
@@ -287,8 +336,7 @@ export const ToolSearchTool = buildTool({
             const found = [];
             const missing = [];
             for (const toolName of requested) {
-                const tool = findToolByName(deferredTools, toolName) ??
-                    findToolByName(tools, toolName);
+                const tool = findToolByName(deferredTools, toolName);
                 if (tool) {
                     if (!found.includes(tool.name))
                         found.push(tool.name);
@@ -301,7 +349,7 @@ export const ToolSearchTool = buildTool({
                 logForDebugging(`ToolSearchTool: select failed — none found: ${missing.join(', ')}`);
                 logSearchOutcome([], 'select');
                 const pendingServers = getPendingServerNames();
-                return buildSearchResult([], query, deferredTools.length, pendingServers);
+                return buildSearchResult([], query, deferredTools.length, pendingServers, undefined, getUnavailableMcpServers());
             }
             if (missing.length > 0) {
                 logForDebugging(`ToolSearchTool: partial select — found: ${found.join(', ')}, missing: ${missing.join(', ')}`);
@@ -310,7 +358,7 @@ export const ToolSearchTool = buildTool({
                 logForDebugging(`ToolSearchTool: selected ${found.join(', ')}`);
             }
             logSearchOutcome(found, 'select');
-            return buildSearchResult(found, query, deferredTools.length);
+            return buildSearchResult(found, query, deferredTools.length, undefined, buildMatchDetails(found, tools, availabilityContext));
         }
         // Keyword search
         const matches = await searchToolsWithKeywords(query, deferredTools, tools, max_results);
@@ -319,9 +367,9 @@ export const ToolSearchTool = buildTool({
         // Include pending server info when search finds no matches
         if (matches.length === 0) {
             const pendingServers = getPendingServerNames();
-            return buildSearchResult(matches, query, deferredTools.length, pendingServers);
+            return buildSearchResult(matches, query, deferredTools.length, pendingServers, undefined, getUnavailableMcpServers());
         }
-        return buildSearchResult(matches, query, deferredTools.length);
+        return buildSearchResult(matches, query, deferredTools.length, undefined, buildMatchDetails(matches, tools, availabilityContext));
     },
     renderToolUseMessage() {
         return null;
@@ -339,6 +387,13 @@ export const ToolSearchTool = buildTool({
                 content.pending_mcp_servers.length > 0) {
                 text += `. Some MCP servers are still connecting: ${content.pending_mcp_servers.join(', ')}. Their tools will become available shortly — try searching again.`;
             }
+            if (content.unavailable_mcp_servers &&
+                content.unavailable_mcp_servers.length > 0) {
+                const details = content.unavailable_mcp_servers
+                    .map(server => `${server.name}=${server.state}`)
+                    .join(', ');
+                text += `. Some MCP servers are unavailable: ${details}. Check MCP authentication or connection status.`;
+            }
             return {
                 type: 'tool_result',
                 tool_use_id: toolUseID,
@@ -355,4 +410,69 @@ export const ToolSearchTool = buildTool({
         };
     },
 });
+function getToolSearchAvailabilityContext(appState) {
+    const mcpServerStatuses = {};
+    for (const client of appState.mcp.clients) {
+        if (isMcpServerAvailabilityState(client.type)) {
+            mcpServerStatuses[client.name] = client.type;
+        }
+    }
+    return Object.keys(mcpServerStatuses).length > 0
+        ? { mcpServerStatuses }
+        : {};
+}
+function isMcpServerAvailabilityState(value) {
+    return (value === 'connected' ||
+        value === 'failed' ||
+        value === 'needs-auth' ||
+        value === 'pending' ||
+        value === 'disabled' ||
+        value === 'discovery-failed' ||
+        value === 'call-failed');
+}
+function buildMatchDetails(matches, tools, availabilityContext) {
+    const registry = buildCcrToolRegistry(tools);
+    return matches.flatMap(name => {
+        const entry = registry.get(name);
+        if (!entry) {
+            return [];
+        }
+        const availability = getCcrToolAvailability(entry, availabilityContext);
+        return [{
+                name: entry.name,
+                display_name: entry.displayName,
+                category: entry.category,
+                source: {
+                    kind: entry.source.kind,
+                    ...(entry.source.providerId
+                        ? { provider_id: entry.source.providerId }
+                        : {}),
+                    ...(entry.source.serverId ? { server_id: entry.source.serverId } : {}),
+                    ...(entry.source.serverName
+                        ? { server_name: entry.source.serverName }
+                        : {}),
+                    ...(entry.source.toolName ? { tool_name: entry.source.toolName } : {}),
+                    ...(entry.source.pluginId ? { plugin_id: entry.source.pluginId } : {}),
+                },
+                availability: {
+                    available: availability.available,
+                    ...(availability.reason ? { reason: availability.reason } : {}),
+                    ...(availability.message ? { message: availability.message } : {}),
+                    ...(availability.mcpState ? { mcp_state: availability.mcpState } : {}),
+                },
+            }];
+    });
+}
+function mapMcpClientTypeToReason(type) {
+    switch (type) {
+        case 'needs-auth':
+            return 'mcp_needs_auth';
+        case 'failed':
+            return 'mcp_connection_failed';
+        case 'disabled':
+            return 'mcp_disabled';
+        default:
+            return undefined;
+    }
+}
 //# sourceMappingURL=ToolSearchTool.js.map

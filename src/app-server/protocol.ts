@@ -239,6 +239,69 @@ export const McpListParamsSchema = z
   .strict()
   .default({})
 
+const McpWritableScopeSchema = z.enum(['user', 'project', 'local'])
+
+export const McpInspectParamsSchema = z
+  .object({
+    name: z.string().min(1),
+  })
+  .strict()
+
+export const McpAddParamsSchema = z
+  .object({
+    name: z.string().min(1),
+    scope: McpWritableScopeSchema,
+    config: JsonRpcParamsSchema,
+  })
+  .strict()
+
+export const McpUpdateParamsSchema = McpAddParamsSchema
+
+export const McpRemoveParamsSchema = z
+  .object({
+    name: z.string().min(1),
+    scope: McpWritableScopeSchema,
+  })
+  .strict()
+
+export const McpEnableParamsSchema = McpInspectParamsSchema
+
+export const McpDisableParamsSchema = McpInspectParamsSchema
+
+export const McpRestartParamsSchema = McpInspectParamsSchema
+
+export const McpTestParamsSchema = McpInspectParamsSchema
+
+export const McpInstallSearchParamsSchema = z
+  .object({
+    query: z.string().optional(),
+  })
+  .strict()
+  .default({})
+
+export const McpInstallPlanParamsSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    scope: McpWritableScopeSchema.default('user'),
+    manifest: JsonRpcParamsSchema,
+    force: z.boolean().optional(),
+  })
+  .strict()
+
+export const McpInstallApplyParamsSchema = McpInstallPlanParamsSchema.extend({
+  confirmed: z.boolean(),
+  confirmationToken: z.string().min(1),
+}).strict()
+
+export const McpInstallListParamsSchema = z.object({}).strict().default({})
+
+export const McpInstallUninstallParamsSchema = z
+  .object({
+    name: z.string().min(1),
+    confirmed: z.boolean(),
+  })
+  .strict()
+
 export const WorkspaceOpenParamsSchema = z
   .object({
     path: z.string().min(1),
@@ -488,6 +551,23 @@ export type ModelCredentialUpdateParams = z.infer<
   typeof ModelCredentialUpdateParamsSchema
 >
 export type McpListParams = z.infer<typeof McpListParamsSchema>
+export type McpInspectParams = z.infer<typeof McpInspectParamsSchema>
+export type McpAddParams = z.infer<typeof McpAddParamsSchema>
+export type McpUpdateParams = z.infer<typeof McpUpdateParamsSchema>
+export type McpRemoveParams = z.infer<typeof McpRemoveParamsSchema>
+export type McpEnableParams = z.infer<typeof McpEnableParamsSchema>
+export type McpDisableParams = z.infer<typeof McpDisableParamsSchema>
+export type McpRestartParams = z.infer<typeof McpRestartParamsSchema>
+export type McpTestParams = z.infer<typeof McpTestParamsSchema>
+export type McpInstallSearchParams = z.infer<
+  typeof McpInstallSearchParamsSchema
+>
+export type McpInstallPlanParams = z.infer<typeof McpInstallPlanParamsSchema>
+export type McpInstallApplyParams = z.infer<typeof McpInstallApplyParamsSchema>
+export type McpInstallListParams = z.infer<typeof McpInstallListParamsSchema>
+export type McpInstallUninstallParams = z.infer<
+  typeof McpInstallUninstallParamsSchema
+>
 export type WorkspaceOpenParams = z.infer<typeof WorkspaceOpenParamsSchema>
 export type ThreadStartParams = z.infer<typeof ThreadStartParamsSchema>
 export type ThreadResumeParams = z.infer<typeof ThreadResumeParamsSchema>
@@ -617,6 +697,19 @@ export type ModelTestResult = Record<string, unknown>
 export type ModelCredentialUpdateResult = Record<string, unknown>
 
 export type McpListResult = Record<string, unknown>
+export type McpInspectResult = Record<string, unknown>
+export type McpAddResult = Record<string, unknown>
+export type McpUpdateResult = Record<string, unknown>
+export type McpRemoveResult = Record<string, unknown>
+export type McpEnableResult = Record<string, unknown>
+export type McpDisableResult = Record<string, unknown>
+export type McpRestartResult = Record<string, unknown>
+export type McpTestResult = Record<string, unknown>
+export type McpInstallSearchResult = Record<string, unknown>
+export type McpInstallPlanResult = Record<string, unknown>
+export type McpInstallApplyResult = Record<string, unknown>
+export type McpInstallListResult = Record<string, unknown>
+export type McpInstallUninstallResult = Record<string, unknown>
 
 export type WorkspaceOpenResult = {
   workspace: {

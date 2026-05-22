@@ -7,6 +7,23 @@ type CcrDesktopEvent = {
   at: string
 }
 
+type DesktopConfirmTone = 'default' | 'warning' | 'danger'
+
+type DesktopConfirmRequest = {
+  id: string
+  title: string
+  message: string
+  detail?: string
+  confirmLabel: string
+  cancelLabel?: string
+  tone?: DesktopConfirmTone
+}
+
+type DesktopConfirmResponse = {
+  id: string
+  confirmed: boolean
+}
+
 type PermissionRespondInput = {
   permissionRequestId: string
   behavior: 'allow' | 'deny'
@@ -117,6 +134,31 @@ type ModelProfileCopyInput = {
 
 type ModelProfileDeleteInput = {
   profileId: string
+}
+
+type McpNameInput = {
+  name: string
+}
+
+type McpInstallSearchInput = {
+  query?: string
+}
+
+type McpInstallPlanInput = {
+  name?: string
+  scope?: 'user' | 'project' | 'local'
+  manifest: Record<string, unknown>
+  force?: boolean
+}
+
+type McpInstallApplyInput = McpInstallPlanInput & {
+  confirmed: boolean
+  confirmationToken: string
+}
+
+type McpInstallUninstallInput = {
+  name: string
+  confirmed: boolean
 }
 
 type ResumeThreadInput = {
@@ -265,6 +307,24 @@ const api = {
   resumeThread: (input: ResumeThreadInput | string, title?: string) =>
     ipcRenderer.invoke('ccr:resume-thread', input, title),
   refreshMcp: () => ipcRenderer.invoke('ccr:refresh-mcp'),
+  inspectMcp: (input: McpNameInput) =>
+    ipcRenderer.invoke('ccr:mcp-inspect', input),
+  enableMcp: (input: McpNameInput) =>
+    ipcRenderer.invoke('ccr:mcp-enable', input),
+  disableMcp: (input: McpNameInput) =>
+    ipcRenderer.invoke('ccr:mcp-disable', input),
+  restartMcp: (input: McpNameInput) =>
+    ipcRenderer.invoke('ccr:mcp-restart', input),
+  testMcp: (input: McpNameInput) => ipcRenderer.invoke('ccr:mcp-test', input),
+  searchMcpInstalls: (input?: McpInstallSearchInput) =>
+    ipcRenderer.invoke('ccr:mcp-install-search', input ?? {}),
+  planMcpInstall: (input: McpInstallPlanInput) =>
+    ipcRenderer.invoke('ccr:mcp-install-plan', input),
+  applyMcpInstall: (input: McpInstallApplyInput) =>
+    ipcRenderer.invoke('ccr:mcp-install-apply', input),
+  listMcpInstalls: () => ipcRenderer.invoke('ccr:mcp-install-list'),
+  uninstallMcp: (input: McpInstallUninstallInput) =>
+    ipcRenderer.invoke('ccr:mcp-install-uninstall', input),
   refreshRuntime: () => ipcRenderer.invoke('ccr:refresh-runtime'),
   runCompact: (instruction?: string) =>
     ipcRenderer.invoke('ccr:compact-run', instruction),
@@ -304,6 +364,18 @@ const api = {
     ipcRenderer.invoke('ccr:get-permission-settings'),
   updatePermissionSettings: (input: PermissionSettingsUpdateInput) =>
     ipcRenderer.invoke('ccr:update-permission-settings', input),
+  respondConfirmRequest: (input: DesktopConfirmResponse) =>
+    ipcRenderer.send('ccr:confirm-response', input),
+  onConfirmRequest: (listener: (request: DesktopConfirmRequest) => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      request: DesktopConfirmRequest,
+    ) => {
+      listener(request)
+    }
+    ipcRenderer.on('ccr:confirm-request', handler)
+    return () => ipcRenderer.removeListener('ccr:confirm-request', handler)
+  },
   onEvent: (listener: (event: CcrDesktopEvent) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, payload: CcrDesktopEvent) => {
       listener(payload)
@@ -326,4 +398,4 @@ const api = {
 contextBridge.exposeInMainWorld('ccr', api)
 
 export type CcrDesktopApi = typeof api
-export type { CcrDesktopEvent }
+export type { CcrDesktopEvent, DesktopConfirmRequest, DesktopConfirmTone }

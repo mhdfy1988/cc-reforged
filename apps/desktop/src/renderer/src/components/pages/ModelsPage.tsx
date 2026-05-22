@@ -786,7 +786,7 @@ export function ModelsPage(props: {
               </div>
               <div>
                 <dt>凭据来源</dt>
-                <dd>{effectiveAvailability?.auth?.source ?? '未发现'}</dd>
+                <dd>{formatCredentialSource(effectiveAvailability)}</dd>
               </div>
             </dl>
             {canEditApiKey ? (
@@ -916,6 +916,15 @@ export function ModelsPage(props: {
               <div>
                 <dt>Provider 声明</dt>
                 <dd>{formatProviderCapabilities(selectedProvider)}</dd>
+              </div>
+              <div>
+                <dt>能力工具</dt>
+                <dd>
+                  {formatProviderCapabilityTools(
+                    effectiveAvailability?.capabilityTools ??
+                      selectedProvider?.capabilityTools,
+                  )}
+                </dd>
               </div>
               <div>
                 <dt>当前模型能力</dt>
@@ -1188,13 +1197,54 @@ function getEndpointLabel(availability: LlmModelAvailability | null): string {
   return baseUrl.replace(/^https?:\/\//, '')
 }
 
+function formatCredentialSource(availability: LlmModelAvailability | null): string {
+  const auth = availability?.auth
+  const source = auth?.source?.trim()
+  if (!source || source === 'none') {
+    return auth?.configured ? '已配置' : '未配置'
+  }
+  if (isEnvironmentCredentialSource(source)) {
+    return '环境变量凭据'
+  }
+  if (isLocalCredentialFileSource(source)) {
+    return '用户全局凭据'
+  }
+  if (source === '/login managed key') {
+    return '登录托管凭据'
+  }
+  if (source === 'claude.ai') {
+    return 'Claude.ai 凭据'
+  }
+  if (source === 'apiKeyHelper') {
+    return 'API Key Helper'
+  }
+  return source
+}
+
+function isEnvironmentCredentialSource(source: string): boolean {
+  return source === 'env' || /^[A-Z][A-Z0-9_]*$/u.test(source)
+}
+
+function isLocalCredentialFileSource(source: string): boolean {
+  const normalized = source.replace(/\\/g, '/').toLowerCase()
+  return (
+    normalized.includes('/.ccr/data/llm.credentials.local.json') ||
+    normalized.endsWith('/llm.credentials.local.json')
+  )
+}
+
 function getCapabilityBadges(provider: LlmModelProviderCatalog | undefined) {
   const capabilities = provider?.capabilities ?? {}
+  const capabilityTools = provider?.capabilityTools
   return [
     { label: '流式', enabled: Boolean(capabilities.streaming) },
     { label: '工具', enabled: Boolean(capabilities.tools) },
     { label: '推理', enabled: Boolean(capabilities.reasoning) },
     { label: '用量', enabled: Boolean(capabilities.usage) },
+    {
+      label: '生图',
+      enabled: Boolean(capabilityTools?.imageGeneration?.available),
+    },
   ]
 }
 
@@ -1203,6 +1253,24 @@ function formatProviderCapabilities(provider: LlmModelProviderCatalog | undefine
     .filter(item => item.enabled)
     .map(item => item.label)
   return enabled.length > 0 ? enabled.join('、') : '暂无声明'
+}
+
+function formatProviderCapabilityTools(
+  capabilityTools: LlmModelProviderCatalog['capabilityTools'] | undefined,
+): string {
+  const imageGeneration = capabilityTools?.imageGeneration
+  if (!imageGeneration) {
+    return '暂无声明'
+  }
+  const provider =
+    imageGeneration.providerDisplayName?.trim() ||
+    imageGeneration.provider?.trim() ||
+    '当前 provider'
+  const model = imageGeneration.model?.trim() || '默认模型'
+  if (imageGeneration.available) {
+    return `生图：${provider} / ${model}`
+  }
+  return `生图不可用：${imageGeneration.reason || 'provider 不支持'}`
 }
 
 function formatModelCapabilities(

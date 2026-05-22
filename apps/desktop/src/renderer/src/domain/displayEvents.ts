@@ -410,6 +410,12 @@ function getChatKind(event: DisplayEvent): string | undefined {
 }
 
 function shouldHideToolFromTimeline(snapshot: ToolSnapshot): boolean {
+  if (snapshot.status === 'failed') {
+    return false
+  }
+  if (snapshot.kind === 'call' && snapshot.showInMainTimeline === false) {
+    return true
+  }
   return (
     (snapshot.kind === 'call' &&
       (snapshot.category === 'control' || isControlToolName(snapshot.name))) ||

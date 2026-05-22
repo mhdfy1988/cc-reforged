@@ -16,6 +16,9 @@ const npmCommand = npmExecPath && existsSync(npmExecPath)
 const npmArgs = npmExecPath && existsSync(npmExecPath)
   ? [npmExecPath, 'run', 'desktop:build']
   : ['run', 'desktop:build']
+const prepareRipgrepArgs = npmExecPath && existsSync(npmExecPath)
+  ? [npmExecPath, 'run', 'prepare:ripgrep']
+  : ['run', 'prepare:ripgrep']
 const builderCli = join(
   root,
   'node_modules',
@@ -36,6 +39,7 @@ if (signed) {
 }
 
 await run(process.execPath, [iconBuilder])
+await run(npmCommand, prepareRipgrepArgs)
 await run(npmCommand, npmArgs)
 
 const publishMode = process.env.CCR_DESKTOP_PUBLISH === '1' ? 'onTagOrDraft' : 'never'

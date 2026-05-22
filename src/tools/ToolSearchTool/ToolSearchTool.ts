@@ -6,6 +6,14 @@ import {
   logEvent,
 } from '../../services/analytics/index.js'
 import {
+  getCcrToolAvailability,
+  type CcrMcpServerAvailabilityStatus,
+  type CcrToolAvailabilityContext,
+  type CcrToolUnavailableReason,
+} from '../../services/tools/toolAvailability.js'
+import { getCcrToolSearchCandidates } from '../../services/tools/toolSearchPolicy.js'
+import { buildCcrToolRegistry } from '../../services/tools/toolRegistry.js'
+import {
   buildTool,
   findToolByName,
   type Tool,
@@ -16,7 +24,7 @@ import { logForDebugging } from '../../utils/debug.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { escapeRegExp } from '../../utils/stringUtils.js'
 import { isToolSearchEnabledOptimistic } from '../../utils/toolSearch.js'
-import { getPrompt, isDeferredTool, TOOL_SEARCH_TOOL_NAME } from './prompt.js'
+import { getPrompt, TOOL_SEARCH_TOOL_NAME } from './prompt.js'
 
 export const inputSchema = lazySchema(() =>
   z.object({
@@ -39,12 +47,48 @@ export const outputSchema = lazySchema(() =>
     matches: z.array(z.string()),
     query: z.string(),
     total_deferred_tools: z.number(),
+    match_details: z
+      .array(
+        z.object({
+          name: z.string(),
+          display_name: z.string(),
+          category: z.string(),
+          source: z.object({
+            kind: z.string(),
+            provider_id: z.string().optional(),
+            server_id: z.string().optional(),
+            server_name: z.string().optional(),
+            tool_name: z.string().optional(),
+            plugin_id: z.string().optional(),
+          }),
+          availability: z.object({
+            available: z.boolean(),
+            reason: z.string().optional(),
+            message: z.string().optional(),
+            mcp_state: z.string().optional(),
+          }),
+        }),
+      )
+      .optional(),
     pending_mcp_servers: z.array(z.string()).optional(),
+    unavailable_mcp_servers: z
+      .array(
+        z.object({
+          name: z.string(),
+          state: z.string(),
+          reason: z.string().optional(),
+        }),
+      )
+      .optional(),
   }),
 )
 type OutputSchema = ReturnType<typeof outputSchema>
 
 export type Output = z.infer<OutputSchema>
+type ToolSearchMatchDetail = NonNullable<Output['match_details']>[number]
+type UnavailableMcpServerDetail = NonNullable<
+  Output['unavailable_mcp_servers']
+>[number]
 
 // Track deferred tool names to detect when cache should be cleared
 let cachedDeferredToolNames: string | null = null
@@ -112,14 +156,22 @@ function buildSearchResult(
   query: string,
   totalDeferredTools: number,
   pendingMcpServers?: string[],
+  matchDetails?: ToolSearchMatchDetail[],
+  unavailableMcpServers?: UnavailableMcpServerDetail[],
 ): { data: Output } {
   return {
     data: {
       matches,
       query,
       total_deferred_tools: totalDeferredTools,
+      ...(matchDetails && matchDetails.length > 0
+        ? { match_details: matchDetails }
+        : {}),
       ...(pendingMcpServers && pendingMcpServers.length > 0
         ? { pending_mcp_servers: pendingMcpServers }
+        : {}),
+      ...(unavailableMcpServers && unavailableMcpServers.length > 0
+        ? { unavailable_mcp_servers: unavailableMcpServers }
         : {}),
     },
   }
@@ -185,7 +237,7 @@ function compileTermPatterns(terms: string[]): Map<string, RegExp> {
  */
 async function searchToolsWithKeywords(
   query: string,
-  deferredTools: Tools,
+  searchableTools: Tools,
   tools: Tools,
   maxResults: number,
 ): Promise<string[]> {
@@ -193,12 +245,12 @@ async function searchToolsWithKeywords(
 
   // Fast path: if query matches a tool name exactly, return it directly.
   // Handles models using a bare tool name instead of select: prefix (seen
-  // from subagents/post-compaction). Checks deferred first, then falls back
-  // to the full tool set — selecting an already-loaded tool is a harmless
-  // no-op that lets the model proceed without retry churn.
-  const exactMatch =
-    deferredTools.find(t => t.name.toLowerCase() === queryLower) ??
-    tools.find(t => t.name.toLowerCase() === queryLower)
+  // from subagents/post-compaction). Only searchable deferred tools are
+  // returned here; direct and internal tools are already visible through the
+  // normal tool list and should not be rediscovered through ToolSearch.
+  const exactMatch = searchableTools.find(
+    t => t.name.toLowerCase() === queryLower,
+  )
   if (exactMatch) {
     return [exactMatch.name]
   }
@@ -206,7 +258,7 @@ async function searchToolsWithKeywords(
   // If query looks like an MCP tool prefix (mcp__server), find matching tools.
   // Handles models searching by server name with mcp__ prefix.
   if (queryLower.startsWith('mcp__') && queryLower.length > 5) {
-    const prefixMatches = deferredTools
+    const prefixMatches = searchableTools
       .filter(t => t.name.toLowerCase().startsWith(queryLower))
       .slice(0, maxResults)
       .map(t => t.name)
@@ -233,10 +285,10 @@ async function searchToolsWithKeywords(
   const termPatterns = compileTermPatterns(allScoringTerms)
 
   // Pre-filter to tools matching ALL required terms in name or description
-  let candidateTools = deferredTools
+  let candidateTools = searchableTools
   if (requiredTerms.length > 0) {
     const matches = await Promise.all(
-      deferredTools.map(async tool => {
+      searchableTools.map(async tool => {
         const parsed = parseToolName(tool.name)
         const description = await getToolDescriptionMemoized(tool.name, tools)
         const descNormalized = description.toLowerCase()
@@ -328,14 +380,29 @@ export const ToolSearchTool = buildTool({
   async call(input, { options: { tools }, getAppState }) {
     const { query, max_results = 5 } = input
 
-    const deferredTools = tools.filter(isDeferredTool)
+    const appState = getAppState()
+    const availabilityContext = getToolSearchAvailabilityContext(appState)
+    const deferredTools = getCcrToolSearchCandidates(tools, availabilityContext)
     maybeInvalidateCache(deferredTools)
 
     // Check for MCP servers still connecting
     function getPendingServerNames(): string[] | undefined {
-      const appState = getAppState()
       const pending = appState.mcp.clients.filter(c => c.type === 'pending')
       return pending.length > 0 ? pending.map(s => s.name) : undefined
+    }
+
+    function getUnavailableMcpServers(): UnavailableMcpServerDetail[] | undefined {
+      const unavailable = appState.mcp.clients
+        .filter(c => c.type !== 'connected' && c.type !== 'pending')
+        .map(c => {
+          const reason = mapMcpClientTypeToReason(c.type)
+          return {
+            name: c.name,
+            state: c.type,
+            ...(reason ? { reason } : {}),
+          }
+        })
+      return unavailable.length > 0 ? unavailable : undefined
     }
 
     // Helper to log search outcome
@@ -357,9 +424,8 @@ export const ToolSearchTool = buildTool({
 
     // Check for select: prefix — direct tool selection.
     // Supports comma-separated multi-select: `select:A,B,C`.
-    // If a name isn't in the deferred set but IS in the full tool set,
-    // we still return it — the tool is already loaded, so "selecting" it
-    // is a harmless no-op that lets the model proceed without retry churn.
+    // Only return searchable deferred tools. Direct tools are already loaded;
+    // internal/control plumbing must not leak through ToolSearch results.
     const selectMatch = query.match(/^select:(.+)$/i)
     if (selectMatch) {
       const requested = selectMatch[1]!
@@ -370,9 +436,7 @@ export const ToolSearchTool = buildTool({
       const found: string[] = []
       const missing: string[] = []
       for (const toolName of requested) {
-        const tool =
-          findToolByName(deferredTools, toolName) ??
-          findToolByName(tools, toolName)
+        const tool = findToolByName(deferredTools, toolName)
         if (tool) {
           if (!found.includes(tool.name)) found.push(tool.name)
         } else {
@@ -391,6 +455,8 @@ export const ToolSearchTool = buildTool({
           query,
           deferredTools.length,
           pendingServers,
+          undefined,
+          getUnavailableMcpServers(),
         )
       }
 
@@ -402,7 +468,13 @@ export const ToolSearchTool = buildTool({
         logForDebugging(`ToolSearchTool: selected ${found.join(', ')}`)
       }
       logSearchOutcome(found, 'select')
-      return buildSearchResult(found, query, deferredTools.length)
+      return buildSearchResult(
+        found,
+        query,
+        deferredTools.length,
+        undefined,
+        buildMatchDetails(found, tools, availabilityContext),
+      )
     }
 
     // Keyword search
@@ -427,10 +499,18 @@ export const ToolSearchTool = buildTool({
         query,
         deferredTools.length,
         pendingServers,
+        undefined,
+        getUnavailableMcpServers(),
       )
     }
 
-    return buildSearchResult(matches, query, deferredTools.length)
+    return buildSearchResult(
+      matches,
+      query,
+      deferredTools.length,
+      undefined,
+      buildMatchDetails(matches, tools, availabilityContext),
+    )
   },
   renderToolUseMessage() {
     return null
@@ -453,6 +533,15 @@ export const ToolSearchTool = buildTool({
       ) {
         text += `. Some MCP servers are still connecting: ${content.pending_mcp_servers.join(', ')}. Their tools will become available shortly — try searching again.`
       }
+      if (
+        content.unavailable_mcp_servers &&
+        content.unavailable_mcp_servers.length > 0
+      ) {
+        const details = content.unavailable_mcp_servers
+          .map(server => `${server.name}=${server.state}`)
+          .join(', ')
+        text += `. Some MCP servers are unavailable: ${details}. Check MCP authentication or connection status.`
+      }
       return {
         type: 'tool_result',
         tool_use_id: toolUseID,
@@ -469,3 +558,82 @@ export const ToolSearchTool = buildTool({
     } as unknown as ToolResultBlockParam
   },
 } satisfies ToolDef<InputSchema, Output>)
+
+function getToolSearchAvailabilityContext(
+  appState: { mcp: { clients: Array<{ name: string; type: string }> } },
+): CcrToolAvailabilityContext {
+  const mcpServerStatuses: Record<string, CcrMcpServerAvailabilityStatus> = {}
+  for (const client of appState.mcp.clients) {
+    if (isMcpServerAvailabilityState(client.type)) {
+      mcpServerStatuses[client.name] = client.type
+    }
+  }
+  return Object.keys(mcpServerStatuses).length > 0
+    ? { mcpServerStatuses }
+    : {}
+}
+
+function isMcpServerAvailabilityState(
+  value: string,
+): value is CcrMcpServerAvailabilityStatus & string {
+  return (
+    value === 'connected' ||
+    value === 'failed' ||
+    value === 'needs-auth' ||
+    value === 'pending' ||
+    value === 'disabled' ||
+    value === 'discovery-failed' ||
+    value === 'call-failed'
+  )
+}
+
+function buildMatchDetails(
+  matches: string[],
+  tools: Tools,
+  availabilityContext: CcrToolAvailabilityContext,
+): ToolSearchMatchDetail[] {
+  const registry = buildCcrToolRegistry(tools)
+  return matches.flatMap(name => {
+    const entry = registry.get(name)
+    if (!entry) {
+      return []
+    }
+    const availability = getCcrToolAvailability(entry, availabilityContext)
+    return [{
+      name: entry.name,
+      display_name: entry.displayName,
+      category: entry.category,
+      source: {
+        kind: entry.source.kind,
+        ...(entry.source.providerId
+          ? { provider_id: entry.source.providerId }
+          : {}),
+        ...(entry.source.serverId ? { server_id: entry.source.serverId } : {}),
+        ...(entry.source.serverName
+          ? { server_name: entry.source.serverName }
+          : {}),
+        ...(entry.source.toolName ? { tool_name: entry.source.toolName } : {}),
+        ...(entry.source.pluginId ? { plugin_id: entry.source.pluginId } : {}),
+      },
+      availability: {
+        available: availability.available,
+        ...(availability.reason ? { reason: availability.reason } : {}),
+        ...(availability.message ? { message: availability.message } : {}),
+        ...(availability.mcpState ? { mcp_state: availability.mcpState } : {}),
+      },
+    }]
+  })
+}
+
+function mapMcpClientTypeToReason(type: string): CcrToolUnavailableReason | undefined {
+  switch (type) {
+    case 'needs-auth':
+      return 'mcp_needs_auth'
+    case 'failed':
+      return 'mcp_connection_failed'
+    case 'disabled':
+      return 'mcp_disabled'
+    default:
+      return undefined
+  }
+}

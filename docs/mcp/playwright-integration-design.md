@@ -134,8 +134,8 @@ CCR 不再恢复旧 `WebBrowserTool` 和 `claude-in-chrome` 作为浏览器主�
   "mcpServers": {
     "playwright": {
       "type": "stdio",
-      "command": "cmd",
-      "args": ["/c", "npx.cmd", "-y", "@playwright/mcp@latest"]
+      "command": "npx.cmd",
+      "args": ["-y", "@playwright/mcp@latest"]
     }
   }
 }
@@ -143,7 +143,7 @@ CCR 不再恢复旧 `WebBrowserTool` 和 `claude-in-chrome` 作为浏览器主�
 
 说明：
 
-- Windows 下不直接写 `command: "npx"`，因为 CCR 当前校验会提示 Windows 需要 `cmd /c` 包装；示例里进一步使用 `npx.cmd`，避免命中 PowerShell 脚本入口。
+- Windows 下不直接写 `command: "npx"`，而是写明确的 `npx.cmd`，避免命中 PowerShell 脚本入口。
 - `-y` 用于减少 `npx` 首次执行时的交互确认。
 - `type: "stdio"` 可以显式写出，虽然 schema 里 stdio 的 `type` 是可选的。
 
@@ -178,8 +178,8 @@ ccr mcp add-playwright
   "mcpServers": {
     "playwright": {
       "type": "stdio",
-      "command": "cmd",
-      "args": ["/c", "npx.cmd", "-y", "@playwright/mcp@latest"]
+      "command": "npx.cmd",
+      "args": ["-y", "@playwright/mcp@latest"]
     }
   }
 }
@@ -233,8 +233,8 @@ ccr mcp add-playwright --mode npx
   "mcpServers": {
     "playwright": {
       "type": "stdio",
-      "command": "cmd",
-      "args": ["/c", "npx.cmd", "-y", "@playwright/mcp@latest"]
+      "command": "npx.cmd",
+      "args": ["-y", "@playwright/mcp@latest"]
     }
   }
 }
@@ -359,7 +359,7 @@ ccr mcp add-playwright --mode managed --version <tested-version>
 适合后续安装版使用：
 
 ```powershell
-ccr mcp add --scope local playwright -- cmd /c npx.cmd -y @playwright/mcp@latest
+ccr mcp add --scope user playwright -- npx.cmd -y @playwright/mcp@latest
 ```
 
 注意：通用 `mcp add` 已把主要用户可见示例改成 `ccr`。少量历史兼容字段、旧环境变量名或旧导入命令不作为本轮重命名目标。
@@ -373,10 +373,8 @@ ccr mcp add --scope local playwright -- cmd /c npx.cmd -y @playwright/mcp@latest
   "mcpServers": {
     "playwright": {
       "type": "stdio",
-      "command": "cmd",
+      "command": "npx.cmd",
       "args": [
-        "/c",
-        "npx.cmd",
         "-y",
         "@playwright/mcp@latest",
         "--config",
@@ -395,7 +393,7 @@ ccr mcp add --scope local playwright -- cmd /c npx.cmd -y @playwright/mcp@latest
 
 1. 用户启动 CCR。
 2. CCR 读取 MCP 配置，发现 `playwright` server。
-3. `connectToServer` 进入 stdio 分支，启动 `cmd /c npx.cmd -y @playwright/mcp@latest`。
+3. `connectToServer` 进入 stdio 分支，启动 `npx.cmd -y @playwright/mcp@latest`。
 4. MCP SDK 完成握手，Playwright MCP 返回 server capabilities。
 5. CCR 调用 `tools/list`，拿到 `browser_navigate`、`browser_snapshot`、`browser_click` 等工具。
 6. CCR 把这些工具包装成 `mcp__playwright__browser_navigate` 这类工具名。
@@ -543,7 +541,7 @@ Playwright MCP 可以控制浏览器，因此风险比普通只读 MCP 高。
 
 ### 9.3 平台边界
 
-当前 CCR `package.json` 已要求 Node `>=24.0.0`，满足 Playwright MCP 当前 Node 要求。Windows 下启动命令必须使用 `cmd /c npx.cmd` 或明确可执行的 `npx.cmd` 方式，避免 `npx` 被 PowerShell/cmd 解析差异影响。
+当前 CCR `package.json` 已要求 Node `>=24.0.0`，满足 Playwright MCP 当前 Node 要求。Windows 下启动命令应优先使用明确可执行的 `npx.cmd`，避免 `npx` 被 PowerShell/cmd 解析差异影响；只有确实需要 shell 语义时才使用 `cmd /c` 包装。
 
 ## 10. 验证方案
 
@@ -573,7 +571,7 @@ node --no-warnings --experimental-loader file:///D:/agent_project/claude-code-re
 预期输出包含：
 
 ```text
-playwright: cmd /c npx.cmd -y @playwright/mcp@latest - ✓ Connected
+playwright: npx.cmd -y @playwright/mcp@latest - ✓ Connected
 ```
 
 进一步查看详情：

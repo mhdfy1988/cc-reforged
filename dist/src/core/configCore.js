@@ -30,6 +30,7 @@ export function getCoreConfigSnapshot() {
             authStrategy: status.authStrategy,
             apiMode: status.apiMode,
             capabilities: status.capabilities,
+            capabilityTools: status.capabilityTools,
             modelCatalogEntry: status.modelCatalogEntry,
             modelCapabilities: status.modelCapabilities,
             ...(status.baseUrl ? { baseUrl: redactUrl(status.baseUrl) } : {}),

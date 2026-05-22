@@ -111,6 +111,7 @@
 4. 共享链路改动合入前，至少跑三路回归：Desktop/App Server 定向 smoke、`ccr -p` 非交互 CLI、`ccr` 交互式 TUI 基础启动或等价最小验证。
 5. 如果某次修复只为了 Desktop 展示，例如工具卡片合并、Todo 浮窗、思考展示、权限卡片布局，应优先把逻辑限制在 Desktop domain / renderer 层；确实需要 Core 事件补字段时，只补协议字段和稳定 ID，不改变 CLI/TUI 消费的原始消息内容。
 6. 每次解释影响面时，必须明确标注该改动属于：Desktop-only、App Server 协议层、Core 共享层、LLM 共享层或构建产物同步。
+7. `npm.cmd run typecheck:desktop` 必须加载根仓库已有类型环境；`apps/desktop/tsconfig.json` 需要保留 `bun` 类型，以及 `../../src/types/**/*.d.ts`、`../../sdk-tools.d.ts` include。遇到 `MACRO`、`Bun` 或可选依赖缺失时，优先检查 Desktop tsconfig 是否丢了这些 root ambient declarations，不要把它长期归类为已知噪音。
 
 ## 12. Desktop / Electron 视觉验证护栏
 

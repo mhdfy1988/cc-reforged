@@ -6,7 +6,7 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.5.0-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.5.1-orange?style=flat-square)
 
 CCR is a recovery and evolution build of a terminal coding agent. It keeps the original terminal-first workflow, adds a CCR-owned configuration/runtime boundary, and is growing a Desktop client around a stable App Server protocol.
 
@@ -17,6 +17,7 @@ The current main line focuses on:
 - Built-in LLM runtime abstractions for multiple providers, profiles, protocols, multimodal content blocks, generated artifacts, and per-turn model metadata.
 - Codex OAuth, OpenAI, DeepSeek official API, MiniMax International / China, Kimi, GLM API / Coding Plan, and shared OpenAI Chat Completions plus Anthropic Messages protocol adapters.
 - Provider-neutral image generation through `GenerateImage`, with generated images persisted before Desktop thumbnail / preview rendering.
+- MCP management baseline, including user-level config, Desktop MCP page, Playwright MCP install flow, enable/disable, diagnostics, and MCP tool cards.
 - Project-local `.ccr` settings isolation, avoiding conflicts with Claude Code, Codex, or OpenClaw on the same machine.
 
 ![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
@@ -24,7 +25,7 @@ The current main line focuses on:
 ## Current Status
 
 - Package: `cc-reforged`
-- Version: `0.5.0`
+- Version: `0.5.1`
 - CLI command: `ccr`
 - Desktop app: `CCR`
 - Runtime requirement: Node.js `>=24.0.0`
@@ -35,7 +36,7 @@ The current main line focuses on:
 
 The repository may contain unreleased work after the latest tagged version. See [CHANGELOG.md](CHANGELOG.md) for user-facing changes.
 
-The `0.5.x` line continues to harden multimodal, multi-provider, and tool-calling behavior. The next larger line, `0.6.0`, is planned for MCP, Skill, Plugin, and external capability governance work.
+The `0.5.x` line continues to harden multimodal, multi-provider, tool-calling, and MCP management behavior. The next larger line, `0.6.0`, is planned for Skill, Plugin, and external capability package governance work.
 
 ## Install
 

@@ -204,6 +204,55 @@ export const McpListParamsSchema = z
 })
     .strict()
     .default({});
+const McpWritableScopeSchema = z.enum(['user', 'project', 'local']);
+export const McpInspectParamsSchema = z
+    .object({
+    name: z.string().min(1),
+})
+    .strict();
+export const McpAddParamsSchema = z
+    .object({
+    name: z.string().min(1),
+    scope: McpWritableScopeSchema,
+    config: JsonRpcParamsSchema,
+})
+    .strict();
+export const McpUpdateParamsSchema = McpAddParamsSchema;
+export const McpRemoveParamsSchema = z
+    .object({
+    name: z.string().min(1),
+    scope: McpWritableScopeSchema,
+})
+    .strict();
+export const McpEnableParamsSchema = McpInspectParamsSchema;
+export const McpDisableParamsSchema = McpInspectParamsSchema;
+export const McpRestartParamsSchema = McpInspectParamsSchema;
+export const McpTestParamsSchema = McpInspectParamsSchema;
+export const McpInstallSearchParamsSchema = z
+    .object({
+    query: z.string().optional(),
+})
+    .strict()
+    .default({});
+export const McpInstallPlanParamsSchema = z
+    .object({
+    name: z.string().min(1).optional(),
+    scope: McpWritableScopeSchema.default('user'),
+    manifest: JsonRpcParamsSchema,
+    force: z.boolean().optional(),
+})
+    .strict();
+export const McpInstallApplyParamsSchema = McpInstallPlanParamsSchema.extend({
+    confirmed: z.boolean(),
+    confirmationToken: z.string().min(1),
+}).strict();
+export const McpInstallListParamsSchema = z.object({}).strict().default({});
+export const McpInstallUninstallParamsSchema = z
+    .object({
+    name: z.string().min(1),
+    confirmed: z.boolean(),
+})
+    .strict();
 export const WorkspaceOpenParamsSchema = z
     .object({
     path: z.string().min(1),

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -80,6 +80,11 @@ try {
     );
     assert.ok(codexProvider);
     assert.ok(deepSeekProvider);
+    assert.equal(codexProvider.capabilityTools.imageGeneration.available, true);
+    assert.equal(
+      deepSeekProvider.capabilityTools.imageGeneration.available,
+      false,
+    );
     assert.deepEqual(modelList.profiles, []);
     assert.deepEqual(codexProvider.profiles, []);
     assert.deepEqual(deepSeekProvider.profiles, []);
@@ -107,6 +112,10 @@ try {
     assert.equal(deepSeekAvailability.testable, false);
     assert.equal(deepSeekAvailability.networkChecked, false);
     assert.equal(deepSeekAvailability.auth.configured, false);
+    assert.equal(
+      deepSeekAvailability.capabilityTools.imageGeneration.available,
+      false,
+    );
     assertNoSecretKeys(deepSeekAvailability);
 
     const deepSeekTest = await managed.client.testModelConnection({
@@ -265,6 +274,143 @@ try {
     assert.equal(Array.isArray(mcpList.servers), true);
     assert.equal(Array.isArray(mcpList.errors), true);
     assertNoSecretKeys(mcpList);
+
+    const missingMcp = await managed.client.inspectMcp({ name: 'sdk_smoke_mcp' });
+    assert.equal(missingMcp.found, false);
+    assertNoSecretKeys(missingMcp);
+
+    const addedMcp = await managed.client.addMcp({
+      name: 'sdk_smoke_mcp',
+      scope: 'user',
+      config: { command: 'node', args: ['-e', 'process.exit(0)'] },
+    });
+    assert.equal(addedMcp.found, true);
+    assert.equal(addedMcp.resolved.scope, 'user');
+    assert.equal(addedMcp.resolved.installKind, 'manual-config');
+    assertNoSecretKeys(addedMcp);
+
+    const testedMcp = await managed.client.testMcp({ name: 'sdk_smoke_mcp' });
+    assert.equal(testedMcp.ok, false);
+    assert.equal(testedMcp.networkChecked, true);
+    assert.equal(testedMcp.state, 'failed');
+    assert.deepEqual(testedMcp.tools, []);
+    assert.deepEqual(testedMcp.resources, []);
+    assertNoSecretKeys(testedMcp);
+
+    const disabledMcp = await managed.client.disableMcp({
+      name: 'sdk_smoke_mcp',
+    });
+    assert.equal(disabledMcp.resolved.enabled, false);
+    assertNoSecretKeys(disabledMcp);
+
+    const enabledMcp = await managed.client.enableMcp({ name: 'sdk_smoke_mcp' });
+    assert.equal(enabledMcp.resolved.enabled, true);
+    assertNoSecretKeys(enabledMcp);
+
+    const updatedMcp = await managed.client.updateMcp({
+      name: 'sdk_smoke_mcp',
+      scope: 'user',
+      config: { command: 'node', args: ['-e', 'console.log("updated")'] },
+    });
+    assert.deepEqual(updatedMcp.resolved.args, [
+      '-e',
+      'console.log("updated")',
+    ]);
+    assertNoSecretKeys(updatedMcp);
+
+    const restartedMcp = await managed.client.restartMcp({
+      name: 'sdk_smoke_mcp',
+    });
+    assert.equal(restartedMcp.accepted, true);
+    assert.equal(restartedMcp.applied, false);
+    assert.equal(restartedMcp.state, 'restart_pending_runtime');
+    assertNoSecretKeys(restartedMcp);
+
+    const removedMcp = await managed.client.removeMcp({
+      name: 'sdk_smoke_mcp',
+      scope: 'user',
+    });
+    assert.equal(removedMcp.removed, true);
+    assertNoSecretKeys(removedMcp);
+
+    const installSearch = await managed.client.searchMcpInstalls({
+      query: 'playwright',
+    });
+    assert.ok(
+      installSearch.candidates.some(
+        candidate => candidate.manifest.name === 'playwright',
+      ),
+    );
+    assertNoSecretKeys(installSearch);
+
+    const installManifest = createSmokeInstallManifest();
+    const installPlan = await managed.client.planMcpInstall({
+      scope: 'user',
+      manifest: installManifest,
+    });
+    assert.equal(installPlan.name, 'sdk_install_smoke_mcp');
+    assert.equal(installPlan.requiresConfirmation, true);
+    assert.equal(typeof installPlan.confirmation.token, 'string');
+    assert.equal(installPlan.security.scopeWritable, true);
+    assert.equal(installPlan.security.dataBoundary, 'local-only');
+    assert.equal(installPlan.security.version.pinned, true);
+    assert.equal(
+      typeof installPlan.security.packageCache.ownerMarkerPath,
+      'string',
+    );
+    assertNoSecretKeys(installPlan);
+
+    const appliedInstall = await managed.client.applyMcpInstall({
+      scope: 'user',
+      manifest: installManifest,
+      confirmed: true,
+      confirmationToken: installPlan.confirmation.token,
+    });
+    assert.equal(appliedInstall.installed, true);
+    assert.equal(appliedInstall.record.name, 'sdk_install_smoke_mcp');
+    assert.equal(typeof appliedInstall.record.packageDir, 'string');
+    assert.equal(typeof appliedInstall.record.packageOwnerMarkerPath, 'string');
+    assert.equal(appliedInstall.test.state, 'configured');
+    assertNoSecretKeys(appliedInstall);
+    const installedPackageDir = appliedInstall.record.packageDir;
+
+    const installList = await managed.client.listMcpInstalls();
+    const installRecord = installList.installed.find(
+      install => install.name === 'sdk_install_smoke_mcp',
+    );
+    assert.ok(installRecord);
+    assert.equal(installRecord.packageOwnerMarkerPath, appliedInstall.record.packageOwnerMarkerPath);
+    assertNoSecretKeys(installList);
+
+    const duplicateInstallPlan = await managed.client.planMcpInstall({
+      scope: 'user',
+      manifest: installManifest,
+    });
+    assert.equal(duplicateInstallPlan.installable, false);
+    assert.equal(duplicateInstallPlan.confirmation.token, '');
+    assert.equal(duplicateInstallPlan.existing.configured, true);
+    assert.equal(duplicateInstallPlan.existing.scope, 'user');
+    assertNoSecretKeys(duplicateInstallPlan);
+
+    const uninstalledMcp = await managed.client.uninstallMcp({
+      name: 'sdk_install_smoke_mcp',
+      confirmed: true,
+    });
+    assert.equal(uninstalledMcp.uninstalled, true);
+    assert.equal(uninstalledMcp.packageRemoved, true);
+    assert.equal(uninstalledMcp.packageRemovalReason, 'owner_marker_verified');
+    assert.equal(existsSync(installedPackageDir), false);
+    assertNoSecretKeys(uninstalledMcp);
+
+    const postUninstallList = await managed.client.listMcpInstalls();
+    assert.equal(
+      postUninstallList.installed.some(
+        install => install.name === 'sdk_install_smoke_mcp',
+      ),
+      false,
+    );
+    assertInstallerStateDoesNotContain('sdk_install_smoke_mcp');
+    assertNoSecretKeys(postUninstallList);
 
     const workspace = await managed.client.openWorkspace({
       path: repoRoot,
@@ -484,6 +630,21 @@ try {
             'model/credential/profile_isolation',
             'model/set',
             'mcp/list',
+            'mcp/inspect',
+            'mcp/add',
+            'mcp/test',
+            'mcp/disable',
+            'mcp/enable',
+            'mcp/update',
+            'mcp/restart',
+            'mcp/remove',
+            'mcp/install/search',
+            'mcp/install/plan',
+            'mcp/install/apply',
+            'mcp/install/list',
+            'mcp/install/uninstall',
+            'mcp/install/security_contract',
+            'mcp/install/uninstall_residual_cleanup',
             'workspace/open',
             'thread/start',
             'thread/list',
@@ -621,6 +782,41 @@ function writeSmokeTranscript() {
     'utf8',
   );
   return { sessionId, transcriptPath };
+}
+
+function createSmokeInstallManifest() {
+  return {
+    schemaVersion: 1,
+    name: 'sdk_install_smoke_mcp',
+    displayName: 'SDK install smoke MCP',
+    version: '1.2.3',
+    source: {
+      kind: 'stdio-npm-package',
+      packageName: '@example/sdk-install-smoke-mcp',
+      packageManager: 'npx',
+    },
+    transport: 'stdio',
+    serverConfig: {
+      type: 'stdio',
+      command: 'node',
+      args: ['-e', 'process.exit(0)'],
+    },
+    permissions: [{ kind: 'process', required: true }],
+    dataBoundary: 'local-only',
+  };
+}
+
+function assertInstallerStateDoesNotContain(name) {
+  for (const filePath of [
+    join(tempDir, 'mcp', 'installed.json'),
+    join(tempDir, 'mcp', 'lock.json'),
+  ]) {
+    if (!existsSync(filePath)) {
+      continue;
+    }
+    const raw = readFileSync(filePath, 'utf8');
+    assert.equal(raw.includes(name), false);
+  }
 }
 
 function writeInterruptedPromptTranscript() {

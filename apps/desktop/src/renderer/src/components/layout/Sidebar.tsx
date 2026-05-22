@@ -1,6 +1,13 @@
 import type { PageId } from '../../domain/displayTypes.js'
 
-type NavIconName = 'chat' | 'models' | 'mcp' | 'logs' | 'settings'
+type NavIconName =
+  | 'chat'
+  | 'models'
+  | 'mcp'
+  | 'skills'
+  | 'plugins'
+  | 'logs'
+  | 'settings'
 
 export function Sidebar(props: {
   page: PageId
@@ -32,6 +39,22 @@ export function Sidebar(props: {
         >
           <NavIcon name="mcp" />
           <span className="nav-label">MCP</span>
+        </button>
+        <button
+          className={`nav-item ${props.page === 'skills' ? 'active' : ''}`}
+          title="技能"
+          onClick={() => props.onChangePage('skills')}
+        >
+          <NavIcon name="skills" />
+          <span className="nav-label">技能</span>
+        </button>
+        <button
+          className={`nav-item ${props.page === 'plugins' ? 'active' : ''}`}
+          title="插件"
+          onClick={() => props.onChangePage('plugins')}
+        >
+          <NavIcon name="plugins" />
+          <span className="nav-label">插件</span>
         </button>
         <button
           className={`nav-item ${props.page === 'logs' ? 'active' : ''}`}
@@ -83,10 +106,27 @@ function NavIcon(props: { name: NavIconName }) {
       ) : null}
       {props.name === 'mcp' ? (
         <>
-          <path d="m12 2.8 7.2 4.1v8.2L12 19.2l-7.2-4.1V6.9L12 2.8Z" />
-          <path d="M12 11.2 4.9 7.1" />
-          <path d="m12 11.2 7.1-4.1" />
-          <path d="M12 11.2v8" />
+          <path d="M8.7 11.1 15.3 7" />
+          <path d="M8.7 12.9 15.3 17" />
+          <circle cx="6" cy="12" r="2.6" />
+          <circle cx="18" cy="6" r="2.6" />
+          <circle cx="18" cy="18" r="2.6" />
+        </>
+      ) : null}
+      {props.name === 'skills' ? (
+        <>
+          <path d="M12 3.5 13.9 8l4.6 1.9-4.6 1.9L12 16.3l-1.9-4.5-4.6-1.9L10.1 8Z" />
+          <path d="M18.5 14.5 19.4 17l2.1.9-2.1.9-.9 2.2-.9-2.2-2.1-.9 2.1-.9Z" />
+          <path d="M5.3 15.2 6 17l1.7.7-1.7.7-.7 1.8-.7-1.8-1.7-.7 1.7-.7Z" />
+        </>
+      ) : null}
+      {props.name === 'plugins' ? (
+        <>
+          <path d="M9 2.8v5.1" />
+          <path d="M15 2.8v5.1" />
+          <path d="M6.5 8h11" />
+          <path d="M7 8v4.7a5 5 0 0 0 10 0V8" />
+          <path d="M12 17.7V21" />
         </>
       ) : null}
       {props.name === 'logs' ? (

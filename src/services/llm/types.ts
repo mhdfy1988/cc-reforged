@@ -43,6 +43,17 @@ export type LlmProviderToolProfileSource =
   | 'api_mode_default'
   | 'disabled_default'
 export type LlmToolCapabilitySupport = boolean | 'beta' | 'unknown'
+export type LlmProviderCapabilityToolSource =
+  | 'builtin'
+  | 'provider_metadata'
+  | 'runtime_provider'
+  | 'disabled_default'
+export type LlmProviderCapabilityToolRoute =
+  | 'same_provider'
+  | 'explicit_cross_provider'
+export type LlmProviderCapabilityDataBoundary =
+  | 'same_provider'
+  | 'explicit_cross_provider'
 
 export interface LlmImageCapabilityLimits {
   maxImages?: number
@@ -129,6 +140,23 @@ export interface LlmProviderCapabilities {
   tools: boolean
   reasoning: boolean
   usage: boolean
+}
+
+export interface LlmProviderCapabilityToolStatus {
+  available: boolean
+  toolName: string
+  provider: LlmProviderId
+  providerDisplayName: string
+  model: LlmModelId
+  source: LlmProviderCapabilityToolSource
+  route: LlmProviderCapabilityToolRoute
+  dataBoundary: LlmProviderCapabilityDataBoundary
+  message: string
+  reason?: string
+}
+
+export interface LlmProviderCapabilityTools {
+  imageGeneration: LlmProviderCapabilityToolStatus
 }
 
 export interface LlmProviderToolProfile {

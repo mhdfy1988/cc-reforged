@@ -4,10 +4,33 @@
 
 ## Unreleased
 
+暂无。
+
+## 0.5.1 - 2026-05-22
+
+### 改动
+
+- 新增只读 `CcrToolRegistry` 第一版，先从现有 `Tool[]` 生成工具中文名、分类、来源、direct/deferred/internal 暴露建议和展示建议，不改变模型协议、App Server 事件协议或 Desktop 展示。
+- 新增 `CcrToolAvailability` 第一版，App Server 工具池可集中输出 `Bash`、`Agent`、`GenerateImage`、MCP 工具等不可用原因，后续 ToolSearch 和 Desktop 展示可复用。
+- 新增 `CcrToolSearchPolicy` 第一版，`ToolSearch` 搜索候选改为只来自 available 且 deferred 的工具，避免返回 `GenerateImage`、`TodoWrite`、`ToolSearch` 等 direct/internal 工具。
+- 新增 App Server 工具池检查脚本与 registry smoke，固定 Windows 下 `PowerShell` 可见、`Bash` / 无 agent definitions 的 `Agent` 被过滤、`GenerateImage` 保持 `alwaysLoad` 的验收基线。
+- 抽出 App Server 平台工具过滤 helper，让运行时和检查脚本复用同一套 Windows 过滤逻辑。
+- 新增共享工具展示目录 `toolDisplayCatalog`，`toolRegistry` 与 Desktop `toolEvents` 统一读取中文名、分类、`summaryKeys` 摘要 fallback、`detailKeys` 详情裁剪和 `showInMainTimeline` 主时间线建议，工具卡展示口径和注册口径收敛但不改变模型协议。
+- 新增 Provider 能力工具快照，`GenerateImage` 的生图能力可统一说明当前来源 provider/model、同供应商数据边界和不可用原因，并在 App Server / Desktop 模型页诊断中展示。
+- 新增 `prepare:ripgrep`，按当前平台准备 `vendor/ripgrep/<arch-platform>/rg(.exe)`；桌面打包和 `ci:smoke` 会在构建/验收前执行，避免发布包依赖用户机器预装 `rg`。
+- 更新 README 与 MCP 文档入口，补齐 Desktop / CLI 的 MCP 安装、检测、启停、卸载、配置位置、安装清单、锁文件和 `npx` 快速模式边界说明。
+- Desktop 侧边栏新增 Skill / Plugin 占位入口，为 `0.6.0` 扩展能力包治理预留导航位置。
+
+### BUG 修复
+
+- 修复 dev / 非 bundled 环境没有随仓库携带 `vendor/ripgrep` 二进制时，`Glob` / ripgrep 链路直接访问缺失的 `dist/.../vendor/ripgrep/.../rg.exe` 并报 `ENOENT` 的问题；内置 ripgrep 不存在时会自动回退到系统 `rg`，系统 `rg` 也不可用时会走 Node 原生文件搜索兜底。
+- 新增文件搜索链路 smoke，覆盖内置 `rg` 可用、无内置 `rg` 且无系统 `rg` 时的 `Glob`、`Grep` 和全局搜索 stream 兜底。
+- 优化 Doctor 搜索诊断，真实 `rg` 不可用但 Node 原生文件搜索兜底可用时会显示 fallback 状态，而不是只显示 `Not working`。
+
 ### 版本线规划
 
-- `0.5.x`：继续收敛多模态、多模型和工具调用相关问题，包括 provider 能力边界、图片/附件展示、历史请求修复、错误诊断和工具权限体验。
-- `0.6.0`：进入 MCP、Skill、Plugin 等扩展能力主线，重点处理外部工具生态、能力发现、安装配置和运行时治理。
+- `0.5.x`：继续收敛多模态、多模型和工具调用相关问题，包括 provider 能力边界、图片/附件展示、历史请求修复、错误诊断、工具权限体验和 MCP 动态工具治理。
+- `0.6.0`：进入 Skill、Plugin 等扩展能力包主线，重点处理外部能力发现、安装启用、命名空间、版本和审计。
 
 ## 0.5.0 - 2026-05-20
 

@@ -21,7 +21,26 @@ import type {
   ContextStatusResult,
   InitializeResult,
   JsonRpcNotification,
+  McpDisableParams,
+  McpDisableResult,
+  McpEnableParams,
+  McpEnableResult,
+  McpInstallApplyParams,
+  McpInstallApplyResult,
+  McpInstallListResult,
+  McpInstallPlanParams,
+  McpInstallPlanResult,
+  McpInstallSearchParams,
+  McpInstallSearchResult,
+  McpInstallUninstallParams,
+  McpInstallUninstallResult,
+  McpInspectParams,
+  McpInspectResult,
   McpListResult,
+  McpRestartParams,
+  McpRestartResult,
+  McpTestParams,
+  McpTestResult,
   MemorySessionStatusResult,
   ModelAvailabilityParams,
   ModelAvailabilityResult,
@@ -62,6 +81,23 @@ type DesktopAppServerStatus =
   | 'stopped'
 
 type DesktopRuntimeMode = 'development' | 'packaged'
+
+type DesktopConfirmTone = 'default' | 'warning' | 'danger'
+
+type DesktopConfirmRequestPayload = {
+  id: string
+  title: string
+  message: string
+  detail?: string
+  confirmLabel: string
+  cancelLabel?: string
+  tone?: DesktopConfirmTone
+}
+
+type DesktopConfirmResponsePayload = {
+  id?: string
+  confirmed?: boolean
+}
 
 type DesktopRuntime = {
   mode: DesktopRuntimeMode
@@ -927,6 +963,20 @@ async function refreshPermissionSettingsSnapshot(): Promise<void> {
   status.permissionSettings = await client.client.getPermissionSettings()
 }
 
+async function getAppServerClient() {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  return managedClient.client
+}
+
+async function refreshMcpSnapshot(): Promise<McpListResult> {
+  const client = await getAppServerClient()
+  status.mcp = await client.listMcp({ includeDisabled: true })
+  return status.mcp
+}
+
 async function getPermissionSettings(): Promise<PermissionSettingsGetResult> {
   await ensureAppServer()
   if (!managedClient) {
@@ -1157,6 +1207,108 @@ async function listModels(
     throw new Error('App Server client is not available.')
   }
   return managedClient.client.listModels(params)
+}
+
+async function inspectMcpServer(
+  params: McpInspectParams,
+): Promise<McpInspectResult> {
+  const client = await getAppServerClient()
+  return client.inspectMcp(params)
+}
+
+async function enableMcpServer(
+  params: McpEnableParams,
+): Promise<McpEnableResult> {
+  const client = await getAppServerClient()
+  const result = await client.enableMcp(params)
+  await refreshMcpSnapshot()
+  broadcast('state', { message: 'mcp enabled', name: params.name, mcp: status.mcp })
+  return result
+}
+
+async function disableMcpServer(
+  params: McpDisableParams,
+): Promise<McpDisableResult> {
+  const client = await getAppServerClient()
+  const result = await client.disableMcp(params)
+  await refreshMcpSnapshot()
+  broadcast('state', { message: 'mcp disabled', name: params.name, mcp: status.mcp })
+  return result
+}
+
+async function restartMcpServer(
+  params: McpRestartParams,
+): Promise<McpRestartResult> {
+  const client = await getAppServerClient()
+  const result = await client.restartMcp(params)
+  await refreshMcpSnapshot()
+  broadcast('state', {
+    message: 'mcp restart requested',
+    name: params.name,
+    result,
+    mcp: status.mcp,
+  })
+  return result
+}
+
+async function testMcpServer(params: McpTestParams): Promise<McpTestResult> {
+  const client = await getAppServerClient()
+  const result = await client.testMcp(params)
+  broadcast('state', {
+    message: 'mcp tested',
+    name: params.name,
+    result,
+  })
+  return result
+}
+
+async function searchMcpInstalls(
+  params: McpInstallSearchParams = {},
+): Promise<McpInstallSearchResult> {
+  const client = await getAppServerClient()
+  return client.searchMcpInstalls(params)
+}
+
+async function planMcpInstall(
+  params: McpInstallPlanParams,
+): Promise<McpInstallPlanResult> {
+  const client = await getAppServerClient()
+  return client.planMcpInstall(params)
+}
+
+async function applyMcpInstall(
+  params: McpInstallApplyParams,
+): Promise<McpInstallApplyResult> {
+  const client = await getAppServerClient()
+  const result = await client.applyMcpInstall(params)
+  await refreshMcpSnapshot()
+  broadcast('state', {
+    message: 'mcp install applied',
+    name: params.name,
+    result,
+    mcp: status.mcp,
+  })
+  return result
+}
+
+async function listMcpInstalls(): Promise<McpInstallListResult> {
+  const client = await getAppServerClient()
+  return client.listMcpInstalls()
+}
+
+async function uninstallMcp(
+  params: McpInstallUninstallParams,
+): Promise<McpInstallUninstallResult> {
+  const client = await getAppServerClient()
+  const result = await client.uninstallMcp(params)
+  await refreshMcpSnapshot()
+  broadcast('state', {
+    message: 'mcp uninstalled',
+    name: params.name,
+    result,
+    mcp: status.mcp,
+  })
+  return result
 }
 
 async function loginAuth(params: AuthLoginParams = {}): Promise<AuthLoginResult> {
@@ -1522,9 +1674,21 @@ async function confirmOutsideWorkspaceAccess(
     return true
   }
 
+  const confirmLabel = getOutsideWorkspaceConfirmLabel(action)
+  const rendererConfirmed = await requestRendererConfirm({
+    title: '路径位于工作区外',
+    message: '该路径不在当前 CCR 工作区内。',
+    detail: targetPath,
+    confirmLabel,
+    tone: 'warning',
+  })
+  if (rendererConfirmed !== null) {
+    return rendererConfirmed
+  }
+
   const result = await dialog.showMessageBox(mainWindow ?? undefined, {
     type: 'warning',
-    buttons: ['取消', getOutsideWorkspaceConfirmLabel(action)],
+    buttons: ['取消', confirmLabel],
     defaultId: 0,
     cancelId: 0,
     title: '路径位于工作区外',
@@ -1532,6 +1696,61 @@ async function confirmOutsideWorkspaceAccess(
     detail: targetPath,
   })
   return result.response === 1
+}
+
+function requestRendererConfirm(
+  input: Omit<DesktopConfirmRequestPayload, 'id'>,
+): Promise<boolean | null> {
+  const targetWindow = mainWindow
+  if (
+    !targetWindow ||
+    targetWindow.isDestroyed() ||
+    targetWindow.webContents.isDestroyed()
+  ) {
+    return Promise.resolve(null)
+  }
+
+  const targetWebContents = targetWindow.webContents
+  const id = randomUUID()
+  const payload: DesktopConfirmRequestPayload = { id, ...input }
+
+  return new Promise(resolve => {
+    let settled = false
+    let timeout: NodeJS.Timeout
+
+    const finish = (confirmed: boolean) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearTimeout(timeout)
+      targetWebContents.removeListener('destroyed', handleDestroyed)
+      ipcMain.removeListener('ccr:confirm-response', handleResponse)
+      resolve(confirmed)
+    }
+
+    const handleDestroyed = () => finish(false)
+
+    const handleResponse = (
+      event: Electron.IpcMainEvent,
+      response: DesktopConfirmResponsePayload,
+    ) => {
+      if (event.sender !== targetWebContents || response?.id !== id) {
+        return
+      }
+      finish(Boolean(response.confirmed))
+    }
+
+    timeout = setTimeout(() => finish(false), 5 * 60 * 1000)
+    targetWebContents.once('destroyed', handleDestroyed)
+    ipcMain.on('ccr:confirm-response', handleResponse)
+
+    try {
+      targetWebContents.send('ccr:confirm-request', payload)
+    } catch {
+      finish(false)
+    }
+  })
 }
 
 function getOutsideWorkspaceConfirmLabel(
@@ -2476,14 +2695,62 @@ ipcMain.handle(
 )
 
 ipcMain.handle('ccr:refresh-mcp', async () => {
-  await ensureAppServer()
-  if (!managedClient) {
-    throw new Error('App Server client is not available.')
-  }
-  status.mcp = await managedClient.client.listMcp({ includeDisabled: true })
+  await refreshMcpSnapshot()
   broadcast('state', { message: 'mcp refreshed', mcp: status.mcp })
   return status.mcp
 })
+
+ipcMain.handle('ccr:mcp-inspect', async (_event, params: McpInspectParams) => {
+  return inspectMcpServer(params)
+})
+
+ipcMain.handle('ccr:mcp-enable', async (_event, params: McpEnableParams) => {
+  return enableMcpServer(params)
+})
+
+ipcMain.handle('ccr:mcp-disable', async (_event, params: McpDisableParams) => {
+  return disableMcpServer(params)
+})
+
+ipcMain.handle('ccr:mcp-restart', async (_event, params: McpRestartParams) => {
+  return restartMcpServer(params)
+})
+
+ipcMain.handle('ccr:mcp-test', async (_event, params: McpTestParams) => {
+  return testMcpServer(params)
+})
+
+ipcMain.handle(
+  'ccr:mcp-install-search',
+  async (_event, params?: McpInstallSearchParams) => {
+    return searchMcpInstalls(params ?? {})
+  },
+)
+
+ipcMain.handle(
+  'ccr:mcp-install-plan',
+  async (_event, params: McpInstallPlanParams) => {
+    return planMcpInstall(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:mcp-install-apply',
+  async (_event, params: McpInstallApplyParams) => {
+    return applyMcpInstall(params)
+  },
+)
+
+ipcMain.handle('ccr:mcp-install-list', async () => {
+  return listMcpInstalls()
+})
+
+ipcMain.handle(
+  'ccr:mcp-install-uninstall',
+  async (_event, params: McpInstallUninstallParams) => {
+    return uninstallMcp(params)
+  },
+)
 
 ipcMain.handle('ccr:refresh-runtime', async () => {
   await ensureAppServer()

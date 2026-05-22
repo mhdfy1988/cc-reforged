@@ -1,6 +1,6 @@
 {
   "name": "cc-reforged",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "main": "out/main/index.js",
   "bin": {
     "ccr": "cli.js"
@@ -15,6 +15,7 @@
     "bun-bundle-loader.mjs",
     "dist/**/*.js",
     "dist/**/*.txt",
+    "dist/src/utils/vendor/ripgrep/**/*",
     "vendor/claude-for-chrome-mcp-stub.mjs"
   ],
   "engines": {
@@ -46,6 +47,7 @@
     "prepublishOnly": "node -e \"if (!process.env.AUTHORIZED) { console.error('ERROR: Direct publishing is not allowed.\\nPlease see the release workflow documentation to publish this package.'); process.exit(1); }\"",
     "build": "tsc -p tsconfig.build.json",
     "postbuild": "node ./scripts/copy-text-assets.mjs",
+    "prepare:ripgrep": "node ./scripts/prepare-ripgrep-vendor.mjs",
     "desktop:icons": "node ./scripts/build-desktop-icons.mjs",
     "desktop:dev": "electron-vite dev --config apps/desktop/electron.vite.config.ts",
     "desktop:build": "electron-vite build --config apps/desktop/electron.vite.config.ts",
@@ -58,6 +60,7 @@
     "release:desktop:public": "node ./scripts/prepare-desktop-github-release.mjs --execute --public",
     "typecheck:desktop": "tsc -p apps/desktop/tsconfig.json --noEmit",
     "audit:runtime-targets": "node ./scripts/audit-runtime-targets.mjs",
+    "inspect:app-server-tools": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/inspect-app-server-tools.mjs",
     "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
     "typecheck:config": "tsc -p tsconfig.typecheck.json --showConfig",
     "build:config": "tsc -p tsconfig.build.json --showConfig",
@@ -77,6 +80,9 @@
     "smoke:provider-output-fixtures": "node ./scripts/smoke-provider-output-fixtures.mjs",
     "smoke:session-generated-image-flow": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-session-generated-image-flow.mjs",
     "smoke:generate-image-tool": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-generate-image-tool.mjs",
+    "smoke:tool-registry": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-tool-registry.mjs",
+    "smoke:file-search": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-file-search.mjs",
+    "smoke:ripgrep-vendor": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-ripgrep-vendor.mjs",
     "smoke:provider-tool-profile": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-provider-tool-profile.mjs",
     "smoke:llm-claude-adapter": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-claude-adapter.mjs",
     "smoke:llm-config": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-config.mjs",

@@ -24,7 +24,22 @@ import {
   handleModelSet,
   handleModelTest,
 } from './handlers/llmHandlers.js'
-import { handleMcpList } from './handlers/mcpHandlers.js'
+import {
+  handleMcpAdd,
+  handleMcpDisable,
+  handleMcpEnable,
+  handleMcpInstallApply,
+  handleMcpInstallList,
+  handleMcpInstallPlan,
+  handleMcpInstallSearch,
+  handleMcpInstallUninstall,
+  handleMcpInspect,
+  handleMcpList,
+  handleMcpRemove,
+  handleMcpRestart,
+  handleMcpTest,
+  handleMcpUpdate,
+} from './handlers/mcpHandlers.js'
 import {
   handlePermissionRespond,
   handlePermissionSettingsGet,
@@ -175,6 +190,71 @@ export async function handleJsonRpcMessage(
         return successResponse(
           request.id,
           await handleMcpList(context, request.params),
+        )
+      case 'mcp/inspect':
+        return successResponse(
+          request.id,
+          handleMcpInspect(context, request.params),
+        )
+      case 'mcp/add':
+        return successResponse(
+          request.id,
+          await handleMcpAdd(context, request.params),
+        )
+      case 'mcp/update':
+        return successResponse(
+          request.id,
+          await handleMcpUpdate(context, request.params),
+        )
+      case 'mcp/remove':
+        return successResponse(
+          request.id,
+          await handleMcpRemove(context, request.params),
+        )
+      case 'mcp/enable':
+        return successResponse(
+          request.id,
+          handleMcpEnable(context, request.params),
+        )
+      case 'mcp/disable':
+        return successResponse(
+          request.id,
+          handleMcpDisable(context, request.params),
+        )
+      case 'mcp/restart':
+        return successResponse(
+          request.id,
+          handleMcpRestart(context, request.params),
+        )
+      case 'mcp/test':
+        return successResponse(
+          request.id,
+          await handleMcpTest(context, request.params),
+        )
+      case 'mcp/install/search':
+        return successResponse(
+          request.id,
+          handleMcpInstallSearch(context, request.params),
+        )
+      case 'mcp/install/plan':
+        return successResponse(
+          request.id,
+          handleMcpInstallPlan(context, request.params),
+        )
+      case 'mcp/install/apply':
+        return successResponse(
+          request.id,
+          await handleMcpInstallApply(context, request.params),
+        )
+      case 'mcp/install/list':
+        return successResponse(
+          request.id,
+          await handleMcpInstallList(context, request.params),
+        )
+      case 'mcp/install/uninstall':
+        return successResponse(
+          request.id,
+          await handleMcpInstallUninstall(context, request.params),
         )
       case 'workspace/open':
         return successResponse(

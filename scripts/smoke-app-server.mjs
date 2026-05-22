@@ -89,7 +89,102 @@ try {
       method: 'model/availability',
       params: { provider: 'deepseek', model: 'deepseek-v4-flash' },
     },
-    { jsonrpc: '2.0', id: 18, method: 'shutdown', params: {} },
+    {
+      jsonrpc: '2.0',
+      id: 18,
+      method: 'mcp/inspect',
+      params: { name: 'smoke_mcp' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 19,
+      method: 'mcp/add',
+      params: {
+        name: 'smoke_mcp',
+        scope: 'user',
+        config: { command: 'node', args: ['-e', 'process.exit(0)'] },
+      },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 20,
+      method: 'mcp/inspect',
+      params: { name: 'smoke_mcp' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 21,
+      method: 'mcp/test',
+      params: { name: 'smoke_mcp' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 22,
+      method: 'mcp/disable',
+      params: { name: 'smoke_mcp' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 23,
+      method: 'mcp/list',
+      params: { includeDisabled: true },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 24,
+      method: 'mcp/enable',
+      params: { name: 'smoke_mcp' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 25,
+      method: 'mcp/update',
+      params: {
+        name: 'smoke_mcp',
+        scope: 'user',
+        config: { command: 'node', args: ['-e', 'console.log("updated")'] },
+      },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 26,
+      method: 'mcp/restart',
+      params: { name: 'smoke_mcp' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 27,
+      method: 'mcp/remove',
+      params: { name: 'smoke_mcp', scope: 'user' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 28,
+      method: 'mcp/test',
+      params: { name: 'smoke_mcp' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 29,
+      method: 'mcp/install/search',
+      params: { query: 'playwright' },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 30,
+      method: 'mcp/install/list',
+      params: {},
+    },
+    {
+      jsonrpc: '2.0',
+      id: 31,
+      method: 'mcp/install/plan',
+      params: {
+        scope: 'user',
+        manifest: createSmokeInstallManifest(),
+      },
+    },
+    { jsonrpc: '2.0', id: 32, method: 'shutdown', params: {} },
   ];
 
   const result = runAppServer(messages);
@@ -119,6 +214,10 @@ try {
   assert.equal(responses[3].result.llm.profileId, 'codex-oauth-1');
   assert.equal(responses[3].result.llm.provider, 'codex-oauth');
   assert.equal(responses[3].result.llm.model, 'gpt-5.4');
+  assert.equal(
+    responses[3].result.llm.capabilityTools.imageGeneration.available,
+    true,
+  );
   assertNoSecretKeys(responses[3].result);
 
   assert.equal(responses[4].id, 4);
@@ -135,6 +234,11 @@ try {
   );
   assert.ok(codexProvider);
   assert.ok(deepSeekProvider);
+  assert.equal(codexProvider.capabilityTools.imageGeneration.available, true);
+  assert.equal(
+    deepSeekProvider.capabilityTools.imageGeneration.available,
+    false,
+  );
   assert.ok(codexProvider.models.some(model => model.model === 'gpt-5.5'));
   assert.ok(codexProvider.models.some(model => model.model === 'gpt-5.4'));
   assert.ok(codexProvider.models.some(model => model.model === 'gpt-5.4-mini'));
@@ -180,6 +284,10 @@ try {
   assert.equal(responses[12].result.testable, false);
   assert.equal(responses[12].result.networkChecked, false);
   assert.equal(responses[12].result.auth.configured, false);
+  assert.equal(
+    responses[12].result.capabilityTools.imageGeneration.available,
+    false,
+  );
   assertNoSecretKeys(responses[12].result);
 
   assert.equal(responses[13].id, 13);
@@ -215,7 +323,101 @@ try {
   assertNoSecretKeys(responses[17].result);
 
   assert.equal(responses[18].id, 18);
-  assert.equal(responses[18].result.accepted, true);
+  assert.equal(responses[18].result.name, 'smoke_mcp');
+  assert.equal(responses[18].result.found, false);
+  assertNoSecretKeys(responses[18].result);
+
+  assert.equal(responses[19].id, 19);
+  assert.equal(responses[19].result.name, 'smoke_mcp');
+  assert.equal(responses[19].result.found, true);
+  assert.equal(responses[19].result.resolved.scope, 'user');
+  assert.equal(responses[19].result.resolved.installKind, 'manual-config');
+  assert.equal(responses[19].result.resolved.transport, 'stdio');
+  assertNoSecretKeys(responses[19].result);
+
+  assert.equal(responses[20].id, 20);
+  assert.equal(responses[20].result.found, true);
+  assert.equal(responses[20].result.resolved.enabled, true);
+  assertNoSecretKeys(responses[20].result);
+
+  assert.equal(responses[21].id, 21);
+  assert.equal(responses[21].result.ok, false);
+  assert.equal(responses[21].result.networkChecked, true);
+  assert.equal(responses[21].result.state, 'failed');
+  assert.deepEqual(responses[21].result.tools, []);
+  assert.deepEqual(responses[21].result.resources, []);
+  assertNoSecretKeys(responses[21].result);
+
+  assert.equal(responses[22].id, 22);
+  assert.equal(responses[22].result.found, true);
+  assert.equal(responses[22].result.resolved.enabled, false);
+  assertNoSecretKeys(responses[22].result);
+
+  assert.equal(responses[23].id, 23);
+  const disabledSmokeServer = responses[23].result.servers.find(
+    server => server.name === 'smoke_mcp',
+  );
+  assert.ok(disabledSmokeServer);
+  assert.equal(disabledSmokeServer.enabled, false);
+  assertNoSecretKeys(responses[23].result);
+
+  assert.equal(responses[24].id, 24);
+  assert.equal(responses[24].result.found, true);
+  assert.equal(responses[24].result.resolved.enabled, true);
+  assertNoSecretKeys(responses[24].result);
+
+  assert.equal(responses[25].id, 25);
+  assert.equal(responses[25].result.found, true);
+  assert.deepEqual(responses[25].result.resolved.args, [
+    '-e',
+    'console.log("updated")',
+  ]);
+  assertNoSecretKeys(responses[25].result);
+
+  assert.equal(responses[26].id, 26);
+  assert.equal(responses[26].result.accepted, true);
+  assert.equal(responses[26].result.applied, false);
+  assert.equal(responses[26].result.state, 'restart_pending_runtime');
+  assertNoSecretKeys(responses[26].result);
+
+  assert.equal(responses[27].id, 27);
+  assert.equal(responses[27].result.removed, true);
+  assertNoSecretKeys(responses[27].result);
+
+  assert.equal(responses[28].id, 28);
+  assert.equal(responses[28].result.ok, false);
+  assert.equal(responses[28].result.state, 'not_found');
+  assertNoSecretKeys(responses[28].result);
+
+  assert.equal(responses[29].id, 29);
+  assert.equal(responses[29].result.query, 'playwright');
+  assert.equal(Array.isArray(responses[29].result.candidates), true);
+  assert.ok(
+    responses[29].result.candidates.some(
+      candidate => candidate.manifest.name === 'playwright',
+    ),
+  );
+  assertNoSecretKeys(responses[29].result);
+
+  assert.equal(responses[30].id, 30);
+  assert.equal(Array.isArray(responses[30].result.installed), true);
+  assertNoSecretKeys(responses[30].result);
+
+  assert.equal(responses[31].id, 31);
+  assert.equal(responses[31].result.name, 'install_smoke_mcp');
+  assert.equal(responses[31].result.scope, 'user');
+  assert.equal(responses[31].result.requiresConfirmation, true);
+  assert.equal(typeof responses[31].result.confirmation.token, 'string');
+  assert.equal(responses[31].result.security.scopeWritable, true);
+  assert.equal(responses[31].result.security.dataBoundary, 'local-only');
+  assert.equal(
+    typeof responses[31].result.security.packageCache.ownerMarkerPath,
+    'string',
+  );
+  assertNoSecretKeys(responses[31].result);
+
+  assert.equal(responses[32].id, 32);
+  assert.equal(responses[32].result.accepted, true);
 
   const unsupported = spawnSync(
     process.execPath,
@@ -350,6 +552,18 @@ try {
           'model/credential/update',
           'model/set',
           'mcp/list',
+          'mcp/inspect',
+          'mcp/add',
+          'mcp/test',
+          'mcp/disable',
+          'mcp/enable',
+          'mcp/update',
+          'mcp/restart',
+          'mcp/remove',
+          'mcp/install/search',
+          'mcp/install/list',
+          'mcp/install/plan',
+          'mcp/install/security_contract',
           'workspace/open',
           'shutdown',
           'unsupported_transport',
@@ -387,6 +601,28 @@ function runAppServer(messages) {
     input,
     maxBuffer: 1024 * 1024 * 10,
   });
+}
+
+function createSmokeInstallManifest() {
+  return {
+    schemaVersion: 1,
+    name: 'install_smoke_mcp',
+    displayName: 'Install smoke MCP',
+    version: '1.2.3',
+    source: {
+      kind: 'stdio-npm-package',
+      packageName: '@example/install-smoke-mcp',
+      packageManager: 'npx',
+    },
+    transport: 'stdio',
+    serverConfig: {
+      type: 'stdio',
+      command: 'node',
+      args: ['-e', 'process.exit(0)'],
+    },
+    permissions: [{ kind: 'process', required: true }],
+    dataBoundary: 'local-only',
+  };
 }
 
 function runPermissionSmoke() {

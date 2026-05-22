@@ -1,0 +1,7 @@
+{
+  "package": "@vscode/ripgrep-win32-x64",
+  "version": "1.18.0",
+  "target": "x64-win32",
+  "source": "https://github.com/microsoft/vscode-ripgrep",
+  "license": "MIT"
+}

@@ -1,0 +1,425 @@
+import { existsSync } from 'fs';
+import { dirname, join, parse } from 'path';
+import { getCurrentProjectConfig, getGlobalConfig, } from '../../utils/config.js';
+import { getCwd } from '../../utils/cwd.js';
+import { getGlobalClaudeFile } from '../../utils/env.js';
+import { getClaudeConfigHomeDir } from '../../utils/envUtils.js';
+import { isSettingSourceEnabled } from '../../utils/settings/constants.js';
+import { isRestrictedToPluginOnly } from '../../utils/settings/pluginOnlyPolicy.js';
+import { doesEnterpriseMcpConfigExist, filterMcpServersByPolicy, getEnterpriseMcpFilePath, getUserMcpFilePath, isMcpServerDisabled, parseMcpConfig, parseMcpConfigFromFilePath, } from './config.js';
+import { getCcrMcpInstallTransport, inferCcrMcpInstallKindFromConfig, } from './installManifest.js';
+import { getProjectMcpServerStatus } from './utils.js';
+const SOURCE_PRECEDENCE = {
+    claudeai: 10,
+    plugin: 20,
+    'user-legacy': 30,
+    'user-file': 31,
+    project: 40,
+    local: 50,
+    dynamic: 60,
+    enterprise: 100,
+};
+export function getCcrMcpInstallPaths() {
+    const configHomeDir = getClaudeConfigHomeDir();
+    return {
+        packageRootDir: join(configHomeDir, 'mcp', 'packages'),
+        installedManifestPath: join(configHomeDir, 'mcp', 'installed.json'),
+        lockFilePath: join(configHomeDir, 'mcp', 'lock.json'),
+        logDir: join(configHomeDir, 'logs', 'mcp'),
+    };
+}
+export function getCcrMcpProjectConfigReadPaths(cwd = getCwd()) {
+    const dirs = [];
+    let currentDir = cwd;
+    while (currentDir !== parse(currentDir).root) {
+        dirs.push(currentDir);
+        currentDir = dirname(currentDir);
+    }
+    return dirs.reverse().map(dir => join(dir, '.mcp.json'));
+}
+export function collectCcrMcpConfigInventory() {
+    const projectCwd = getCwd();
+    const configHomeDir = getClaudeConfigHomeDir();
+    const globalConfigPath = getGlobalClaudeFile();
+    const enterpriseExclusive = doesEnterpriseMcpConfigExist();
+    const pluginOnly = isRestrictedToPluginOnly('mcp');
+    const projectReadPaths = getCcrMcpProjectConfigReadPaths(projectCwd);
+    const enterprisePath = getEnterpriseMcpFilePath();
+    const userPath = getUserMcpFilePath();
+    const sourceDefinitions = [
+        {
+            id: 'enterprise',
+            label: '企业托管 MCP 配置',
+            scope: 'enterprise',
+            mode: 'config-file',
+            precedence: SOURCE_PRECEDENCE.enterprise,
+            enabled: true,
+            writable: false,
+            readPaths: [enterprisePath],
+            writePath: null,
+            readOnlyReason: 'managed_policy',
+            exclusive: enterpriseExclusive,
+        },
+        {
+            id: 'claudeai',
+            label: 'Claude.ai 连接器 MCP',
+            scope: 'claudeai',
+            mode: 'remote',
+            precedence: SOURCE_PRECEDENCE.claudeai,
+            enabled: !enterpriseExclusive,
+            writable: false,
+            readPaths: [],
+            writePath: null,
+            readOnlyReason: enterpriseExclusive ? 'enterprise_exclusive' : 'remote',
+        },
+        {
+            id: 'plugin',
+            label: '插件提供 MCP',
+            scope: 'dynamic',
+            mode: 'runtime',
+            precedence: SOURCE_PRECEDENCE.plugin,
+            enabled: !enterpriseExclusive,
+            writable: false,
+            readPaths: [],
+            writePath: null,
+            readOnlyReason: enterpriseExclusive ? 'enterprise_exclusive' : 'plugin_provided',
+        },
+        {
+            id: 'user-legacy',
+            label: '用户级旧配置 MCP',
+            scope: 'user',
+            mode: 'settings',
+            precedence: SOURCE_PRECEDENCE['user-legacy'],
+            enabled: isSettingSourceEnabled('userSettings') &&
+                !enterpriseExclusive &&
+                !pluginOnly,
+            writable: false,
+            readPaths: [globalConfigPath],
+            writePath: null,
+            readOnlyReason: pluginOnly
+                ? 'plugin_only_policy'
+                : enterpriseExclusive
+                    ? 'enterprise_exclusive'
+                    : 'legacy_read_only',
+        },
+        {
+            id: 'user-file',
+            label: '用户级 MCP 配置',
+            scope: 'user',
+            mode: 'config-file',
+            precedence: SOURCE_PRECEDENCE['user-file'],
+            enabled: isSettingSourceEnabled('userSettings') &&
+                !enterpriseExclusive &&
+                !pluginOnly,
+            writable: !enterpriseExclusive && !pluginOnly,
+            readPaths: [userPath],
+            writePath: userPath,
+            readOnlyReason: pluginOnly
+                ? 'plugin_only_policy'
+                : enterpriseExclusive
+                    ? 'enterprise_exclusive'
+                    : undefined,
+        },
+        {
+            id: 'project',
+            label: '项目级 MCP 配置',
+            scope: 'project',
+            mode: 'config-file',
+            precedence: SOURCE_PRECEDENCE.project,
+            enabled: isSettingSourceEnabled('projectSettings') &&
+                !enterpriseExclusive &&
+                !pluginOnly,
+            writable: isSettingSourceEnabled('projectSettings') &&
+                !enterpriseExclusive &&
+                !pluginOnly,
+            readPaths: projectReadPaths,
+            writePath: join(projectCwd, '.mcp.json'),
+            readOnlyReason: pluginOnly
+                ? 'plugin_only_policy'
+                : enterpriseExclusive
+                    ? 'enterprise_exclusive'
+                    : undefined,
+        },
+        {
+            id: 'local',
+            label: '本项目本地 MCP 配置',
+            scope: 'local',
+            mode: 'settings',
+            precedence: SOURCE_PRECEDENCE.local,
+            enabled: isSettingSourceEnabled('localSettings') &&
+                !enterpriseExclusive &&
+                !pluginOnly,
+            writable: isSettingSourceEnabled('localSettings') &&
+                !enterpriseExclusive &&
+                !pluginOnly,
+            readPaths: [globalConfigPath],
+            writePath: globalConfigPath,
+            readOnlyReason: pluginOnly
+                ? 'plugin_only_policy'
+                : enterpriseExclusive
+                    ? 'enterprise_exclusive'
+                    : undefined,
+        },
+        {
+            id: 'dynamic',
+            label: '运行时动态 MCP',
+            scope: 'dynamic',
+            mode: 'runtime',
+            precedence: SOURCE_PRECEDENCE.dynamic,
+            enabled: !enterpriseExclusive,
+            writable: false,
+            readPaths: [],
+            writePath: null,
+            readOnlyReason: enterpriseExclusive ? 'enterprise_exclusive' : 'runtime_only',
+        },
+    ];
+    const sourceErrors = new Map();
+    const candidates = [];
+    collectFileCandidates({
+        sourceId: 'enterprise',
+        scope: 'enterprise',
+        filePath: enterprisePath,
+        writePath: null,
+        readOnly: true,
+        sourceEnabled: true,
+        candidates,
+        sourceErrors,
+    });
+    collectUserLegacyCandidates({
+        globalConfigPath,
+        sourceEnabled: isSettingSourceEnabled('userSettings') &&
+            !enterpriseExclusive &&
+            !pluginOnly,
+        candidates,
+        sourceErrors,
+    });
+    collectFileCandidates({
+        sourceId: 'user-file',
+        scope: 'user',
+        filePath: userPath,
+        writePath: userPath,
+        readOnly: enterpriseExclusive || pluginOnly,
+        sourceEnabled: isSettingSourceEnabled('userSettings') &&
+            !enterpriseExclusive &&
+            !pluginOnly,
+        candidates,
+        sourceErrors,
+    });
+    for (const filePath of projectReadPaths) {
+        collectFileCandidates({
+            sourceId: 'project',
+            scope: 'project',
+            filePath,
+            writePath: join(projectCwd, '.mcp.json'),
+            readOnly: enterpriseExclusive || pluginOnly,
+            sourceEnabled: isSettingSourceEnabled('projectSettings') &&
+                !enterpriseExclusive &&
+                !pluginOnly,
+            candidates,
+            sourceErrors,
+        });
+    }
+    collectLocalCandidates({
+        globalConfigPath,
+        sourceEnabled: isSettingSourceEnabled('localSettings') &&
+            !enterpriseExclusive &&
+            !pluginOnly,
+        candidates,
+        sourceErrors,
+    });
+    const sources = sourceDefinitions.map(source => ({
+        ...source,
+        serverCount: candidates.filter(candidate => candidate.sourceId === source.id)
+            .length,
+        errors: sourceErrors.get(source.id) ?? [],
+    }));
+    return {
+        projectCwd,
+        configHomeDir,
+        globalConfigPath,
+        enterpriseExclusive,
+        pluginOnly,
+        installPaths: getCcrMcpInstallPaths(),
+        sources,
+        servers: buildServerInventory(candidates, enterpriseExclusive),
+    };
+}
+export function summarizeCcrMcpConfigInventory(inventory = collectCcrMcpConfigInventory()) {
+    return {
+        projectCwd: inventory.projectCwd,
+        configHomeDir: inventory.configHomeDir,
+        globalConfigPath: inventory.globalConfigPath,
+        enterpriseExclusive: inventory.enterpriseExclusive,
+        pluginOnly: inventory.pluginOnly,
+        installPaths: inventory.installPaths,
+        sources: inventory.sources.map(source => ({
+            id: source.id,
+            scope: source.scope,
+            mode: source.mode,
+            precedence: source.precedence,
+            enabled: source.enabled,
+            writable: source.writable,
+            readPaths: source.readPaths,
+            writePath: source.writePath,
+            readOnlyReason: source.readOnlyReason,
+            exclusive: source.exclusive,
+            serverCount: source.serverCount,
+            errors: source.errors,
+            existingReadPaths: source.readPaths.filter(path => existsSync(path)),
+        })),
+        servers: inventory.servers,
+    };
+}
+function collectFileCandidates(params) {
+    const { config, errors } = parseMcpConfigFromFilePath({
+        filePath: params.filePath,
+        expandVars: true,
+        scope: params.scope,
+    });
+    pushErrors(params.sourceErrors, params.sourceId, errors);
+    if (!config?.mcpServers) {
+        return;
+    }
+    for (const [name, serverConfig] of Object.entries(config.mcpServers)) {
+        params.candidates.push({
+            name,
+            config: { ...serverConfig, scope: params.scope },
+            sourceId: params.sourceId,
+            scope: params.scope,
+            precedence: SOURCE_PRECEDENCE[params.sourceId],
+            configPath: params.filePath,
+            writePath: params.writePath,
+            readOnly: params.readOnly,
+            sourceEnabled: params.sourceEnabled,
+        });
+    }
+}
+function collectUserLegacyCandidates(params) {
+    const legacyMcpServers = getGlobalConfig().mcpServers;
+    if (!legacyMcpServers) {
+        return;
+    }
+    const { config, errors } = parseMcpConfig({
+        configObject: { mcpServers: legacyMcpServers },
+        expandVars: true,
+        scope: 'user',
+    });
+    pushErrors(params.sourceErrors, 'user-legacy', errors);
+    for (const [name, serverConfig] of Object.entries(config?.mcpServers ?? {})) {
+        params.candidates.push({
+            name,
+            config: { ...serverConfig, scope: 'user' },
+            sourceId: 'user-legacy',
+            scope: 'user',
+            precedence: SOURCE_PRECEDENCE['user-legacy'],
+            configPath: params.globalConfigPath,
+            writePath: null,
+            readOnly: true,
+            sourceEnabled: params.sourceEnabled,
+        });
+    }
+}
+function collectLocalCandidates(params) {
+    const localMcpServers = getCurrentProjectConfig().mcpServers;
+    if (!localMcpServers) {
+        return;
+    }
+    const { config, errors } = parseMcpConfig({
+        configObject: { mcpServers: localMcpServers },
+        expandVars: true,
+        scope: 'local',
+    });
+    pushErrors(params.sourceErrors, 'local', errors);
+    for (const [name, serverConfig] of Object.entries(config?.mcpServers ?? {})) {
+        params.candidates.push({
+            name,
+            config: { ...serverConfig, scope: 'local' },
+            sourceId: 'local',
+            scope: 'local',
+            precedence: SOURCE_PRECEDENCE.local,
+            configPath: params.globalConfigPath,
+            writePath: params.globalConfigPath,
+            readOnly: false,
+            sourceEnabled: params.sourceEnabled,
+        });
+    }
+}
+function buildServerInventory(candidates, enterpriseExclusive) {
+    const activeByName = new Map();
+    for (const candidate of candidates) {
+        if (getSuppressionReason(candidate, enterpriseExclusive)) {
+            continue;
+        }
+        const current = activeByName.get(candidate.name);
+        if (!current || candidate.precedence >= current.precedence) {
+            activeByName.set(candidate.name, candidate);
+        }
+    }
+    return candidates
+        .map(candidate => {
+        const active = activeByName.get(candidate.name) === candidate;
+        const suppressionReason = getSuppressionReason(candidate, enterpriseExclusive) ??
+            (active ? null : `shadowed_by_${activeByName.get(candidate.name)?.sourceId ?? 'none'}`);
+        return {
+            name: candidate.name,
+            sourceId: candidate.sourceId,
+            scope: candidate.scope,
+            transport: getCcrMcpInstallTransport(candidate.config),
+            installKind: inferCcrMcpInstallKindFromConfig(candidate.config, {
+                pluginSource: candidate.config.pluginSource,
+                sourceId: candidate.sourceId,
+            }),
+            configPath: candidate.configPath,
+            writePath: candidate.writePath,
+            enabled: !isMcpServerDisabled(candidate.name),
+            readOnly: candidate.readOnly,
+            active,
+            suppressed: !active,
+            suppressionReason,
+            projectStatus: candidate.scope === 'project'
+                ? getProjectMcpServerStatus(candidate.name)
+                : undefined,
+            pluginSource: candidate.config.pluginSource,
+        };
+    })
+        .sort((a, b) => {
+        const byName = a.name.localeCompare(b.name);
+        if (byName !== 0)
+            return byName;
+        return a.sourceId.localeCompare(b.sourceId);
+    });
+}
+function getSuppressionReason(candidate, enterpriseExclusive) {
+    if (enterpriseExclusive && candidate.scope !== 'enterprise') {
+        return 'enterprise_exclusive';
+    }
+    if (!candidate.sourceEnabled) {
+        return 'source_disabled';
+    }
+    if (isMcpServerDisabled(candidate.name)) {
+        return 'disabled';
+    }
+    const { blocked } = filterMcpServersByPolicy({
+        [candidate.name]: candidate.config,
+    });
+    if (blocked.includes(candidate.name)) {
+        return 'policy_blocked';
+    }
+    if (candidate.scope === 'project') {
+        const status = getProjectMcpServerStatus(candidate.name);
+        if (status !== 'approved') {
+            return `project_${status}`;
+        }
+    }
+    return null;
+}
+function pushErrors(target, sourceId, errors) {
+    const messages = errors
+        .map(error => error.message)
+        .filter(message => !message.startsWith('MCP config file not found'));
+    if (messages.length === 0) {
+        return;
+    }
+    target.set(sourceId, [...(target.get(sourceId) ?? []), ...messages]);
+}
+//# sourceMappingURL=configInventory.js.map

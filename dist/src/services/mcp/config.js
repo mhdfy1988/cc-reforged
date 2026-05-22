@@ -669,6 +669,97 @@ export async function addMcpConfig(name, config, scope) {
             throw new Error(`Cannot add MCP server to scope: ${scope}`);
     }
 }
+export async function updateMcpConfig(name, config, scope) {
+    if (name.match(/[^a-zA-Z0-9_-]/)) {
+        throw new Error(`Invalid name ${name}. Names can only contain letters, numbers, hyphens, and underscores.`);
+    }
+    if (isClaudeInChromeMCPServer(name)) {
+        throw new Error(`Cannot update MCP server "${name}": this name is reserved.`);
+    }
+    if (feature('CHICAGO_MCP')) {
+        const { isComputerUseMCPServer } = await import('../../utils/computerUse/common.js');
+        if (isComputerUseMCPServer(name)) {
+            throw new Error(`Cannot update MCP server "${name}": this name is reserved.`);
+        }
+    }
+    if (doesEnterpriseMcpConfigExist()) {
+        throw new Error(`Cannot update MCP server: enterprise MCP configuration is active and has exclusive control over MCP servers`);
+    }
+    const result = McpServerConfigSchema().safeParse(config);
+    if (!result.success) {
+        const formattedErrors = result.error.issues
+            .map(err => `${err.path.join('.')}: ${err.message}`)
+            .join(', ');
+        throw new Error(`Invalid configuration: ${formattedErrors}`);
+    }
+    const validatedConfig = result.data;
+    if (isMcpServerDenied(name, validatedConfig)) {
+        throw new Error(`Cannot update MCP server "${name}": server is explicitly blocked by enterprise policy`);
+    }
+    if (!isMcpServerAllowedByPolicy(name, validatedConfig)) {
+        throw new Error(`Cannot update MCP server "${name}": not allowed by enterprise policy`);
+    }
+    switch (scope) {
+        case 'project': {
+            const { servers: existingServers } = getProjectMcpConfigsFromCwd();
+            if (!existingServers[name]) {
+                throw new Error(`No MCP server found with name: ${name} in .mcp.json`);
+            }
+            const mcpServers = removeScopeFromServers(existingServers);
+            mcpServers[name] = validatedConfig;
+            try {
+                await writeProjectMcpjsonFile({ mcpServers });
+            }
+            catch (error) {
+                throw new Error(`Failed to update .mcp.json: ${error}`);
+            }
+            break;
+        }
+        case 'user': {
+            const userMcpConfig = getMcpJsonFileForWrite(getUserMcpFilePath(), 'user');
+            const legacyGlobalConfig = getGlobalConfig();
+            const existsInUserFile = Boolean(userMcpConfig.mcpServers[name]);
+            const existsInLegacyGlobal = Boolean(legacyGlobalConfig.mcpServers?.[name]);
+            if (!existsInUserFile && !existsInLegacyGlobal) {
+                throw new Error(`No user-scoped MCP server found with name: ${name}`);
+            }
+            if (existsInUserFile) {
+                await writeUserMcpjsonFile({
+                    mcpServers: {
+                        ...userMcpConfig.mcpServers,
+                        [name]: validatedConfig,
+                    },
+                });
+            }
+            if (existsInLegacyGlobal) {
+                saveGlobalConfig(current => ({
+                    ...current,
+                    mcpServers: {
+                        ...current.mcpServers,
+                        [name]: validatedConfig,
+                    },
+                }));
+            }
+            break;
+        }
+        case 'local': {
+            const currentConfig = getCurrentProjectConfig();
+            if (!currentConfig.mcpServers?.[name]) {
+                throw new Error(`No project-local MCP server found with name: ${name}`);
+            }
+            saveCurrentProjectConfig(current => ({
+                ...current,
+                mcpServers: {
+                    ...current.mcpServers,
+                    [name]: validatedConfig,
+                },
+            }));
+            break;
+        }
+        default:
+            throw new Error(`Cannot update MCP server in scope: ${scope}`);
+    }
+}
 /**
  * Remove an MCP server configuration
  * @param name The name of the server to remove

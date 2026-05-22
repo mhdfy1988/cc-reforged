@@ -6,11 +6,11 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.5.0-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.5.1-orange?style=flat-square)
 
 CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留终端优先的工作方式，同时把配置、LLM 运行时、App Server 和 Desktop 客户端逐步收敛到 CCR 自己的边界内。
 
-当前 `0.5.x` 版本线聚焦三件事：多模型、多模态和工具调用。下一条 `0.6.0` 主线会进入 MCP、Skill、Plugin 与外部能力治理。
+当前 `0.5.x` 版本线聚焦多模型、多模态、工具调用和 MCP 基础管理面。下一条 `0.6.0` 主线会进入 Skill、Plugin 与外部能力包治理。
 
 ![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
 
@@ -24,7 +24,7 @@ CCR 的目标不是简单“换一个模型接口”，而是把一个本地编�
 | Desktop 工作台 | 管理工作区、历史会话、模型配置、权限、日志、更新和生成物展示 |
 | LLM Runtime | 管理 provider、Profile、凭据、模型目录、协议适配、能力声明和每轮元数据 |
 | 多模态协议 | 统一文本、图片、文件、工具结果、生成图片和历史恢复的内部内容块 |
-| 工具治理 | 让模型只看到当前真实可用的工具，后续继续接入 MCP、Skill、Plugin |
+| 工具治理 | 让模型只看到当前真实可用的工具，并把 MCP 工具、安装、启停和诊断纳入统一管理 |
 | 项目隔离 | 使用 `.ccr` 项目配置，避免污染 Claude Code、Codex、OpenClaw 等其它工具 |
 
 你可以把它理解成三层组合：
@@ -47,7 +47,7 @@ Provider Adapters
 | 项目 | 当前值 |
 | --- | --- |
 | npm 包名 | `cc-reforged` |
-| 当前版本 | `0.5.0` |
+| 当前版本 | `0.5.1` |
 | CLI 命令 | `ccr` |
 | 桌面应用 | `CCR` |
 | 运行时要求 | Node.js `>=24.0.0` |
@@ -76,27 +76,27 @@ CCR 当前更像一个本地 Agent 工作台，而不是单纯的 CLI 包：
 | 本地工作台 | CCR Windows 客户端 | 适合需要历史会话、模型切换、权限页、日志页和图片预览的人 |
 | 多模型调试 | Desktop 模型页 / `ccr model` | 适合比较 Codex OAuth、OpenAI、DeepSeek、MiniMax、Kimi、GLM 等供应商 |
 | 多模态 / 生图 | Desktop 会话 | 适合发送图片、生成图片、查看缩略图和预览生成物 |
+| MCP 浏览器工具 | Desktop MCP 页 / `ccr mcp add-playwright` | 适合安装 Playwright MCP，让模型在需要时调用真实浏览器工具 |
 | Provider 接入开发 | `docs/architecture/provider-integrations/` | 适合继续补新模型、新协议、新能力矩阵 |
 
-## 0.5.0 重点
+## 0.5.1 重点
 
-- 多供应商模型管理：Codex OAuth、OpenAI、DeepSeek、MiniMax、Kimi、GLM API / Coding Plan 已进入统一 Profile 管理。
-- 多模态输入：图片和文件附件进入草稿队列，发送前按当前模型能力校验。
-- 统一生图工具：模型可见 `GenerateImage`，不再让模型猜测应该写 SVG、调用 shell 还是手写文件。
-- 生成物展示：GLM 返回的远程 URL 会先下载落盘，再复用本地缩略图和预览 UI。
-- Desktop 体验修复：历史会话、计划卡、错误诊断、工具卡片、附件展示和长 JSON 溢出都做了收敛。
-- 发布链路：Windows 安装包、`.blockmap`、`latest.yml`、SHA256 和 GitHub Release 流程已经跑通。
+- 工具治理：新增只读工具注册目录、可用性判断和 `ToolSearch` 搜索策略，让模型只看到当前真实可用的 deferred 工具。
+- MCP 管理：Desktop MCP 页支持 Playwright MCP 的安装、启停、检测、卸载和安装记录展示，默认写入用户全局 `~/.ccr`。
+- 文件搜索：打包前准备内置 `ripgrep`，开发态缺少内置二进制时会回退系统 `rg`，再回退 Node 原生文件搜索。
+- Desktop 导航：新增 Skill / Plugin 占位入口，为 `0.6.0` 外部能力包治理预留位置。
+- 发布链路：Windows 安装包继续保持 `CCR-<version>-win-x64.exe` 命名，并保留 `.blockmap`、`latest.yml` 和校验 smoke。
 
-`0.5.0` 更具体的变化可以按几条线看：
+`0.5.1` 更具体的变化可以按几条线看：
 
 | 方向 | 已完成 |
 | --- | --- |
-| 多供应商 | Profile、凭据隔离、provider 目录、测试连接、顶部模型 / 连接配置切换 |
-| 多模态输入 | 图片 / 文件草稿队列、模型能力校验、内容块协议、历史恢复展示 |
-| 图片生成 | OpenAI / Codex OAuth / MiniMax / GLM 输出统一为 `generatedArtifact` |
-| Desktop 展示 | 附件卡、图片预览、工具卡、错误卡、日志原始数据块和长诊断限宽 |
-| 会话历史 | 工作区分组、当前会话展示、运行中不可切换、历史恢复过滤内部合成消息 |
-| 发布 | `CCR-0.5.0-win-x64.exe`、`.blockmap`、`latest.yml`、SHA256 和公开 GitHub Release |
+| 工具注册目录 | `CcrToolRegistry`、中文名、分类、来源、direct/deferred/internal 展示建议 |
+| 工具可用性 | App Server 工具池集中输出不可用原因，`ToolSearch` 只返回 available + deferred 候选 |
+| MCP | 用户全局安装、安装清单、锁文件、缓存目录、启停、检测、卸载和工具卡展示 |
+| 文件搜索 | `prepare:ripgrep`、内置 `rg`、系统 `rg`、Node 原生 fallback 和 smoke 验收 |
+| Desktop 导航 | MCP、Skill、Plugin 入口并列，Skill / Plugin 先占位不抢 `0.5.x` 主线 |
+| 发布 | `CCR-0.5.1-win-x64.exe`、`.blockmap`、`latest.yml` 和发布资产校验 |
 
 ## 安装
 
@@ -285,12 +285,72 @@ Provider 原始响应
 
 后续如果接音频、视频、文件生成，也会先扩展 `generatedArtifact` 生命周期，而不是把 provider 原始响应直接塞进 UI。
 
+## MCP 安装与使用
+
+MCP 已提前进入 `0.5.x` 工具治理线。CCR 当前已经有用户级 MCP 配置、Desktop MCP 管理页、受控安装计划、安装记录、启用/禁用、检测、卸载和 MCP 工具卡展示。
+
+### Desktop 推荐流程
+
+日常使用优先走 Desktop：
+
+1. 打开 CCR Desktop，进入左侧 `MCP` 页面。
+2. 在安装区搜索 `playwright`。
+3. 点击 `安装`。
+4. 在确认弹窗里检查写入位置、启动方式、风险提示和数据边界。
+5. 点击 `确认安装`。
+6. 安装后点击 `检测`，确认工具能被发现。
+7. 会话里需要浏览器时，明确说“用浏览器打开/查询/操作”。成功时会看到 `MCP playwright / browser_*` 工具卡。
+
+如果已经安装，候选会显示“已安装”，不要重复安装；直接在 MCP 页面里使用 `检测`、`重启`、`禁用/启用` 或 `卸载`。
+
+### CLI 安装
+
+Playwright MCP 用户级快捷安装：
+
+```powershell
+ccr mcp add-playwright
+```
+
+常用变体：
+
+```powershell
+ccr mcp add-playwright --headless
+ccr mcp add-playwright --version 0.0.71
+ccr mcp add-playwright --mode managed
+```
+
+也可以手动添加其它 MCP：
+
+```powershell
+ccr mcp add --scope user playwright -- npx.cmd -y @playwright/mcp@latest
+ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
+```
+
+### 配置和安全边界
+
+| 路径 | 用途 |
+| --- | --- |
+| `~/.ccr/mcp.json` | 用户全局 MCP 配置，Desktop 推荐安装默认写这里 |
+| 项目根目录 `.mcp.json` | 项目级共享 MCP 配置 |
+| `~/.ccr/mcp/installed.json` | CCR 受控安装记录 |
+| `~/.ccr/mcp/lock.json` | CCR 受控安装锁定记录 |
+| `~/.ccr/mcp/packages/` | CCR installer-owned 包缓存和 owner marker |
+| `~/.ccr/logs/mcp/` | MCP 安装、连接和诊断日志 |
+
+`npx` 快速模式不会把 `@playwright/mcp` 复制进 CCR 安装目录；首次启动时会由 npm/npx 获取并缓存。`managed` 模式会把指定版本安装到 `~/.ccr/mcp/servers/playwright/` 并把配置指向本地入口。
+
+模型可以建议需要某类 MCP 能力，但不能绕过用户确认自行下载安装、写配置、启动陌生 stdio server 或卸载删除文件。
+
+更完整的 MCP 文档见 [MCP 文档入口](docs/mcp/README.md)。
+
 ## Desktop 能力
 
 - 本地 App Server 生命周期管理。
 - 工作区切换和项目级 settings 隔离。
 - 按工作区分组的历史会话、搜索和恢复。
 - 一级“模型”页面，支持供应商 Profile、凭据、模型和测试连接管理。
+- 一级“MCP”页面，支持 MCP server 查看、安装、检测、启用 / 禁用、重启和卸载。
+- 一级“技能 / 插件”占位入口，给后续 Skill / Plugin 扩展包治理预留位置。
 - 顶部当前模型和连接配置快速切换。
 - 多模态输入卡片、模型生成图片卡片、本地缩略图 / 预览和生成物持久化。
 - 本地 / 项目 / 用户级权限设置页面。
@@ -317,6 +377,9 @@ Desktop 当前围绕一个“本地工作区 + 会话流”展开：
 | --- | --- |
 | `~/.ccr/data/llm.config.local.json` | 普通模型配置、Profile、当前选择、provider 覆盖 |
 | `~/.ccr/data/llm.credentials.local.json` | API Key、OAuth token 等敏感凭据 |
+| `~/.ccr/mcp.json` | 用户全局 MCP 配置 |
+| `~/.ccr/mcp/installed.json` | CCR 受控 MCP 安装记录 |
+| `~/.ccr/mcp/lock.json` | CCR 受控 MCP 安装锁定记录 |
 | `~/.ccr/generated_outputs/` | 模型生成图片等本地持久化产物 |
 | `.ccr/settings*.json` | 项目级 CCR 设置 |
 | `%APPDATA%/CCR/` | Windows Desktop 的窗口状态、日志、UI 本地状态 |
@@ -418,11 +481,13 @@ npm.cmd run smoke:desktop-release-artifacts
 - GitHub Release 发布流程：[docs/architecture/desktop-github-release-workflow.md](docs/architecture/desktop-github-release-workflow.md)
 - npm 发布流程：[docs/release/npm-publish-workflow.md](docs/release/npm-publish-workflow.md)
 
-`0.5.0` 已公开发布，发布资产包括：
+`0.5.1` 本地正式包命名为：
 
-- `CCR-0.5.0-win-x64.exe`
-- `CCR-0.5.0-win-x64.exe.blockmap`
+- `CCR-0.5.1-win-x64.exe`
+- `CCR-0.5.1-win-x64.exe.blockmap`
 - `latest.yml`
+
+正式公开发布以 GitHub Release 和 tag 为准；上一公开版本 `0.5.0` 的 SHA256 记录保留在 Desktop 发布验收 Runbook 中。
 
 当前安装包允许 unsigned 发布，release note 会保留 SHA256 校验值。未来如果购买代码签名证书，可以开启 `CCR_REQUIRE_SIGNED=1` 做强制签名门禁。
 
@@ -430,8 +495,8 @@ npm.cmd run smoke:desktop-release-artifacts
 
 | 版本线 | 重点 |
 | --- | --- |
-| `0.5.x` | 多模态、多模型、工具调用、错误诊断、历史会话、发布质量继续稳定化 |
-| `0.6.0` | MCP、Skill、Plugin、外部能力治理、能力发现和安装配置 |
+| `0.5.x` | 多模态、多模型、工具调用、MCP 管理面、错误诊断、历史会话、发布质量继续稳定化 |
+| `0.6.0` | Skill、Plugin、外部能力包治理、能力发现、安装启用、命名空间和审计 |
 | 后续 | 跨供应商能力路由、音频 / 视频 / 文件生成、更多 provider conformance matrix |
 
 `0.5.x` 期间不会把没有能力声明的模型伪装成全能模型，也不会默认跨供应商发送用户数据。所有 provider 能力都应进入模型目录、Profile 覆盖或显式工具配置。
@@ -459,6 +524,7 @@ npm.cmd run smoke:desktop-release-artifacts
 - [Provider 接入文档](docs/architecture/provider-integrations/README.md)
 - [Provider 协议盘点与官方文档对照](docs/architecture/provider-protocol-inventory-and-official-docs.md)
 - [Provider 工具协议统一化标准](docs/architecture/provider-tool-protocol-normalization.md)
+- [CCR 工具注册目录](docs/architecture/tool-registry-catalog.md)
 
 ## 常见问题
 

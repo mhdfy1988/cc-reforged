@@ -465,6 +465,7 @@ export async function getDoctorDiagnostic() {
     // Provide simple ripgrep status info
     const ripgrepStatus = {
         working: ripgrepStatusRaw.working ?? true, // Assume working if not yet tested
+        fallbackAvailable: ripgrepStatusRaw.fallbackAvailable,
         mode: ripgrepStatusRaw.mode,
         systemPath: ripgrepStatusRaw.mode === 'system' ? ripgrepStatusRaw.path : null,
     };

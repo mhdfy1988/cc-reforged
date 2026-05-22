@@ -116,8 +116,7 @@ await writeFile(
       },
     )
     assert.equal(event?.type, 'assistant_message')
-    assert.match(event?.text ?? '', /模型生成图片/)
-    assert.match(event?.text ?? '', /已保存/)
+    assert.equal(event?.text, '')
     assert.equal(event?.attachmentSnapshots?.[0]?.source, 'ModelOutput')
     assert.equal(event?.attachmentSnapshots?.[0]?.status, 'generated')
     assert.equal(event?.attachmentSnapshots?.[0]?.savedPath, generatedBlock.savedPath)

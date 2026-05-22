@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod/v4'
 import { getSessionId } from '../../bootstrap/state.js'
 import { createDefaultLlmRuntime } from '../../services/llm/defaultRuntime.js'
-import { loadLlmConfig, type ResolvedLlmConfig } from '../../services/llm/llmConfig.js'
+import { loadLlmConfig } from '../../services/llm/llmConfig.js'
+import {
+  resolveLlmProviderCapabilityTools,
+} from '../../services/llm/providerCapabilityTools.js'
 import type {
   CcrGeneratedArtifactSnapshot,
   CcrImageContentBlock,
@@ -132,36 +135,32 @@ export const GenerateImageTool = buildTool({
   async validateInput(input): Promise<ValidationResult> {
     const config = loadLlmConfig()
     const runtime = createDefaultLlmRuntime()
-    let providerName = config.provider
-    let supportsImageGeneration = false
+    const capability = resolveLlmProviderCapabilityTools({
+      config,
+      runtime,
+      imageGenerationModel: input.model?.trim() || undefined,
+    }).imageGeneration
 
-    try {
-      const provider = runtime.getProvider(config.provider)
-      providerName = provider.name
-      supportsImageGeneration = typeof provider.generateImage === 'function'
-    } catch {
-      supportsImageGeneration = false
-    }
-
-    if (supportsImageGeneration) {
+    if (capability.available) {
       return { result: true }
     }
 
-    const model = input.model?.trim() || resolveDefaultImageModel(config)
     return {
       result: false,
       errorCode: 20,
-      message: [
-        `当前供应商不支持生图：${providerName} / ${model}。`,
-        '请切换到支持生图的供应商后再试，例如 GLM API（glm-image）、OpenAI（gpt-image-1）或 Codex OAuth。',
-      ].join(''),
+      message: capability.message,
     }
   },
   async call(input, context) {
     const prompt = input.prompt.trim()
     const config = loadLlmConfig()
-    const model = input.model?.trim() || resolveDefaultImageModel(config)
     const runtime = createDefaultLlmRuntime()
+    const capability = resolveLlmProviderCapabilityTools({
+      config,
+      runtime,
+      imageGenerationModel: input.model?.trim() || undefined,
+    }).imageGeneration
+    const model = capability.model
     const response = await runtime.generateImage({
       provider: config.provider,
       model,
@@ -177,6 +176,12 @@ export const GenerateImageTool = buildTool({
       metadata: {
         source: 'generate_image_tool',
         tool: GENERATE_IMAGE_TOOL_NAME,
+        capabilityTool: {
+          route: capability.route,
+          dataBoundary: capability.dataBoundary,
+          provider: capability.provider,
+          model: capability.model,
+        },
         ...(context.agentId ? { agentId: context.agentId } : {}),
       },
       signal: context.abortController.signal,
@@ -200,12 +205,6 @@ export const GenerateImageTool = buildTool({
     }
   },
 } satisfies ToolDef<InputSchema, GenerateImageToolOutput>)
-
-function resolveDefaultImageModel(config: ResolvedLlmConfig): string {
-  const providerConfig = config.providers[config.provider]
-  const metadataModel = getNonEmptyString(providerConfig?.metadata?.defaultImageModel)
-  return metadataModel ?? config.model
-}
 
 function summarizeGeneratedImages(
   output: readonly CcrImageContentBlock[],
@@ -265,8 +264,4 @@ function trimForDisplay(value: unknown): string | undefined {
     return undefined
   }
   return text.length > 80 ? `${text.slice(0, 77)}...` : text
-}
-
-function getNonEmptyString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }

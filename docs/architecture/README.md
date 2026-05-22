@@ -35,6 +35,8 @@
 - [CCR Provider 协议盘点与官方文档对照](./provider-protocol-inventory-and-official-docs.md)
 - [CCR Provider 工具协议统一化标准](./provider-tool-protocol-normalization.md)
 - [Provider 能力工具化后续方向](./provider-capability-tools-future.md)
+- [CCR 工具注册目录](./tool-registry-catalog.md)
+- [Codex / OpenClaw 工具系统源码对照索引](../references/codex-openclaw-tool-system-source-evidence.md)
 - [CCR Provider 真实 Probe 设计与入口](./provider-real-probe-design.md)
 - [前台 Provider / Model 切换设计方案](./llm-frontend-provider-model-picker-design.md)
 - [ChatGPT Codex Plan Provider 接入设计](./chatgpt-codex-provider-design.md)

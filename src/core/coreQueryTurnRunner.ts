@@ -6,12 +6,24 @@ import { query } from '../query.js'
 import { shouldUseBuiltinLlmRuntime } from '../services/llm/claudeApiAdapter.js'
 import { loadLlmConfig } from '../services/llm/llmConfig.js'
 import { getLlmRuntimeAuthStatus } from '../services/llm/runtimeStatus.js'
+import { getMcpToolsCommandsAndResources } from '../services/mcp/client.js'
+import type {
+  MCPServerConnection,
+  ServerResource,
+} from '../services/mcp/types.js'
+import {
+  enableAppServerPlatformToolDefaults,
+  filterAppServerPlatformTools,
+} from '../services/tools/appServerToolFilters.js'
 import { getDefaultAppState, type AppState } from '../state/AppStateStore.js'
-import type { ToolPermissionContext, ToolUseContext, Tools } from '../Tool.js'
+import type { Command } from '../commands.js'
+import type { Tool, ToolPermissionContext, ToolUseContext } from '../Tool.js'
 import { assembleToolPool } from '../tools.js'
 import type { AttributionState } from '../utils/commitAttribution.js'
+import { errorMessage } from '../utils/errors.js'
 import type { FileStateCache } from '../utils/fileStateCache.js'
 import type { FileHistoryState } from '../utils/fileHistory.js'
+import { logMCPError } from '../utils/log.js'
 import { createUserMessage } from '../utils/messages.js'
 import {
   initialPermissionModeFromCLI,
@@ -71,6 +83,11 @@ export type CoreQueryRuntimeState = {
   contentReplacementState?: ContentReplacementState
 }
 
+export type CoreMcpRuntimeState = Pick<
+  AppState['mcp'],
+  'clients' | 'tools' | 'commands' | 'resources'
+>
+
 export const runCoreQueryTurn: CoreQueryTurnRunner = async input => {
   const {
     turn,
@@ -107,6 +124,7 @@ export const runCoreQueryTurn: CoreQueryTurnRunner = async input => {
     messages: messagesForQuery,
     readFileState: input.readFileState,
     runtimeState: input.runtimeState,
+    mcpRuntime: await loadAppServerMcpRuntimeState(),
     toolPermissionContext: await createAppServerToolPermissionContext(),
   })
 
@@ -375,14 +393,22 @@ export function createCoreQueryRuntime(input: {
   messages: readonly Message[]
   readFileState: FileStateCache
   runtimeState?: CoreQueryRuntimeState
+  mcpRuntime?: CoreMcpRuntimeState
   toolPermissionContext?: ToolPermissionContext
 }): {
   toolUseContext: ToolUseContext
   getAppState: () => AppState
 } {
   enableAppServerPlatformToolDefaults()
-  let appState = {
-    ...getDefaultAppState(),
+  const defaultAppState = getDefaultAppState()
+  let appState: AppState = {
+    ...defaultAppState,
+    mcp: input.mcpRuntime
+      ? {
+          ...defaultAppState.mcp,
+          ...input.mcpRuntime,
+        }
+      : defaultAppState.mcp,
     ...(input.toolPermissionContext
       ? { toolPermissionContext: input.toolPermissionContext }
       : {}),
@@ -397,7 +423,7 @@ export function createCoreQueryRuntime(input: {
   const computeTools = () =>
     filterAppServerPlatformTools(
       assembleToolPool(appState.toolPermissionContext, appState.mcp.tools),
-      appState,
+      { activeAgentCount: appState.agentDefinitions.activeAgents.length },
     )
 
   const toolUseContext: ToolUseContext = {
@@ -451,6 +477,36 @@ export function createCoreQueryRuntime(input: {
   return { toolUseContext, getAppState }
 }
 
+async function loadAppServerMcpRuntimeState(): Promise<CoreMcpRuntimeState> {
+  const clients: MCPServerConnection[] = []
+  const tools: Tool[] = []
+  const commands: Command[] = []
+  const resources: Record<string, ServerResource[]> = {}
+
+  try {
+    await getMcpToolsCommandsAndResources(result => {
+      clients.push(result.client)
+      tools.push(...result.tools)
+      commands.push(...result.commands)
+      if (result.resources?.length) {
+        resources[result.client.name] = result.resources
+      }
+    })
+  } catch (error) {
+    logMCPError(
+      'app-server-runtime',
+      `Failed to load MCP runtime tools: ${errorMessage(error)}`,
+    )
+  }
+
+  return {
+    clients,
+    tools,
+    commands,
+    resources,
+  }
+}
+
 async function createAppServerToolPermissionContext(): Promise<ToolPermissionContext> {
   const { mode } = initialPermissionModeFromCLI({
     permissionModeCli: undefined,
@@ -493,41 +549,6 @@ function getAppServerPlatformToolInstructions(): string[] {
       '目录查看可以使用 PowerShell 的 Get-ChildItem；文件搜索和文件读取优先回退到 Glob、Grep、Read 等高层工具。',
     ].join(' '),
   ]
-}
-
-function enableAppServerPlatformToolDefaults(): void {
-  if (
-    process.platform === 'win32' &&
-    process.env.CLAUDE_CODE_USE_POWERSHELL_TOOL === undefined
-  ) {
-    process.env.CLAUDE_CODE_USE_POWERSHELL_TOOL = '1'
-  }
-}
-
-function filterAppServerPlatformTools(tools: Tools, appState: AppState): Tools {
-  if (process.platform !== 'win32') {
-    return tools
-  }
-
-  return tools.filter(tool => {
-    // App Server 当前没有为 Windows 提供可用的 POSIX shell 运行环境。
-    // Windows 下默认启用 PowerShellTool，并移除 Bash，避免模型把
-    // Get-ChildItem/dir 这类 Windows 命令错误地交给 Bash 执行。
-    if (tool.name === 'Bash') {
-      return false
-    }
-
-    // App Server 还没有像 TUI 那样加载内置/自定义 agent definitions。
-    // 没有可用 agent 时继续暴露 AgentTool，只会让模型绕路调用失败。
-    if (
-      tool.name === 'Agent' &&
-      appState.agentDefinitions.activeAgents.length === 0
-    ) {
-      return false
-    }
-
-    return true
-  })
 }
 
 function handleStreamEvent(input: {

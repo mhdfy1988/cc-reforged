@@ -302,9 +302,7 @@ function PermissionSettingsPanel(props: {
       ) ?? [],
     [props.settings],
   )
-  const defaultSource = props.settings?.defaultSource ?? 'localSettings'
-  const [source, setSource] =
-    useState<EditablePermissionSettingsSource>(defaultSource)
+  const defaultSource = props.settings?.defaultSource ?? 'userSettings'
   const [mode, setMode] = useState<PermissionModeSetting | ''>('')
   const [disableBypass, setDisableBypass] = useState(false)
   const [allowRules, setAllowRules] = useState('')
@@ -313,16 +311,9 @@ function PermissionSettingsPanel(props: {
   const [directories, setDirectories] = useState('')
 
   const selectedSource =
-    editableSources?.find(item => item.source === source) ?? editableSources?.[0]
-
-  useEffect(() => {
-    if (!props.settings) {
-      return
-    }
-    if (!editableSources?.some(item => item.source === source)) {
-      setSource(defaultSource)
-    }
-  }, [defaultSource, editableSources, props.settings, source])
+    editableSources.find(item => item.source === 'userSettings') ??
+    editableSources.find(item => item.source === defaultSource) ??
+    editableSources[0]
 
   useEffect(() => {
     if (!selectedSource) {
@@ -382,23 +373,6 @@ function PermissionSettingsPanel(props: {
         <p className="settings-muted">权限设置待加载。</p>
       ) : (
         <div className="permission-settings-form">
-          <label>
-            <span>写入位置</span>
-            <select
-              value={selectedSource?.source ?? source}
-              onChange={event =>
-                setSource(
-                  event.target.value as EditablePermissionSettingsSource,
-                )
-              }
-            >
-              {editableSources?.map(item => (
-                <option key={item.source} value={item.source}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </label>
           <label>
             <span>默认模式</span>
             <select

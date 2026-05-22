@@ -29,6 +29,7 @@ function runNpm(args) {
   run('npm', args);
 }
 
+runNpm(['run', 'prepare:ripgrep']);
 runNpm(['run', 'build', '--', '--pretty', 'false']);
 runNpm(['run', 'typecheck', '--', '--pretty', 'false']);
 runNpm(['run', 'typecheck:desktop']);
@@ -39,6 +40,8 @@ runNpm(['run', 'smoke:desktop-display-events']);
 runNpm(['run', 'smoke:generated-output-provider']);
 runNpm(['run', 'smoke:provider-output-fixtures']);
 runNpm(['run', 'smoke:generate-image-tool']);
+runNpm(['run', 'smoke:ripgrep-vendor']);
+runNpm(['run', 'smoke:file-search']);
 runNpm(['run', 'smoke:desktop-github-actions-release']);
 runNpm(['run', 'smoke:desktop-shell-cards']);
 runNpm(['run', 'smoke:desktop-signing-readiness']);

@@ -499,7 +499,7 @@ export function Doctor(t0) {
     else {
         t15 = $[28];
     }
-    const t16 = diagnostic.ripgrepStatus.working ? "OK" : "Not working";
+    const t16 = diagnostic.ripgrepStatus.working ? "OK" : diagnostic.ripgrepStatus.fallbackAvailable ? "Fallback available" : "Not working";
     const t17 = diagnostic.ripgrepStatus.mode === "embedded" ? "bundled" : diagnostic.ripgrepStatus.mode === "builtin" ? "vendor" : diagnostic.ripgrepStatus.systemPath || "system";
     let t18;
     if ($[29] !== t16 || $[30] !== t17) {

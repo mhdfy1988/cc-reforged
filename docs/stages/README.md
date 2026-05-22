@@ -4,10 +4,12 @@
 
 ## 当前主线
 
-当前公开版本是 `0.5.0`。阶段任务进入发布后的 `0.5.x` 稳定化：继续处理多模态、多模型、工具调用、错误诊断、历史会话和发布质量；`0.6.0` 再进入 MCP、Skill、Plugin 主线。
+当前公开版本是 `0.5.0`。阶段任务进入发布后的 `0.5.x` 稳定化：继续处理多模态、多模型、工具调用、错误诊断、历史会话和发布质量，并提前收住 MCP 动态工具治理；`0.6.0` 再进入 Skill、Plugin 扩展包主线。
 
 - [当前修复看板](./current-repair-backlog.md)
 - [CCR 工具能力治理修复清单](./tool-capability-repair-list.md)
+- [CCR 工具注册治理分期推进计划](./tool-registry-governance-todo.md)
+- [CCR 文件搜索链路修复记录](./file-search-chain-todo.md)
 - [CCR 多模态输入输出 Todo](./multimodal-input-output-todo.md)
 - [CCR 多供应商模型与协议接入 Todo](./multi-provider-model-management-todo.md)
 - [CCR App Server 实施 Todo](./app-server-todo.md)
@@ -28,6 +30,8 @@
 - [真实 Runtime E2E Todo](./real-runtime-e2e-todo.md)
 - [Runtime Smoke Todo](./runtime-smoke-todo.md)
 - [工具能力治理修复清单](./tool-capability-repair-list.md)
+- [工具注册治理分期推进计划](./tool-registry-governance-todo.md)
+- [文件搜索链路修复记录](./file-search-chain-todo.md)
 
 ## 交接、审计与归档
 

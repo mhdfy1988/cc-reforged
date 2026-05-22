@@ -1,4 +1,4 @@
-import { cp, mkdir } from 'node:fs/promises'
+import { cp, mkdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -22,10 +22,20 @@ const assets = [
       'yolo-classifier-prompts',
     ),
   },
+  {
+    from: join(repoRoot, 'vendor', 'ripgrep'),
+    to: join(repoRoot, 'dist', 'src', 'utils', 'vendor', 'ripgrep'),
+    optional: true,
+  },
 ]
 
 for (const asset of assets) {
+  if (asset.optional) {
+    const exists = await stat(asset.from)
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) continue
+  }
   await mkdir(dirname(asset.to), { recursive: true })
   await cp(asset.from, asset.to, { recursive: true })
 }
-

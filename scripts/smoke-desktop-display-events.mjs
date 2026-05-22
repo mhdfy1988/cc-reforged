@@ -497,12 +497,17 @@ async function assertToolErrorClassifications() {
       import { readFile } from 'node:fs/promises'
       import { createDisplayEventFromCompletedItem, createErrorDisplayEvent } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
       import { getAttachmentActionPath, getAttachmentImagePreviewSrc } from '../../apps/desktop/src/renderer/src/components/chat/AttachmentImagePreview.tsx'
-      import { getToolMetaItems } from '../../apps/desktop/src/renderer/src/components/chat/ToolCard.tsx'
+      import { getConfirmDialogToneClass } from '../../apps/desktop/src/renderer/src/components/common/ConfirmDialog.tsx'
+      import { createToolDetailBlocks, getToolMetaItems } from '../../apps/desktop/src/renderer/src/components/chat/ToolCard.tsx'
       import { createErrorDiagnostics, getErrorActionViewModels, getPolicyBoundaryHint, getPolicyBoundaryLabel, getQuotaHint, getRateLimitHint } from '../../apps/desktop/src/renderer/src/components/chat/ErrorCard.tsx'
+      import { formatInstalledRecord, formatManifest, formatMcpScopeLabel, formatServerSubtitle, formatToolAnnotations, getCandidateInstallState, getCandidateKey, getServerStatusLabel, getServerTone, mergeMcpServers, normalizeMcpState } from '../../apps/desktop/src/renderer/src/components/pages/McpPage.tsx'
       import { createCcrErrorSnapshot } from '../../src/types/errorSnapshot.ts'
       import { persistGeneratedArtifactFromBase64, prepareGeneratedImageCallForModelReplay, sanitizeGeneratedArtifactsForResume, shouldIncludeGeneratedImageResultForReplay } from '../../src/utils/generatedArtifacts.ts'
 
       const generatedArtifactsHome = ${JSON.stringify(join(tempDir, 'generated-artifacts-home'))}
+
+      assert.equal(getConfirmDialogToneClass('warning'), 'confirm-dialog--warning')
+      assert.equal(getConfirmDialogToneClass('danger'), 'confirm-dialog--danger')
 
       const providerError = createErrorDisplayEvent(
         'fixture-provider-auth-error',
@@ -534,11 +539,365 @@ async function assertToolErrorClassifications() {
         },
       )
       assert.equal(generateImageToolEvent?.toolSnapshot?.summary, \`生成图片：\${imagePrompt}\`)
+      assert.equal(generateImageToolEvent?.toolSnapshot?.category, 'media')
       assert.equal(generateImageToolEvent?.toolSnapshot?.target, imagePrompt)
       assert.equal(
         getToolMetaItems(generateImageToolEvent.toolSnapshot).some(item => item.label === '目标'),
         false,
       )
+
+      const taskOutputToolEvent = createDisplayEventFromCompletedItem(
+        'fixture-task-output-tool-call',
+        'assistant_message',
+        [
+          {
+            type: 'tool_use',
+            id: 'toolu_task_output',
+            name: 'TaskOutput',
+            input: {
+              task_id: 'task_123',
+            },
+          },
+        ],
+        'running',
+        {
+          itemId: 'fixture-task-output-tool-call',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_task_output',
+        },
+      )
+      assert.equal(taskOutputToolEvent?.toolSnapshot?.displayName, '后台任务输出')
+      assert.equal(taskOutputToolEvent?.toolSnapshot?.category, 'agent')
+      assert.equal(taskOutputToolEvent?.toolSnapshot?.summary, '后台任务输出：任务=task_123')
+      const taskOutputSnapshot = taskOutputToolEvent?.toolSnapshot
+      assert.ok(taskOutputToolEvent)
+      assert.ok(taskOutputSnapshot)
+      const taskOutputDetails = createToolDetailBlocks(taskOutputSnapshot, taskOutputToolEvent)
+      const taskOutputInputDetail = taskOutputDetails.find(block => block.kind === 'input')
+      assert.equal(taskOutputInputDetail?.title, '关键参数')
+      assert.deepEqual(taskOutputInputDetail?.value, { task_id: 'task_123' })
+
+      const mcpToolEvent = createDisplayEventFromCompletedItem(
+        'fixture-mcp-tool-call',
+        'assistant_message',
+        [
+          {
+            type: 'tool_use',
+            id: 'toolu_mcp_demo_search',
+            name: 'mcp__demo__search',
+            input: {
+              query: 'release notes',
+            },
+          },
+        ],
+        'running',
+        {
+          itemId: 'fixture-mcp-tool-call',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_mcp_demo_search',
+        },
+      )
+      assert.equal(mcpToolEvent?.toolSnapshot?.displayName, 'MCP demo / search')
+      assert.equal(mcpToolEvent?.toolSnapshot?.category, 'mcp')
+      assert.equal(mcpToolEvent?.toolSnapshot?.summary, 'MCP demo / search：release notes')
+
+      const mcpProgressEvent = createDisplayEventFromCompletedItem(
+        'fixture-mcp-progress',
+        'assistant_message',
+        [
+          {
+            type: 'progress',
+            data: {
+              type: 'mcp_progress',
+              status: 'failed',
+              serverName: 'demo',
+              toolName: 'search',
+            },
+          },
+        ],
+        'running',
+        {
+          itemId: 'fixture-mcp-progress',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+        },
+      )
+      assert.equal(mcpProgressEvent?.toolSnapshot?.displayName, 'MCP demo / search')
+      assert.equal(mcpProgressEvent?.toolSnapshot?.category, 'mcp')
+      assert.equal(mcpProgressEvent?.toolSnapshot?.summary, 'MCP demo / search：failed')
+
+      const normalizedMcpState = normalizeMcpState(null)
+      assert.deepEqual(normalizedMcpState.servers, [])
+      assert.deepEqual(normalizedMcpState.errors, [])
+
+      const mergedMcpServers = mergeMcpServers(
+        {
+          servers: [
+            {
+              name: 'browser',
+              scope: 'user',
+              transport: 'stdio',
+              source: 'user',
+              enabled: true,
+              command: 'node',
+              args: ['server.js'],
+              tools: [
+                {
+                  name: 'click',
+                  description: 'Click a locator',
+                  annotations: { readOnly: false, destructive: true },
+                },
+              ],
+            },
+          ],
+          inventory: {
+            servers: [
+              {
+                name: 'browser',
+                sourceId: 'user-file',
+                scope: 'user',
+                transport: 'stdio',
+                installKind: 'stdio-npm-package',
+                configPath: 'C:/tmp/mcp.json',
+                writePath: 'C:/tmp/mcp.json',
+                enabled: true,
+                active: true,
+                suppressed: false,
+              },
+              {
+                name: 'shadowed',
+                sourceId: 'project',
+                scope: 'project',
+                transport: 'stdio',
+                installKind: 'manual-config',
+                configPath: 'C:/tmp/.mcp.json',
+                writePath: 'C:/tmp/.mcp.json',
+                enabled: true,
+                active: false,
+                suppressed: true,
+                suppressionReason: 'shadowed_by_local',
+              },
+            ],
+          },
+          errors: [],
+        },
+        {
+          installed: [
+            {
+              name: 'browser',
+              scope: 'user',
+              updatedAt: '2026-05-21T00:00:00.000Z',
+              manifest: {
+                name: 'browser',
+                kind: 'stdio-npm-package',
+                transport: 'stdio',
+              },
+              packageDir: 'C:/tmp/pkg',
+              packageOwnerMarkerPath: 'C:/tmp/pkg/.ccr-mcp-install.json',
+              lockKey: 'browser',
+            },
+          ],
+        },
+      )
+      const browserMcpServer = mergedMcpServers.find(server => server.name === 'browser')
+      const shadowedMcpServer = mergedMcpServers.find(server => server.name === 'shadowed')
+      assert.ok(browserMcpServer)
+      assert.ok(shadowedMcpServer)
+      assert.equal(browserMcpServer?.installed?.packageOwnerMarkerPath, 'C:/tmp/pkg/.ccr-mcp-install.json')
+      assert.equal(browserMcpServer?.installKind, 'stdio-npm-package')
+      assert.equal(formatMcpScopeLabel('user'), '用户全局')
+      assert.equal(formatMcpScopeLabel('project'), '项目共享')
+      assert.equal(formatServerSubtitle(browserMcpServer!), '用户全局 · stdio · user')
+      assert.equal(getServerStatusLabel(browserMcpServer!), 'active')
+      assert.equal(getServerTone(browserMcpServer!), 'success')
+      assert.equal(getServerStatusLabel(shadowedMcpServer!), '被覆盖')
+      assert.equal(getServerTone(shadowedMcpServer!), 'warning')
+      assert.equal(formatToolAnnotations(browserMcpServer?.tools?.[0] ?? {}), '破坏性')
+      assert.equal(
+        formatInstalledRecord(browserMcpServer!.installed!),
+        '用户全局 · stdio-npm-package · stdio · 2026-05-21T00:00:00.000Z',
+      )
+      assert.equal(
+        formatManifest({
+          name: 'browser',
+          kind: 'stdio-npm-package',
+          transport: 'stdio',
+          version: '1.2.3',
+        }),
+        'stdio-npm-package · stdio · 1.2.3',
+      )
+      assert.equal(
+        getCandidateKey({
+          displayName: 'Browser MCP',
+          manifest: {
+            name: 'browser',
+            kind: 'stdio-npm-package',
+            transport: 'stdio',
+            version: '1.2.3',
+          },
+        }),
+        'browser:stdio-npm-package:1.2.3:Browser MCP',
+      )
+      assert.deepEqual(
+        getCandidateInstallState(
+          {
+            displayName: 'Browser MCP',
+            manifest: {
+              name: 'browser',
+              kind: 'stdio-npm-package',
+              transport: 'stdio',
+            },
+            manifestInput: {
+              name: 'browser',
+            },
+          },
+          mergedMcpServers,
+          {
+            installed: [
+              {
+                name: 'browser',
+                scope: 'user',
+              },
+            ],
+          },
+        ),
+        {
+          blocked: true,
+          label: '已安装',
+          message: '已由 CCR 安装在 用户全局。',
+          name: 'browser',
+        },
+      )
+      assert.deepEqual(
+        getCandidateInstallState(
+          {
+            displayName: 'Shadowed MCP',
+            manifest: {
+              name: 'shadowed',
+              kind: 'manual-config',
+              transport: 'stdio',
+            },
+            manifestInput: {
+              name: 'shadowed',
+            },
+          },
+          mergedMcpServers,
+          { installed: [] },
+        ),
+        {
+          blocked: true,
+          label: '已配置',
+          message: '已在 项目共享 配置。',
+          name: 'shadowed',
+        },
+      )
+      assert.deepEqual(
+        getCandidateInstallState(
+          {
+            displayName: 'New MCP',
+            manifest: {
+              name: 'new-mcp',
+              kind: 'stdio-npm-package',
+              transport: 'stdio',
+            },
+            manifestInput: {
+              name: 'new-mcp',
+            },
+          },
+          mergedMcpServers,
+          { installed: [] },
+        ),
+        {
+          blocked: false,
+          label: '安装',
+          message: '',
+          name: 'new-mcp',
+        },
+      )
+
+      const webFetchToolEvent = createDisplayEventFromCompletedItem(
+        'fixture-web-fetch-tool-call',
+        'assistant_message',
+        [
+          {
+            type: 'tool_use',
+            id: 'toolu_web_fetch',
+            name: 'WebFetch',
+            input: {
+              url: 'https://example.com/docs',
+              prompt: '摘要这个页面',
+            },
+          },
+        ],
+        'running',
+        {
+          itemId: 'fixture-web-fetch-tool-call',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_web_fetch',
+        },
+      )
+      assert.equal(webFetchToolEvent?.toolSnapshot?.displayName, '读取网页')
+      assert.equal(webFetchToolEvent?.toolSnapshot?.category, 'web')
+      assert.equal(
+        webFetchToolEvent?.toolSnapshot?.summary,
+        '读取网页：网址=https://example.com/docs · 提示=摘要这个页面',
+      )
+
+      const toolSearchToolEvent = createDisplayEventFromCompletedItem(
+        'fixture-tool-search-tool-call',
+        'assistant_message',
+        [
+          {
+            type: 'tool_use',
+            id: 'toolu_tool_search',
+            name: 'ToolSearch',
+            input: {
+              query: '网页读取工具',
+              limit: 3,
+            },
+          },
+        ],
+        'running',
+        {
+          itemId: 'fixture-tool-search-tool-call',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_tool_search',
+        },
+      )
+      assert.equal(toolSearchToolEvent?.toolSnapshot?.displayName, '工具搜索')
+      assert.equal(toolSearchToolEvent?.toolSnapshot?.showInMainTimeline, false)
+      assert.equal(toolSearchToolEvent?.timelineHidden, true)
+
+      const failedToolSearchToolEvent = createDisplayEventFromCompletedItem(
+        'fixture-failed-tool-search-tool-call',
+        'assistant_message',
+        [
+          {
+            type: 'tool_use',
+            id: 'toolu_failed_tool_search',
+            name: 'ToolSearch',
+            status: 'failed',
+            input: {
+              query: '失败时仍应可见',
+              limit: 3,
+            },
+          },
+        ],
+        'failed',
+        {
+          itemId: 'fixture-failed-tool-search-tool-call',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_failed_tool_search',
+        },
+      )
+      assert.equal(failedToolSearchToolEvent?.toolSnapshot?.status, 'failed')
+      assert.equal(failedToolSearchToolEvent?.toolSnapshot?.showInMainTimeline, false)
+      assert.equal(failedToolSearchToolEvent?.timelineHidden, false)
 
       const sanitizedError = createCcrErrorSnapshot({
         message: 'Provider API request failed: Bearer sk-secretvalue123456',

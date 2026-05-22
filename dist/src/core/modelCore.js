@@ -2,6 +2,7 @@ import { getDefaultLlmRuntime, resetDefaultLlmRuntime, } from '../services/llm/d
 import { getLlmProfileForProvider, listResolvedLlmProfiles, loadLlmConfig, deletePersistedLlmProfile, updatePersistedLlmConfig, upsertPersistedLlmProfile, } from '../services/llm/llmConfig.js';
 import { getLlmModelCatalogEntry, listKnownLlmModelCatalogEntries, } from '../services/llm/modelCatalog.js';
 import { resolveLlmModelCapabilities } from '../services/llm/modelCapabilities.js';
+import { resolveLlmProviderCapabilityTools } from '../services/llm/providerCapabilityTools.js';
 import { deleteLlmProfileCredential, updateLlmProviderApiKey, } from '../services/llm/providerCredentials.js';
 import { getLlmRuntimeAuthStatusForProvider, getLlmRuntimeAuthStatusSyncForProvider, getLlmRuntimeDisplayStatusForProvider, getResolvedLlmProviderDefinition, } from '../services/llm/runtimeStatus.js';
 import { resetDefaultCodexOAuthSession } from '../services/llm/sessions/defaultCodexOAuthSession.js';
@@ -28,6 +29,12 @@ export function listCoreModels(provider) {
             authStrategy: providerDefinition.authStrategy,
             apiMode: providerDefinition.apiMode,
             capabilities: providerDefinition.capabilities,
+            capabilityTools: resolveLlmProviderCapabilityTools({
+                providerId: providerDefinition.id,
+                model: defaultModel,
+                ...(profile ? { profileId: profile.id } : {}),
+                config,
+            }),
             profiles: providerProfiles.map(profile => profile.id),
             models: listCatalogEntriesForProvider({
                 providerId: providerDefinition.id,
@@ -105,6 +112,7 @@ export function getCoreModelAvailability(input = {}) {
         apiMode: displayStatus.apiMode,
         authStrategy: displayStatus.authStrategy,
         capabilities: displayStatus.capabilities,
+        capabilityTools: displayStatus.capabilityTools,
         modelCatalogEntry: selection.modelCatalogEntry,
         modelCapabilities: selection.modelCapabilities,
         ...(displayStatus.baseUrl ? { baseUrl: displayStatus.baseUrl } : {}),
@@ -518,6 +526,12 @@ function resolveCoreModelSelection(input) {
             providerCapabilities: providerDefinition.capabilities,
             catalogEntry: modelCatalogEntry,
             ...(profile ? { profile } : {}),
+        }),
+        capabilityTools: resolveLlmProviderCapabilityTools({
+            providerId: requestedProvider,
+            model: requestedModel,
+            ...(profile ? { profileId: profile.id } : {}),
+            config,
         }),
     };
 }

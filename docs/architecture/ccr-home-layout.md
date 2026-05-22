@@ -16,6 +16,9 @@ CCR 的用户级默认目录是 `~/.ccr`，也就是 Windows 当前用户下的 
     llm.config.local.json
     codex-oauth.json
   mcp/
+    installed.json
+    lock.json
+    packages/
     servers/
     presets/
     cache/
@@ -55,6 +58,9 @@ CCR 的用户级默认目录是 `~/.ccr`，也就是 Windows 当前用户下的 
 | 路径 | 用途 | 说明 |
 | --- | --- | --- |
 | `~/.ccr/mcp/servers/` | CCR 自研或手动安装的 MCP server | 放 CCR 管理的本地 server 包或入口 |
+| `~/.ccr/mcp/installed.json` | CCR 受控 MCP 安装清单 | Desktop / App Server install 入口记录 installer-owned MCP |
+| `~/.ccr/mcp/lock.json` | CCR 受控 MCP 锁文件 | 记录安装来源、版本、包缓存、checksum 和 dataBoundary |
+| `~/.ccr/mcp/packages/` | CCR installer-owned 包缓存 | 通过 owner marker 保护，卸载时只清理确认归属的目录 |
 | `~/.ccr/mcp/presets/` | 用户自定义 MCP 预设 | 例如自定义 browser/db/search preset |
 | `~/.ccr/skills/` | 用户安装的 skill | 类似 Codex skill，但归 CCR 管理 |
 | `~/.ccr/plugins/` | 用户安装的 plugin | 插件包、manifest、版本目录 |
@@ -63,8 +69,9 @@ CCR 的用户级默认目录是 `~/.ccr`，也就是 Windows 当前用户下的 
 
 Playwright MCP 后续明确支持两种来源：
 
-- `npx` 快速模式：`~/.ccr/mcp.json` 直接引用 `npx.cmd`，适合快速验证和轻量使用。
+- `npx` 快速模式：`~/.ccr/mcp.json` 直接引用 `npx.cmd`，适合快速验证和轻量使用；首次启动时由 npm/npx 获取和缓存包。
 - `.ccr` 管理式安装模式：`ccr mcp add-playwright --mode managed` 把固定版本放入 `~/.ccr/mcp/servers/playwright/`，`~/.ccr/mcp.json` 指向本地入口，适合发布版、弱网和可控升级。
+- Desktop 受控安装模式：先生成安装计划并要求用户确认，默认写入用户全局 `~/.ccr/mcp.json`，同步记录 `installed.json`、`lock.json` 和 `packages/` owner marker；stdio npm 包仍可由 `npx` 在运行时获取。
 
 Playwright MCP 管理式安装目录结构：
 

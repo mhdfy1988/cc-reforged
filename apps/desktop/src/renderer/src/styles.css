@@ -682,6 +682,220 @@
   padding: 18px;
 }
 
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(31, 24, 18, 0.3);
+  padding: 24px;
+  backdrop-filter: blur(4px);
+}
+
+.confirm-dialog {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr);
+  width: min(460px, calc(100vw - 48px));
+  overflow: hidden;
+  border: 1px solid rgba(216, 190, 162, 0.72);
+  border-radius: 10px;
+  background: rgba(255, 253, 249, 0.99);
+  box-shadow: 0 24px 70px rgba(61, 44, 28, 0.24);
+}
+
+.confirm-dialog-marker {
+  background: #ef9700;
+}
+
+.confirm-dialog--warning .confirm-dialog-marker {
+  background: #ef9700;
+}
+
+.confirm-dialog--danger .confirm-dialog-marker {
+  background: #d94f45;
+}
+
+.confirm-dialog-body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.confirm-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.confirm-dialog-header strong {
+  min-width: 0;
+  color: #2f251d;
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog-message {
+  margin: 0;
+  color: #5c4937;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog-detail {
+  max-height: 126px;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid rgba(216, 190, 162, 0.6);
+  border-radius: 8px;
+  background: #fff8ea;
+  color: #6b5845;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.confirm-dialog .primary-action.danger {
+  border-color: rgba(194, 64, 55, 0.48);
+  background: #e7665d;
+  color: #fffdf9;
+}
+
+.confirm-dialog .primary-action.danger:not(:disabled):hover {
+  border-color: rgba(194, 64, 55, 0.62);
+  box-shadow: 0 10px 22px rgba(138, 42, 37, 0.16);
+}
+
+.mcp-install-dialog {
+  width: min(520px, calc(100vw - 48px));
+}
+
+.mcp-install-dialog .confirm-dialog-body {
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.mcp-install-dialog-title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.mcp-install-dialog-title strong {
+  overflow: hidden;
+  color: #2f251d;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-install-dialog-title span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mcp-install-dialog-summary,
+.mcp-install-dialog-note,
+.mcp-install-dialog-technical {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcp-install-dialog-summary,
+.mcp-install-dialog-note {
+  border-radius: 8px;
+  background: rgba(255, 248, 234, 0.68);
+  padding: 12px;
+}
+
+.mcp-install-dialog-summary strong,
+.mcp-install-dialog-note strong {
+  color: #3d2b1b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.mcp-install-dialog-summary ul {
+  display: grid;
+  gap: 6px;
+  padding-left: 18px;
+  margin: 0;
+}
+
+.mcp-install-dialog-summary li,
+.mcp-install-dialog-note span {
+  color: #4f3d2d;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.mcp-install-dialog-technical {
+  border: 1px solid rgba(216, 190, 162, 0.54);
+  border-radius: 8px;
+  background: rgba(255, 253, 249, 0.72);
+  padding: 10px 12px;
+}
+
+.mcp-install-dialog-technical summary {
+  cursor: pointer;
+  color: #6c5137;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.mcp-install-dialog-technical dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.mcp-install-dialog-technical dl > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mcp-install-dialog-technical dt,
+.mcp-install-dialog-technical dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.mcp-install-dialog-technical dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mcp-install-dialog-technical dd {
+  overflow: hidden;
+  color: #34271b;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .thread-history-head {
   display: flex;
   align-items: center;
@@ -1056,6 +1270,248 @@ h1 {
   margin: 0;
   padding: 14px;
   white-space: pre-wrap;
+}
+
+.mcp-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-self: stretch;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mcp-page-title {
+  flex: 0 0 auto;
+}
+
+.mcp-inline-message {
+  border: 1px solid rgba(12, 143, 114, 0.24);
+  border-radius: 12px;
+  color: #08715b;
+  background: rgba(218, 248, 238, 0.78);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 9px 12px;
+}
+
+.mcp-workspace {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(210px, 280px) minmax(0, 1fr) minmax(260px, 360px);
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mcp-server-column,
+.mcp-install-column {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mcp-server-column {
+  grid-template-rows: auto minmax(0, 1fr);
+  border-right: 1px solid rgba(216, 190, 162, 0.5);
+  padding-right: 14px;
+}
+
+.mcp-install-column {
+  border-left: 1px solid rgba(216, 190, 162, 0.5);
+  padding-left: 16px;
+  overflow: auto;
+}
+
+.mcp-server-list,
+.mcp-candidate-list,
+.mcp-installed-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.mcp-server-item,
+.mcp-candidate-item,
+.mcp-installed-item {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(216, 190, 162, 0.64);
+  border-radius: 8px;
+  color: #4b3d31;
+  background: rgba(255, 253, 249, 0.8);
+  padding: 11px 12px;
+  text-align: left;
+}
+
+.mcp-server-item {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mcp-candidate-item,
+.mcp-installed-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.mcp-server-item:not(.active):hover {
+  border-color: rgba(239, 151, 0, 0.42);
+  background: #fff8ea;
+}
+
+.mcp-server-item.active {
+  border-color: rgba(239, 151, 0, 0.58);
+  background: #fff0d8;
+  box-shadow: 0 12px 24px rgba(158, 105, 25, 0.08);
+}
+
+.mcp-server-item span,
+.mcp-candidate-item span,
+.mcp-installed-item span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mcp-server-item strong,
+.mcp-candidate-item strong,
+.mcp-installed-item strong {
+  overflow: hidden;
+  color: #3d2b1b;
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-server-item em,
+.mcp-candidate-item em,
+.mcp-installed-item em {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.mcp-tags small {
+  border-radius: 999px;
+  color: #7b5a35;
+  background: rgba(232, 220, 202, 0.72);
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 8px;
+}
+
+.mcp-tags small.success {
+  color: #08745c;
+  background: rgba(218, 248, 238, 0.88);
+}
+
+.mcp-tags small.warning {
+  color: #9a5c00;
+  background: rgba(255, 237, 202, 0.92);
+}
+
+.mcp-tags small.danger {
+  color: #8b2f2f;
+  background: rgba(255, 230, 227, 0.92);
+}
+
+.mcp-detail {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 16px;
+}
+
+.mcp-tool-list,
+.mcp-write-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcp-tool-item,
+.mcp-write-list span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border-radius: 8px;
+  background: rgba(255, 248, 234, 0.68);
+  padding: 9px 10px;
+}
+
+.mcp-tool-item strong,
+.mcp-write-list strong {
+  overflow: hidden;
+  color: #34271b;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-tool-item span,
+.mcp-write-list em {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.mcp-install-section {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(208, 186, 158, 0.58);
+  border-radius: 8px;
+  background: rgba(255, 253, 249, 0.82);
+  padding: 14px;
+}
+
+.mcp-install-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.mcp-install-search input {
+  min-width: 0;
+  height: 36px;
+  border: 1px solid rgba(216, 190, 162, 0.72);
+  border-radius: 8px;
+  outline: none;
+  background: #fffdf8;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mcp-install-search input {
+  padding: 0 10px;
 }
 
 .raw-data-block {
@@ -2743,6 +3199,41 @@ h1 {
     overflow: visible;
   }
 
+  .mcp-page {
+    overflow: auto;
+  }
+
+  .mcp-workspace {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .mcp-server-column,
+  .mcp-install-column {
+    overflow: visible;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 1px solid rgba(216, 190, 162, 0.5);
+    padding-left: 0;
+    padding-right: 0;
+    padding-bottom: 12px;
+  }
+
+  .mcp-detail {
+    overflow: visible;
+    padding: 12px 0;
+  }
+
+  .mcp-server-list,
+  .mcp-candidate-list,
+  .mcp-installed-list {
+    overflow: visible;
+  }
+
+  .mcp-install-search {
+    grid-template-columns: 1fr;
+  }
+
   .models-provider-column,
   .models-profile-column {
     overflow: visible;
@@ -2811,6 +3302,27 @@ h1 {
 
   .thread-history-backdrop {
     padding: 12px;
+  }
+
+  .confirm-dialog-backdrop {
+    padding: 12px;
+  }
+
+  .confirm-dialog {
+    width: calc(100vw - 24px);
+  }
+
+  .confirm-dialog-body {
+    padding: 14px;
+  }
+
+  .confirm-dialog-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mcp-install-dialog-technical dl {
+    grid-template-columns: 1fr;
   }
 
   .thread-history-dialog {

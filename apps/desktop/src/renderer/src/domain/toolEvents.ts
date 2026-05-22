@@ -5,6 +5,11 @@ import {
   type DisplayEventContractContext,
   type DisplayEventIdentity,
 } from './eventContract.js'
+import {
+  getCcrToolDisplayMetadata,
+  type CcrToolDisplayCategory,
+  type CcrToolDisplayMetadata,
+} from '../../../../../../src/services/tools/toolDisplayCatalog.js'
 
 export type ToolSnapshotKind = 'call' | 'result' | 'progress'
 export type ToolCategory =
@@ -13,6 +18,10 @@ export type ToolCategory =
   | 'mcp'
   | 'browser'
   | 'search'
+  | 'web'
+  | 'agent'
+  | 'media'
+  | 'internal'
   | 'control'
   | 'unknown'
 
@@ -54,6 +63,8 @@ export type ToolSnapshot = {
   errorClass?: ToolErrorClass
   errorMessage?: string
   actionableHint?: string
+  detailKeys?: string[]
+  showInMainTimeline?: boolean
   raw?: unknown
 }
 
@@ -95,6 +106,8 @@ export function extractToolSnapshotFromBlocks(
         shell: metadata.shell,
         provider: metadata.provider,
         risk: metadata.risk,
+        detailKeys: metadata.detailKeys,
+        showInMainTimeline: metadata.showInMainTimeline,
         raw: block,
       }
     }
@@ -237,6 +250,18 @@ function extractProgressMetadata(data: unknown): Pick<
       summary: 'Bash 正在执行',
     }
   }
+  if (progressType === 'mcp_progress') {
+    const serverName = getString(value, ['serverName', 'server_name'])
+    const toolName = getString(value, ['toolName', 'tool_name'])
+    const status = getString(value, ['status'])
+    const displayName = formatMcpToolDisplayName(serverName, toolName)
+    return {
+      name: serverName && toolName ? `mcp__${serverName}__${toolName}` : 'MCP',
+      displayName,
+      category: 'mcp',
+      summary: status ? `${displayName}：${status}` : `${displayName} 正在执行`,
+    }
+  }
   return {
     name: '工具进度',
     displayName: '工具进度',
@@ -306,6 +331,13 @@ function classifyToolCategory(
   name: string,
   input?: JsonObject | null,
 ): ToolCategory {
+  const registryCategory = mapRegistryCategoryToToolCategory(
+    getCcrToolDisplayMetadata(name)?.category,
+  )
+  if (registryCategory) {
+    return registryCategory
+  }
+
   const normalized = name.toLowerCase()
   if (isControlToolInvocation(name, input)) {
     return 'control'
@@ -340,6 +372,31 @@ function classifyToolCategory(
   return 'unknown'
 }
 
+function mapRegistryCategoryToToolCategory(
+  category: CcrToolDisplayCategory | undefined,
+): ToolCategory | undefined {
+  switch (category) {
+    case 'file':
+      return 'file'
+    case 'runtime':
+      return 'shell'
+    case 'mcp':
+      return 'mcp'
+    case 'web':
+      return 'web'
+    case 'control':
+      return 'control'
+    case 'agent':
+      return 'agent'
+    case 'media':
+      return 'media'
+    case 'internal':
+      return 'internal'
+    default:
+      return undefined
+  }
+}
+
 function extractToolCallMetadata(
   name: string,
   category: ToolCategory,
@@ -355,6 +412,8 @@ function extractToolCallMetadata(
   | 'shell'
   | 'provider'
   | 'risk'
+  | 'detailKeys'
+  | 'showInMainTimeline'
 > {
   const command = getString(input, ['command', 'cmd', 'script'])
   const cwd = getString(input, [
@@ -368,22 +427,33 @@ function extractToolCallMetadata(
   const target = getToolTarget(name, input)
   const risk = getString(input, ['risk', 'riskLevel', 'risk_level'])
   const provider = getString(input, ['provider'])
+  const registryMetadata = getCcrToolDisplayMetadata(name)
+  const registryDisplayName = registryMetadata?.displayName
+  const registrySummary = buildRegistrySummary(
+    registryMetadata,
+    registryDisplayName,
+    input,
+  )
+  const detailKeys = registryMetadata?.detailKeys
+  const showInMainTimeline = getToolShowInMainTimeline(registryMetadata)
 
   if (name === 'GenerateImage') {
     return {
-      displayName: '生成图片',
+      displayName: registryDisplayName ?? '生成图片',
       summary: target ? `生成图片：${target}` : '生成图片',
       description,
       target,
       cwd,
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   if (category === 'shell') {
     return {
-      displayName: name,
+      displayName: registryDisplayName ?? name,
       summary: command ? `运行命令：${command}` : `调用命令工具：${name}`,
       description,
       target,
@@ -392,125 +462,259 @@ function extractToolCallMetadata(
       shell: shell ?? inferShellName(name),
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   if (name === 'Read') {
     return {
-      displayName: '读取文件',
+      displayName: registryDisplayName ?? '读取文件',
       summary: target ? `读取文件：${target}` : '读取文件',
       description,
       target,
       cwd,
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   if (name === 'Write') {
     return {
-      displayName: '写入文件',
+      displayName: registryDisplayName ?? '写入文件',
       summary: target ? `写入文件：${target}` : '写入文件',
       description,
       target,
       cwd,
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   if (name === 'Edit' || name === 'MultiEdit' || name === 'NotebookEdit') {
     return {
-      displayName: '编辑文件',
+      displayName: registryDisplayName ?? '编辑文件',
       summary: target ? `编辑文件：${target}` : `调用工具：${name}`,
       description,
       target,
       cwd,
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   if (name === 'LS') {
     return {
-      displayName: '列出目录',
+      displayName: registryDisplayName ?? '列出目录',
       summary: target ? `列出目录：${target}` : '列出目录',
       description,
       target,
       cwd,
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   if (name === 'Glob' || name === 'Grep') {
+    const summaryLabel = name === 'Glob' ? '搜索文件' : '搜索内容'
     return {
-      displayName: name === 'Glob' ? '搜索文件' : '搜索内容',
-      summary: target ? `${name === 'Glob' ? '搜索文件' : '搜索内容'}：${target}` : `调用工具：${name}`,
+      displayName: registryDisplayName ?? summaryLabel,
+      summary: target ? `${summaryLabel}：${target}` : `调用工具：${name}`,
       description,
       target,
       cwd,
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   if (category === 'browser') {
     return {
-      displayName: '浏览器工具',
+      displayName: registryDisplayName ?? '浏览器工具',
       summary: target ? `操作浏览器：${target}` : `调用浏览器工具：${name}`,
       description,
       target,
       cwd,
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   if (category === 'search') {
     return {
-      displayName: '搜索工具',
+      displayName: registryDisplayName ?? '搜索工具',
       summary: target ? `搜索：${target}` : `调用搜索工具：${name}`,
       description,
       target,
       cwd,
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   if (name === 'TodoWrite') {
     return {
-      displayName: 'TodoWrite',
+      displayName: registryDisplayName ?? 'TodoWrite',
       summary: '更新待办列表',
       description,
       target,
       cwd,
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   if (category === 'mcp') {
+    const mcpLabel = getMcpToolDisplayName(name)
+    const displayName = registryDisplayName ?? mcpLabel ?? 'MCP 工具'
     return {
-      displayName: 'MCP 工具',
-      summary: `调用 MCP 工具：${name}`,
+      displayName,
+      summary: target ? `${displayName}：${target}` : `调用 ${displayName}`,
       description,
       target,
       cwd,
       provider,
       risk,
+      detailKeys,
+      showInMainTimeline,
     }
   }
 
   return {
-    displayName: name,
-    summary: `调用工具：${name}`,
+    displayName: registryDisplayName ?? name,
+    summary: registrySummary ?? `调用工具：${name}`,
     description,
     target,
     cwd,
     provider,
     risk,
+    detailKeys,
+    showInMainTimeline,
+  }
+}
+
+function getToolShowInMainTimeline(
+  metadata: CcrToolDisplayMetadata | undefined,
+): boolean | undefined {
+  if (!metadata) {
+    return undefined
+  }
+  return metadata.showInMainTimeline ?? (
+    metadata.category !== 'control' && metadata.category !== 'internal'
+  )
+}
+
+function buildRegistrySummary(
+  metadata: CcrToolDisplayMetadata | undefined,
+  displayName: string | undefined,
+  input: JsonObject | null,
+): string | undefined {
+  if (!metadata?.summaryKeys?.length || !input) {
+    return undefined
+  }
+
+  const fields = metadata.summaryKeys
+    .map(key => formatSummaryField(key, input[key]))
+    .filter((item): item is string => Boolean(item))
+
+  if (!fields.length) {
+    return undefined
+  }
+
+  return `${displayName ?? metadata.displayName}：${fields.join(' · ')}`
+}
+
+function formatSummaryField(key: string, value: unknown): string | undefined {
+  const formattedValue = formatSummaryValue(value)
+  if (!formattedValue) {
+    return undefined
+  }
+  return `${getSummaryFieldLabel(key)}=${formattedValue}`
+}
+
+function formatSummaryValue(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return truncateSummaryText(value.trim())
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0 ? `${value.length} 项` : undefined
+  }
+  if (value && typeof value === 'object') {
+    try {
+      return truncateSummaryText(JSON.stringify(value))
+    } catch {
+      return truncateSummaryText(String(value))
+    }
+  }
+  return undefined
+}
+
+function truncateSummaryText(value: string): string | undefined {
+  if (!value) {
+    return undefined
+  }
+  return value.length > 120 ? `${value.slice(0, 117)}...` : value
+}
+
+function getSummaryFieldLabel(key: string): string {
+  switch (key) {
+    case 'task_id':
+      return '任务'
+    case 'description':
+      return '说明'
+    case 'prompt':
+      return '提示'
+    case 'subagent_type':
+      return '类型'
+    case 'command':
+      return '命令'
+    case 'pattern':
+      return '模式'
+    case 'path':
+      return '路径'
+    case 'glob':
+      return '范围'
+    case 'file_path':
+      return '文件'
+    case 'notebook_path':
+      return 'Notebook'
+    case 'cell_id':
+      return '单元格'
+    case 'url':
+      return '网址'
+    case 'query':
+      return '查询'
+    case 'question':
+      return '问题'
+    case 'skill':
+      return '技能'
+    case 'size':
+      return '尺寸'
+    case 'output_format':
+      return '格式'
+    case 'todos':
+      return '待办'
+    default:
+      return key
   }
 }
 
@@ -718,6 +922,45 @@ function getToolTarget(name: string, input: JsonObject | null): string | undefin
     return getString(input, ['command', 'cmd'])
   }
   return undefined
+}
+
+function getMcpToolDisplayName(name: string): string | undefined {
+  const identity = parseMcpToolName(name)
+  if (!identity) {
+    return undefined
+  }
+  return formatMcpToolDisplayName(identity.serverName, identity.toolName)
+}
+
+function formatMcpToolDisplayName(
+  serverName: string | undefined,
+  toolName: string | undefined,
+): string {
+  if (serverName && toolName) {
+    return `MCP ${serverName} / ${toolName}`
+  }
+  if (serverName) {
+    return `MCP ${serverName}`
+  }
+  return 'MCP 工具'
+}
+
+function parseMcpToolName(
+  name: string,
+): { serverName: string; toolName?: string } | undefined {
+  const parts = name.split('__')
+  if (parts[0] !== 'mcp' || parts.length < 2) {
+    return undefined
+  }
+  const serverName = parts[1]?.trim()
+  if (!serverName) {
+    return undefined
+  }
+  const toolName = parts.slice(2).join('__').trim()
+  return {
+    serverName,
+    ...(toolName ? { toolName } : {}),
+  }
 }
 
 function inferShellName(name: string): string | undefined {

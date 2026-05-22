@@ -14,13 +14,13 @@ import { makeSecondaryModelPrompt } from './prompt.js';
 // Custom error classes for domain blocking
 class DomainBlockedError extends Error {
     constructor(domain) {
-        super(`Claude Code is unable to fetch from ${domain}`);
+        super(`CCR 无法访问 ${domain}`);
         this.name = 'DomainBlockedError';
     }
 }
 class DomainCheckFailedError extends Error {
     constructor(domain) {
-        super(`Unable to verify if domain ${domain} is safe to fetch. This may be due to network restrictions or enterprise security policies blocking claude.ai.`);
+        super(`无法确认 ${domain} 是否可安全访问，可能是网络限制或企业安全策略阻止了校验请求。`);
         this.name = 'DomainCheckFailedError';
     }
 }

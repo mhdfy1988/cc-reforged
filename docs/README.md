@@ -12,8 +12,8 @@
 ## 当前版本与路线
 
 - 当前公开版本：`0.5.0`，发布于 2026-05-20。
-- 当前版本线：`0.5.x` 继续收敛多模态、多模型和工具调用。
-- 下一条主线：`0.6.0` 进入 MCP、Skill、Plugin 与外部能力治理。
+- 当前版本线：`0.5.x` 继续收敛多模态、多模型、工具调用和 MCP 基础管理面。
+- 下一条主线：`0.6.0` 进入 Skill、Plugin 与外部能力包治理。
 - 路线详情：[CCR 版本路线图](./architecture/version-roadmap.md)。
 - 逐版本变化：[CHANGELOG.md](../CHANGELOG.md)。
 
@@ -40,6 +40,7 @@
 - [CCR 多供应商模型与协议接入设计](./architecture/multi-provider-model-management-design.md)
 - [CCR Provider 协议盘点与官方文档对照](./architecture/provider-protocol-inventory-and-official-docs.md)
 - [CCR Provider 工具协议统一化标准](./architecture/provider-tool-protocol-normalization.md)
+- [CCR 工具注册目录](./architecture/tool-registry-catalog.md)
 - [前台 Provider / Model 切换设计方案](./architecture/llm-frontend-provider-model-picker-design.md)
 - [CCR 多模态输入输出设计](./architecture/multimodal-input-output-design.md)
 - [CCR 模型输出归一化与展示标准](./architecture/model-output-normalization-and-display-standard.md)
@@ -67,10 +68,12 @@
 ### MCP、参考与示例
 
 - [MCP 文档入口](./mcp/README.md)
+- [MCP 安装与使用](./mcp/README.md#使用入口)
 - [通用 MCP 接入规范](./mcp/integration-standard.md)
 - [MCP 验证与排查手册](./mcp/verification-runbook.md)
 - [Playwright MCP 接入设计](./mcp/playwright-integration-design.md)
 - [MCP 示例配置](./examples/mcp/README.md)
+- [Codex / OpenClaw 工具系统源码对照索引](./references/codex-openclaw-tool-system-source-evidence.md)
 - [OpenAI Codex 生成物源码对照索引](./references/openai-codex-generated-artifacts.md)
 - [npm 发布流程](./release/npm-publish-workflow.md)
 
@@ -84,6 +87,7 @@
 - [CCR Desktop 自动更新状态机 Todo](./stages/desktop-auto-update-todo.md)
 - [CCR Desktop 安装包瘦身专项 Todo](./stages/desktop-packaging-slimming-todo.md)
 - [CCR 工具能力治理修复清单](./stages/tool-capability-repair-list.md)
+- [CCR 工具注册治理分期推进计划](./stages/tool-registry-governance-todo.md)
 - [当前交接文档 2026-05-08](./stages/current-handoff-20260508.md)
 - [历史会话恢复索引 2026-05-18](./stages/history-session-recovery-index-2026-05-18.md)
 - [阶段目标目录](./goals/README.md)

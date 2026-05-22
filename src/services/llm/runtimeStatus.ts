@@ -19,6 +19,7 @@ import {
 } from './llmConfig.js'
 import { getLlmModelCatalogEntry } from './modelCatalog.js'
 import { resolveLlmModelCapabilities } from './modelCapabilities.js'
+import { resolveLlmProviderCapabilityTools } from './providerCapabilityTools.js'
 import {
   createFallbackLlmProviderDefinition,
   getBuiltinLlmProviderDefinition,
@@ -30,6 +31,7 @@ import type {
   LlmAuthStrategy,
   LlmModelCatalogEntry,
   LlmModelCapabilities,
+  LlmProviderCapabilityTools,
   LlmProviderCapabilities,
   LlmProviderDefinition,
 } from './types.js'
@@ -41,6 +43,7 @@ export interface LlmRuntimeDisplayStatus {
   authStrategy: LlmAuthStrategy
   apiMode: LlmApiMode
   capabilities: Readonly<LlmProviderCapabilities>
+  capabilityTools: LlmProviderCapabilityTools
   modelCatalogEntry: LlmModelCatalogEntry
   modelCapabilities: LlmModelCapabilities
   profileId?: string
@@ -70,7 +73,21 @@ interface CodexCredentialSnapshot {
 }
 
 const API_KEY_PROVIDER_ENV_NAMES: Record<string, readonly string[]> = {
+  openai: ['CCR_OPENAI_API_KEY', 'OPENAI_API_KEY'],
   deepseek: ['CCR_DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY'],
+  'kimi-api': ['CCR_KIMI_API_KEY', 'KIMI_API_KEY', 'MOONSHOT_API_KEY'],
+  'kimi-code': ['CCR_KIMI_CODE_API_KEY', 'KIMI_CODE_API_KEY'],
+  'glm-api': [
+    'CCR_GLM_API_KEY',
+    'GLM_API_KEY',
+    'ZAI_API_KEY',
+    'ZHIPUAI_API_KEY',
+  ],
+  'glm-coding': [
+    'CCR_GLM_CODING_API_KEY',
+    'GLM_CODING_API_KEY',
+    'ZAI_CODING_API_KEY',
+  ],
   minimax: ['CCR_MINIMAX_API_KEY', 'MINIMAX_API_KEY'],
   'minimax-cn': [
     'CCR_MINIMAX_CN_API_KEY',
@@ -140,6 +157,12 @@ export function getLlmRuntimeDisplayStatusForProvider(
     authStrategy,
     apiMode,
     capabilities: providerDefinition.capabilities,
+    capabilityTools: resolveLlmProviderCapabilityTools({
+      providerId: provider,
+      model,
+      ...(profile ? { profileId: profile.id } : {}),
+      config,
+    }),
     modelCatalogEntry,
     modelCapabilities: resolveLlmModelCapabilities({
       providerId: provider,

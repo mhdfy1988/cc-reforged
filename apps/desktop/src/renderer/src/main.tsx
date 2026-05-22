@@ -12,6 +12,7 @@ import { routeDesktopEvent } from './app/notificationRouter.js'
 import { Sidebar } from './components/layout/Sidebar.js'
 import { Topbar } from './components/layout/Topbar.js'
 import { WindowTitlebar } from './components/layout/WindowTitlebar.js'
+import { ConfirmDialog } from './components/common/ConfirmDialog.js'
 import { ChatPage } from './components/pages/ChatPage.js'
 import type {
   ComposerPrepareAttachmentInput,
@@ -21,7 +22,9 @@ import type {
 import { LogsPage } from './components/pages/LogsPage.js'
 import { McpPage } from './components/pages/McpPage.js'
 import { ModelsPage } from './components/pages/ModelsPage.js'
+import { PluginsPage } from './components/pages/PluginsPage.js'
 import { SettingsPage } from './components/pages/SettingsPage.js'
+import { SkillsPage } from './components/pages/SkillsPage.js'
 import {
   createErrorDisplayEvent,
   createSystemNoticeEvent,
@@ -43,6 +46,13 @@ import type {
   LlmModelProfileMutationResult,
   LlmModelProfileSaveInput,
   LogSnapshot,
+  McpInstallCandidate,
+  McpInstallListState,
+  McpInstallPlanState,
+  McpInstallPlanViewState,
+  McpInstallSearchState,
+  McpTestState,
+  McpWritableScope,
   PageId,
   PermissionRespondPayload,
   PermissionSettingsState,
@@ -52,10 +62,24 @@ import type {
   TurnRuntimeMetadata,
 } from './domain/displayTypes.js'
 import type { UpdateActionKind } from './domain/updateDisplay.js'
-import type { CcrDesktopEvent } from './global.js'
+import type {
+  CcrDesktopEvent,
+  DesktopConfirmRequest,
+  DesktopConfirmTone,
+} from './global.js'
 
 type AppPageId = Exclude<PageId, 'settings'>
 type ModelAvailabilityCache = Record<string, LlmModelAvailability>
+type ConfirmDialogState = {
+  title: string
+  message: string
+  detail?: string
+  confirmLabel: string
+  cancelLabel?: string
+  tone?: DesktopConfirmTone
+  onConfirm: () => void
+  onCancel?: () => void
+}
 
 const BOOT_MIN_VISIBLE_MS = 1400
 const BOOT_INITIAL_STATUS_TIMEOUT_MS = 2800
@@ -108,6 +132,18 @@ function App({ initialStatus = null }: AppProps) {
     Record<string, true>
   >({})
   const [modelPageError, setModelPageError] = useState<string | null>(null)
+  const [mcpInstalls, setMcpInstalls] = useState<McpInstallListState | null>(
+    null,
+  )
+  const [mcpInstallSearch, setMcpInstallSearch] =
+    useState<McpInstallSearchState | null>(null)
+  const [mcpInstallPlan, setMcpInstallPlan] =
+    useState<McpInstallPlanViewState | null>(null)
+  const [mcpTestByName, setMcpTestByName] = useState<
+    Record<string, McpTestState>
+  >({})
+  const [mcpPageError, setMcpPageError] = useState<string | null>(null)
+  const [mcpPageMessage, setMcpPageMessage] = useState<string | null>(null)
   const [threadHistory, setThreadHistory] = useState<ThreadHistoryState>({
     status: 'closed',
     scope: 'allProjects',
@@ -115,6 +151,9 @@ function App({ initialStatus = null }: AppProps) {
     groups: [],
     threads: [],
   })
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(
+    null,
+  )
   const [busy, setBusy] = useState(false)
   const itemMetadataRef = useRef<Map<string, JsonObject>>(new Map())
   const modelAuthLoginRunRef = useRef(0)
@@ -144,6 +183,19 @@ function App({ initialStatus = null }: AppProps) {
     })
   }, [])
 
+  useEffect(() => {
+    return window.ccr.onConfirmRequest(request => {
+      showConfirmDialog(createConfirmDialogFromRequest(request))
+    })
+  }, [])
+
+  useEffect(() => {
+    if (page !== 'mcp') {
+      return
+    }
+    void refreshMcpManagement().catch(() => undefined)
+  }, [page])
+
   const model = status?.config?.llm?.model ?? '模型待加载'
   const provider = status?.config?.llm?.provider ?? 'provider 待加载'
   const modelCapabilities = status?.config?.llm?.modelCapabilities
@@ -169,6 +221,54 @@ function App({ initialStatus = null }: AppProps) {
   )
   const hasCustomTitleBar =
     status?.platform === 'win32' || navigator.userAgent.includes('Windows')
+
+  function showConfirmDialog(nextDialog: ConfirmDialogState): void {
+    setConfirmDialog(current => {
+      current?.onCancel?.()
+      return nextDialog
+    })
+  }
+
+  function handleConfirmDialogConfirm(): void {
+    const dialog = confirmDialog
+    if (!dialog) {
+      return
+    }
+    setConfirmDialog(null)
+    dialog.onConfirm()
+  }
+
+  function handleConfirmDialogCancel(): void {
+    const dialog = confirmDialog
+    if (!dialog) {
+      return
+    }
+    setConfirmDialog(null)
+    dialog.onCancel?.()
+  }
+
+  function createConfirmDialogFromRequest(
+    request: DesktopConfirmRequest,
+  ): ConfirmDialogState {
+    return {
+      title: request.title,
+      message: request.message,
+      detail: request.detail,
+      confirmLabel: request.confirmLabel,
+      cancelLabel: request.cancelLabel,
+      tone: request.tone,
+      onConfirm: () =>
+        window.ccr.respondConfirmRequest({
+          id: request.id,
+          confirmed: true,
+        }),
+      onCancel: () =>
+        window.ccr.respondConfirmRequest({
+          id: request.id,
+          confirmed: false,
+        }),
+    }
+  }
 
   async function runAction(action: () => Promise<unknown>): Promise<void> {
     setBusy(true)
@@ -619,6 +719,181 @@ function App({ initialStatus = null }: AppProps) {
     setLogSnapshot(logs)
   }
 
+  async function refreshMcpManagement(query = ''): Promise<void> {
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        const [, installs, search] = await Promise.all([
+          window.ccr.refreshMcp(),
+          window.ccr.listMcpInstalls(),
+          window.ccr.searchMcpInstalls({ query }),
+        ])
+        setMcpInstalls(installs as McpInstallListState)
+        setMcpInstallSearch(search as McpInstallSearchState)
+      })
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function searchMcpInstallCandidates(query: string): Promise<void> {
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        const search = (await window.ccr.searchMcpInstalls({
+          query,
+        })) as McpInstallSearchState
+        setMcpInstallSearch(search)
+      })
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function planMcpInstallFromCandidate(
+    candidate: McpInstallCandidate,
+    scope: McpWritableScope,
+  ): Promise<void> {
+    const manifestInput = getMcpCandidateManifestInput(candidate)
+    if (!manifestInput) {
+      setMcpPageError('该 MCP 候选缺少完整安装清单，无法准备安装确认。')
+      return
+    }
+
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        const plan = (await window.ccr.planMcpInstall({
+          scope,
+          manifest: manifestInput,
+        })) as McpInstallPlanState
+        setMcpInstallPlan({ plan, manifestInput })
+        setMcpPageMessage(
+          plan.installable === false
+            ? (plan.existing?.message ?? '该 MCP 已存在，无需重复安装。')
+            : '请确认安装 MCP。',
+        )
+      })
+    } catch (error) {
+      setMcpInstallPlan(null)
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function applyMcpInstallPlan(
+    planView: McpInstallPlanViewState,
+  ): Promise<void> {
+    if (planView.plan.installable === false || planView.plan.existing) {
+      setMcpPageError(
+        planView.plan.existing?.message ?? '该 MCP 已存在，无需重复安装。',
+      )
+      return
+    }
+
+    const token = planView.plan.confirmation?.token
+    if (!token) {
+      setMcpPageError('安装确认缺少 token。')
+      return
+    }
+
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        await window.ccr.applyMcpInstall({
+          ...(planView.plan.name ? { name: planView.plan.name } : {}),
+          scope: normalizeMcpScope(planView.plan.scope),
+          manifest: planView.manifestInput,
+          force: Boolean(planView.plan.force),
+          confirmed: true,
+          confirmationToken: token,
+        })
+        const installs =
+          (await window.ccr.listMcpInstalls()) as McpInstallListState
+        setMcpInstalls(installs)
+        setMcpInstallPlan(null)
+        setMcpPageMessage(`已安装 MCP：${planView.plan.name ?? '未命名'}`)
+      })
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function enableMcpServer(name: string): Promise<void> {
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        await window.ccr.enableMcp({ name })
+        setMcpPageMessage(`已启用 MCP：${name}`)
+      })
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function disableMcpServer(name: string): Promise<void> {
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        await window.ccr.disableMcp({ name })
+        setMcpPageMessage(`已禁用 MCP：${name}`)
+      })
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function restartMcpServer(name: string): Promise<void> {
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        await window.ccr.restartMcp({ name })
+        setMcpPageMessage(`已提交 MCP 重启请求：${name}`)
+      })
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function testMcpServer(name: string): Promise<void> {
+    try {
+      setMcpPageError(null)
+      const result = (await window.ccr.testMcp({ name })) as McpTestState
+      setMcpTestByName(current => ({ ...current, [name]: result }))
+      setMcpPageMessage(`已检测 MCP：${name}`)
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  function uninstallMcpServer(name: string): void {
+    showConfirmDialog({
+      title: '卸载 MCP',
+      message: `卸载 CCR 安装的 MCP：${name}？`,
+      detail:
+        '会移除 CCR 管理的安装记录和配置；手动配置或非 CCR 归属目录不会被这里删除。',
+      confirmLabel: '卸载',
+      tone: 'danger',
+      onConfirm: () => {
+        void performMcpUninstall(name)
+      },
+    })
+  }
+
+  async function performMcpUninstall(name: string): Promise<void> {
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        await window.ccr.uninstallMcp({ name, confirmed: true })
+        const installs =
+          (await window.ccr.listMcpInstalls()) as McpInstallListState
+        setMcpInstalls(installs)
+        setMcpPageMessage(`已卸载 MCP：${name}`)
+      })
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   async function refreshPermissionSettings(): Promise<void> {
     const settings =
       (await window.ccr.getPermissionSettings()) as PermissionSettingsState
@@ -972,8 +1247,27 @@ function App({ initialStatus = null }: AppProps) {
             {page === 'mcp' ? (
               <McpPage
                 busy={busy}
+                error={mcpPageError}
+                installPlan={mcpInstallPlan}
+                installSearch={mcpInstallSearch}
+                installs={mcpInstalls}
+                message={mcpPageMessage}
                 mcp={status?.mcp ?? { servers: [], errors: [] }}
-                onRefresh={() => void runAction(() => window.ccr.refreshMcp())}
+                testByName={mcpTestByName}
+                onApplyInstall={planView => void applyMcpInstallPlan(planView)}
+                onCancelInstall={() => setMcpInstallPlan(null)}
+                onDisable={name => void disableMcpServer(name)}
+                onEnable={name => void enableMcpServer(name)}
+                onPlanInstall={(candidate, scope) =>
+                  void planMcpInstallFromCandidate(candidate, scope)
+                }
+                onRefresh={() => void refreshMcpManagement()}
+                onRestart={name => void restartMcpServer(name)}
+                onSearchInstalls={query =>
+                  void searchMcpInstallCandidates(query)
+                }
+                onTest={name => void testMcpServer(name)}
+                onUninstall={name => void uninstallMcpServer(name)}
               />
             ) : null}
 
@@ -1025,6 +1319,10 @@ function App({ initialStatus = null }: AppProps) {
               />
             ) : null}
 
+            {page === 'skills' ? <SkillsPage /> : null}
+
+            {page === 'plugins' ? <PluginsPage /> : null}
+
             {page === 'logs' ? (
               <LogsPage
                 busy={busy}
@@ -1036,8 +1334,37 @@ function App({ initialStatus = null }: AppProps) {
           </section>
         </main>
       )}
+      {confirmDialog ? (
+        <ConfirmDialog
+          cancelLabel={confirmDialog.cancelLabel}
+          confirmLabel={confirmDialog.confirmLabel}
+          detail={confirmDialog.detail}
+          message={confirmDialog.message}
+          onCancel={handleConfirmDialogCancel}
+          onConfirm={handleConfirmDialogConfirm}
+          open
+          title={confirmDialog.title}
+          tone={confirmDialog.tone}
+        />
+      ) : null}
     </div>
   )
+}
+
+function getMcpCandidateManifestInput(
+  candidate: McpInstallCandidate,
+): Record<string, unknown> | null {
+  if (candidate.manifestInput && typeof candidate.manifestInput === 'object') {
+    return candidate.manifestInput
+  }
+  if (candidate.manifest && typeof candidate.manifest === 'object') {
+    return candidate.manifest as Record<string, unknown>
+  }
+  return null
+}
+
+function normalizeMcpScope(value: unknown): McpWritableScope {
+  return value === 'project' || value === 'local' ? value : 'user'
 }
 
 function isCompactCommand(text: string): boolean {

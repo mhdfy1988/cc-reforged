@@ -28,7 +28,10 @@ CCR 的 MCP 分层固定为：
 | MCP 示例配置 | `docs/examples/mcp/<name>.json` |
 | 临时验证工作区 | `tmp/<name>-mcp-smoke/` |
 | 用户级 MCP 配置 | `~/.ccr/mcp.json` |
-| CCR 管理的本地 MCP 安装 | `~/.ccr/mcp/servers/<name>/` |
+| CCR 受控安装清单 | `~/.ccr/mcp/installed.json` |
+| CCR 受控安装锁文件 | `~/.ccr/mcp/lock.json` |
+| CCR installer-owned 包缓存 | `~/.ccr/mcp/packages/<package>/<version>/` |
+| CLI managed 本地 MCP 安装 | `~/.ccr/mcp/servers/<name>/` |
 | 用户 skill 安装 | `~/.ccr/skills/` |
 | 用户 plugin 安装 | `~/.ccr/plugins/` |
 
@@ -45,8 +48,9 @@ CCR 的 MCP 分层固定为：
 
 Playwright MCP 的安装来源采用双模式：
 
-- `npx` 快速模式：配置里直接写 `cmd /c npx.cmd -y @playwright/mcp@<version>`，包下载和缓存由 npm/npx 管理。
+- `npx` 快速模式：Windows 配置里直接写 `npx.cmd -y @playwright/mcp@<version>`，包下载和缓存由 npm/npx 管理。
 - `.ccr` 管理式安装模式：CCR 把指定版本安装到 `~/.ccr/mcp/servers/playwright/`，配置里指向本地入口。
+- Desktop 受控安装模式：先写安装计划、用户确认、配置、安装清单、锁文件和 owner marker；stdio npm 包实际获取仍由 npm/npx 在启动时完成。
 
 两种模式都必须走同一套 `mcpServers` schema 和 MCP runtime；不要因为 `.ccr` 管理式安装就绕过通用 MCP 连接层。
 
@@ -79,7 +83,7 @@ Playwright MCP 的安装来源采用双模式：
 在当前 Windows 环境下：
 
 - npm/npx 入口优先使用 `npm.cmd`、`npx.cmd`。
-- stdio MCP 如果通过 shell 包装，优先使用 `command: "cmd"` 和 `args: ["/c", "npx.cmd", ...]`。
+- stdio MCP 优先直接使用明确可执行入口，例如 `command: "npx.cmd"`；只有确实需要 shell 语义时才使用 `cmd /c` 包装。
 - 不要在 PowerShell 5.1 命令里使用 `&&` / `||`。
 - 如果 Node loader 使用绝对路径，在非仓库目录运行时要写成 `file:///D:/.../bun-bundle-loader.mjs`。
 

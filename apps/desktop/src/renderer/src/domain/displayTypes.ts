@@ -1,3 +1,199 @@
+export type McpWritableScope = 'user' | 'project' | 'local'
+
+export type McpServerSummary = {
+  name: string
+  scope?: string
+  type?: string
+  transport?: string
+  installKind?: string
+  source?: string
+  enabled?: boolean
+  command?: string
+  args?: string[]
+  url?: string
+  headers?: Record<string, unknown>
+  env?: Record<string, unknown>
+  oauth?: Record<string, unknown>
+  tools?: McpRuntimeToolSummary[]
+  resources?: Record<string, unknown>[]
+  auth?: Record<string, unknown>
+  error?: string | Record<string, unknown>
+}
+
+export type McpRuntimeToolSummary = {
+  name?: string
+  description?: string
+  annotations?: {
+    readOnly?: boolean
+    destructive?: boolean
+    openWorld?: boolean
+  }
+}
+
+export type McpConfigSourceSummary = {
+  id?: string
+  scope?: string
+  mode?: string
+  precedence?: number
+  enabled?: boolean
+  writable?: boolean
+  readPaths?: string[]
+  existingReadPaths?: string[]
+  writePath?: string | null
+  readOnlyReason?: string
+  exclusive?: boolean
+  serverCount?: number
+  errors?: string[]
+}
+
+export type McpInventoryServerSummary = {
+  name: string
+  sourceId?: string
+  scope?: string
+  transport?: string
+  installKind?: string
+  configPath?: string | null
+  writePath?: string | null
+  enabled?: boolean
+  readOnly?: boolean
+  active?: boolean
+  suppressed?: boolean
+  suppressionReason?: string | null
+  projectStatus?: 'approved' | 'rejected' | 'pending'
+  pluginSource?: string
+}
+
+export type McpConfigInventorySummary = {
+  projectCwd?: string
+  configHomeDir?: string
+  globalConfigPath?: string
+  enterpriseExclusive?: boolean
+  pluginOnly?: boolean
+  installPaths?: {
+    packageRootDir?: string
+    installedManifestPath?: string
+    lockFilePath?: string
+    logDir?: string
+  }
+  sources?: McpConfigSourceSummary[]
+  servers?: McpInventoryServerSummary[]
+}
+
+export type McpListState = {
+  configPath?: string
+  inventory?: McpConfigInventorySummary
+  servers?: McpServerSummary[]
+  errors?: Array<string | Record<string, unknown>>
+}
+
+export type McpInstallManifestSummary = {
+  schemaVersion?: 1
+  name?: string
+  kind?: string
+  version?: string
+  transport?: string
+  permissionKinds?: string[]
+  envNames?: string[]
+  dataBoundary?: string
+}
+
+export type McpInstallCandidate = {
+  displayName?: string
+  description?: string
+  trusted?: boolean
+  manifest?: McpInstallManifestSummary
+  manifestInput?: Record<string, unknown>
+}
+
+export type McpInstallSearchState = {
+  query?: string
+  candidates?: McpInstallCandidate[]
+}
+
+export type McpInstallRecord = {
+  name?: string
+  scope?: McpWritableScope | string
+  installedAt?: string
+  updatedAt?: string
+  manifest?: McpInstallManifestSummary
+  serverConfig?: Record<string, unknown>
+  configPath?: string | null
+  packageDir?: string | null
+  packageOwnerMarkerPath?: string | null
+  lockKey?: string
+}
+
+export type McpInstallListState = {
+  installed?: McpInstallRecord[]
+  installPaths?: NonNullable<McpConfigInventorySummary['installPaths']>
+}
+
+export type McpInstallPlanState = {
+  schemaVersion?: 1
+  planId?: string
+  name?: string
+  scope?: McpWritableScope | string
+  force?: boolean
+  installable?: boolean
+  existing?: {
+    configured?: boolean
+    installed?: boolean
+    scope?: string | null
+    message?: string
+  }
+  manifest?: McpInstallManifestSummary
+  serverConfigPreview?: Record<string, unknown>
+  writes?: Array<{
+    kind?: string
+    path?: string
+    mode?: string
+  }>
+  risks?: string[]
+  security?: {
+    dataBoundary?: string
+    scopeWritable?: boolean
+    projectTrustRequired?: boolean
+    enterpriseExclusive?: boolean
+    pluginOnly?: boolean
+    packageCache?: {
+      packageRootDir?: string
+      packageDir?: string | null
+      ownerMarkerPath?: string | null
+      cleanupPolicy?: string
+    }
+    checksum?: {
+      declared?: boolean
+      requiredForDownload?: boolean
+      algorithm?: string | null
+    }
+    version?: {
+      value?: string | null
+      pinned?: boolean
+    }
+  }
+  requiresConfirmation?: boolean
+  confirmation?: {
+    token?: string
+    message?: string
+  }
+}
+
+export type McpInstallPlanViewState = {
+  plan: McpInstallPlanState
+  manifestInput: Record<string, unknown>
+}
+
+export type McpTestState = {
+  name?: string
+  ok?: boolean
+  state?: string
+  message?: string
+  networkChecked?: boolean
+  tools?: McpRuntimeToolSummary[]
+  resources?: Record<string, unknown>[]
+  inspected?: Record<string, unknown>
+}
+
 export type DesktopStatus = {
   appServer: string
   platform: string
@@ -32,6 +228,7 @@ export type DesktopStatus = {
       authStrategy?: LlmAuthStrategy
       apiMode?: LlmApiMode
       capabilities?: LlmProviderCapabilities
+      capabilityTools?: LlmProviderCapabilityTools
       modelCatalogEntry?: LlmModelCatalogEntry
       modelCapabilities?: LlmModelCapabilities
       baseUrl?: string
@@ -43,10 +240,7 @@ export type DesktopStatus = {
     available?: boolean
     provider?: string
   } | null
-  mcp: {
-    servers?: unknown[]
-    errors?: unknown[]
-  } | null
+  mcp: McpListState | null
   context: RuntimeContextStatus | null
   compact: RuntimeCompactStatus | null
   memory: RuntimeMemoryStatus | null
@@ -125,12 +319,30 @@ export type LlmProviderCapabilities = {
   usage?: boolean
 }
 
+export type LlmProviderCapabilityToolStatus = {
+  available?: boolean
+  toolName?: string
+  provider?: string
+  providerDisplayName?: string
+  model?: string
+  source?: string
+  route?: string
+  dataBoundary?: string
+  message?: string
+  reason?: string
+}
+
+export type LlmProviderCapabilityTools = {
+  imageGeneration?: LlmProviderCapabilityToolStatus
+}
+
 export type LlmModelProviderCatalog = {
   id: string
   displayName?: string
   authStrategy?: LlmAuthStrategy
   apiMode?: LlmApiMode
   capabilities?: LlmProviderCapabilities
+  capabilityTools?: LlmProviderCapabilityTools
   profiles?: string[]
   models?: LlmModelCatalogEntry[]
 }
@@ -198,6 +410,7 @@ export type LlmModelAvailability = {
   apiMode?: LlmApiMode
   authStrategy?: LlmAuthStrategy
   capabilities?: LlmProviderCapabilities
+  capabilityTools?: LlmProviderCapabilityTools
   modelCatalogEntry?: LlmModelCatalogEntry
   modelCapabilities?: LlmModelCapabilities
   baseUrl?: string
@@ -508,7 +721,14 @@ export type ThreadHistoryState = {
   error?: string
 }
 
-export type PageId = 'chat' | 'models' | 'mcp' | 'settings' | 'logs'
+export type PageId =
+  | 'chat'
+  | 'models'
+  | 'mcp'
+  | 'skills'
+  | 'plugins'
+  | 'settings'
+  | 'logs'
 
 export type LogSnapshot = {
   logDir: string

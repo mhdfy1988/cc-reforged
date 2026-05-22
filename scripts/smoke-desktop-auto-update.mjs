@@ -75,7 +75,7 @@ assertText(files.main, "broadcast('update'", 'main process must broadcast update
 assertText(files.main, "../preload/index.mjs", 'main process must load the emitted ESM preload file')
 assertText(files.main, 'CCR_DESKTOP_RENDERER_DIAGNOSTICS', 'main process must support renderer diagnostics')
 assertText(files.main, "titleBarStyle: 'hidden'", 'main process must enable the custom Windows title bar')
-assertText(files.main, 'titleBarOverlay', 'main process must keep native window controls over the custom title bar')
+assertNotText(files.main, 'titleBarOverlay', 'main process must keep renderer-owned window controls')
 assertText(files.main, 'window-state.json', 'main process must persist Desktop window state')
 assertText(files.main, 'readWindowState()', 'main process must restore Desktop window state')
 assertText(files.main, 'attachWindowStatePersistence(mainWindow)', 'main process must attach window state persistence')
@@ -89,6 +89,10 @@ for (const method of [
   'installUpdate',
   'mockUpdateState',
   'interruptTurn',
+  'getWindowState',
+  'minimizeWindow',
+  'toggleMaximizeWindow',
+  'closeWindow',
 ]) {
   assertText(files.preload, method, 'preload API is missing an expected method')
 }
@@ -113,6 +117,11 @@ for (const expected of [
   '停止',
   'WindowTitlebar',
   'window-titlebar',
+  'window-titlebar-controls',
+  'window-control-button',
+  'minimizeWindow',
+  'toggleMaximizeWindow',
+  'closeWindow',
   "case 'item/started'",
   'upsertCompletedItemMessage',
   'upsertThinkingDelta',
@@ -196,6 +205,12 @@ function collectSourceFiles(directory, sourceFiles) {
 function assertText(text, expected, message) {
   if (!text.includes(expected)) {
     fail(message, { expected })
+  }
+}
+
+function assertNotText(text, unexpected, message) {
+  if (text.includes(unexpected)) {
+    fail(message, { unexpected })
   }
 }
 
