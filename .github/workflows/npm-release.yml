@@ -1,6 +1,9 @@
 name: NPM Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -18,10 +21,17 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout tag
+      - name: Checkout tag (manual)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Checkout tag (auto)
+        if: ${{ github.event_name == 'push' }}
+        uses: actions/checkout@v4
+        with:
           fetch-depth: 0
 
       - name: Setup Node
@@ -30,11 +40,25 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Resolve release tag
+        id: release_tag
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $tag = '${{ inputs.tag }}'
+          } else {
+            $tag = '${{ github.ref_name }}'
+          }
+          if (-not $tag) {
+            throw 'Unable to resolve release tag'
+          }
+          "value=$tag" >> $env:GITHUB_OUTPUT
+
       - name: Verify tag matches package version
         shell: pwsh
         run: |
           $pkgVersion = node -e "console.log(require('./package.json').version)"
-          $expectedVersion = '${{ inputs.tag }}'
+          $expectedVersion = '${{ steps.release_tag.outputs.value }}'
           if ($expectedVersion.StartsWith('v')) {
             $expectedVersion = $expectedVersion.Substring(1)
           }

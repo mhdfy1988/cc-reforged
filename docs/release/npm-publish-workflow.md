@@ -21,7 +21,7 @@
 
 1. Trusted Publishing 只替代 `npm publish` 的认证，不替代你们现有的质量门禁。
 2. 若项目后续引入私有依赖，`npm ci` 可能仍需要只读安装凭据（发布凭据仍建议保持 OIDC）。
-3. 当前发布入口是 **手动触发 workflow_dispatch**，避免误发包。
+3. 当前发布入口默认是 **push tag 自动触发**，并保留 `workflow_dispatch` 作为兜底重试。
 
 ## 2. 一次性配置（npm 网站）
 
@@ -78,9 +78,17 @@ git tag v0.5.1
 git push origin v0.5.1
 ```
 
-### 4.3 触发发布工作流
+### 4.3 自动触发发布工作流
 
-在 GitHub Actions 页面手动触发 `NPM Release`：
+推送版本 tag 后会自动触发 `NPM Release`，不需要再手点 Run：
+
+1. Workflow：`NPM Release`
+2. 触发来源：`push tag`（例如 `v0.5.1`）
+3. 自动执行发布
+
+### 4.4 手动兜底触发（可选）
+
+如果自动流程需要重试，也可以手动运行 `workflow_dispatch`：
 
 1. Workflow：`NPM Release`
 2. 输入 `tag`：`v0.5.1`
