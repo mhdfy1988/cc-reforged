@@ -1,0 +1,36 @@
+import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
+
+export const TOOL_TIMING_METADATA_KEYS = [
+  'durationMs',
+  'duration_ms',
+  'elapsedTimeMs',
+  'elapsed_ms',
+  'startedAt',
+  'started_at',
+  'startTime',
+  'start_time',
+  'completedAt',
+  'completed_at',
+  'endedAt',
+  'ended_at',
+  'endTime',
+  'end_time',
+]
+
+export function stripToolTimingMetadataFromContentBlock<
+  T extends ContentBlockParam,
+>(block: T): T {
+  if (block.type !== 'tool_result' && block.type !== 'tool_use') {
+    return block
+  }
+
+  let changed = false
+  const sanitized = { ...(block as unknown as Record<string, unknown>) }
+  for (const key of TOOL_TIMING_METADATA_KEYS) {
+    if (key in sanitized) {
+      delete sanitized[key]
+      changed = true
+    }
+  }
+  return changed ? (sanitized as unknown as T) : block
+}

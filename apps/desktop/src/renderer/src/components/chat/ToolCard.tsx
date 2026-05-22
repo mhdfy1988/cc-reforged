@@ -44,7 +44,19 @@ export function ToolCard(props: {
   )
   const useCompactFileLayout = snapshot.category === 'file' && hasFileSnapshot
   const detailBlocks = createToolDetailBlocks(snapshot, props.event)
-  const hasDetail = detailBlocks.length > 0
+  const conciseDetailBlocks = detailBlocks.filter(isConciseToolDetailBlock)
+  const hasRichDetail = Boolean(
+    props.event.fileSnapshot ||
+      props.event.referenceSnapshot ||
+      props.event.attachmentSnapshot ||
+      props.event.attachmentSnapshots?.length,
+  )
+  const hasDetail = Boolean(
+    conciseDetailBlocks.length ||
+      metaItemsHaveDetails(snapshot, useCompactFileLayout) ||
+      hasRichDetail ||
+      getToolHints(snapshot).length,
+  )
   const metaItems = getToolMetaItems(snapshot, {
     hideTarget: useCompactFileLayout,
   })
@@ -63,31 +75,61 @@ export function ToolCard(props: {
     >
       <b>i</b>
       <div className="tool-card-body">
-        <div className="tool-card-head">
-          <strong>{snapshot.displayName ?? snapshot.name}</strong>
-          {useCompactFileLayout ? null : (
-            <span>{getCategoryText(snapshot.category)}</span>
-          )}
-        </div>
-        {useCompactFileLayout ? null : (
-          <p className="tool-card-summary" title={snapshot.summary}>
-            {snapshot.summary}
-          </p>
-        )}
-        {metaItems.length ? (
-          <div className="tool-card-meta">
-            {metaItems.map(item => (
-              <span key={item.label}>
-                {item.label}：{item.value}
-              </span>
-            ))}
+        {hasDetail ? (
+          <details className="tool-card-details">
+            <summary className="tool-card-compact-row">
+              <ToolCompactMain snapshot={snapshot} />
+              <DurationBadge durationMs={snapshot.durationMs} />
+              {showToolStatus ? (
+                <StatusBadge label={snapshot.statusLabel} status={snapshot.status} />
+              ) : null}
+              <span className="tool-card-toggle-text" aria-hidden="true" />
+            </summary>
+            <div className="tool-card-expanded-content">
+              {metaItems.length ? (
+                <div className="tool-card-meta">
+                  {metaItems.map(item => (
+                    <span key={item.label}>
+                      {item.label}：{item.value}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              {hints.map(hint => (
+                <p className="tool-card-hint" key={hint}>
+                  {hint}
+                </p>
+              ))}
+              {props.event.fileSnapshot ||
+              props.event.referenceSnapshot ||
+              props.event.attachmentSnapshot ? (
+                <FileSnapshotPanel
+                  event={props.event}
+                  variant={useCompactFileLayout ? 'compact' : 'default'}
+                />
+              ) : null}
+              {props.event.attachmentSnapshots?.length ? (
+                <MessageAttachmentStrip
+                  attachments={props.event.attachmentSnapshots}
+                />
+              ) : null}
+              {conciseDetailBlocks.map(block => (
+                <ToolDetailBlock
+                  key={getToolDetailBlockKey(block)}
+                  block={block}
+                />
+              ))}
+            </div>
+          </details>
+        ) : (
+          <div className="tool-card-compact-row">
+            <ToolCompactMain snapshot={snapshot} />
+            <DurationBadge durationMs={snapshot.durationMs} />
+            {showToolStatus ? (
+              <StatusBadge label={snapshot.statusLabel} status={snapshot.status} />
+            ) : null}
           </div>
-        ) : null}
-        {hints.map(hint => (
-          <p className="tool-card-hint" key={hint}>
-            {hint}
-          </p>
-        ))}
+        )}
         {inlinePermission ? (
           isShellPermission(inlinePermission) ? (
             <ShellPermissionInlinePanel
@@ -102,33 +144,67 @@ export function ToolCard(props: {
             />
           )
         ) : null}
-        {props.event.fileSnapshot ||
-        props.event.referenceSnapshot ||
-        props.event.attachmentSnapshot ? (
-          <FileSnapshotPanel
-            event={props.event}
-            variant={useCompactFileLayout ? 'compact' : 'default'}
-          />
-        ) : null}
-        {props.event.attachmentSnapshots?.length ? (
-          <MessageAttachmentStrip attachments={props.event.attachmentSnapshots} />
-        ) : null}
-        {hasDetail ? (
-          <details>
-            <summary>查看详情</summary>
-            {detailBlocks.map(block => (
-              <ToolDetailBlock key={getToolDetailBlockKey(block)} block={block} />
-            ))}
-          </details>
-        ) : null}
-        {showToolStatus ? (
-          <div className="tool-card-status-row">
-            <StatusBadge label={snapshot.statusLabel} status={snapshot.status} />
-          </div>
-        ) : null}
       </div>
     </div>
   )
+}
+
+function ToolCompactMain(props: {
+  snapshot: NonNullable<DisplayEvent['toolSnapshot']>
+}) {
+  const category = getCategoryText(props.snapshot.category)
+  return (
+    <div className="tool-card-compact-main">
+      <strong title={props.snapshot.displayName ?? props.snapshot.name}>
+        {props.snapshot.displayName ?? props.snapshot.name}
+      </strong>
+      <span className="tool-card-category">{category}</span>
+      <span className="tool-card-summary" title={props.snapshot.summary}>
+        {props.snapshot.summary}
+      </span>
+    </div>
+  )
+}
+
+function DurationBadge(props: { durationMs?: number }) {
+  if (typeof props.durationMs !== 'number' || !Number.isFinite(props.durationMs)) {
+    return null
+  }
+  return (
+    <span className="tool-duration-badge">
+      耗时 {formatDurationMs(props.durationMs)}
+    </span>
+  )
+}
+
+function formatDurationMs(value: number | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return ''
+  }
+  const durationMs = Math.max(0, Math.round(value ?? 0))
+  if (durationMs < 1000) {
+    return `${durationMs}ms`
+  }
+  if (durationMs < 60_000) {
+    const seconds = durationMs / 1000
+    return `${seconds >= 10 ? Math.round(seconds) : seconds.toFixed(1)}s`
+  }
+  const minutes = Math.floor(durationMs / 60_000)
+  const seconds = Math.round((durationMs % 60_000) / 1000)
+  return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`
+}
+
+function isConciseToolDetailBlock(block: ToolDetailBlockView): boolean {
+  return block.kind === 'input' || block.kind === 'result' || block.kind === 'error'
+}
+
+function metaItemsHaveDetails(
+  snapshot: NonNullable<DisplayEvent['toolSnapshot']>,
+  useCompactFileLayout: boolean,
+): boolean {
+  return getToolMetaItems(snapshot, {
+    hideTarget: useCompactFileLayout,
+  }).length > 0
 }
 
 function isShellPermission(permission: PermissionCard): boolean {

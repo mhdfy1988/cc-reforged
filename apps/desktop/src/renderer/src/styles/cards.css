@@ -4,19 +4,35 @@
   min-width: 0;
 }
 
-.tool-card-head {
+.tool-card-compact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tool-card-compact-main {
   display: flex;
   align-items: center;
-  gap: 10px;
+  min-width: 0;
+  gap: 8px;
 }
 
-.tool-card-head strong {
+.tool-card-compact-main strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: #7b4b05;
   font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.tool-card-head span,
-.tool-card-meta span {
+.tool-card-category,
+.tool-card-meta span,
+.tool-duration-badge {
+  flex: 0 0 auto;
   border: 1px solid rgba(118, 93, 61, 0.14);
   border-radius: 999px;
   background: rgba(255, 251, 243, 0.74);
@@ -26,22 +42,27 @@
   padding: 2px 7px;
 }
 
+.tool-card-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: #2f261d;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tool-card-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.tool-card-status-row {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .tool-status-badge {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 6px;
-  margin-left: auto;
   border: 1px solid rgba(239, 151, 0, 0.28);
   border-radius: 999px;
   background: rgba(255, 248, 234, 0.78);
@@ -49,6 +70,11 @@
   font-size: 11px;
   font-weight: 900;
   padding: 3px 8px;
+}
+
+.tool-duration-badge {
+  color: #6b5845;
+  background: rgba(255, 248, 234, 0.72);
 }
 
 .tool-status-badge.is-success {
@@ -85,28 +111,56 @@
   font-weight: 800;
 }
 
-.tool-card-summary {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .tool-card-body .tool-card-hint {
   color: #7b4b05;
   font-size: 11px;
   font-weight: 700;
 }
 
-.tool-card details {
-  margin-top: 2px;
+.tool-card-details {
+  min-width: 0;
 }
 
-.tool-card summary {
+.tool-card-details > summary {
+  list-style: none;
+}
+
+.tool-card-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-card-toggle-text {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  margin-left: 12px;
+  border: 1px solid rgba(118, 93, 61, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 251, 243, 0.8);
   color: var(--muted);
   cursor: pointer;
   font-size: 11px;
   font-weight: 900;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.tool-card-toggle-text::before {
+  content: '展开';
+}
+
+.tool-card-details[open] .tool-card-toggle-text::before {
+  content: '收起';
+}
+
+.tool-card-expanded-content {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 10px;
+  border-top: 1px dashed rgba(208, 186, 158, 0.72);
+  padding-top: 10px;
 }
 
 .tool-card pre {

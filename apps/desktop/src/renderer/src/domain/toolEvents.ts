@@ -87,6 +87,7 @@ export function extractToolSnapshotFromBlocks(
       const category = classifyToolCategory(name, input)
       const metadata = extractToolCallMetadata(name, category, input)
       const status = getToolUseDisplayStatus(block, context)
+      const timing = extractToolTiming(block, input, context)
 
       return {
         id,
@@ -108,12 +109,18 @@ export function extractToolSnapshotFromBlocks(
         risk: metadata.risk,
         detailKeys: metadata.detailKeys,
         showInMainTimeline: metadata.showInMainTimeline,
+        ...timing,
         raw: block,
       }
     }
 
     if (type === 'tool_result') {
       const resultText = stringifyToolResult(block.content)
+      const timing = extractToolTiming(
+        block,
+        getToolResultTimingSource(block.content),
+        context,
+      )
       const category = classifyToolCategory(getToolName(block))
       const isError = Boolean(block.isError) || isFailureStatus(statusText)
       const isMissingTaskOutput = isTaskNotFoundToolResult(resultText)
@@ -141,12 +148,14 @@ export function extractToolSnapshotFromBlocks(
         errorClass,
         errorMessage: isError && errorClass ? resultText : undefined,
         actionableHint: getActionableHint(errorClass),
+        ...timing,
         raw: block,
       }
     }
 
     if (type === 'progress') {
       const metadata = extractProgressMetadata(block.data)
+      const timing = extractToolTiming(block, getJsonObject(block.data), context)
       return {
         id,
         kind: 'progress',
@@ -158,12 +167,92 @@ export function extractToolSnapshotFromBlocks(
         summary: metadata.summary,
         identity,
         result: block.data,
+        ...timing,
         raw: block,
       }
     }
   }
 
   return null
+}
+
+function extractToolTiming(
+  block: JsonObject,
+  nested: JsonObject | null,
+  context: DisplayEventContractContext | undefined,
+): Pick<ToolSnapshot, 'durationMs' | 'startedAt' | 'completedAt'> {
+  const durationMs =
+    getNumber(block, ['durationMs', 'duration_ms', 'elapsedTimeMs', 'elapsed_ms']) ??
+    getNumber(nested, ['durationMs', 'duration_ms', 'elapsedTimeMs', 'elapsed_ms']) ??
+    getNumber(context?.item, [
+      'durationMs',
+      'duration_ms',
+      'elapsedTimeMs',
+      'elapsed_ms',
+    ]) ??
+    getNumber(context?.params, [
+      'durationMs',
+      'duration_ms',
+      'elapsedTimeMs',
+      'elapsed_ms',
+    ])
+  const startedAt =
+    getString(block, ['startedAt', 'started_at', 'startTime', 'start_time']) ??
+    getString(nested, ['startedAt', 'started_at', 'startTime', 'start_time']) ??
+    getString(context?.item, ['startedAt', 'started_at', 'startTime', 'start_time']) ??
+    getString(context?.params, ['startedAt', 'started_at', 'startTime', 'start_time'])
+  const completedAt =
+    getString(block, [
+      'completedAt',
+      'completed_at',
+      'endedAt',
+      'ended_at',
+      'endTime',
+      'end_time',
+    ]) ??
+    getString(nested, [
+      'completedAt',
+      'completed_at',
+      'endedAt',
+      'ended_at',
+      'endTime',
+      'end_time',
+    ]) ??
+    getString(context?.item, [
+      'completedAt',
+      'completed_at',
+      'endedAt',
+      'ended_at',
+      'endTime',
+      'end_time',
+    ]) ??
+    getString(context?.params, [
+      'completedAt',
+      'completed_at',
+      'endedAt',
+      'ended_at',
+      'endTime',
+      'end_time',
+    ])
+
+  return {
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...(startedAt ? { startedAt } : {}),
+    ...(completedAt ? { completedAt } : {}),
+  }
+}
+
+function getToolResultTimingSource(value: unknown): JsonObject | null {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const source = getToolResultTimingSource(item)
+      if (source) {
+        return source
+      }
+    }
+    return null
+  }
+  return getJsonObject(value)
 }
 
 function isHistoryReplayContext(
@@ -984,7 +1073,7 @@ function getJsonObject(value: unknown): JsonObject | null {
 }
 
 function getString(
-  input: JsonObject | null,
+  input: JsonObject | null | undefined,
   keys: string[],
 ): string | undefined {
   if (!input) {
@@ -994,6 +1083,28 @@ function getString(
     const value = input[key]
     if (typeof value === 'string' && value.trim()) {
       return value
+    }
+  }
+  return undefined
+}
+
+function getNumber(
+  input: JsonObject | null | undefined,
+  keys: string[],
+): number | undefined {
+  if (!input) {
+    return undefined
+  }
+  for (const key of keys) {
+    const value = input[key]
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value
+    }
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) {
+        return parsed
+      }
     }
   }
   return undefined

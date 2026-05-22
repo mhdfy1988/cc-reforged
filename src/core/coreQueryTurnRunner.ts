@@ -822,20 +822,24 @@ function contentBlocks(
       }
     }
     if ('type' in block && block.type === 'tool_use') {
+      const timing = getTimingFieldsFromRecord(block)
       return {
         type: 'tool_use',
         id: 'id' in block ? block.id : undefined,
         name: 'name' in block ? block.name : undefined,
         input: 'input' in block ? block.input : undefined,
+        ...timing,
       }
     }
     if ('type' in block && block.type === 'tool_result') {
+      const timing = getTimingFieldsFromRecord(block)
       return {
         type: 'tool_result',
         toolUseId: 'tool_use_id' in block ? block.tool_use_id : undefined,
         isError: 'is_error' in block ? block.is_error : undefined,
         content: 'content' in block ? block.content : undefined,
         ...(displayToolResult ? { result: displayToolResult } : {}),
+        ...timing,
       }
     }
     if (
@@ -849,6 +853,77 @@ function contentBlocks(
     }
     return { type: String('type' in block ? block.type : 'json'), value: block }
   })
+}
+
+function getTimingFieldsFromRecord(
+  value: Record<string, unknown> | null,
+): Partial<{
+  durationMs: number
+  startedAt: string
+  completedAt: string
+}> {
+  if (!value) {
+    return {}
+  }
+
+  const durationMs = getTimingNumberField(value, [
+    'durationMs',
+    'duration_ms',
+    'elapsedTimeMs',
+    'elapsed_ms',
+  ])
+  const startedAt = getTimingStringField(value, [
+    'startedAt',
+    'started_at',
+    'startTime',
+    'start_time',
+  ])
+  const completedAt = getTimingStringField(value, [
+    'completedAt',
+    'completed_at',
+    'endedAt',
+    'ended_at',
+    'endTime',
+    'end_time',
+  ])
+
+  return {
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...(startedAt ? { startedAt } : {}),
+    ...(completedAt ? { completedAt } : {}),
+  }
+}
+
+function getTimingNumberField(
+  value: Record<string, unknown>,
+  keys: string[],
+): number | undefined {
+  for (const key of keys) {
+    const fieldValue = value[key]
+    if (typeof fieldValue === 'number' && Number.isFinite(fieldValue)) {
+      return fieldValue
+    }
+    if (typeof fieldValue === 'string' && fieldValue.trim()) {
+      const parsed = Number(fieldValue)
+      if (Number.isFinite(parsed)) {
+        return parsed
+      }
+    }
+  }
+  return undefined
+}
+
+function getTimingStringField(
+  value: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const fieldValue = value[key]
+    if (typeof fieldValue === 'string' && fieldValue.trim()) {
+      return fieldValue
+    }
+  }
+  return undefined
 }
 
 function getDisplayToolResult(value: unknown): CoreJsonObject | undefined {

@@ -342,12 +342,49 @@ function getMcpServerBaseUrlFromToolName(
   return getLoggingSafeMcpBaseUrl(serverConnection.config)
 }
 
+type ToolTimingSnapshot = {
+  durationMs: number
+  startedAt: string
+  completedAt: string
+}
+
+function createToolTimingSnapshot(
+  startedAtMs: number,
+  completedAtMs = Date.now(),
+): ToolTimingSnapshot {
+  const safeStart = Number.isFinite(startedAtMs) ? startedAtMs : completedAtMs
+  const safeCompleted = Number.isFinite(completedAtMs)
+    ? completedAtMs
+    : safeStart
+  return {
+    durationMs: Math.max(0, safeCompleted - safeStart),
+    startedAt: new Date(safeStart).toISOString(),
+    completedAt: new Date(safeCompleted).toISOString(),
+  }
+}
+
+function withToolResultTiming(
+  block: ToolResultBlockParam,
+  timing: ToolTimingSnapshot | undefined,
+): ToolResultBlockParam {
+  if (!timing) {
+    return block
+  }
+  return {
+    ...(block as unknown as Record<string, unknown>),
+    durationMs: timing.durationMs,
+    startedAt: timing.startedAt,
+    completedAt: timing.completedAt,
+  } as unknown as ToolResultBlockParam
+}
+
 export async function* runToolUse(
   toolUse: ToolUseBlock,
   assistantMessage: AssistantMessage,
   canUseTool: CanUseToolFn,
   toolUseContext: ToolUseContext,
 ): AsyncGenerator<MessageUpdateLazy, void> {
+  const runToolUseStartedAtMs = Date.now()
   const toolName = toolUse.name
   const sourceToolAssistantUUID = getSourceToolAssistantUUID(assistantMessage)
   // First try to find in the available tools (what the model sees)
@@ -402,15 +439,19 @@ export async function* runToolUse(
       }),
       ...mcpToolDetailsForAnalytics(toolName, mcpServerType, mcpServerBaseUrl),
     })
+    const timing = createToolTimingSnapshot(runToolUseStartedAtMs)
     yield {
       message: createUserMessage({
         content: [
-          {
-            type: 'tool_result',
-            content: `<tool_use_error>Error: No such tool available: ${toolName}</tool_use_error>`,
-            is_error: true,
-            tool_use_id: toolUse.id,
-          },
+          withToolResultTiming(
+            {
+              type: 'tool_result',
+              content: `<tool_use_error>Error: No such tool available: ${toolName}</tool_use_error>`,
+              is_error: true,
+              tool_use_id: toolUse.id,
+            },
+            timing,
+          ),
         ],
         toolUseResult: `Error: No such tool available: ${toolName}`,
         sourceToolAssistantUUID,
@@ -449,7 +490,10 @@ export async function* runToolUse(
           mcpServerBaseUrl,
         ),
       })
-      const content = createToolResultStopMessage(toolUse.id)
+      const content = createToolResultStopMessage(
+        toolUse.id,
+        createToolTimingSnapshot(runToolUseStartedAtMs),
+      )
       content.content = withMemoryCorrectionHint(CANCEL_MESSAGE)
       yield {
         message: createUserMessage({
@@ -480,16 +524,20 @@ export async function* runToolUse(
     const errorMessage = error instanceof Error ? error.message : String(error)
     const toolInfo = tool ? ` (${tool.name})` : ''
     const detailedError = `Error calling tool${toolInfo}: ${errorMessage}`
+    const timing = createToolTimingSnapshot(runToolUseStartedAtMs)
 
     yield {
       message: createUserMessage({
         content: [
-          {
-            type: 'tool_result',
-            content: `<tool_use_error>${detailedError}</tool_use_error>`,
-            is_error: true,
-            tool_use_id: toolUse.id,
-          },
+          withToolResultTiming(
+            {
+              type: 'tool_result',
+              content: `<tool_use_error>${detailedError}</tool_use_error>`,
+              is_error: true,
+              tool_use_id: toolUse.id,
+            },
+            timing,
+          ),
         ],
         toolUseResult: detailedError,
         sourceToolAssistantUUID,
@@ -621,6 +669,7 @@ async function checkPermissionsAndCallTool(
   ) => void,
 ): Promise<MessageUpdateLazy[]> {
   const sourceToolAssistantUUID = getSourceToolAssistantUUID(assistantMessage)
+  const toolFlowStartedAtMs = Date.now()
   // Validate input types with zod (surprisingly, the model is not great at generating valid input)
   const parsedInput = tool.inputSchema.safeParse(input)
   if (!parsedInput.success) {
@@ -675,12 +724,15 @@ async function checkPermissionsAndCallTool(
       {
         message: createUserMessage({
           content: [
-            {
-              type: 'tool_result',
-              content: `<tool_use_error>InputValidationError: ${errorContent}</tool_use_error>`,
-              is_error: true,
-              tool_use_id: toolUseID,
-            },
+            withToolResultTiming(
+              {
+                type: 'tool_result',
+                content: `<tool_use_error>InputValidationError: ${errorContent}</tool_use_error>`,
+                is_error: true,
+                tool_use_id: toolUseID,
+              },
+              createToolTimingSnapshot(toolFlowStartedAtMs),
+            ),
           ],
           toolUseResult: `InputValidationError: ${parsedInput.error.message}`,
           sourceToolAssistantUUID,
@@ -728,12 +780,15 @@ async function checkPermissionsAndCallTool(
       {
         message: createUserMessage({
           content: [
-            {
-              type: 'tool_result',
-              content: `<tool_use_error>${isValidCall.message}</tool_use_error>`,
-              is_error: true,
-              tool_use_id: toolUseID,
-            },
+            withToolResultTiming(
+              {
+                type: 'tool_result',
+                content: `<tool_use_error>${isValidCall.message}</tool_use_error>`,
+                is_error: true,
+                tool_use_id: toolUseID,
+              },
+              createToolTimingSnapshot(toolFlowStartedAtMs),
+            ),
           ],
           toolUseResult: `Error: ${isValidCall.message}`,
           sourceToolAssistantUUID,
@@ -862,7 +917,12 @@ async function checkPermissionsAndCallTool(
         )
         resultingMessages.push({
           message: createUserMessage({
-            content: [createToolResultStopMessage(toolUseID)],
+            content: [
+              createToolResultStopMessage(
+                toolUseID,
+                createToolTimingSnapshot(toolFlowStartedAtMs),
+              ),
+            ],
             toolUseResult: `Error: ${stopReason}`,
             sourceToolAssistantUUID,
           }),
@@ -1038,12 +1098,15 @@ async function checkPermissionsAndCallTool(
 
     // Build top-level content: tool_result (text-only for is_error compatibility) + images alongside
     const messageContent: ContentBlockParam[] = [
-      {
-        type: 'tool_result',
-        content: errorMessage,
-        is_error: true,
-        tool_use_id: toolUseID,
-      },
+      withToolResultTiming(
+        {
+          type: 'tool_result',
+          content: errorMessage,
+          is_error: true,
+          tool_use_id: toolUseID,
+        },
+        createToolTimingSnapshot(toolFlowStartedAtMs),
+      ),
     ]
 
     // Add image blocks at top level (not inside tool_result, which rejects non-text with is_error)
@@ -1230,7 +1293,9 @@ async function checkPermissionsAndCallTool(
         })
       },
     )
-    const durationMs = Date.now() - startTime
+    const completedAtMs = Date.now()
+    const durationMs = completedAtMs - startTime
+    const executionTiming = createToolTimingSnapshot(startTime, completedAtMs)
     addToToolDuration(durationMs)
 
     // Log tool content/output as span event if enabled
@@ -1416,13 +1481,17 @@ async function checkPermissionsAndCallTool(
     ) {
       // Use the pre-mapped block when available (non-MCP tools where hooks
       // don't modify the output), otherwise map from scratch.
-      const toolResultBlock = preMappedBlock
+      const mappedToolResultBlock = preMappedBlock
         ? await processPreMappedToolResultBlock(
             preMappedBlock,
             tool.name,
             tool.maxResultSizeChars,
           )
         : await processToolResultBlock(tool, toolUseResult, toolUseID)
+      const toolResultBlock = withToolResultTiming(
+        mappedToolResultBlock,
+        executionTiming,
+      )
 
       // Build content blocks - tool result first, then optional feedback
       const contentBlocks: ContentBlockParam[] = [toolResultBlock]
@@ -1597,7 +1666,9 @@ async function checkPermissionsAndCallTool(
     }
     return resultingMessages
   } catch (error) {
-    const durationMs = Date.now() - startTime
+    const completedAtMs = Date.now()
+    const durationMs = completedAtMs - startTime
+    const executionTiming = createToolTimingSnapshot(startTime, completedAtMs)
     addToToolDuration(durationMs)
 
     endToolExecutionSpan({
@@ -1726,12 +1797,15 @@ async function checkPermissionsAndCallTool(
       {
         message: createUserMessage({
           content: [
-            {
-              type: 'tool_result',
-              content,
-              is_error: true,
-              tool_use_id: toolUseID,
-            },
+            withToolResultTiming(
+              {
+                type: 'tool_result',
+                content,
+                is_error: true,
+                tool_use_id: toolUseID,
+              },
+              executionTiming,
+            ),
           ],
           toolUseResult: `Error: ${content}`,
           mcpMeta: toolUseContext.agentId

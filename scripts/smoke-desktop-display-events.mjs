@@ -503,6 +503,7 @@ async function assertToolErrorClassifications() {
       import { formatInstalledRecord, formatManifest, formatMcpScopeLabel, formatServerSubtitle, formatToolAnnotations, getCandidateInstallState, getCandidateKey, getServerStatusLabel, getServerTone, mergeMcpServers, normalizeMcpState } from '../../apps/desktop/src/renderer/src/components/pages/McpPage.tsx'
       import { createCcrErrorSnapshot } from '../../src/types/errorSnapshot.ts'
       import { persistGeneratedArtifactFromBase64, prepareGeneratedImageCallForModelReplay, sanitizeGeneratedArtifactsForResume, shouldIncludeGeneratedImageResultForReplay } from '../../src/utils/generatedArtifacts.ts'
+      import { stripToolTimingMetadataFromContentBlock } from '../../src/utils/toolTimingMetadata.ts'
 
       const generatedArtifactsHome = ${JSON.stringify(join(tempDir, 'generated-artifacts-home'))}
 
@@ -586,6 +587,7 @@ async function assertToolErrorClassifications() {
             type: 'tool_use',
             id: 'toolu_mcp_demo_search',
             name: 'mcp__demo__search',
+            durationMs: 1234,
             input: {
               query: 'release notes',
             },
@@ -602,6 +604,7 @@ async function assertToolErrorClassifications() {
       assert.equal(mcpToolEvent?.toolSnapshot?.displayName, 'MCP demo / search')
       assert.equal(mcpToolEvent?.toolSnapshot?.category, 'mcp')
       assert.equal(mcpToolEvent?.toolSnapshot?.summary, 'MCP demo / search：release notes')
+      assert.equal(mcpToolEvent?.toolSnapshot?.durationMs, 1234)
 
       const mcpProgressEvent = createDisplayEventFromCompletedItem(
         'fixture-mcp-progress',
@@ -614,6 +617,7 @@ async function assertToolErrorClassifications() {
               status: 'failed',
               serverName: 'demo',
               toolName: 'search',
+              elapsedTimeMs: 3800,
             },
           },
         ],
@@ -627,6 +631,47 @@ async function assertToolErrorClassifications() {
       assert.equal(mcpProgressEvent?.toolSnapshot?.displayName, 'MCP demo / search')
       assert.equal(mcpProgressEvent?.toolSnapshot?.category, 'mcp')
       assert.equal(mcpProgressEvent?.toolSnapshot?.summary, 'MCP demo / search：failed')
+      assert.equal(mcpProgressEvent?.toolSnapshot?.durationMs, 3800)
+
+      const timedToolResultEvent = createDisplayEventFromCompletedItem(
+        'fixture-timed-tool-result',
+        'tool_result',
+        [
+          {
+            type: 'tool_result',
+            name: 'Read',
+            tool_use_id: 'toolu_timed_result',
+            content: 'ok',
+            durationMs: 2150,
+            startedAt: '2026-05-22T08:00:00.000Z',
+            completedAt: '2026-05-22T08:00:02.150Z',
+          },
+        ],
+        'completed',
+        {
+          itemId: 'fixture-timed-tool-result',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_timed_result',
+        },
+      )
+      assert.equal(timedToolResultEvent?.toolSnapshot?.durationMs, 2150)
+      assert.equal(timedToolResultEvent?.toolSnapshot?.startedAt, '2026-05-22T08:00:00.000Z')
+      assert.equal(timedToolResultEvent?.toolSnapshot?.completedAt, '2026-05-22T08:00:02.150Z')
+
+      const sanitizedToolResultBlock = stripToolTimingMetadataFromContentBlock({
+        type: 'tool_result',
+        tool_use_id: 'toolu_timed_result',
+        content: 'ok',
+        durationMs: 2150,
+        startedAt: '2026-05-22T08:00:00.000Z',
+        completedAt: '2026-05-22T08:00:02.150Z',
+      })
+      const sanitizedToolResultJson = JSON.stringify(sanitizedToolResultBlock)
+      assert.equal(sanitizedToolResultJson.includes('tool_result'), true)
+      assert.equal(sanitizedToolResultJson.includes('durationMs'), false)
+      assert.equal(sanitizedToolResultJson.includes('startedAt'), false)
+      assert.equal(sanitizedToolResultJson.includes('completedAt'), false)
 
       const normalizedMcpState = normalizeMcpState(null)
       assert.deepEqual(normalizedMcpState.servers, [])
