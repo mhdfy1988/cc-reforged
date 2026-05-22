@@ -1,0 +1,59 @@
+name: NPM Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing git tag to publish, for example v0.5.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish npm package via Trusted Publishing
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify tag matches package version
+        shell: pwsh
+        run: |
+          $pkgVersion = node -e "console.log(require('./package.json').version)"
+          $expectedVersion = '${{ inputs.tag }}'
+          if ($expectedVersion.StartsWith('v')) {
+            $expectedVersion = $expectedVersion.Substring(1)
+          }
+          if ($pkgVersion -ne $expectedVersion) {
+            throw "Tag version mismatch: tag=${{ inputs.tag }} package.json=$pkgVersion"
+          }
+
+      - name: Install dependencies
+        run: npm.cmd ci
+
+      - name: Run core smoke gate
+        env:
+          CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE: '1'
+        run: npm.cmd run ci:smoke
+
+      - name: Validate package contents
+        run: npm.cmd pack --dry-run
+
+      - name: Publish to npm (OIDC Trusted Publishing)
+        env:
+          AUTHORIZED: '1'
+        run: npm.cmd publish --access public
