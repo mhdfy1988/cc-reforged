@@ -1,19 +1,25 @@
 import type { SessionAction } from './sessionState.js'
 import {
+  canFallbackMissingThreadDisplayProjection,
+  createDisplayEventFromThreadDisplayProjection,
   createErrorDisplayEvent,
-  createSystemNoticeEvent,
+  createThreadDisplayProjectionProtocolErrorEvent,
+  getThreadDisplayProjectionProtocolIssue,
 } from '../domain/displayEvents.js'
 import type {
   JsonObject,
   NotificationPayload,
+  PermissionCard,
   PermissionInteractionKind,
+  ThreadDisplayItem,
+  ThreadDisplayPatch,
+  ThreadDisplayPatchOperation,
+  ThreadDisplaySnapshot,
   TurnRuntimeMetadata,
   TurnUsage,
 } from '../domain/displayTypes.js'
-import { normalizeContentBlocks } from '../domain/contentBlocks.js'
 import {
   createCompletedItemContractContext,
-  withContentBlock,
 } from '../domain/eventContract.js'
 import type { CcrDesktopEvent } from '../global.js'
 
@@ -23,6 +29,24 @@ export type RoutedDesktopEvent = {
     itemId: string
     item: JsonObject
   }
+}
+
+const STATUS_SNAPSHOT_REPLAY_MESSAGES = new Set([
+  'permission responded',
+  'runtime snapshots refreshed',
+])
+
+export function shouldReplayThreadDisplaySnapshotFromStatusEvent(
+  event: CcrDesktopEvent,
+  status: { threadDisplaySnapshot?: ThreadDisplaySnapshot | null } | null,
+): boolean {
+  if (event.type !== 'state' || !status?.threadDisplaySnapshot) {
+    return false
+  }
+
+  const payload = getObjectRecord(event.payload)
+  const message = typeof payload?.message === 'string' ? payload.message : ''
+  return STATUS_SNAPSHOT_REPLAY_MESSAGES.has(message)
 }
 
 export function routeDesktopEvent(
@@ -51,14 +75,12 @@ export function routeDesktopEvent(
         ],
       }
 
-    case 'item/started':
-      return routeItemStarted(params)
-
-    case 'item/delta':
-      return routeItemDelta(event, params, itemMetadata)
-
-    case 'item/completed':
-      return routeItemCompleted(params, itemMetadata)
+    case 'thread/display/patch':
+      return {
+        sessionActions: createThreadDisplayPatchActions(
+          params as unknown as ThreadDisplayPatch,
+        ),
+      }
 
     case 'turn/completed':
       return {
@@ -84,124 +106,336 @@ export function routeDesktopEvent(
         ],
       }
 
-    case 'turn/failed':
-      return {
-        sessionActions: [
-          {
-            type: 'merge-turn-metadata',
-            metadata: getTurnMetadataFromParams(params, 'failed'),
-          },
-          { type: 'set-active-turn', turnId: null },
-          { type: 'clear-permissions' },
-          {
-            type: 'append-display-event',
-            event: createErrorDisplayEvent(
-              `${event.at}-turn-failed`,
-              stringifyErrorPayload(params.error ?? params),
-            ),
-          },
-        ],
-      }
-
-    case 'context/compacted':
-      return {
-        sessionActions: [
-          {
-            type: 'append-display-event',
-            event: createSystemNoticeEvent(
-              `${event.at}-context-compacted`,
-              formatCompactNotification(params),
-            ),
-          },
-        ],
-      }
-
-    case 'permission/requested': {
-      const toolName = getToolName(params)
-      const tool = getObjectRecord(params.tool)
-      const permissionRequestId =
-        getString(params.permissionRequestId) ?? `${event.at}-permission`
-      return {
-        sessionActions: [
-          {
-            type: 'add-permission',
-            permission: {
-              permissionRequestId,
-              threadId: getString(params.threadId),
-              turnId: getString(params.turnId),
-              toolUseId: getString(
-                params.toolUseId ?? params.toolUseID ?? params.tool_use_id,
-              ),
-              toolName,
-              displayName: getString(
-                params.displayName ??
-                  params.display_name ??
-                  params.title ??
-                  tool?.displayName ??
-                  tool?.display_name,
-              ),
-              description: getString(
-                params.description ?? params.message ?? tool?.description,
-              ),
-              input: (params.input ?? {}) as JsonObject,
-              permissionSuggestions: getArray(
-                params.permissionSuggestions ?? params.permission_suggestions,
-              ),
-              blockedPath: getString(params.blockedPath ?? params.blocked_path),
-              decisionReason: getString(
-                params.decisionReason ?? params.decision_reason,
-              ),
-              agentId: getString(params.agentId ?? params.agent_id),
-              createdAt: getString(params.createdAt),
-              interactionKind: derivePermissionInteractionKind(toolName),
-              status: 'pending',
-            },
-          },
-        ],
-      }
-    }
-
-    case 'permission/cancelled':
-      return {
-        sessionActions: [
-          {
-            type: 'set-permission-status',
-            permissionRequestId: String(params.permissionRequestId ?? ''),
-            status: 'cancelled',
-          },
-          {
-            type: 'remove-permission',
-            permissionRequestId: String(params.permissionRequestId ?? ''),
-          },
-        ],
-      }
-
     default:
       return { sessionActions: [] }
   }
 }
 
-function formatCompactNotification(params: JsonObject): string {
-  const metadata = getObjectRecord(params.metadata)
-  const result = getObjectRecord(params.result)
-  const messageCount = getNumber(metadata?.messageCount ?? result?.messageCount)
-  const compactBoundaryCount = getNumber(
-    metadata?.compactBoundaryCount ?? result?.compactBoundaryCount,
-  )
-  const attachmentCount = getNumber(
-    result?.attachmentCount ?? metadata?.attachmentCount,
-  )
-  if (messageCount !== undefined) {
-    const attachmentSummary =
-      typeof attachmentCount === 'number' && attachmentCount > 0
-        ? `，并恢复 ${attachmentCount} 个上下文附件`
-        : ''
-    return `已压缩上下文：当前保留 ${messageCount} 条消息，压缩边界 ${compactBoundaryCount ?? 0} 个${attachmentSummary}。`
+export function createThreadDisplayPatchActions(
+  patch: ThreadDisplayPatch | null | undefined,
+): SessionAction[] {
+  if (!patch || !Array.isArray(patch.operations)) {
+    return []
   }
-  if (typeof attachmentCount === 'number' && attachmentCount > 0) {
-    return `已压缩上下文，并恢复 ${attachmentCount} 个上下文附件。`
+  return patch.operations.flatMap(operation =>
+    createThreadDisplayPatchOperationActions(patch, operation),
+  )
+}
+
+export function createThreadDisplaySnapshotActions(
+  snapshot: ThreadDisplaySnapshot | null | undefined,
+): SessionAction[] {
+  if (!snapshot || !Array.isArray(snapshot.items)) {
+    return []
   }
-  return '已压缩上下文，运行状态已刷新。'
+  return snapshot.items.flatMap((item, sourceIndex) =>
+    createThreadDisplayItemActions(item, 'history', snapshot, sourceIndex),
+  )
+}
+
+function createThreadDisplayPatchOperationActions(
+  patch: ThreadDisplayPatch,
+  operation: ThreadDisplayPatchOperation,
+): SessionAction[] {
+  switch (operation.op) {
+    case 'append_item':
+      return createThreadDisplayItemActions(operation.item, 'live', patch)
+
+    case 'update_item':
+      return createThreadDisplayItemUpdateActions(patch, operation)
+
+    case 'complete_item':
+      return operation.item
+        ? createThreadDisplayItemActions(
+            {
+              ...operation.item,
+              status: operation.status ?? operation.item.status,
+            },
+            'live',
+            patch,
+          )
+        : []
+
+    case 'replace_active_stream':
+      return operation.item
+        ? createThreadDisplayItemActions(operation.item, 'live', patch)
+        : []
+
+    case 'update_counts':
+      return []
+  }
+}
+
+function createThreadDisplayItemUpdateActions(
+  patch: ThreadDisplayPatch,
+  operation: Extract<ThreadDisplayPatchOperation, { op: 'update_item' }>,
+): SessionAction[] {
+  const item = operation.item
+  const metadata = getObjectRecord(item.metadata)
+
+  if (
+    item.status === 'cancelled' &&
+    metadata?.coreEventType === 'permission_cancelled'
+  ) {
+    return [
+      {
+        type: 'set-permission-status',
+        permissionRequestId: operation.itemId,
+        status: 'cancelled',
+      },
+      {
+        type: 'remove-permission',
+        permissionRequestId: operation.itemId,
+      },
+    ]
+  }
+
+  if (metadata?.deltaMode !== 'append_text') {
+    return []
+  }
+
+  const text = typeof item.text === 'string' ? item.text : ''
+  if (!text) {
+    return []
+  }
+  const context = createCompletedItemContractContext({
+    itemId: operation.itemId,
+    params: createThreadDisplayContextParams(
+      {
+        id: operation.itemId,
+        type: item.type ?? 'assistant_message',
+        text,
+        status: item.status,
+        metadata: item.metadata,
+      },
+      'live',
+      patch,
+    ),
+  })
+
+  return [
+    isThinkingPatchItem(item)
+      ? {
+          type: 'upsert-thinking-delta',
+          itemId: operation.itemId,
+          thinking: text,
+          context,
+        }
+      : {
+          type: 'upsert-assistant-delta',
+          itemId: operation.itemId,
+          text,
+          context,
+        },
+  ]
+}
+
+function createThreadDisplayItemActions(
+  item: ThreadDisplayItem,
+  source: 'history' | 'live',
+  owner: ThreadDisplayPatch | ThreadDisplaySnapshot,
+  sourceIndex?: number,
+): SessionAction[] {
+  if (!item || !item.id) {
+    return []
+  }
+
+  if (source === 'live' && item.type === 'user_message') {
+    return []
+  }
+
+  const projectionIssue = getThreadDisplayProjectionProtocolIssue(item)
+  if (
+    projectionIssue &&
+    !canFallbackMissingThreadDisplayProjection(item, projectionIssue)
+  ) {
+    return withThreadDisplayLifecycleActions(item, [
+      {
+        type: 'append-display-event',
+        event: createThreadDisplayProjectionProtocolErrorEvent(
+          item.id,
+          item,
+          projectionIssue,
+          createCompletedItemContractContext({
+            itemId: item.id,
+            params: createThreadDisplayContextParams(
+              item,
+              source,
+              owner,
+              sourceIndex,
+            ),
+            item: item as unknown as JsonObject,
+          }),
+        ),
+      },
+    ])
+  }
+
+  if (item.type === 'permission_request') {
+    const permission = createPermissionFromThreadDisplayItem(item)
+    return withThreadDisplayLifecycleActions(
+      item,
+      permission ? [{ type: 'add-permission', permission }] : [],
+    )
+  }
+
+  if (item.content !== undefined) {
+    return withThreadDisplayLifecycleActions(
+      item,
+      createThreadDisplayCompletedItemActions(
+        item,
+        source,
+        owner,
+        sourceIndex,
+      ),
+    )
+  }
+
+  const event = createDisplayEventFromThreadDisplayProjection(
+    item.id,
+    item as unknown as JsonObject,
+  )
+  return withThreadDisplayLifecycleActions(
+    item,
+    event ? [{ type: 'append-display-event', event }] : [],
+  )
+}
+
+function withThreadDisplayLifecycleActions(
+  item: ThreadDisplayItem,
+  actions: SessionAction[],
+): SessionAction[] {
+  const metadata = getObjectRecord(item.metadata)
+  if (metadata?.coreEventType !== 'turn_failed') {
+    return actions
+  }
+
+  return [
+    {
+      type: 'merge-turn-metadata',
+      metadata: getTurnMetadataFromParams(
+        compactObject({
+          threadId: item.identity?.threadId,
+          turnId: item.identity?.turnId,
+          metadata: item.metadata,
+        }),
+        'failed',
+      ),
+    },
+    { type: 'set-active-turn', turnId: null },
+    { type: 'clear-permissions' },
+    ...actions,
+  ]
+}
+
+function createThreadDisplayCompletedItemActions(
+  item: ThreadDisplayItem,
+  source: 'history' | 'live',
+  owner: ThreadDisplayPatch | ThreadDisplaySnapshot,
+  sourceIndex?: number,
+): SessionAction[] {
+  const kind = getCompletedItemKindFromThreadDisplayItem(item)
+  const statusText = item.status ?? 'completed'
+  const context = createCompletedItemContractContext({
+    itemId: item.id,
+    params: createThreadDisplayContextParams(item, source, owner, sourceIndex),
+    item: item as unknown as JsonObject,
+  })
+  return [
+    {
+      type: 'upsert-completed-item-message',
+      itemId: item.id,
+      kind,
+      content: item.content,
+      statusText,
+      context,
+    },
+  ]
+}
+
+function createPermissionFromThreadDisplayItem(
+  item: ThreadDisplayItem,
+): PermissionCard | null {
+  const content = getObjectRecord(item.content)
+  const identity = item.identity
+  return createPermissionCardFromPayload(
+    compactObject({
+      ...(content ?? {}),
+      permissionRequestId: content?.permissionRequestId ?? item.id,
+      threadId: content?.threadId ?? identity?.threadId,
+      turnId: content?.turnId ?? identity?.turnId,
+      toolUseId: content?.toolUseId ?? identity?.toolUseId,
+      createdAt: content?.createdAt ?? item.createdAt,
+    }),
+    item.id,
+  )
+}
+
+function createThreadDisplayContextParams(
+  item: Pick<
+    ThreadDisplayItem,
+    'id' | 'type' | 'text' | 'status' | 'createdAt' | 'identity' | 'metadata'
+  >,
+  source: 'history' | 'live',
+  owner: ThreadDisplayPatch | ThreadDisplaySnapshot,
+  sourceIndex?: number,
+): JsonObject {
+  const ownerSessionId =
+    'sessionId' in owner && typeof owner.sessionId === 'string'
+      ? owner.sessionId
+      : undefined
+  return compactObject({
+    source,
+    threadId: item.identity?.threadId ?? owner.threadId,
+    sessionId: item.identity?.sessionId ?? ownerSessionId,
+    turnId: item.identity?.turnId,
+    itemId: item.identity?.itemId ?? item.id,
+    toolUseId: item.identity?.toolUseId,
+    parentToolUseId: item.identity?.parentToolUseId,
+    createdAt: item.createdAt,
+    status: item.status,
+    displayItemType: item.type,
+    sourceIndex: item.identity?.sourceIndex ?? sourceIndex,
+  })
+}
+
+function getCompletedItemKindFromThreadDisplayItem(
+  item: ThreadDisplayItem,
+): string | undefined {
+  if (item.sourceKind) {
+    return item.sourceKind
+  }
+  if (item.type === 'user_message') {
+    return 'user_message'
+  }
+  if (
+    item.type === 'tool_call' ||
+    item.type === 'tool_result' ||
+    item.type === 'file_change' ||
+    item.type === 'todo_list'
+  ) {
+    return 'assistant'
+  }
+  if (item.type === 'assistant_message' || item.type === 'thinking_summary') {
+    return 'assistant_message'
+  }
+  return item.type
+}
+
+function isThinkingPatchItem(item: Partial<ThreadDisplayItem>): boolean {
+  if (item.type === 'thinking_summary') {
+    return true
+  }
+  const delta = getObjectRecord(getObjectRecord(item.metadata)?.delta)
+  const deltaType = typeof delta?.type === 'string' ? delta.type : ''
+  return (
+    deltaType === 'thinking' ||
+    deltaType === 'thinking_summary' ||
+    deltaType === 'redacted_thinking' ||
+    deltaType === 'reasoning' ||
+    deltaType === 'reasoning_summary' ||
+    deltaType === 'summary_text'
+  )
 }
 
 function routeNonNotificationEvent(event: CcrDesktopEvent): RoutedDesktopEvent {
@@ -223,168 +457,46 @@ function routeNonNotificationEvent(event: CcrDesktopEvent): RoutedDesktopEvent {
   }
 }
 
-function routeItemStarted(params: JsonObject): RoutedDesktopEvent {
-  const item = params.item
-  if (!item || typeof item !== 'object') {
-    return { sessionActions: [] }
-  }
-
-  const object = item as JsonObject
-  const itemId = String(object.itemId ?? '')
-  if (!itemId) {
-    return { sessionActions: [] }
-  }
-
-  return {
-    sessionActions: [],
-    itemMetadata: {
-      itemId,
-      item: object,
-    },
-  }
-}
-
-function routeItemDelta(
-  event: CcrDesktopEvent,
+export function createPermissionCardFromPayload(
   params: JsonObject,
-  itemMetadata: ReadonlyMap<string, JsonObject>,
-): RoutedDesktopEvent {
-  const itemId = String(params.itemId ?? `${event.at}-assistant`)
-  const delta = (params.delta ?? {}) as JsonObject
-  const sessionActions: SessionAction[] = []
-
-  if (
-    delta.type === 'text' &&
-    typeof delta.text === 'string' &&
-    delta.text !== ''
-  ) {
-    sessionActions.push({
-      type: 'upsert-assistant-delta',
-      itemId,
-      text: delta.text,
-      context: createCompletedItemContractContext({
-        itemId,
-        params,
-        item: itemMetadata.get(itemId),
-      }),
-    })
-  }
-
-  const thinkingSummary = getThinkingSummaryDelta(delta)
-  if (thinkingSummary) {
-    sessionActions.push({
-      type: 'upsert-thinking-delta',
-      itemId,
-      thinking: thinkingSummary,
-      context: createCompletedItemContractContext({
-        itemId,
-        params,
-        item: itemMetadata.get(itemId),
-      }),
-    })
-  }
-
-  return { sessionActions }
-}
-
-function getThinkingSummaryDelta(delta: JsonObject): string | null {
-  const type = typeof delta.type === 'string' ? delta.type : ''
-  if (
-    type !== 'thinking_summary' &&
-    type !== 'reasoning_summary' &&
-    type !== 'summary_text'
-  ) {
+  fallbackPermissionRequestId?: string,
+): PermissionCard | null {
+  const toolName = getToolName(params)
+  const tool = getObjectRecord(params.tool)
+  const permissionRequestId =
+    getString(params.permissionRequestId) ?? fallbackPermissionRequestId
+  if (!permissionRequestId) {
     return null
   }
-
-  const text = getStringDelta(delta.text ?? delta.thinking ?? delta.summary)
-  return text && text.trim() ? text : null
-}
-
-function routeItemCompleted(
-  params: JsonObject,
-  itemMetadata: ReadonlyMap<string, JsonObject>,
-): RoutedDesktopEvent {
-  const itemId = String(params.itemId ?? '')
-  if (!itemId) {
-    return { sessionActions: [] }
-  }
-
-  const metadata = itemMetadata.get(itemId)
-  const kind =
-    metadata && typeof metadata.kind === 'string' ? metadata.kind : undefined
-  const content =
-    'content' in params
-      ? params.content
-      : metadata && 'content' in metadata
-        ? metadata.content
-        : undefined
-  const statusText = String(params.status ?? 'completed')
-  const context = createCompletedItemContractContext({
-    itemId,
-    params,
-    item: metadata,
-  })
-  const blocks = normalizeContentBlocks(content)
-
-  if (shouldSplitCompletedItemBlocks(blocks)) {
-    return {
-      sessionActions: blocks.map((block, contentIndex) => ({
-        type: 'upsert-completed-item-message',
-        itemId: createSplitCompletedItemId(itemId, block, contentIndex),
-        kind,
-        content: [block],
-        statusText,
-        context: withContentBlock(context, block, contentIndex),
-      })),
-    }
-  }
-
   return {
-    sessionActions: [
-      {
-        type: 'upsert-completed-item-message',
-        itemId,
-        kind,
-        content,
-        statusText,
-        context,
-      },
-    ],
+    permissionRequestId,
+    threadId: getString(params.threadId),
+    turnId: getString(params.turnId),
+    toolUseId: getString(
+      params.toolUseId ?? params.toolUseID ?? params.tool_use_id,
+    ),
+    toolName,
+    displayName: getString(
+      params.displayName ??
+        params.display_name ??
+        params.title ??
+        tool?.displayName ??
+        tool?.display_name,
+    ),
+    description: getString(
+      params.description ?? params.message ?? tool?.description,
+    ),
+    input: (params.input ?? {}) as JsonObject,
+    permissionSuggestions: getArray(
+      params.permissionSuggestions ?? params.permission_suggestions,
+    ),
+    blockedPath: getString(params.blockedPath ?? params.blocked_path),
+    decisionReason: getString(params.decisionReason ?? params.decision_reason),
+    agentId: getString(params.agentId ?? params.agent_id),
+    createdAt: getString(params.createdAt),
+    interactionKind: derivePermissionInteractionKind(toolName),
+    status: 'pending',
   }
-}
-
-function shouldSplitCompletedItemBlocks(blocks: JsonObject[]): boolean {
-  return blocks.length > 1 && blocks.some(isToolLifecycleBlock)
-}
-
-function isToolLifecycleBlock(block: JsonObject): boolean {
-  const type = typeof block.type === 'string' ? block.type : ''
-  return type === 'tool_use' || type === 'tool_result' || type === 'progress'
-}
-
-function createSplitCompletedItemId(
-  itemId: string,
-  block: JsonObject,
-  contentIndex: number,
-): string {
-  const lifecycleId = getString(
-    block.id ??
-      block.toolUseId ??
-      block.toolUseID ??
-      block.tool_use_id ??
-      block.parentToolUseId ??
-      block.parentToolUseID ??
-      block.parent_tool_use_id,
-  )
-  const suffix = lifecycleId
-    ? sanitizeItemIdPart(lifecycleId)
-    : String(contentIndex)
-  return `${itemId}:${contentIndex}:${suffix}`
-}
-
-function sanitizeItemIdPart(value: string): string {
-  return value.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 80)
 }
 
 function getToolName(params: JsonObject): string {
@@ -498,10 +610,6 @@ function compactObject(value: JsonObject): JsonObject {
   return Object.fromEntries(
     Object.entries(value).filter(([, nestedValue]) => nestedValue !== undefined),
   )
-}
-
-function getStringDelta(value: unknown): string | null {
-  return typeof value === 'string' ? value : null
 }
 
 function stringifyErrorPayload(payload: unknown): string {

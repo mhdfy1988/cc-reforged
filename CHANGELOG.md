@@ -4,7 +4,27 @@
 
 ## Unreleased
 
-暂无。
+### 改动
+
+- Desktop 历史恢复和实时展示主路径统一为 `ThreadDisplaySnapshot` / `ThreadDisplayPatch`，Renderer 不再消费旧 `threadMessages` replay 展示状态。
+- Core 当前模型上下文与 UI 可见历史改为同源双投影：compact 后继续对话使用压缩后的 `currentContextMessages`，历史 UI 仍从 transcript 展示投影恢复压缩前后可见记录。
+- 历史恢复新增 Codex-like ordered 语义适配层：transcript 会先生成 `classifiedTranscriptEvents`，再解析 `currentContextTailUuid`；`canonicalLeafUuid` 仅保留为兼容字段，不再表示 parent graph leaf。
+- 会话物化边界收口：`conversationMaterialization.ts` 自己读取 transcript JSONL 生成 ordered/rawIndex/坏行诊断；`sessionStorage.ts` 和 `buildConversationChain(...)` 仅保留为原生读侧 helper，不再承载 UI replay 或 current tail 产品语义。
+- 工具展示按来源 ID 归并：一个 `tool_use` 对应一张工具卡，`tool_result` 按 `tool_use_id` 回填对应工具卡，支持同一 turn 内多个工具调用和结果乱序返回。
+- 普通历史恢复提示不再显示易混淆的“已回放 N 条”数量；raw transcript、Core context、visible timeline 等数量仅用于调试和诊断。
+- Desktop 主路径不再支持旧 replay 展示协议、旧实时展示通知或缺失 projection 的 raw fallback；缺失 / 非法 projection 会展示协议错误卡。
+
+### BUG 修复
+
+- 修复上下文压缩后切换会话再恢复时，Core 当前上下文可能回到 compact 前旧消息的问题。
+- 修复手动 compact 后立即回读 transcript 时可能读到未 flush 的旧 JSONL，导致实时上下文 token 仍显示压缩前大小的问题。
+- 修复手动 compact 后恢复上下文短于实时上下文的问题；compact 后的附件和系统附属消息会跟随摘要进入当前模型上下文。
+- 修复手动 compact 完成后顶部“上下文”数字仍显示 compact 前估算，切换会话后才更新的问题；Desktop 状态快照会刷新 runtime context 后再返回。
+- 修复历史恢复时 compact 前 UI 可见历史被误裁掉的问题。
+- 修复并行工具结果 sibling 或旧 parent leaf 多候选导致恢复失败，并被误显示成 `Session transcript not found` 的问题；物化失败现在保留具体 diagnostic code。
+- 修复并行工具结果按返回顺序或 raw content 误绑定，导致工具卡重复、错位或变成 assistant 普通文本的问题。
+- 修复权限请求被拒绝后，实时 UI 仍停留在“等待授权”直到刷新才变成失败卡的问题。
+- 补齐会话恢复 smoke 覆盖：普通恢复、compact 后恢复、compact 前 UI 历史可见、并行工具、tool_result 乱序、多 legacy leaf 诊断、物化失败 diagnostic、App Server snapshot 和 Desktop display events。
 
 ## 0.5.1 - 2026-05-22
 

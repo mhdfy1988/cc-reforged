@@ -116,6 +116,20 @@ export function renderMessageBlocks(text: string): ReactNode[] {
       continue
     }
 
+    if (isMarkdownTableStart(lines, index)) {
+      const table = readMarkdownTable(lines, index)
+      flushParagraph()
+      blocks.push(
+        <MessageTable
+          headers={table.headers}
+          key={`table-${blocks.length}`}
+          rows={table.rows}
+        />,
+      )
+      index = table.endIndex
+      continue
+    }
+
     const unordered = line.match(/^[-*]\s+(.+)$/)
     if (unordered) {
       const items: string[] = []
@@ -167,6 +181,72 @@ export function renderMessageBlocks(text: string): ReactNode[] {
 
   flushParagraph()
   return blocks.length ? blocks : [<p key="empty">暂无内容</p>]
+}
+
+function MessageTable(props: {
+  headers: string[]
+  rows: string[][]
+}): ReactNode {
+  return (
+    <div className="message-table-wrap">
+      <table className="message-table">
+        <thead>
+          <tr>
+            {props.headers.map((header, index) => (
+              <th key={index}>{renderInlineText(header)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {props.rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {props.headers.map((_, cellIndex) => (
+                <td key={cellIndex}>{renderInlineText(row[cellIndex] ?? '')}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function isMarkdownTableStart(lines: string[], index: number): boolean {
+  const current = lines[index]?.trim() ?? ''
+  const next = lines[index + 1]?.trim() ?? ''
+  return isMarkdownTableRow(current) && isMarkdownTableSeparator(next)
+}
+
+function readMarkdownTable(
+  lines: string[],
+  startIndex: number,
+): { headers: string[]; rows: string[][]; endIndex: number } {
+  const headers = parseMarkdownTableRow(lines[startIndex])
+  const rows: string[][] = []
+  let index = startIndex + 2
+  while (index < lines.length && isMarkdownTableRow(lines[index].trim())) {
+    rows.push(parseMarkdownTableRow(lines[index]))
+    index += 1
+  }
+  return { headers, rows, endIndex: index - 1 }
+}
+
+function isMarkdownTableRow(line: string): boolean {
+  const trimmed = line.trim()
+  return trimmed.includes('|') && parseMarkdownTableRow(trimmed).length >= 2
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+  const cells = parseMarkdownTableRow(line)
+  return (
+    cells.length >= 2 &&
+    cells.every(cell => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, '')))
+  )
+}
+
+function parseMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '')
+  return trimmed.split('|').map(cell => cell.trim())
 }
 
 type CopyState = 'idle' | 'copied' | 'failed'

@@ -1,4 +1,5 @@
 import {
+  PermissionPendingListParamsSchema,
   PermissionRespondParamsSchema,
   PermissionSettingsGetParamsSchema,
   PermissionSettingsUpdateParamsSchema,
@@ -44,6 +45,16 @@ export function handlePermissionRespond(
               : {}),
       },
   })
+}
+
+export function handlePermissionPendingList(
+  context: AppServerContext,
+  params: unknown,
+): Record<string, unknown> {
+  PermissionPendingListParamsSchema.parse(params ?? {})
+  return {
+    permissions: context.core.permission.listPending(),
+  }
 }
 
 export function handlePermissionSettingsGet(

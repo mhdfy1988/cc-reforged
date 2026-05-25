@@ -9,6 +9,12 @@
   --green: #0b9276;
   --red: #c44d4d;
   --shadow: 0 24px 72px rgba(76, 49, 20, 0.13);
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: rgba(115, 102, 89, 0.32);
+  --scrollbar-thumb-hover: rgba(91, 74, 58, 0.54);
+  --scrollbar-thumb-active: rgba(74, 58, 44, 0.68);
+  --scrollbar-thumb-code: rgba(247, 234, 213, 0.34);
+  --scrollbar-thumb-code-hover: rgba(247, 234, 213, 0.58);
   font-family:
     "HarmonyOS Sans SC",
     "MiSans",
@@ -23,6 +29,72 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-thumb-active);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+pre,
+code,
+.raw-data-block pre,
+.mcp-raw-config,
+.confirm-dialog-detail,
+.todo-overlay pre {
+  scrollbar-color: var(--scrollbar-thumb-code) transparent;
+}
+
+pre::-webkit-scrollbar-thumb,
+.raw-data-block pre::-webkit-scrollbar-thumb,
+.mcp-raw-config::-webkit-scrollbar-thumb,
+.confirm-dialog-detail::-webkit-scrollbar-thumb,
+.todo-overlay pre::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-code);
+  background-clip: padding-box;
+}
+
+pre::-webkit-scrollbar-thumb:hover,
+.raw-data-block pre::-webkit-scrollbar-thumb:hover,
+.mcp-raw-config::-webkit-scrollbar-thumb:hover,
+.confirm-dialog-detail::-webkit-scrollbar-thumb:hover,
+.todo-overlay pre::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-code-hover);
+  background-clip: padding-box;
 }
 
 html,

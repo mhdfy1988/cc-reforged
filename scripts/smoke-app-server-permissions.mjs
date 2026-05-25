@@ -33,15 +33,43 @@ const allowPromise = context.core.permission.requestPermission({
   },
 })
 
-const requested = await waitForNotification(
-  notification => notification.method === 'permission/requested',
+const requestedPatch = await waitForNotification(
+  notification =>
+    notification.method === 'thread/display/patch' &&
+    notification.params.operations?.some(
+      operation =>
+        operation.op === 'append_item' &&
+        operation.item?.type === 'permission_request' &&
+        operation.item?.content?.threadId === 'thread_smoke_permissions',
+    ),
 )
-assert.equal(requested.params.threadId, 'thread_smoke_permissions')
-assert.equal(requested.params.turnId, 'turn_smoke_permissions')
-assert.equal(requested.params.tool.name, 'Bash')
-assert.equal(requested.params.input.command, 'npm.cmd test')
+const requestedItem = requestedPatch.params.operations.find(
+  operation =>
+    operation.op === 'append_item' &&
+    operation.item?.type === 'permission_request' &&
+    operation.item?.content?.threadId === 'thread_smoke_permissions',
+)?.item
+assert.equal(requestedItem.projection?.version, 1)
+assert.equal(requestedItem.projection?.event?.type, 'permission_request')
+assert.equal(requestedItem.content.threadId, 'thread_smoke_permissions')
+assert.equal(requestedItem.content.turnId, 'turn_smoke_permissions')
+assert.equal(requestedItem.content.tool.name, 'Bash')
+assert.equal(requestedItem.content.input.command, 'npm.cmd test')
 
-const permissionRequestId = requested.params.permissionRequestId
+const permissionRequestId = requestedItem.content.permissionRequestId
+const pendingListResponse = await handleJsonRpcMessage(context, {
+  jsonrpc: '2.0',
+  id: 20,
+  method: 'permission/pending/list',
+  params: {},
+})
+assert.equal(pendingListResponse.result.permissions.length, 1)
+assert.equal(
+  pendingListResponse.result.permissions[0].permissionRequestId,
+  permissionRequestId,
+)
+assert.equal(pendingListResponse.result.permissions[0].tool.name, 'Bash')
+
 const allowResponse = await handleJsonRpcMessage(context, {
   jsonrpc: '2.0',
   id: 2,
@@ -57,6 +85,13 @@ assert.equal(allowResponse.result.accepted, true)
 const allowResult = await allowPromise
 assert.equal(allowResult.behavior, 'allow')
 assert.equal(allowResult.updatedInput.command, 'npm.cmd test')
+const emptyPendingListResponse = await handleJsonRpcMessage(context, {
+  jsonrpc: '2.0',
+  id: 21,
+  method: 'permission/pending/list',
+  params: {},
+})
+assert.equal(emptyPendingListResponse.result.permissions.length, 0)
 
 const duplicateResponse = await handleJsonRpcMessage(context, {
   jsonrpc: '2.0',
@@ -101,11 +136,22 @@ const cancelPromise = context.core.permission
     error => error,
   )
 
-const cancelRequested = await waitForNotification(
+const cancelRequestedPatch = await waitForNotification(
   notification =>
-    notification.method === 'permission/requested' &&
-    notification.params.threadId === 'thread_smoke_cancel',
+    notification.method === 'thread/display/patch' &&
+    notification.params.operations?.some(
+      operation =>
+        operation.op === 'append_item' &&
+        operation.item?.type === 'permission_request' &&
+        operation.item?.content?.threadId === 'thread_smoke_cancel',
+    ),
 )
+const cancelRequestedItem = cancelRequestedPatch.params.operations.find(
+  operation =>
+    operation.op === 'append_item' &&
+    operation.item?.type === 'permission_request' &&
+    operation.item?.content?.threadId === 'thread_smoke_cancel',
+)?.item
 context.core.permission.cancelForTurn({
   threadId: 'thread_smoke_cancel',
   turnId: 'turn_smoke_cancel',
@@ -113,23 +159,47 @@ context.core.permission.cancelForTurn({
 })
 const cancelled = await waitForNotification(
   notification =>
-    notification.method === 'permission/cancelled' &&
-    notification.params.permissionRequestId ===
-      cancelRequested.params.permissionRequestId,
+    notification.method === 'thread/display/patch' &&
+    notification.params.operations?.some(
+      operation =>
+        operation.op === 'update_item' &&
+        operation.itemId === cancelRequestedItem.content.permissionRequestId &&
+        operation.item?.status === 'cancelled' &&
+        operation.item?.metadata?.coreEventType === 'permission_cancelled',
+    ),
 )
-assert.equal(cancelled.params.reason, 'smoke_cancel')
+const cancelledOperation = cancelled.params.operations.find(
+  operation =>
+    operation.op === 'update_item' &&
+    operation.itemId === cancelRequestedItem.content.permissionRequestId,
+)
+assert.equal(cancelledOperation.item.metadata.reason, 'smoke_cancel')
 const cancelError = await cancelPromise
 assert.equal(cancelError.kind, 'turn_not_active')
+
+assert.equal(
+  notifications.some(
+    notification => notification.method === 'permission/requested',
+  ),
+  false,
+)
+assert.equal(
+  notifications.some(
+    notification => notification.method === 'permission/cancelled',
+  ),
+  false,
+)
 
 console.log(
   JSON.stringify({
     ok: true,
     checked: [
-      'permission/requested',
+      'thread/display/patch_permission_requested',
+      'permission/pending/list',
       'permission/respond_allow',
       'permission/respond_duplicate',
       'permission/respond_missing',
-      'permission/cancelled',
+      'thread/display/patch_permission_cancelled',
     ],
   }),
 )

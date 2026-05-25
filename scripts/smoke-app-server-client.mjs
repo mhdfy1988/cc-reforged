@@ -528,10 +528,26 @@ try {
       waiters,
       notification => notification.method === 'turn/started',
     );
-    await waitForNotification(
+    const failedDisplayPatch = await waitForNotification(
       notifications,
       waiters,
-      notification => notification.method === 'turn/failed',
+      notification =>
+        notification.method === 'thread/display/patch' &&
+        notification.params.operations?.some(
+          operation =>
+            operation.op === 'append_item' &&
+            operation.item?.type === 'error' &&
+            operation.item?.metadata?.coreEventType === 'turn_failed',
+        ),
+    );
+    assert.ok(
+      failedDisplayPatch.params.operations.some(
+        operation => operation.item?.projection?.event?.type === 'error',
+      ),
+    );
+    assert.equal(
+      notifications.some(notification => notification.method === 'turn/failed'),
+      false,
     );
 
     const smokeTranscript = writeSmokeTranscript();
@@ -839,6 +855,27 @@ function writeInterruptedPromptTranscript() {
       message: {
         role: 'user',
         content: 'interrupted before assistant persisted',
+      },
+    },
+    {
+      type: 'assistant',
+      uuid: randomUUID(),
+      parentUuid: userUuid,
+      isSidechain: false,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      message: {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: 'No response requested.',
+          },
+        ],
       },
     },
   ];

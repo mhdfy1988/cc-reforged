@@ -22,6 +22,15 @@ YYYY-MM-DD-p<阶段号>-<简短主题>.md
 
 当前 Goal：
 
+- [2026-05-24 STD-HISTORY-09-1 会话物化源码入口核对](./2026-05-24-std-history-09-1-source-entry-audit.md)
+- [2026-05-24 STD-HISTORY-09-2 MaterializedConversation 物化协议定型](./2026-05-24-std-history-09-2-materialized-conversation-contract.md)
+- [2026-05-24 STD-HISTORY-09-3 compact / snip / preservedSegment 语义统一](./2026-05-24-std-history-09-3-compact-snip-preserved-segment.md)
+- [2026-05-24 STD-HISTORY-09-4 Core resume 只消费物化结果](./2026-05-24-std-history-09-4-core-resume-materialized-context.md)
+- [2026-05-24 STD-HISTORY-09-5 App Server 恢复展示消费同一物化结果](./2026-05-24-std-history-09-5-app-server-display-materialized-context.md)
+- [2026-05-24 STD-HISTORY-09-6 异常只诊断不伪装成功](./2026-05-24-std-history-09-6-diagnostics-not-fallback.md)
+- [2026-05-24 STD-HISTORY-09-7 缓存和持久化顺序闭环](./2026-05-24-std-history-09-7-cache-and-persistence-order.md)
+- [2026-05-24 STD-HISTORY-09-8 自动验证覆盖关键路径](./2026-05-24-std-history-09-8-smoke-coverage.md)
+- [2026-05-24 STD-HISTORY-09-9 文档和后续回归收口](./2026-05-24-std-history-09-9-doc-closeout.md)
 - [2026-05-19 STD-PROVIDER-01 Kimi / GLM Provider 接入](./2026-05-19-std-provider-01-kimi-glm-openai-chat-compatible.md)
 - [2026-05-18 STD-OUTPUT-09 会话流生成图片输出闭环](./2026-05-18-std-output-09-session-generated-image-flow.md)
 - [2026-05-18 STD-OUTPUT-08 通用图片生成归一化与 MiniMax 接入](./2026-05-18-std-output-08-provider-neutral-minimax-image-generation.md)

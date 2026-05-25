@@ -1,5 +1,7 @@
 # CCR App Server 原生上下文链路恢复设计
 
+> 2026-05-24 复审修正：本文中的 `compact boundary 裁剪` 只指模型上下文 / 原生 `Message[]`，不是 UI 可见历史。历史 UI 应通过展示投影回放 transcript / rollout，不能因为上下文压缩而截断用户可见时间线。
+
 ## 目标
 
 让 Desktop / App Server 入口重新复用 Claude Code 原生上下文语义，而不是每轮只把当前用户输入拼成一次性 prompt。当前阶段恢复同一 App Server thread 内的短期上下文、工具结果回灌、compact boundary 裁剪、readFileState 复用，以及按 thread 独立 transcript 的 resume 能力；避免把多 thread 错误写进同一个全局 transcript。
@@ -34,7 +36,7 @@
 - 每轮 `runCoreQueryTurn` 先构造当前 `userMessage`，再用 `historyMessages + userMessage` 调用 `query()`。
 - `query()` 产出的 renderable `Message` 会回写 thread history，包括 assistant、user tool_result、progress、attachment、tool_use_summary、compact boundary。
 - `stream_event` 只用于 UI 增量展示，不写入 history，避免重复归档。
-- 遇到 `system:compact_boundary` 时，按原生语义裁剪边界前历史。
+- 遇到 `system:compact_boundary` 时，按原生语义裁剪模型上下文里的边界前历史；UI 可见历史不套用这条裁剪。
 - `CoreSessionService` 为每个 thread 建立独立 `sessionId` 和 transcript 路径。
 - `recordThreadMessage()` 会在裁剪 compact boundary 前先调用 `recordTranscript()`，避免压缩边界或工具结果还没落盘就被本地 history 裁掉。
 - `thread/resume` 复用 `loadConversationForResume()` 加载原生消息，并复用 `extractReadFilesFromMessages()` 重建 `readFileState`。
@@ -88,7 +90,7 @@ P26 还补了 App Server 的轻量初始化：`setupAppServerRuntime()` 只注�
 
 - `smoke:app-server-context`：验证同一 thread 两轮历史保持。
 - `smoke:app-server-context`：验证 `readFileState` 跨 turn 复用。
-- `smoke:app-server-context`：验证 compact boundary 裁剪边界前历史。
+- `smoke:app-server-context`：验证 compact boundary 裁剪模型上下文里的边界前历史。
 - `smoke:app-server-context`：验证 transcript 按 thread session 写入。
 - `smoke:app-server-context`：验证 `thread/resume` 恢复消息和 `readFileState`。
 - `smoke:app-server-context`：验证 `context/status`、`compact/status`、`memory/session/status`、`context/analyze` 聚合输出和 `context_compacted` 事件。

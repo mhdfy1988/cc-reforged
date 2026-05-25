@@ -3,6 +3,8 @@ import { FileSnapshotPanel } from './FileCard.js'
 import { ShellPermissionInlinePanel } from './ShellPermissionCard.js'
 import { ToolPermissionInlinePanel } from './ToolPermissionInlinePanel.js'
 import { RawDataBlock } from '../common/RawDataBlock.js'
+import { MessageAvatar } from './MessageAvatar.js'
+import { ToolDurationBadge } from './ToolDurationBadge.js'
 import type { DisplayEvent } from '../../domain/displayEvents.js'
 import type {
   PermissionCard,
@@ -34,7 +36,7 @@ export function ToolCard(props: {
 }) {
   const snapshot = props.event.toolSnapshot
   if (!snapshot) {
-    return <MessageFrame label="i" event={props.event} />
+    return <MessageFrame event={props.event} />
   }
 
   const hasFileSnapshot = Boolean(
@@ -73,13 +75,18 @@ export function ToolCard(props: {
         useCompactFileLayout ? 'tool-card-file-compact' : ''
       }`}
     >
-      <b>i</b>
+      <MessageAvatar event={props.event} />
       <div className="tool-card-body">
         {hasDetail ? (
           <details className="tool-card-details">
             <summary className="tool-card-compact-row">
               <ToolCompactMain snapshot={snapshot} />
-              <DurationBadge durationMs={snapshot.durationMs} />
+              <ToolDurationBadge
+                durationMs={snapshot.durationMs}
+                startedAt={snapshot.startedAt}
+                completedAt={snapshot.completedAt}
+                status={snapshot.status}
+              />
               {showToolStatus ? (
                 <StatusBadge label={snapshot.statusLabel} status={snapshot.status} />
               ) : null}
@@ -124,7 +131,12 @@ export function ToolCard(props: {
         ) : (
           <div className="tool-card-compact-row">
             <ToolCompactMain snapshot={snapshot} />
-            <DurationBadge durationMs={snapshot.durationMs} />
+            <ToolDurationBadge
+              durationMs={snapshot.durationMs}
+              startedAt={snapshot.startedAt}
+              completedAt={snapshot.completedAt}
+              status={snapshot.status}
+            />
             {showToolStatus ? (
               <StatusBadge label={snapshot.statusLabel} status={snapshot.status} />
             ) : null}
@@ -164,34 +176,6 @@ function ToolCompactMain(props: {
       </span>
     </div>
   )
-}
-
-function DurationBadge(props: { durationMs?: number }) {
-  if (typeof props.durationMs !== 'number' || !Number.isFinite(props.durationMs)) {
-    return null
-  }
-  return (
-    <span className="tool-duration-badge">
-      耗时 {formatDurationMs(props.durationMs)}
-    </span>
-  )
-}
-
-function formatDurationMs(value: number | undefined): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return ''
-  }
-  const durationMs = Math.max(0, Math.round(value ?? 0))
-  if (durationMs < 1000) {
-    return `${durationMs}ms`
-  }
-  if (durationMs < 60_000) {
-    const seconds = durationMs / 1000
-    return `${seconds >= 10 ? Math.round(seconds) : seconds.toFixed(1)}s`
-  }
-  const minutes = Math.floor(durationMs / 60_000)
-  const seconds = Math.round((durationMs % 60_000) / 1000)
-  return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`
 }
 
 function isConciseToolDetailBlock(block: ToolDetailBlockView): boolean {

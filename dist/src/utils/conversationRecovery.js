@@ -11,7 +11,8 @@ import { logError } from './log.js';
 import { createAssistantMessage, createUserMessage, filterOrphanedThinkingOnlyMessages, filterUnresolvedToolUses, filterWhitespaceOnlyAssistantMessages, isToolUseResultMessage, NO_RESPONSE_REQUESTED, normalizeMessages, } from './messages.js';
 import { copyPlanForResume } from './plans.js';
 import { processSessionStartHooks } from './sessionStart.js';
-import { buildConversationChain, checkResumeConsistency, getLastSessionLog, getSessionIdFromLog, isLiteLog, loadFullLog, loadMessageLogs, loadTranscriptFile, removeExtraFields, } from './sessionStorage.js';
+import { checkResumeConsistency, getLastSessionLog, getSessionIdFromLog, isLiteLog, loadFullLog, loadMessageLogs, } from './sessionStorage.js';
+import { materializeConversationFromTranscript } from './conversationMaterialization.js';
 const require = createRequire(import.meta.url);
 // Dead code elimination: ant-only tool names are conditionally required so
 // their strings don't leak into external builds. Static imports always bundle.
@@ -282,43 +283,98 @@ export function restoreSkillStateFromMessages(messages) {
     }
 }
 /**
- * Chain-walk a transcript jsonl by path.  Same sequence loadFullLog
- * runs internally — loadTranscriptFile → find newest non-sidechain
- * leaf → buildConversationChain → removeExtraFields — just starting
- * from an arbitrary path instead of the sid-derived one.
- *
- * leafUuids is populated by loadTranscriptFile as "uuids that no
- * other message's parentUuid points at" — the chain tips.  There can
- * be several (sidechains, orphans); newest non-sidechain is the main
- * conversation's end.
+ * Materialize a transcript jsonl by path. This is the same current-context
+ * contract used by resume callers: compact / snip / sidechain semantics are
+ * replayed before resolving the current context tail.
  */
 export async function loadMessagesFromJsonlPath(path) {
-    const { messages: byUuid, leafUuids } = await loadTranscriptFile(path);
-    let tip = null;
-    let tipTs = 0;
-    for (const [messageUuid, message] of byUuid.entries()) {
-        if (message.isSidechain || !leafUuids.has(messageUuid))
-            continue;
-        const ts = new Date(message.timestamp).getTime();
-        if (ts > tipTs) {
-            tipTs = ts;
-            tip = message;
-        }
+    const materialized = await materializeConversationFromTranscript(path);
+    if (materialized.status !== 'ok') {
+        throw createHistoryMaterializationError(path, materialized.diagnostics);
     }
-    if (!tip)
-        return { messages: [], sessionId: undefined };
-    const chain = buildConversationChain(byUuid, tip);
     return {
-        messages: removeExtraFields(chain),
-        // Leaf's sessionId — forked sessions copy chain[0] from the source
-        // transcript, so the root retains the source session's ID. Matches
-        // loadFullLog's mostRecentLeaf.sessionId.
-        sessionId: tip.sessionId,
+        messages: materialized.currentContextMessages,
+        sessionId: materialized.sessionId,
     };
+}
+async function materializeLogForResume(log) {
+    if (!log.fullPath)
+        return null;
+    const materialized = await materializeConversationFromTranscript(log.fullPath);
+    if (materialized.status !== 'ok') {
+        throw createHistoryMaterializationError(log.fullPath, materialized.diagnostics);
+    }
+    const sessionId = materialized.sessionId;
+    const metadata = materialized.metadata;
+    const canonicalLeafUuid = materialized.canonicalLeafUuid;
+    const logWithMaterializedMessages = {
+        ...log,
+        messages: materialized.currentContextMessages,
+        leafUuid: canonicalLeafUuid,
+        summary: canonicalLeafUuid
+            ? (metadata.summaries.get(canonicalLeafUuid) ?? log.summary)
+            : log.summary,
+        customTitle: sessionId
+            ? (metadata.customTitles.get(sessionId) ?? log.customTitle)
+            : log.customTitle,
+        tag: sessionId ? (metadata.tags.get(sessionId) ?? log.tag) : log.tag,
+        agentName: sessionId
+            ? (metadata.agentNames.get(sessionId) ?? log.agentName)
+            : log.agentName,
+        agentColor: sessionId
+            ? (metadata.agentColors.get(sessionId) ?? log.agentColor)
+            : log.agentColor,
+        agentSetting: sessionId
+            ? (metadata.agentSettings.get(sessionId) ?? log.agentSetting)
+            : log.agentSetting,
+        mode: sessionId
+            ? (metadata.modes.get(sessionId) ?? log.mode)
+            : log.mode,
+        worktreeSession: sessionId && metadata.worktreeStates.has(sessionId)
+            ? metadata.worktreeStates.get(sessionId)
+            : log.worktreeSession,
+        prNumber: sessionId
+            ? (metadata.prNumbers.get(sessionId) ?? log.prNumber)
+            : log.prNumber,
+        prUrl: sessionId ? (metadata.prUrls.get(sessionId) ?? log.prUrl) : log.prUrl,
+        prRepository: sessionId
+            ? (metadata.prRepositories.get(sessionId) ?? log.prRepository)
+            : log.prRepository,
+        contentReplacements: sessionId
+            ? (metadata.contentReplacements.get(sessionId) ?? log.contentReplacements)
+            : log.contentReplacements,
+        contextCollapseCommits: sessionId
+            ? metadata.contextCollapseCommits.filter(e => e.sessionId === sessionId)
+            : log.contextCollapseCommits,
+        contextCollapseSnapshot: sessionId && metadata.contextCollapseSnapshot?.sessionId === sessionId
+            ? metadata.contextCollapseSnapshot
+            : log.contextCollapseSnapshot,
+    };
+    return {
+        log: logWithMaterializedMessages,
+        messages: materialized.currentContextMessages,
+        sessionId,
+    };
+}
+function createHistoryMaterializationError(transcriptPath, diagnostics) {
+    const errorCodes = diagnostics
+        .filter(diagnostic => diagnostic.level === 'error')
+        .map(diagnostic => diagnostic.code);
+    const codes = errorCodes.length > 0 ? errorCodes.join(', ') : 'unknown';
+    const error = new Error(`History transcript materialization failed (${codes}) for ${transcriptPath}`);
+    return Object.assign(error, {
+        code: 'history_materialization_failed',
+        diagnostics,
+    });
 }
 /**
  * Loads a conversation for resume from various sources.
  * This is the centralized function for loading and deserializing conversations.
+ *
+ * CCR fork boundary: this module is the unified resume facade for CLI/TUI,
+ * Core, and App Server initiated resumes. Resume callers must consume the
+ * materialized current-context contract here instead of re-reading transcript
+ * chains independently.
  *
  * @param source - The source to load from:
  *   - undefined: load most recent conversation
@@ -361,8 +417,8 @@ export async function loadConversationForResume(source, sourceJsonlFile) {
         }
         else if (sourceJsonlFile) {
             // --resume with a .jsonl path (cli/print.ts routes on suffix).
-            // Same chain walk as the sid branch below — only the starting
-            // path differs.
+            // Same materialized current-context contract as the sid branch below —
+            // only the starting path differs.
             const loaded = await loadMessagesFromJsonlPath(sourceJsonlFile);
             messages = loaded.messages;
             sessionId = loaded.sessionId;
@@ -384,6 +440,12 @@ export async function loadConversationForResume(source, sourceJsonlFile) {
             if (isLiteLog(log)) {
                 log = await loadFullLog(log);
             }
+            const materializedLog = await materializeLogForResume(log);
+            if (materializedLog) {
+                log = materializedLog.log;
+                messages = materializedLog.messages;
+                sessionId = materializedLog.sessionId ?? sessionId;
+            }
             // Determine sessionId first so we can pass it to copy functions
             if (!sessionId) {
                 sessionId = getSessionIdFromLog(log);
@@ -395,7 +457,7 @@ export async function loadConversationForResume(source, sourceJsonlFile) {
             }
             // Copy file history for resume
             void copyFileHistoryForResume(log);
-            messages = log.messages;
+            messages ??= log.messages;
             checkResumeConsistency(messages);
         }
         // Restore skill state from invoked_skills attachments before deserialization.

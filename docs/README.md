@@ -28,6 +28,7 @@
 - [CCR App Server 会话 API 设计](./architecture/app-server-session-api-design.md)
 - [CCR App Server Client SDK 设计](./architecture/app-server-client-sdk-design.md)
 - [CCR App Server 原生上下文链路恢复设计](./architecture/app-server-native-context-recovery.md)
+- [CCR 历史恢复与 transcript 语义](./architecture/session-resume-transcript-semantics.md)
 - [CCR App Server 权限复用设计](./architecture/app-server-permission-reuse-design.md)
 - [CCR App Server 版本、协议兼容与回滚规则](./architecture/app-server-version-compatibility.md)
 

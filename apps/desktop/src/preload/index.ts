@@ -169,6 +169,12 @@ type ResumeThreadInput = {
   metadata?: Record<string, unknown>
 }
 
+type RenameSessionHistoryInput = {
+  sessionId: string
+  title: string
+  transcriptPath?: string
+}
+
 type DesktopAttachmentSource =
   | {
       kind: 'file'
@@ -306,6 +312,8 @@ const api = {
     ipcRenderer.invoke('ccr:list-session-history', input ?? {}),
   resumeThread: (input: ResumeThreadInput | string, title?: string) =>
     ipcRenderer.invoke('ccr:resume-thread', input, title),
+  renameSessionHistory: (input: RenameSessionHistoryInput) =>
+    ipcRenderer.invoke('ccr:rename-session-history', input),
   refreshMcp: () => ipcRenderer.invoke('ccr:refresh-mcp'),
   inspectMcp: (input: McpNameInput) =>
     ipcRenderer.invoke('ccr:mcp-inspect', input),
@@ -358,6 +366,8 @@ const api = {
     ipcRenderer.invoke('ccr:show-item-in-folder', path),
   savePathAs: (path: string) => ipcRenderer.invoke('ccr:save-path-as', path),
   copyText: (text: string) => ipcRenderer.invoke('ccr:copy-text', text),
+  readClipboardText: (): Promise<string> =>
+    ipcRenderer.invoke('ccr:read-clipboard-text'),
   respondPermission: (input: PermissionRespondInput) =>
     ipcRenderer.invoke('ccr:permission-respond', input),
   getPermissionSettings: () =>

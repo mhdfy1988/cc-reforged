@@ -108,6 +108,8 @@
     "smoke:desktop-release-artifacts": "node ./scripts/smoke-desktop-release-artifacts.mjs",
     "smoke:desktop-shell-cards": "node ./scripts/smoke-desktop-shell-cards.mjs",
     "smoke:desktop-signing-readiness": "node ./scripts/smoke-desktop-signing-readiness.mjs",
+    "smoke:core-session-parent-chain": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-core-session-parent-chain.mjs",
+    "smoke:conversation-materialization": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-conversation-materialization.mjs",
     "smoke:cli-model": "node ./scripts/smoke-cli-model.mjs",
     "smoke:runtime": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-runtime.mjs",
     "smoke:settings-isolation": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-settings-isolation.mjs",

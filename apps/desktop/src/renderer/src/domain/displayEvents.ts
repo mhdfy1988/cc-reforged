@@ -7,6 +7,10 @@ import {
   type CcrContentBlock,
 } from '../../../../../../src/types/contentBlocks.js'
 import {
+  parseThreadDisplayProjection,
+  validateThreadDisplayProjection,
+} from '../../../../../../src/display/threadDisplayProjectionSchema.js'
+import {
   createCcrErrorSnapshot,
   type CcrErrorSnapshot,
 } from '../../../../../../src/types/errorSnapshot.js'
@@ -25,6 +29,8 @@ import type {
 import {
   extractAttachmentSnapshotsFromContentBlocks,
   extractFileDisplaySnapshotsFromToolSnapshot,
+  removeGeneratedOutputImagePathsFromText,
+  removeUserUploadImagePlaceholderFromText,
 } from './fileEvents.js'
 import {
   extractTodoOverlaySnapshotFromBlocks,
@@ -65,8 +71,22 @@ export type DisplayEvent = {
   attachmentSnapshot?: AttachmentSnapshot
   attachmentSnapshots?: AttachmentSnapshot[]
   referenceSnapshot?: ReferenceSnapshot
+  compactSnapshot?: DisplayCompactSnapshot
   contentBlocks?: CcrContentBlock[]
   errorSnapshot?: CcrErrorSnapshot
+}
+
+export type DisplayCompactSnapshot = {
+  status?: string
+  trigger?: string
+  startedAt?: string
+  completedAt?: string
+  preCompactTokenCount?: number
+  postCompactTokenCount?: number
+  truePostCompactTokenCount?: number
+  summaryMessageCount?: number
+  attachmentCount?: number
+  hookResultCount?: number
 }
 
 export type DisplayAttachmentInput = {
@@ -93,10 +113,14 @@ export function createUserDisplayEvent(
     blocks: rawBlocks,
     source: 'UserUpload',
   })
+  const displayText = removeUserUploadImagePlaceholderFromText(
+    text,
+    attachmentSnapshots,
+  )
   return {
     id,
     type: 'user_message',
-    text,
+    text: displayText,
     attachmentSnapshots:
       attachmentSnapshots.length > 0 ? attachmentSnapshots : undefined,
     contentBlocks: normalizeCcrContentBlocks(rawBlocks),
@@ -130,6 +154,28 @@ export function createDisplayEventFromCompletedItem(
   statusText: string,
   context?: DisplayEventContractContext,
 ): DisplayEvent | null {
+  const projectionIssue = getThreadDisplayProjectionProtocolIssue(context?.item)
+  if (
+    isThreadDisplayContext(context) &&
+    projectionIssue &&
+    !canFallbackMissingThreadDisplayProjection(context?.item, projectionIssue)
+  ) {
+    return createThreadDisplayProjectionProtocolErrorEvent(
+      itemId,
+      context?.item,
+      projectionIssue,
+      context,
+    )
+  }
+
+  const projectedEvent = createDisplayEventFromThreadDisplayProjection(
+    itemId,
+    context?.item,
+  )
+  if (projectedEvent) {
+    return projectedEvent
+  }
+
   const blocks = normalizeContentBlocks(content)
   const contentBlocks = normalizeCcrContentBlocks(content)
   const identity = createDisplayEventIdentity(context ?? { itemId })
@@ -234,9 +280,137 @@ export function createDisplayEventFromCompletedItem(
   }
 
   const event = chatMessageToDisplayEvent(message, identity)
+  const text = removeGeneratedOutputImagePathsFromText(
+    event.text,
+    attachmentSnapshots,
+  )
   return attachmentSnapshots.length > 0
-    ? { ...event, attachmentSnapshots, contentBlocks }
-    : { ...event, contentBlocks }
+    ? { ...event, text, attachmentSnapshots, contentBlocks }
+    : { ...event, text, contentBlocks }
+}
+
+export function createDisplayEventFromThreadDisplayProjection(
+  itemId: string,
+  item: unknown,
+): DisplayEvent | null {
+  const projection = parseThreadDisplayProjection(
+    getObjectRecord(item)?.projection,
+  )
+  const projectedEvent = projection?.event
+  if (!projectedEvent) {
+    return null
+  }
+
+  const type = getProjectedString(projectedEvent.type)
+  const text = getProjectedString(projectedEvent.text)
+  if (!type || text === undefined) {
+    return null
+  }
+
+  const attachmentSnapshots = Array.isArray(projectedEvent.attachmentSnapshots)
+    ? (projectedEvent.attachmentSnapshots as AttachmentSnapshot[])
+    : undefined
+  const displayText = removeUserUploadImagePlaceholderFromText(
+    removeGeneratedOutputImagePathsFromText(text, attachmentSnapshots),
+    attachmentSnapshots,
+  )
+
+  return {
+    id: itemId,
+    type: type as DisplayEventType,
+    text: displayText,
+    status: getProjectedString(projectedEvent.status),
+    sourceKind: getProjectedString(projectedEvent.sourceKind),
+    timelineHidden:
+      typeof projectedEvent.timelineHidden === 'boolean'
+        ? projectedEvent.timelineHidden
+        : undefined,
+    identity: getObjectRecord(projectedEvent.identity) as
+      | DisplayEventIdentity
+      | undefined,
+    todoSnapshot: getObjectRecord(projectedEvent.todoSnapshot) as
+      | TodoOverlaySnapshot
+      | undefined,
+    toolSnapshot: getObjectRecord(projectedEvent.toolSnapshot) as
+      | ToolSnapshot
+      | undefined,
+    fileToolSnapshot: getObjectRecord(projectedEvent.fileToolSnapshot) as
+      | FileToolSnapshot
+      | undefined,
+    fileSnapshot: getObjectRecord(projectedEvent.fileSnapshot) as
+      | FileSnapshot
+      | undefined,
+    attachmentSnapshot: getObjectRecord(projectedEvent.attachmentSnapshot) as
+      | AttachmentSnapshot
+      | undefined,
+    attachmentSnapshots,
+    referenceSnapshot: getObjectRecord(projectedEvent.referenceSnapshot) as
+      | ReferenceSnapshot
+      | undefined,
+    compactSnapshot: getObjectRecord(projectedEvent.compactSnapshot) as
+      | DisplayCompactSnapshot
+      | undefined,
+    contentBlocks: Array.isArray(projectedEvent.contentBlocks)
+      ? (projectedEvent.contentBlocks as CcrContentBlock[])
+      : undefined,
+    errorSnapshot: getObjectRecord(projectedEvent.errorSnapshot) as unknown as
+      | CcrErrorSnapshot
+      | undefined,
+  }
+}
+
+export function getThreadDisplayProjectionProtocolIssue(
+  item: unknown,
+): string | null {
+  const object = getObjectRecord(item)
+  if (!object || !('projection' in object)) {
+    return '缺少 ThreadDisplayItem.projection'
+  }
+
+  const result = validateThreadDisplayProjection(object.projection)
+  return 'issue' in result ? result.issue : null
+}
+
+export function canFallbackMissingThreadDisplayProjection(
+  item: unknown,
+  issue = getThreadDisplayProjectionProtocolIssue(item),
+): boolean {
+  if (issue !== '缺少 ThreadDisplayItem.projection') {
+    return false
+  }
+  const object = getObjectRecord(item)
+  return object?.content !== undefined
+}
+
+export function createThreadDisplayProjectionProtocolErrorEvent(
+  itemId: string,
+  item: unknown,
+  issue = getThreadDisplayProjectionProtocolIssue(item) ??
+    'ThreadDisplayItem.projection 无效',
+  context?: DisplayEventContractContext,
+): DisplayEvent {
+  const itemObject = getObjectRecord(item)
+  const itemType = getProjectedString(itemObject?.type) ?? 'unknown'
+  const event = createErrorDisplayEvent(
+    `${itemId}:projection-protocol-error`,
+    `展示协议错误：${issue}。itemId=${itemId}，itemType=${itemType}。`,
+  )
+  return {
+    ...event,
+    status: 'failed',
+    sourceKind: 'thread_display_projection',
+    identity: createDisplayEventIdentity(context ?? { itemId }),
+  }
+}
+
+function getObjectRecord(value: unknown): JsonObject | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as JsonObject)
+    : undefined
+}
+
+function getProjectedString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
 }
 
 function toAttachmentContentBlock(attachment: DisplayAttachmentInput): JsonObject {
@@ -250,6 +424,15 @@ function isHistoryReplayContext(
   context: DisplayEventContractContext | undefined,
 ): boolean {
   return context?.params?.source === 'history'
+}
+
+function isThreadDisplayContext(
+  context: DisplayEventContractContext | undefined,
+): boolean {
+  return (
+    Boolean(context?.item) &&
+    (context?.params?.source === 'history' || context?.params?.source === 'live')
+  )
 }
 
 function createUserDisplayEventFromBlocks(
@@ -268,15 +451,19 @@ function createUserDisplayEventFromBlocks(
     source: 'UserUpload',
     identity,
   })
+  const displayText = removeUserUploadImagePlaceholderFromText(
+    text,
+    attachmentSnapshots,
+  )
 
-  if (!text && attachmentSnapshots.length === 0) {
+  if (!displayText && attachmentSnapshots.length === 0) {
     return null
   }
 
   return {
     id: itemId,
     type: 'user_message',
-    text,
+    text: displayText,
     status: 'completed',
     sourceKind: 'user_message',
     identity,

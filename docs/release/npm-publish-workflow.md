@@ -98,15 +98,21 @@ git push origin v0.5.1
 
 ```powershell
 npm.cmd view cc-reforged version dist-tags --json
-npm.cmd view cc-reforged bin
-npx.cmd -y --package cc-reforged ccr --version
+npm.cmd view cc-reforged@0.5.1 bin --json
+npm.cmd pack cc-reforged@0.5.1
+$dst = Join-Path $env:TEMP "ccr-pack-0.5.1"
+if (Test-Path $dst) { Remove-Item -LiteralPath $dst -Recurse -Force }
+New-Item -ItemType Directory -Path $dst | Out-Null
+tar -xf cc-reforged-0.5.1.tgz -C $dst
+node (Join-Path $dst "package\\cli.js") --version
 ```
 
 验证要点：
 
 1. `dist-tags.latest` 指向新版本。
 2. `bin` 包含 `ccr`。
-3. 远端执行 `ccr --version` 输出正确版本号。
+3. 解包后的 `cli.js --version` 输出正确版本号。
+4. 本机如果有全局 `ccr`，不要用 `npx ... ccr --version` 当发布验证口径。
 
 ## 6. 常见失败与处理
 
@@ -141,6 +147,17 @@ ERROR: Direct publishing is not allowed.
 
 处理：这是预期保护。CI 工作流已在 publish step 设置 `AUTHORIZED=1`，不要删除该环境变量。
 
+### 6.5 本机 `npx ... ccr --version` 显示旧版本
+
+现象：npm `latest` 已是新版本，但 `npx.cmd -y --package cc-reforged ccr --version` 仍显示旧版本（例如 `CCR v0.1`）。
+
+处理：
+
+1. 先检查是否存在全局 `ccr`：`Get-Command ccr`。
+2. 若命中 `C:\Users\<user>\AppData\Roaming\npm\ccr.*`，说明被全局命令抢占。
+3. 用“发布后验证”里的 `npm pack + node package/cli.js --version` 作为权威验证。
+4. 如需清理本机冲突：`npm.cmd uninstall -g cc-reforged` 或升级全局到新版本 `npm.cmd install -g cc-reforged@latest`。
+
 ## 7. 应急路径（仅故障兜底）
 
 默认不建议本机直发；仅当 GitHub Actions 或 OIDC 临时故障且必须紧急发版时，才使用本机发布：
@@ -150,7 +167,13 @@ ERROR: Direct publishing is not allowed.
 3. 执行 `npm.cmd publish --access public`。
 4. 事后回到 OIDC 主路径，避免长期依赖本机 token。
 
-## 8. 官方参考
+## 8. 发布记录
+
+| 日期 | 版本 | 触发方式 | 结果 |
+| --- | --- | --- | --- |
+| 2026-05-22 | `0.5.1` | `workflow_dispatch`，输入 `tag=v0.5.1` | 首次通过 npm Trusted Publishing / OIDC 发布；GitHub Actions run：`26270002796`；npm `latest=0.5.1` |
+
+## 9. 官方参考
 
 1. npm Trusted Publishing（GitHub Actions）：https://docs.npmjs.com/trusted-publishers/
 2. npm publish 命令：https://docs.npmjs.com/cli/publish/

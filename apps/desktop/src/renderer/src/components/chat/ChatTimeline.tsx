@@ -17,17 +17,18 @@ import {
   USER_SCROLL_DIRECTION_EPSILON_PX,
 } from '../../domain/autoScroll.js'
 import type { DisplayEvent } from '../../domain/displayEvents.js'
+import type { MessageAvatarRuntime } from '../../domain/avatarEvents.js'
 import type {
   PermissionCard,
   PermissionRespondPayload,
 } from '../../domain/displayTypes.js'
 import type { TodoOverlaySnapshot } from '../../domain/todoEvents.js'
-import { isControlToolName } from '../../domain/toolEvents.js'
 
 export function ChatTimeline(props: {
   activeTurnId: string | null
   canInterruptTurn: boolean
   events: DisplayEvent[]
+  avatarRuntime?: MessageAvatarRuntime
   permissions: PermissionCard[]
   todoOverlay: TodoOverlaySnapshot | null
   onOpenLogs?: () => void
@@ -44,13 +45,6 @@ export function ChatTimeline(props: {
   const lastScrollTopRef = useRef<number | null>(null)
   const [hasNewContentBelow, setHasNewContentBelow] = useState(false)
   const visibleEvents = props.events.filter(event => !event.timelineHidden)
-  const inlineControlFailureByAssistantId =
-    getInlineControlFailureByAssistantId(visibleEvents, props.events)
-  const inlineControlFailureEventIds = new Set(
-    Array.from(inlineControlFailureByAssistantId.values()).map(
-      event => event.id,
-    ),
-  )
   const compactCarryoverEventIds = useMemo(
     () => getCompactCarryoverEventIds(visibleEvents),
     [visibleEvents],
@@ -152,14 +146,9 @@ export function ChatTimeline(props: {
             {visibleEvents.map(event => (
               <TimelineEvent
                 event={event}
+                avatarRuntime={props.avatarRuntime}
                 key={event.id}
-                inlineControlFailure={
-                  event.type === 'assistant_message'
-                    ? inlineControlFailureByAssistantId.get(event.id)
-                    : undefined
-                }
                 compactCarryover={compactCarryoverEventIds.has(event.id)}
-                inlineControlFailureEventIds={inlineControlFailureEventIds}
                 permission={getInlinePermissionForEvent(
                   event,
                   props.permissions,
@@ -172,7 +161,10 @@ export function ChatTimeline(props: {
             ))}
 
             {props.activeTurnId ? (
-              <ThinkingIndicator canStop={props.canInterruptTurn} />
+              <ThinkingIndicator
+                avatarRuntime={props.avatarRuntime}
+                canStop={props.canInterruptTurn}
+              />
             ) : null}
 
             {props.permissions
@@ -216,11 +208,10 @@ function scrollToTimelineBottom(
 
 function TimelineEvent(props: {
   event: DisplayEvent
+  avatarRuntime?: MessageAvatarRuntime
   onOpenLogs?: () => void
   onOpenModels?: () => void
-  inlineControlFailure?: DisplayEvent
   compactCarryover?: boolean
-  inlineControlFailureEventIds: Set<string>
   permission?: PermissionCard
   onRespondPermission: (
     permissionRequestId: string,
@@ -238,7 +229,7 @@ function TimelineEvent(props: {
     return (
       <AssistantMessage
         event={event}
-        inlineControlFailure={props.inlineControlFailure}
+        avatarRuntime={props.avatarRuntime}
         onOpenLogs={props.onOpenLogs}
         onOpenModels={props.onOpenModels}
         permission={props.permission}
@@ -262,9 +253,6 @@ function TimelineEvent(props: {
   }
 
   if (event.type === 'tool_call' || event.type === 'tool_result') {
-    if (props.inlineControlFailureEventIds.has(event.id)) {
-      return null
-    }
     return (
       <ToolCard
         event={event}
@@ -308,34 +296,6 @@ function getInlinePermissionIds(
     }
   }
   return ids
-}
-
-function getInlineControlFailureByAssistantId(
-  events: DisplayEvent[],
-  allEvents: DisplayEvent[],
-): Map<string, DisplayEvent> {
-  const assistantIds = new Set(
-    events
-      .filter(event => event.type === 'assistant_message')
-      .map(event => event.id),
-  )
-  const inlineMap = new Map<string, DisplayEvent>()
-
-  for (const event of events) {
-    if (!isInlineControlFailureEvent(event)) {
-      continue
-    }
-    const anchorAssistantId = resolveControlFailureAnchorAssistantId(
-      event,
-      allEvents,
-    )
-    if (!anchorAssistantId || !assistantIds.has(anchorAssistantId)) {
-      continue
-    }
-    inlineMap.set(anchorAssistantId, event)
-  }
-
-  return inlineMap
 }
 
 function getInlinePermissionForEvent(
@@ -432,43 +392,7 @@ function resolvePlanApprovalAnchorAssistantId(
     }
   }
 
-  const globalFallback = findLastAssistantMessage(allEvents)
-  if (globalFallback) {
-    return globalFallback.id
-  }
-
-  return undefined
-}
-
-function resolveControlFailureAnchorAssistantId(
-  event: DisplayEvent,
-  allEvents: DisplayEvent[],
-): string | undefined {
-  const eventIndex = allEvents.findIndex(candidate => candidate.id === event.id)
-  if (eventIndex === -1) {
-    return undefined
-  }
-
-  const turnId =
-    event.toolSnapshot?.identity?.turnId ?? event.identity?.turnId ?? undefined
-  const nearestAssistant = findNearestAssistantMessageBeforeIndex(
-    allEvents,
-    eventIndex,
-    turnId,
-  )
-  if (nearestAssistant) {
-    return nearestAssistant.id
-  }
-
-  if (turnId) {
-    const fallbackAssistant = findLastAssistantMessageForTurn(allEvents, turnId)
-    if (fallbackAssistant) {
-      return fallbackAssistant.id
-    }
-  }
-
-  const globalFallback = findLastAssistantMessage(allEvents)
-  return globalFallback?.id
+  return findLastAssistantMessage(allEvents)?.id
 }
 
 function findLastAssistantMessageForTurn(
@@ -552,7 +476,6 @@ function findNearestAssistantMessageBeforeIndex(
 function getEventToolUseId(event: DisplayEvent): string | undefined {
   return (
     event.toolSnapshot?.identity?.toolUseId ??
-    getRawToolUseId(event.toolSnapshot?.raw) ??
     event.fileToolSnapshot?.toolUseId ??
     event.fileToolSnapshot?.identity?.toolUseId ??
     event.fileSnapshot?.toolUseId ??
@@ -561,33 +484,6 @@ function getEventToolUseId(event: DisplayEvent): string | undefined {
     event.referenceSnapshot?.identity?.toolUseId ??
     event.identity?.toolUseId
   )
-}
-
-function getRawToolUseId(value: unknown): string | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined
-  }
-  const object = value as Record<string, unknown>
-  const id =
-    object.id ??
-    object.toolUseId ??
-    object.toolUseID ??
-    object.tool_use_id
-  return typeof id === 'string' && id.trim() ? id : undefined
-}
-
-function isInlineControlFailureEvent(event: DisplayEvent): boolean {
-  if (event.type !== 'tool_call' && event.type !== 'tool_result') {
-    return false
-  }
-  const snapshot = event.toolSnapshot
-  if (!snapshot) {
-    return false
-  }
-  if (snapshot.status !== 'failed' && snapshot.status !== 'timeout') {
-    return false
-  }
-  return snapshot.category === 'control' || isControlToolName(snapshot.name)
 }
 
 function isInlineToolPermission(permission: PermissionCard): boolean {

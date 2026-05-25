@@ -1,19 +1,28 @@
 import { getClaudeConfigHomeDir } from '../utils/envUtils.js';
 import { createCcrCore } from '../core/index.js';
-import { coreEventToJsonRpcNotification } from './coreEventMapper.js';
+import { coreEventToJsonRpcNotification, coreEventToThreadDisplayPatchNotification, } from './coreEventMapper.js';
 import { AppServerError, errorResponse } from './errors.js';
 import { handleCompactRun, handleCompactStatus, handleContextAnalyze, handleContextStatus, handleMemorySessionStatus, } from './handlers/contextHandlers.js';
 import { handleAuthLogin, handleAuthStatus, handleConfigGet, handleModelAvailability, handleModelProfileCopy, handleModelProfileDelete, handleModelCredentialUpdate, handleModelList, handleModelProfileList, handleModelProfileSave, handleModelProfileSetCurrent, handleModelSet, handleModelTest, } from './handlers/llmHandlers.js';
 import { handleMcpAdd, handleMcpDisable, handleMcpEnable, handleMcpInstallApply, handleMcpInstallList, handleMcpInstallPlan, handleMcpInstallSearch, handleMcpInstallUninstall, handleMcpInspect, handleMcpList, handleMcpRemove, handleMcpRestart, handleMcpTest, handleMcpUpdate, } from './handlers/mcpHandlers.js';
-import { handlePermissionRespond, handlePermissionSettingsGet, handlePermissionSettingsUpdate, } from './handlers/permissionHandlers.js';
-import { handleSessionHistoryList, handleThreadList, handleThreadResume, handleThreadStart, handleTurnInterrupt, handleTurnStart, } from './handlers/sessionHandlers.js';
+import { handlePermissionPendingList, handlePermissionRespond, handlePermissionSettingsGet, handlePermissionSettingsUpdate, } from './handlers/permissionHandlers.js';
+import { handleSessionHistoryList, handleSessionHistoryRename, handleThreadList, handleThreadMessagesList, handleThreadResume, handleThreadStart, handleTurnInterrupt, handleTurnStart, } from './handlers/sessionHandlers.js';
 import { handleWorkspaceOpen } from './handlers/workspaceHandlers.js';
 import { setupAppServerRuntime } from './setup.js';
 import { APP_SERVER_CONFIG_SCHEMA_VERSION, APP_SERVER_PROTOCOL_VERSION, DEFAULT_SERVER_CAPABILITIES, InitializeParamsSchema, JsonRpcRequestSchema, ShutdownParamsSchema, successResponse, } from './protocol.js';
 export function createAppServerContext(options = {}) {
     const emit = options.emit ?? (() => { });
     const core = createCcrCore({
-        emit: event => emit(coreEventToJsonRpcNotification(event)),
+        emit: event => {
+            const displayPatchNotification = coreEventToThreadDisplayPatchNotification(event);
+            if (displayPatchNotification) {
+                emit(displayPatchNotification);
+            }
+            const notification = coreEventToJsonRpcNotification(event);
+            if (notification) {
+                emit(notification);
+            }
+        },
     });
     return {
         initialized: false,
@@ -101,8 +110,12 @@ export async function handleJsonRpcMessage(context, rawMessage) {
                 return successResponse(request.id, handleThreadStart(context, request.params));
             case 'thread/list':
                 return successResponse(request.id, handleThreadList(context, request.params));
+            case 'thread/messages/list':
+                return successResponse(request.id, handleThreadMessagesList(context, request.params));
             case 'session/history/list':
                 return successResponse(request.id, await handleSessionHistoryList(context, request.params));
+            case 'session/history/rename':
+                return successResponse(request.id, await handleSessionHistoryRename(context, request.params));
             case 'thread/resume':
                 return successResponse(request.id, await handleThreadResume(context, request.params));
             case 'turn/start':
@@ -111,6 +124,8 @@ export async function handleJsonRpcMessage(context, rawMessage) {
                 return successResponse(request.id, handleTurnInterrupt(context, request.params));
             case 'permission/respond':
                 return successResponse(request.id, handlePermissionRespond(context, request.params));
+            case 'permission/pending/list':
+                return successResponse(request.id, handlePermissionPendingList(context, request.params));
             case 'permission/settings/get':
                 return successResponse(request.id, handlePermissionSettingsGet(context, request.params));
             case 'permission/settings/update':

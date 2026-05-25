@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { InteractionDetails } from './InteractionDetails.js'
 import { InteractionCardShell } from './InteractionCardShell.js'
+import { PathActionLink } from './PathActionLink.js'
 import { renderMessageBlocks } from '../../domain/contentBlocks.js'
 import type {
   JsonObject,
@@ -152,10 +153,6 @@ export function PlanApprovalCard(props: {
   }
 
   const title = resolveExitPlanModeTitle(permission)
-  const plan = extractPlanText(
-    permission.input,
-    resolvePlanTextFallback(permission),
-  )
   const planFilePath = extractPlanFilePath(permission.input)
   const internalPlanDraft = extractInternalPlanDraft(permission.input)
   const planDraft =
@@ -167,6 +164,12 @@ export function PlanApprovalCard(props: {
           status: undefined,
         }
       : null)
+  const plan = extractPlanText(
+    permission.input,
+    planDraft
+      ? '计划正文在草稿文件中，点击上方路径查看。'
+      : resolvePlanTextFallback(permission),
+  )
   const allowedPrompts = extractAllowedPrompts(permission.input)
 
   return (
@@ -219,14 +222,9 @@ export function PlanApprovalCard(props: {
       ) : (
         <>
           <section className="plan-card-preview">
-            <h4>计划内容</h4>
-            <div className="plan-card-markdown">{renderMessageBlocks(plan)}</div>
-          </section>
-
-          {planDraft ? (
-            <section className="plan-card-draft">
-              <h4>{internalPlanDraft ? '内部计划草稿' : '计划文件'}</h4>
-              <div className="plan-card-draft-row">
+            <div className="plan-card-section-line">
+              <h4>计划内容</h4>
+              {planDraft ? (
                 <span
                   className={`plan-card-draft-status ${getPlanDraftStatusClass(
                     planDraft.status,
@@ -234,25 +232,47 @@ export function PlanApprovalCard(props: {
                 >
                   {formatPlanDraftStatus(planDraft.status)}
                 </span>
-                <code>{planDraft.path}</code>
-              </div>
-              {planDraft.seriesId ? (
-                <small>计划系列：{planDraft.seriesId}</small>
               ) : null}
-            </section>
-          ) : null}
+            </div>
+            {planDraft ? (
+              <div className="plan-card-source-line">
+                <span>{internalPlanDraft ? '内部草稿' : '计划文件'}</span>
+                {planDraft.seriesId ? (
+                  <b title={planDraft.seriesId}>{planDraft.seriesId}</b>
+                ) : null}
+                <span className="plan-card-source-spacer" />
+                <span className="plan-card-path-slot">
+                  <PathActionLink
+                    className="plan-card-path-link"
+                    path={planDraft.path}
+                    statusClassName="plan-card-path-status"
+                    title={planDraft.path}
+                  >
+                    {getFilenameFromPath(planDraft.path)}
+                  </PathActionLink>
+                </span>
+              </div>
+            ) : null}
+            <div className="plan-card-markdown">{renderMessageBlocks(plan)}</div>
+          </section>
 
           {allowedPrompts.length > 0 ? (
             <section className="plan-card-prompts">
-              <h4>计划申请的语义权限</h4>
-              <ul>
-                {allowedPrompts.map((prompt, index) => (
-                  <li key={`${prompt.tool}:${index}`}>
-                    <strong>{prompt.tool}</strong>
-                    <span>{prompt.prompt}</span>
-                  </li>
-                ))}
-              </ul>
+              <div className="plan-card-prompts-line">
+                <h4>计划申请的语义权限</h4>
+                <div className="plan-card-prompt-chip-list">
+                  {allowedPrompts.map((prompt, index) => (
+                    <span
+                      aria-label={`${prompt.tool}: ${prompt.prompt}`}
+                      className="plan-card-prompt-chip"
+                      key={`${prompt.tool}:${index}`}
+                      title={prompt.prompt}
+                    >
+                      {prompt.tool}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </section>
           ) : null}
         </>
@@ -415,6 +435,11 @@ function getPlanSeriesIdFromPath(path: string): string | undefined {
   const planSlug = stem.slice(0, markerIndex)
   const agentId = stem.slice(markerIndex + agentMarker.length)
   return planSlug && agentId ? `${planSlug}:agent:${agentId}` : stem
+}
+
+function getFilenameFromPath(path: string): string {
+  const normalized = path.replace(/\\/g, '/')
+  return normalized.split('/').filter(Boolean).at(-1) ?? path
 }
 
 function formatPlanDraftStatus(status: string | undefined): string {

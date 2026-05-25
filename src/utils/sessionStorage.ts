@@ -1957,6 +1957,27 @@ function extractFirstPrompt(transcript: TranscriptMessage[]): string {
   return 'No prompt'
 }
 
+function extractLastPrompt(transcript: TranscriptMessage[]): string | undefined {
+  const textContent = getLastMeaningfulUserMessageTextContent(transcript)
+  if (!textContent) {
+    return undefined
+  }
+  const result = textContent.replace(/\n/g, ' ').trim()
+  return result.length > 200 ? `${result.slice(0, 200).trim()}…` : result
+}
+
+function getLastMeaningfulUserMessageTextContent<T extends Message>(
+  transcript: T[],
+): string | undefined {
+  for (let i = transcript.length - 1; i >= 0; i -= 1) {
+    const textContent = getMeaningfulUserMessageTextContent(transcript[i]!)
+    if (textContent) {
+      return textContent
+    }
+  }
+  return undefined
+}
+
 /**
  * Gets the last user message that was processed (i.e., before any non-user message appears).
  * Used to determine if a session has valid user interaction.
@@ -1965,67 +1986,76 @@ export function getFirstMeaningfulUserMessageTextContent<T extends Message>(
   transcript: T[],
 ): string | undefined {
   for (const msg of transcript) {
-    if (msg.type !== 'user' || msg.isMeta) continue
-    // Skip compact summary messages - they should not be treated as the first prompt
-    if ('isCompactSummary' in msg && msg.isCompactSummary) continue
+    const textContent = getMeaningfulUserMessageTextContent(msg)
+    if (textContent) {
+      return textContent
+    }
+  }
+  return undefined
+}
 
-    const content = msg.message?.content
-    if (!content) continue
+function getMeaningfulUserMessageTextContent<T extends Message>(
+  msg: T,
+): string | undefined {
+  if (msg.type !== 'user' || msg.isMeta) return undefined
+  // Skip compact summary messages - they should not be treated as prompts.
+  if ('isCompactSummary' in msg && msg.isCompactSummary) return undefined
 
-    // Collect all text values. For array content (common in VS Code where
-    // IDE metadata tags come before the user's actual prompt), iterate all
-    // text blocks so we don't miss the real prompt hidden behind
-    // <ide_selection>/<ide_opened_file> blocks.
-    const texts: string[] = []
-    if (typeof content === 'string') {
-      texts.push(content)
-    } else if (Array.isArray(content)) {
-      for (const block of content) {
-        const text = getUserContentBlockText(block)
-        if (text) {
-          texts.push(text)
-        }
+  const content = msg.message?.content
+  if (!content) return undefined
+
+  // Collect all text values. For array content (common in VS Code where
+  // IDE metadata tags come before the user's actual prompt), iterate all
+  // text blocks so we don't miss the real prompt hidden behind
+  // <ide_selection>/<ide_opened_file> blocks.
+  const texts: string[] = []
+  if (typeof content === 'string') {
+    texts.push(content)
+  } else if (Array.isArray(content)) {
+    for (const block of content) {
+      const text = getUserContentBlockText(block)
+      if (text) {
+        texts.push(text)
       }
     }
+  }
 
-    for (const textContent of texts) {
-      if (!textContent) continue
+  for (const textContent of texts) {
+    if (!textContent) continue
 
-      const commandNameTag = extractTag(textContent, COMMAND_NAME_TAG)
-      if (commandNameTag) {
-        const commandName = commandNameTag.replace(/^\//, '')
+    const commandNameTag = extractTag(textContent, COMMAND_NAME_TAG)
+    if (commandNameTag) {
+      const commandName = commandNameTag.replace(/^\//, '')
 
-        // If it's a built-in command, then it's unlikely to provide
-        // meaningful context (e.g. `/model sonnet`)
-        if (builtInCommandNames().has(commandName)) {
-          continue
-        } else {
-          // Otherwise, for custom commands, then keep it only if it has
-          // arguments (e.g. `/review reticulate splines`)
-          const commandArgs = extractTag(textContent, 'command-args')?.trim()
-          if (!commandArgs) {
-            continue
-          }
-          // Return clean formatted command instead of raw XML
-          return `${commandNameTag} ${commandArgs}`
-        }
-      }
-
-      // Format bash input with ! prefix (as user typed it). Checked before
-      // the generic XML skip so bash-mode sessions get a meaningful title.
-      const bashInput = extractTag(textContent, 'bash-input')
-      if (bashInput) {
-        return `! ${bashInput}`
-      }
-
-      // Skip non-meaningful messages (local command output, hook output,
-      // autonomous tick prompts, task notifications, pure IDE metadata tags)
-      if (SKIP_FIRST_PROMPT_PATTERN.test(textContent)) {
+      // If it's a built-in command, then it's unlikely to provide
+      // meaningful context (e.g. `/model sonnet`)
+      if (builtInCommandNames().has(commandName)) {
         continue
       }
 
-      return textContent
+      // Otherwise, for custom commands, keep it only if it has arguments.
+      const commandArgs = extractTag(textContent, 'command-args')?.trim()
+      if (!commandArgs) {
+        continue
+      }
+      // Return clean formatted command instead of raw XML
+      return `${commandNameTag} ${commandArgs}`
     }
+
+    // Format bash input with ! prefix (as user typed it). Checked before
+    // the generic XML skip so bash-mode sessions get a meaningful title.
+    const bashInput = extractTag(textContent, 'bash-input')
+    if (bashInput) {
+      return `! ${bashInput}`
+    }
+
+    // Skip non-meaningful messages (local command output, hook output,
+    // autonomous tick prompts, task notifications, pure IDE metadata tags)
+    if (SKIP_FIRST_PROMPT_PATTERN.test(textContent)) {
+      continue
+    }
+
+    return textContent
   }
   return undefined
 }
@@ -2048,10 +2078,9 @@ export function removeExtraFields(
  * patching: head→anchor, and anchor's other children→tail. Anchor is the
  * last summary for suffix-preserving, boundary itself for prefix-preserving.
  *
- * Only the LAST seg-boundary is relinked — earlier segs were summarized
- * into it. Everything physically before the absolute-last boundary (except
- * preservedUuids) is deleted, which handles all multi-boundary shapes
- * without special-casing.
+ * Only the LAST live seg-boundary is relinked — earlier segs were summarized
+ * into it. Current-context compact pruning is intentionally not applied here;
+ * CCR materialization owns that projection.
  *
  * Mutates the Map in place.
  */
@@ -2063,12 +2092,8 @@ function applyPreservedSegmentRelinks(
   let lastSeg: PreservedSegment | undefined
   let lastSegBoundaryIdx = -1
   let absoluteLastBoundaryIdx = -1
-  const entryIndex = new Map<UUID, number>()
   let i = 0
   for (const entry of messages.values()) {
-    const entryUuid = getTranscriptMessageUuidIfValid(entry)
-    if (!entryUuid) continue
-    entryIndex.set(entryUuid, i)
     if (isCompactBoundaryMessage(entry)) {
       absoluteLastBoundaryIdx = i
       const seg = getCompactPreservedSegment(entry)
@@ -2079,101 +2104,83 @@ function applyPreservedSegmentRelinks(
     }
     i++
   }
-  // No seg anywhere → no-op. findUnresolvedToolUse etc. read the full map.
+
+  // No preserved segment anywhere: no native relink is needed. The
+  // current-context projection handles normal compact boundary pruning.
   if (!lastSeg) return
 
-  // Seg stale (no-seg boundary came after): skip relink, still prune at
-  // absolute — otherwise the stale preserved chain becomes a phantom leaf.
+  // Seg stale (no-seg boundary came after): skip native relink. The
+  // materialization layer will diagnose stale metadata and prune context.
   const segIsLive = lastSegBoundaryIdx === absoluteLastBoundaryIdx
+  if (!segIsLive) return
 
   // Validate tail→head BEFORE mutating so malformed metadata is a true
   // no-op (walk stops at headUuid, doesn't need the relink to run first).
   const preservedUuids = new Set<UUID>()
-  if (segIsLive) {
-    const walkSeen = new Set<UUID>()
-    let cur = messages.get(lastSeg.tailUuid)
-    let reachedHead = false
-    while (cur) {
-      const curUuid = getTranscriptMessageUuidIfValid(cur)
-      if (!curUuid || walkSeen.has(curUuid)) break
-      walkSeen.add(curUuid)
-      preservedUuids.add(curUuid)
-      if (curUuid === lastSeg.headUuid) {
-        reachedHead = true
-        break
-      }
-      cur = cur.parentUuid ? messages.get(cur.parentUuid) : undefined
+  const walkSeen = new Set<UUID>()
+  let cur = messages.get(lastSeg.tailUuid)
+  let reachedHead = false
+  while (cur) {
+    const curUuid = getTranscriptMessageUuidIfValid(cur)
+    if (!curUuid || walkSeen.has(curUuid)) break
+    walkSeen.add(curUuid)
+    preservedUuids.add(curUuid)
+    if (curUuid === lastSeg.headUuid) {
+      reachedHead = true
+      break
     }
-    if (!reachedHead) {
-      // tail→head walk broke — a UUID in the preserved segment isn't in the
-      // transcript. Returning here skips the prune below, so resume loads
-      // the full pre-compact history. Known cause: mid-turn-yielded
-      // attachment pushed to mutableMessages but never recordTranscript'd
-      // (SDK subprocess restarted before next turn's qe:420 flush).
-      logEvent('tengu_relink_walk_broken', {
-        tailInTranscript: messages.has(lastSeg.tailUuid),
-        headInTranscript: messages.has(lastSeg.headUuid),
-        anchorInTranscript: messages.has(lastSeg.anchorUuid),
-        walkSteps: walkSeen.size,
-        transcriptSize: messages.size,
-      })
-      return
-    }
+    cur = cur.parentUuid ? messages.get(cur.parentUuid) : undefined
+  }
+  if (!reachedHead) {
+    // tail→head walk broke — a UUID in the preserved segment isn't in the
+    // transcript. Treat it as malformed compact metadata and skip native
+    // relink. Materialization owns the current-context fallback behavior.
+    logEvent('tengu_relink_walk_broken', {
+      tailInTranscript: messages.has(lastSeg.tailUuid),
+      headInTranscript: messages.has(lastSeg.headUuid),
+      anchorInTranscript: messages.has(lastSeg.anchorUuid),
+      walkSteps: walkSeen.size,
+      transcriptSize: messages.size,
+    })
+    return
   }
 
-  if (segIsLive) {
-    const head = messages.get(lastSeg.headUuid)
-    if (head) {
-      messages.set(lastSeg.headUuid, {
-        ...head,
-        parentUuid: lastSeg.anchorUuid,
-      })
+  const head = messages.get(lastSeg.headUuid)
+  if (head) {
+    messages.set(lastSeg.headUuid, {
+      ...head,
+      parentUuid: lastSeg.anchorUuid,
+    })
+  }
+  // Tail-splice: anchor's other children → tail. No-op if already pointing
+  // at tail (the useLogMessages race case).
+  for (const [uuid, msg] of messages) {
+    if (msg.parentUuid === lastSeg.anchorUuid && uuid !== lastSeg.headUuid) {
+      messages.set(uuid, { ...msg, parentUuid: lastSeg.tailUuid })
     }
-    // Tail-splice: anchor's other children → tail. No-op if already pointing
-    // at tail (the useLogMessages race case).
-    for (const [uuid, msg] of messages) {
-      if (msg.parentUuid === lastSeg.anchorUuid && uuid !== lastSeg.headUuid) {
-        messages.set(uuid, { ...msg, parentUuid: lastSeg.tailUuid })
-      }
-    }
-    // Zero stale usage: on-disk input_tokens reflect pre-compact context
-    // (~190K) — stripStaleUsage only patched in-memory copies that were
-    // dedup-skipped. Without this, resume → immediate autocompact spiral.
-    for (const uuid of preservedUuids) {
-      const msg = messages.get(uuid)
-      if (!msg || !isAssistantTranscriptEntry(msg)) continue
-      const usage = getAssistantUsage(msg)
-      if (!usage) continue
-      messages.set(uuid, {
-        ...msg,
-        message: {
-          ...msg.message,
-          usage: {
-            ...usage,
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_creation_input_tokens: 0,
-            cache_read_input_tokens: 0,
-          },
+  }
+  // Zero stale usage: on-disk input_tokens reflect pre-compact context
+  // (~190K) — stripStaleUsage only patched in-memory copies that were
+  // dedup-skipped. Without this, resume → immediate autocompact spiral.
+  for (const uuid of preservedUuids) {
+    const msg = messages.get(uuid)
+    if (!msg || !isAssistantTranscriptEntry(msg)) continue
+    const usage = getAssistantUsage(msg)
+    if (!usage) continue
+    messages.set(uuid, {
+      ...msg,
+      message: {
+        ...msg.message,
+        usage: {
+          ...usage,
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
         },
-      })
-    }
+      },
+    })
   }
-
-  // Prune everything physically before the absolute-last boundary that
-  // isn't preserved. preservedUuids empty when !segIsLive → full prune.
-  const toDelete: UUID[] = []
-  for (const [uuid] of messages) {
-    const idx = entryIndex.get(uuid)
-    if (
-      idx !== undefined &&
-      idx < absoluteLastBoundaryIdx &&
-      !preservedUuids.has(uuid)
-    ) {
-      toDelete.push(uuid)
-    }
-  }
-  for (const uuid of toDelete) messages.delete(uuid)
 }
 
 /**
@@ -2283,6 +2290,12 @@ function findLatestMessage<T extends { timestamp: string }>(
 
 /**
  * Builds a conversation chain from a leaf message to root
+ *
+ * Boundary: this is a legacy/native helper. Callers must provide the leaf or
+ * tail they already chose. This function may rebuild the parent chain and
+ * recover orphaned parallel tool siblings, but it must not choose CCR's current
+ * context tail, expose ordered/rawIndex data, or create UI replay projection.
+ *
  * @param messages Map of all messages
  * @param leafMessage The leaf message to start from
  * @returns Array of messages from root to leaf
@@ -3223,45 +3236,51 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
       contentReplacements,
       contextCollapseCommits,
       contextCollapseSnapshot,
-      leafUuids,
-    } = await loadTranscriptFile(sessionFile)
+    } = await loadTranscriptFile(sessionFile, { keepAllLeaves: true })
 
     if (messages.size === 0) {
       return log
     }
 
-    // Find the most recent user/assistant leaf message from the transcript
-    const mostRecentLeaf = findLatestMessage(messages.values(), msg => {
-      const uuid = getTranscriptMessageUuidIfValid(msg)
-      return uuid
-        ? leafUuids.has(uuid) &&
-            (msg.type === 'user' || msg.type === 'assistant')
-        : false
-    })
-    if (!mostRecentLeaf) {
+    // Legacy full-log loading is for search and metadata hydration. It should
+    // not decide CCR's current context tail; materialization owns that.
+    const transcript = Array.from(messages.values()).filter(
+      message => message.isSidechain !== true,
+    )
+    if (transcript.length === 0) {
       return log
     }
 
-    // Build the conversation chain from this leaf
-    const transcript = buildConversationChain(messages, mostRecentLeaf)
-    // Leaf's sessionId — forked sessions copy chain[0] from the source, but
-    // metadata entries (custom-title etc.) are keyed by the current session.
-    const leafUuid = getTranscriptMessageUuidOrThrow(mostRecentLeaf, 'most recent leaf')
-    const sessionId = getTranscriptMessageSessionIdIfValid(mostRecentLeaf)
+    const firstMessage = transcript[0]!
+    const lastMessage = transcript.at(-1)!
+    const sessionId =
+      (log.sessionId ? validateUuid(log.sessionId) : undefined) ??
+      getTranscriptMessageSessionIdIfValid(lastMessage)
     return {
       ...log,
       messages: removeExtraFields(transcript),
       firstPrompt: extractFirstPrompt(transcript),
+      lastPrompt: extractLastPrompt(transcript),
       messageCount: countVisibleMessages(transcript),
-      summary: mostRecentLeaf
-        ? summaries.get(leafUuid)
+      summary: log.leafUuid
+        ? (summaries.get(log.leafUuid) ?? log.summary)
         : log.summary,
-      customTitle: sessionId ? customTitles.get(sessionId) : log.customTitle,
-      tag: sessionId ? tags.get(sessionId) : log.tag,
-      agentName: sessionId ? agentNames.get(sessionId) : log.agentName,
-      agentColor: sessionId ? agentColors.get(sessionId) : log.agentColor,
-      agentSetting: sessionId ? agentSettings.get(sessionId) : log.agentSetting,
-      mode: sessionId ? (modes.get(sessionId) as LogOption['mode']) : log.mode,
+      customTitle: sessionId
+        ? (customTitles.get(sessionId) ?? log.customTitle)
+        : log.customTitle,
+      tag: sessionId ? (tags.get(sessionId) ?? log.tag) : log.tag,
+      agentName: sessionId
+        ? (agentNames.get(sessionId) ?? log.agentName)
+        : log.agentName,
+      agentColor: sessionId
+        ? (agentColors.get(sessionId) ?? log.agentColor)
+        : log.agentColor,
+      agentSetting: sessionId
+        ? (agentSettings.get(sessionId) ?? log.agentSetting)
+        : log.agentSetting,
+      mode: sessionId
+        ? ((modes.get(sessionId) as LogOption['mode']) ?? log.mode)
+        : log.mode,
       worktreeSession:
         sessionId && worktreeStates.has(sessionId)
           ? worktreeStates.get(sessionId)
@@ -3271,10 +3290,10 @@ export async function loadFullLog(log: LogOption): Promise<LogOption> {
       prRepository: sessionId
         ? prRepositories.get(sessionId)
         : log.prRepository,
-      gitBranch: mostRecentLeaf?.gitBranch ?? log.gitBranch,
-      isSidechain: transcript[0]?.isSidechain ?? log.isSidechain,
-      teamName: transcript[0]?.teamName ?? log.teamName,
-      leafUuid,
+      gitBranch: lastMessage.gitBranch ?? log.gitBranch,
+      isSidechain: firstMessage.isSidechain ?? log.isSidechain,
+      teamName: firstMessage.teamName ?? log.teamName,
+      leafUuid: log.leafUuid,
       fileHistorySnapshots: buildFileHistorySnapshotChain(
         fileHistorySnapshots,
         transcript,
@@ -3874,7 +3893,7 @@ export async function loadTranscriptFile(
       }
     }
 
-    const entries = parseJSONL<Entry>(buf)
+    const parsedEntries = parseJSONL<Entry>(buf)
 
     // Bridge map for legacy progress entries: progress_uuid → progress_parent_uuid.
     // PR #24099 removed progress from isTranscriptMessage, so old transcripts with
@@ -3885,7 +3904,7 @@ export async function loadTranscriptFile(
     // rewrite any subsequent message whose parentUuid lands in the bridge.
     const progressBridge = new Map<UUID, UUID | null>()
 
-    for (const entry of entries) {
+    for (const entry of parsedEntries) {
       // Legacy progress check runs before the Entry-typed else-if chain —
       // progress is not in the Entry union, so checking it after TypeScript
       // has narrowed `entry` intersects to `never`.
@@ -4865,6 +4884,7 @@ const INITIAL_ENRICH_COUNT = 50
 
 type LiteMetadata = {
   firstPrompt: string
+  lastPrompt?: string
   gitBranch?: string
   isSidechain: boolean
   projectPath?: string
@@ -4958,6 +4978,7 @@ export async function loadAllLogsFromSessionFile(
       created: new Date(firstMessage.timestamp),
       modified: new Date(leafMessage.timestamp),
       firstPrompt: extractFirstPrompt(chain),
+      lastPrompt: extractLastPrompt(chain),
       messageCount: countVisibleMessages(chain),
       isSidechain: firstMessage.isSidechain ?? false,
       sessionId,
@@ -5028,7 +5049,7 @@ async function getLogsWithoutIndex(
  * Reads the first and last ~64KB of a JSONL file and extracts lite metadata.
  *
  * Head (first 64KB): isSidechain, projectPath, teamName, firstPrompt.
- * Tail (last 64KB): customTitle, tag, PR link, latest gitBranch.
+ * Tail (last 64KB): lastPrompt, customTitle, tag, PR link, latest gitBranch.
  *
  * Accepts a shared buffer to avoid per-file allocation overhead.
  */
@@ -5048,17 +5069,14 @@ async function readLiteMetadata(
   const teamName = extractJsonStringField(head, 'teamName')
   const agentSetting = extractJsonStringField(head, 'agentSetting')
 
-  // Prefer the last-prompt tail entry — captured by extractFirstPrompt at
-  // write time (filtered, authoritative) and shows what the user was most
-  // recently doing. Head scan is the fallback for sessions written before
-  // last-prompt entries existed. Raw string scrapes of head are last resort
-  // and catch array-format content blocks (VS Code <ide_selection> metadata).
+  // firstPrompt is a stable title seed. lastPrompt is useful history metadata,
+  // but it must not replace the first prompt or the session title.
   const firstPrompt =
-    extractLastJsonStringField(tail, 'lastPrompt') ||
     extractFirstPromptFromChunk(head) ||
     extractJsonStringFieldPrefix(head, 'content', 200) ||
     extractJsonStringFieldPrefix(head, 'text', 200) ||
     ''
+  const lastPrompt = extractLastJsonStringField(tail, 'lastPrompt') || undefined
 
   // Extract tail metadata via string search (last occurrence wins).
   // User titles (customTitle field, from custom-title entries) win over
@@ -5094,6 +5112,7 @@ async function readLiteMetadata(
 
   return {
     firstPrompt,
+    lastPrompt,
     gitBranch,
     isSidechain,
     projectPath,
@@ -5343,6 +5362,7 @@ async function enrichLog(
     ...log,
     isLite: false,
     firstPrompt: meta.firstPrompt,
+    lastPrompt: meta.lastPrompt,
     gitBranch: meta.gitBranch,
     isSidechain: meta.isSidechain,
     teamName: meta.teamName,

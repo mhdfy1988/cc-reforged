@@ -4,7 +4,7 @@
 
 ## 当前主线
 
-当前公开版本是 `0.5.0`。阶段任务进入发布后的 `0.5.x` 稳定化：继续处理多模态、多模型、工具调用、错误诊断、历史会话和发布质量，并提前收住 MCP 动态工具治理；`0.6.0` 再进入 Skill、Plugin 扩展包主线。
+当前公开版本是 `0.5.1`。阶段任务进入发布后的 `0.5.x` 稳定化：继续处理多模态、多模型、工具调用、错误诊断、历史会话和发布质量，并提前收住 MCP 动态工具治理；`0.6.0` 再进入 Skill、Plugin 扩展包主线。
 
 - [当前修复看板](./current-repair-backlog.md)
 - [CCR 工具能力治理修复清单](./tool-capability-repair-list.md)
@@ -13,11 +13,13 @@
 - [CCR 多模态输入输出 Todo](./multimodal-input-output-todo.md)
 - [CCR 多供应商模型与协议接入 Todo](./multi-provider-model-management-todo.md)
 - [CCR App Server 实施 Todo](./app-server-todo.md)
+- [CCR 历史恢复与实时展示统一协议实施计划](./realtime-history-display-contract-todo.md)
 
 ## 专项 Todo
 
 - [CCR 项目级 Settings 隔离 Todo](./ccr-project-settings-isolation-todo.md)
 - [CCR Desktop 历史会话 Todo](./desktop-session-history-todo.md)
+- [CCR 历史恢复与实时展示统一协议实施计划](./realtime-history-display-contract-todo.md)
 - [CCR Desktop 交互卡片补齐专项](./desktop-interaction-cards-todo.md)
 - [CCR Desktop 自动更新状态机 Todo](./desktop-auto-update-todo.md)
 - [CCR Desktop 安装包瘦身专项 Todo](./desktop-packaging-slimming-todo.md)

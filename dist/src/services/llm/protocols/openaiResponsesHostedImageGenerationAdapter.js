@@ -1,5 +1,6 @@
 import { configureGlobalFetchDispatcher } from '../../../utils/proxy.js';
 import { normalizeOpenAiImageGenerationCall, } from './openaiImageGenerationAdapter.js';
+import { collectOpenAiResponsesImageGenerationCalls, } from './openaiResponsesImageGenerationCalls.js';
 export class OpenAiResponsesHostedImageGenerationAdapter {
     #providerId;
     #providerLabel;
@@ -142,40 +143,7 @@ function resolveHeaders(value, request) {
     return typeof value === 'function' ? value(request) : value;
 }
 function getImageGenerationCalls(input) {
-    const calls = [];
-    const seen = new Set();
-    for (const item of input.raw?.output ?? []) {
-        addImageGenerationCall(calls, seen, item);
-    }
-    for (const event of input.events) {
-        addImageGenerationCall(calls, seen, event);
-        const item = toRecord(event.item);
-        if (item) {
-            addImageGenerationCall(calls, seen, item);
-        }
-        const response = toRecord(event.response);
-        for (const outputItem of toRecordArray(response?.output)) {
-            addImageGenerationCall(calls, seen, outputItem);
-        }
-        for (const outputItem of toRecordArray(event.output)) {
-            addImageGenerationCall(calls, seen, outputItem);
-        }
-    }
-    return calls;
-}
-function addImageGenerationCall(calls, seen, value) {
-    if (!value || value.type !== 'image_generation_call') {
-        return;
-    }
-    const call = value;
-    const key = getNonEmptyString(call.id) ?? getNonEmptyString(call.call_id);
-    if (key) {
-        if (seen.has(key)) {
-            return;
-        }
-        seen.add(key);
-    }
-    calls.push(call);
+    return collectOpenAiResponsesImageGenerationCalls(input);
 }
 function findCompletedResponse(events) {
     for (let index = events.length - 1; index >= 0; index -= 1) {

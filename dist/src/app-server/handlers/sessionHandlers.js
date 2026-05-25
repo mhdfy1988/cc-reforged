@@ -1,8 +1,11 @@
-import { SessionHistoryListParamsSchema, ThreadListParamsSchema, ThreadResumeParamsSchema, ThreadStartParamsSchema, TurnInterruptParamsSchema, TurnStartParamsSchema, } from '../protocol.js';
+import { SessionHistoryListParamsSchema, SessionHistoryRenameParamsSchema, ThreadListParamsSchema, ThreadMessagesListParamsSchema, ThreadResumeParamsSchema, ThreadStartParamsSchema, TurnInterruptParamsSchema, TurnStartParamsSchema, } from '../protocol.js';
 import { normalizeTurnStartInputForCurrentModel } from '../turnInput.js';
+import { buildThreadDisplaySnapshot } from '../threadDisplay.js';
+import { enrichToolResultReplayContentWithGeneratedOutputs, } from '../threadReplayContent.js';
 import { getOriginalCwd } from '../../bootstrap/state.js';
 import { getWorktreePaths } from '../../utils/getWorktreePaths.js';
-import { getSessionIdFromLog, loadAllProjectsMessageLogsProgressive, loadSameRepoMessageLogsProgressive, } from '../../utils/sessionStorage.js';
+import { getSessionIdFromLog, loadAllProjectsMessageLogsProgressive, loadSameRepoMessageLogsProgressive, saveCustomTitle, } from '../../utils/sessionStorage.js';
+import { materializeConversationFromTranscript } from '../../utils/conversationMaterialization.js';
 import { sanitizeGeneratedArtifactsForResume } from '../../utils/generatedArtifacts.js';
 import { basename } from 'node:path';
 export function handleThreadStart(context, params) {
@@ -15,6 +18,21 @@ export function handleThreadList(context, params) {
     ThreadListParamsSchema.parse(params ?? {});
     return {
         threads: context.core.session.listThreads(),
+    };
+}
+export function handleThreadMessagesList(context, params) {
+    const parsedParams = ThreadMessagesListParamsSchema.parse(params);
+    const messages = toAppServerThreadMessages(context.core.session.listThreadMessages(parsedParams.threadId));
+    return {
+        messages,
+        messagesSemantics: 'current_context_compat',
+        displaySnapshot: buildThreadDisplaySnapshot({
+            threadId: parsedParams.threadId,
+            source: 'thread',
+            messages,
+            rawTranscriptEvents: messages.length,
+            coreContextMessages: messages.length,
+        }),
     };
 }
 export async function handleSessionHistoryList(context, params) {
@@ -41,6 +59,15 @@ export async function handleSessionHistoryList(context, params) {
         ...(hasMore ? { nextCursor: String(cursorOffset + limit) } : {}),
     };
 }
+export async function handleSessionHistoryRename(context, params) {
+    const parsedParams = SessionHistoryRenameParamsSchema.parse(params);
+    await saveCustomTitle(parsedParams.sessionId, parsedParams.title, parsedParams.transcriptPath);
+    context.core.session.renameThreadBySessionId(parsedParams.sessionId, parsedParams.title);
+    return {
+        sessionId: parsedParams.sessionId,
+        title: parsedParams.title,
+    };
+}
 export async function handleThreadResume(context, params) {
     const parsedParams = ThreadResumeParamsSchema.parse(params);
     const thread = await context.core.session.resumeThread({
@@ -52,9 +79,23 @@ export async function handleThreadResume(context, params) {
         ...(parsedParams.projectPath ? { projectPath: parsedParams.projectPath } : {}),
         ...(parsedParams.metadata ? { metadata: parsedParams.metadata } : {}),
     });
+    const fallbackMessages = context.core.session.listThreadMessages(thread.threadId);
+    const replayPayload = await loadThreadResumeReplayPayload(parsedParams.transcriptPath, fallbackMessages);
+    const messages = toAppServerThreadMessages(replayPayload.messages);
     return {
         thread,
-        messages: toAppServerThreadMessages(context.core.session.listThreadMessages(thread.threadId)),
+        messages,
+        messagesSemantics: replayPayload.messagesSemantics,
+        displaySnapshot: buildThreadDisplaySnapshot({
+            threadId: thread.threadId,
+            sessionId: parsedParams.sessionId,
+            source: 'history',
+            messages,
+            rawTranscriptEvents: replayPayload.rawTranscriptEvents,
+            coreContextMessages: replayPayload.coreContextMessages,
+            canonicalLeafUuid: replayPayload.canonicalLeafUuid,
+            diagnostics: replayPayload.diagnostics,
+        }),
     };
 }
 export function handleTurnStart(context, params) {
@@ -79,10 +120,66 @@ export function handleTurnInterrupt(context, params) {
         ...(parsedParams.reason ? { reason: parsedParams.reason } : {}),
     });
 }
+async function loadThreadResumeReplayPayload(transcriptPath, fallbackMessages) {
+    if (!transcriptPath) {
+        return createFallbackReplayPayload(fallbackMessages);
+    }
+    try {
+        const materialized = await materializeConversationFromTranscript(transcriptPath);
+        const diagnostics = [...materialized.diagnostics];
+        if (materialized.status !== 'ok') {
+            diagnostics.push({
+                level: 'error',
+                code: 'history_materialization_failed',
+                message: '历史 transcript 当前上下文物化失败；展示仍使用 transcript 原始投影。',
+                details: {
+                    displaySource: 'transcript_display_replay',
+                },
+            });
+        }
+        const replayMessages = materialized.displayReplayEvents.length > 0
+            ? materialized.displayReplayEvents
+            : fallbackMessages;
+        return {
+            messages: replayMessages,
+            messagesSemantics: materialized.displayReplayEvents.length > 0
+                ? 'display_replay_compat'
+                : 'current_context_compat',
+            rawTranscriptEvents: materialized.rawTranscriptEvents,
+            coreContextMessages: materialized.coreContextMessages,
+            canonicalLeafUuid: materialized.status === 'ok' ? materialized.canonicalLeafUuid : undefined,
+            diagnostics,
+        };
+    }
+    catch {
+        return createFallbackReplayPayload(fallbackMessages, {
+            level: 'error',
+            code: 'history_materialization_load_failed',
+            message: '读取历史 transcript 物化结果失败；仅展示 Core 当前消息。',
+            details: {
+                fallbackSource: 'core_current_thread',
+            },
+        });
+    }
+}
+function createFallbackReplayPayload(messages, diagnostic) {
+    return {
+        messages,
+        messagesSemantics: 'current_context_compat',
+        rawTranscriptEvents: messages.length,
+        coreContextMessages: messages.length,
+        diagnostics: diagnostic ? [diagnostic] : [],
+    };
+}
 function toAppServerThreadMessages(messages) {
     const unresolvedToolUseIds = collectUnresolvedToolUseIds(messages);
     const replayMessages = [];
     for (const [index, message] of messages.entries()) {
+        const compactNotice = createCompactBoundaryReplayNotice(message, index);
+        if (compactNotice) {
+            replayMessages.push(compactNotice);
+            continue;
+        }
         const interruptedNotice = createInterruptedReplayNotice(message, index, messages);
         if (interruptedNotice) {
             replayMessages.push(interruptedNotice);
@@ -119,8 +216,48 @@ function messageToThreadMessage(message, index, unresolvedToolUseIds) {
 }
 function isHiddenHistoryMessage(message) {
     return (('isMeta' in message && message.isMeta === true) ||
+        ('isVisibleInTranscriptOnly' in message &&
+            message.isVisibleInTranscriptOnly === true) ||
         ('isVirtual' in message && message.isVirtual === true) ||
+        isCompactSummaryHistoryMessage(message) ||
         isSyntheticHistoryMessage(message));
+}
+function isCompactBoundaryHistoryMessage(message) {
+    return (message.type === 'system' &&
+        (message.subtype === 'compact_boundary' ||
+            message.subtype === 'microcompact_boundary'));
+}
+function isCompactSummaryHistoryMessage(message) {
+    if (message.type !== 'user') {
+        return false;
+    }
+    if (message.isCompactSummary === true) {
+        return true;
+    }
+    const text = getSyntheticHistoryMessageText(message);
+    return Boolean(text &&
+        COMPACT_SUMMARY_PREFIXES.some(prefix => text.startsWith(prefix)));
+}
+function createCompactBoundaryReplayNotice(message, index) {
+    if (!isCompactBoundaryHistoryMessage(message)) {
+        return null;
+    }
+    const text = '上下文已压缩。';
+    const sourceType = typeof message.subtype === 'string' ? message.subtype : 'compact_boundary';
+    return {
+        id: typeof message.uuid === 'string'
+            ? `${message.uuid}-compact-notice`
+            : `history-${index}-compact-notice`,
+        role: 'system',
+        text,
+        status: 'completed',
+        kind: 'context_compaction',
+        sourceType,
+        content: [{ type: 'text', text }],
+        ...(typeof message.timestamp === 'string'
+            ? { createdAt: message.timestamp }
+            : {}),
+    };
 }
 function createInterruptedReplayNotice(message, index, messages) {
     if (message.type !== 'assistant' ||
@@ -199,6 +336,9 @@ const SYNTHETIC_HISTORY_MESSAGES = new Set([
     "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
     'No response requested.',
 ]);
+const COMPACT_SUMMARY_PREFIXES = [
+    'This session is being continued from a previous conversation that ran out of context.',
+];
 function getThreadMessageRole(message) {
     if (message.type === 'user') {
         return 'user';
@@ -239,7 +379,7 @@ function extractContentDisplayText(value) {
 function getThreadMessageReplayContent(message, unresolvedToolUseIds) {
     switch (message.type) {
         case 'user':
-            return sanitizeGeneratedArtifactsForResume(message.message?.content);
+            return sanitizeGeneratedArtifactsForResume(enrichToolResultReplayContentWithGeneratedOutputs(message.message?.content, message.toolUseResult));
         case 'assistant':
             return sanitizeGeneratedArtifactsForResume(annotateUnresolvedToolUseBlocks(message.message?.content, unresolvedToolUseIds));
         case 'system':
@@ -510,15 +650,14 @@ function logToHistoryItem(log, currentSessions) {
     const isCurrentSession = Boolean(currentSession);
     const activeTurnId = currentSession?.activeTurnId ?? null;
     const firstPrompt = normalizeTitle(log.firstPrompt);
+    const lastPrompt = normalizeTitle(log.lastPrompt);
     return {
         sessionId,
         threadId: `history_${sessionId}`,
         title: titleParts.title,
         titleSource: titleParts.source,
         ...(firstPrompt ? { firstPrompt } : {}),
-        ...(titleParts.source === 'lastPrompt' && firstPrompt
-            ? { lastPrompt: firstPrompt }
-            : {}),
+        ...(lastPrompt ? { lastPrompt } : {}),
         ...(normalizeTitle(log.summary) ? { summary: normalizeTitle(log.summary) } : {}),
         createdAt: log.created.toISOString(),
         updatedAt: log.modified.toISOString(),

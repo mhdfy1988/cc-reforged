@@ -30,6 +30,7 @@ export async function runTextOnlyCoreTurn(input: {
   }
 
   const userItemId = createItemId()
+  const userItemAt = new Date().toISOString()
   emit({
     type: 'item_started',
     item: {
@@ -38,6 +39,9 @@ export async function runTextOnlyCoreTurn(input: {
       turnId: turn.turnId,
       kind: 'user_message',
       status: 'completed',
+      startedAt: userItemAt,
+      completedAt: userItemAt,
+      durationMs: 0,
       content: renderUserMessageContent(turn),
     },
   })
@@ -46,10 +50,16 @@ export async function runTextOnlyCoreTurn(input: {
     threadId: turn.threadId,
     turnId: turn.turnId,
     itemId: userItemId,
+    kind: 'user_message',
     status: 'completed',
+    content: renderUserMessageContent(turn),
+    startedAt: userItemAt,
+    completedAt: userItemAt,
+    durationMs: 0,
   })
 
   const assistantItemId = createItemId()
+  const assistantStartedAt = new Date().toISOString()
   emit({
     type: 'item_started',
     item: {
@@ -58,6 +68,7 @@ export async function runTextOnlyCoreTurn(input: {
       turnId: turn.turnId,
       kind: 'assistant_message',
       status: 'streaming',
+      startedAt: assistantStartedAt,
       content: [],
     },
   })
@@ -110,13 +121,18 @@ export async function runTextOnlyCoreTurn(input: {
     }
   }
 
+  const assistantCompletedAt = new Date().toISOString()
   emit({
     type: 'item_completed',
     threadId: turn.threadId,
     turnId: turn.turnId,
     itemId: assistantItemId,
+    kind: 'assistant_message',
     status: 'completed',
     content: [{ type: 'text', text }],
+    startedAt: assistantStartedAt,
+    completedAt: assistantCompletedAt,
+    durationMs: inferDurationMs(assistantStartedAt, assistantCompletedAt),
   })
 
   return metadata
@@ -124,6 +140,15 @@ export async function runTextOnlyCoreTurn(input: {
 
 function createItemId(): string {
   return `item_${randomUUID()}`
+}
+
+function inferDurationMs(startedAt: string, completedAt: string): number {
+  const startedMs = Date.parse(startedAt)
+  const completedMs = Date.parse(completedAt)
+  if (!Number.isFinite(startedMs) || !Number.isFinite(completedMs)) {
+    return 0
+  }
+  return Math.max(0, completedMs - startedMs)
 }
 
 function renderUserMessageContent(turn: CoreTurn): CoreJsonObject[] {

@@ -1,4 +1,4 @@
-import { PermissionRespondParamsSchema, PermissionSettingsGetParamsSchema, PermissionSettingsUpdateParamsSchema, } from '../protocol.js';
+import { PermissionPendingListParamsSchema, PermissionRespondParamsSchema, PermissionSettingsGetParamsSchema, PermissionSettingsUpdateParamsSchema, } from '../protocol.js';
 export function handlePermissionRespond(context, params) {
     const parsedParams = PermissionRespondParamsSchema.parse(params);
     return context.core.permission.respondPermission({
@@ -34,6 +34,12 @@ export function handlePermissionRespond(context, params) {
                     : {}),
             },
     });
+}
+export function handlePermissionPendingList(context, params) {
+    PermissionPendingListParamsSchema.parse(params ?? {});
+    return {
+        permissions: context.core.permission.listPending(),
+    };
 }
 export function handlePermissionSettingsGet(context, params) {
     PermissionSettingsGetParamsSchema.parse(params ?? {});

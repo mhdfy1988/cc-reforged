@@ -1,6 +1,9 @@
 import { getClaudeConfigHomeDir } from '../utils/envUtils.js'
 import { createCcrCore, type CcrCore } from '../core/index.js'
-import { coreEventToJsonRpcNotification } from './coreEventMapper.js'
+import {
+  coreEventToJsonRpcNotification,
+  coreEventToThreadDisplayPatchNotification,
+} from './coreEventMapper.js'
 import { AppServerError, errorResponse } from './errors.js'
 import {
   handleCompactRun,
@@ -41,13 +44,16 @@ import {
   handleMcpUpdate,
 } from './handlers/mcpHandlers.js'
 import {
+  handlePermissionPendingList,
   handlePermissionRespond,
   handlePermissionSettingsGet,
   handlePermissionSettingsUpdate,
 } from './handlers/permissionHandlers.js'
 import {
   handleSessionHistoryList,
+  handleSessionHistoryRename,
   handleThreadList,
+  handleThreadMessagesList,
   handleThreadResume,
   handleThreadStart,
   handleTurnInterrupt,
@@ -86,7 +92,17 @@ export function createAppServerContext(options: {
 } = {}): AppServerContext {
   const emit = options.emit ?? (() => {})
   const core = createCcrCore({
-    emit: event => emit(coreEventToJsonRpcNotification(event)),
+    emit: event => {
+      const displayPatchNotification =
+        coreEventToThreadDisplayPatchNotification(event)
+      if (displayPatchNotification) {
+        emit(displayPatchNotification)
+      }
+      const notification = coreEventToJsonRpcNotification(event)
+      if (notification) {
+        emit(notification)
+      }
+    },
   })
   return {
     initialized: false,
@@ -271,10 +287,20 @@ export async function handleJsonRpcMessage(
           request.id,
           handleThreadList(context, request.params),
         )
+      case 'thread/messages/list':
+        return successResponse(
+          request.id,
+          handleThreadMessagesList(context, request.params),
+        )
       case 'session/history/list':
         return successResponse(
           request.id,
           await handleSessionHistoryList(context, request.params),
+        )
+      case 'session/history/rename':
+        return successResponse(
+          request.id,
+          await handleSessionHistoryRename(context, request.params),
         )
       case 'thread/resume':
         return successResponse(
@@ -292,6 +318,11 @@ export async function handleJsonRpcMessage(
         return successResponse(
           request.id,
           handlePermissionRespond(context, request.params),
+        )
+      case 'permission/pending/list':
+        return successResponse(
+          request.id,
+          handlePermissionPendingList(context, request.params),
         )
       case 'permission/settings/get':
         return successResponse(

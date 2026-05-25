@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { MessageAvatar } from './MessageAvatar.js'
 import { RawDataBlock } from '../common/RawDataBlock.js'
 import type { DisplayEvent } from '../../domain/displayEvents.js'
 import type {
@@ -49,7 +50,7 @@ export function ErrorCard(props: {
   if (!snapshot) {
     return (
       <div className="message error error-card">
-        <b>!</b>
+        <MessageAvatar event={props.event} />
         <div className="error-card-body">
           <p>{props.event.text}</p>
         </div>
@@ -144,7 +145,7 @@ export function ErrorCard(props: {
 
   return (
     <div className={`message error error-card ${getCategoryClass(snapshot)}`}>
-      <b>!</b>
+      <MessageAvatar event={props.event} />
       <div className="error-card-body">
         <div className="error-card-head">
           <strong>{snapshot.title}</strong>

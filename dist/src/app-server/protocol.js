@@ -267,6 +267,11 @@ export const ThreadStartParamsSchema = z
     .strict()
     .default({});
 export const ThreadListParamsSchema = z.object({}).strict().default({});
+export const ThreadMessagesListParamsSchema = z
+    .object({
+    threadId: z.string().min(1),
+})
+    .strict();
 export const ThreadResumeParamsSchema = z
     .object({
     sessionId: z.string().min(1),
@@ -286,6 +291,13 @@ export const SessionHistoryListParamsSchema = z
 })
     .strict()
     .default({});
+export const SessionHistoryRenameParamsSchema = z
+    .object({
+    sessionId: z.string().uuid(),
+    title: z.string().trim().min(1).max(80),
+    transcriptPath: z.string().min(1).optional(),
+})
+    .strict();
 export const TurnContentSourceSchema = z.union([
     z
         .object({
@@ -406,6 +418,7 @@ export const PermissionRespondParamsSchema = z
         .optional(),
 })
     .strict();
+export const PermissionPendingListParamsSchema = z.object({}).strict().default({});
 export const PermissionSettingsGetParamsSchema = z.object({}).strict().default({});
 export const PermissionSettingsUpdateParamsSchema = z
     .object({

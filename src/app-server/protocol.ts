@@ -1,10 +1,12 @@
 import { z } from 'zod'
 import type { CorePermissionSettingsSnapshot } from '../core/permissionSettingsCore.js'
+import type { CorePermissionRequest } from '../core/types.js'
 import type {
   CcrAttachmentContentBlockBase,
   CcrContentSource,
   CcrTextContentBlock,
 } from '../types/contentBlocks.js'
+import type { ThreadDisplayProjection } from '../display/threadDisplayProjection.js'
 
 export const APP_SERVER_PROTOCOL_VERSION = '0.1'
 export const APP_SERVER_CONFIG_SCHEMA_VERSION = '0.1'
@@ -319,6 +321,12 @@ export const ThreadStartParamsSchema = z
 
 export const ThreadListParamsSchema = z.object({}).strict().default({})
 
+export const ThreadMessagesListParamsSchema = z
+  .object({
+    threadId: z.string().min(1),
+  })
+  .strict()
+
 export const ThreadResumeParamsSchema = z
   .object({
     sessionId: z.string().min(1),
@@ -339,6 +347,14 @@ export const SessionHistoryListParamsSchema = z
   })
   .strict()
   .default({})
+
+export const SessionHistoryRenameParamsSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    title: z.string().trim().min(1).max(80),
+    transcriptPath: z.string().min(1).optional(),
+  })
+  .strict()
 
 export const TurnContentSourceSchema = z.union([
   z
@@ -474,6 +490,8 @@ export const PermissionRespondParamsSchema = z
   })
   .strict()
 
+export const PermissionPendingListParamsSchema = z.object({}).strict().default({})
+
 export const PermissionSettingsGetParamsSchema = z.object({}).strict().default({})
 
 export const PermissionSettingsUpdateParamsSchema = z
@@ -570,9 +588,15 @@ export type McpInstallUninstallParams = z.infer<
 >
 export type WorkspaceOpenParams = z.infer<typeof WorkspaceOpenParamsSchema>
 export type ThreadStartParams = z.infer<typeof ThreadStartParamsSchema>
+export type ThreadMessagesListParams = z.infer<
+  typeof ThreadMessagesListParamsSchema
+>
 export type ThreadResumeParams = z.infer<typeof ThreadResumeParamsSchema>
 export type SessionHistoryListParams = z.infer<
   typeof SessionHistoryListParamsSchema
+>
+export type SessionHistoryRenameParams = z.infer<
+  typeof SessionHistoryRenameParamsSchema
 >
 export type TurnInterruptParams = z.infer<typeof TurnInterruptParamsSchema>
 export type TurnStartParams = {
@@ -585,6 +609,9 @@ export type TurnStartParams = {
 }
 export type PermissionRespondParams = z.infer<
   typeof PermissionRespondParamsSchema
+>
+export type PermissionPendingListParams = z.infer<
+  typeof PermissionPendingListParamsSchema
 >
 export type PermissionSettingsGetParams = z.infer<
   typeof PermissionSettingsGetParamsSchema
@@ -763,14 +790,146 @@ export type AppServerThreadMessage = {
   content?: unknown
 }
 
+export type ThreadDisplayItemType =
+  | 'user_message'
+  | 'assistant_message'
+  | 'thinking_summary'
+  | 'tool_call'
+  | 'tool_result'
+  | 'permission_request'
+  | 'todo_list'
+  | 'file_change'
+  | 'file_reference'
+  | 'attachment'
+  | 'system_notice'
+  | 'error'
+
+export type ThreadDisplayIdentity = {
+  threadId?: string
+  sessionId?: string
+  turnId?: string
+  itemId?: string
+  messageUuid?: string
+  parentUuid?: string | null
+  toolUseId?: string
+  parentToolUseId?: string
+  sourceIndex?: number
+  rawIndex?: number
+  materializedIndex?: number
+  contentIndex?: number
+}
+
+export type ThreadDisplayItem = {
+  id: string
+  type: ThreadDisplayItemType
+  text: string
+  status?: string
+  sourceKind?: string
+  createdAt?: string
+  timelineHidden?: boolean
+  identity?: ThreadDisplayIdentity
+  content?: unknown
+  metadata?: Record<string, unknown>
+  projection?: ThreadDisplayProjection
+}
+
+export type ThreadDisplayCounts = {
+  /** 磁盘 transcript / rollout 中被选为当前主线的原始事件数。 */
+  rawTranscriptEvents: number
+  /** Core 继续对话实际使用的上下文消息数。 */
+  coreContextMessages: number
+  /** App Server 投影后交给 Renderer 的展示候选项数。 */
+  projectedDisplayItems: number
+  /** Renderer 主聊天时间线最终可见的展示项数。 */
+  visibleTimelineItems: number
+  /** 展示候选项里被标记为不进主聊天时间线的数量。 */
+  hiddenDisplayItems: number
+  /** 原始 transcript 主线里没有投影成展示候选项的数量。 */
+  filteredTranscriptEvents: number
+  /** 兼容聚合值：未进入主聊天时间线的展示隐藏项 + transcript 过滤项。 */
+  hiddenTimelineItems: number
+}
+
+export type ThreadDisplayDiagnostic = {
+  level: 'info' | 'warning' | 'error'
+  code: string
+  message: string
+  details?: Record<string, unknown>
+}
+
+export type ThreadDisplaySnapshot = {
+  threadId: string
+  sessionId?: string
+  source: 'history' | 'thread' | 'live'
+  generatedAt: string
+  canonicalLeafUuid?: string
+  items: ThreadDisplayItem[]
+  counts: ThreadDisplayCounts
+  diagnostics?: ThreadDisplayDiagnostic[]
+}
+
+export type ThreadDisplayPatchOperation =
+  | {
+      op: 'append_item'
+      item: ThreadDisplayItem
+    }
+  | {
+      op: 'update_item'
+      itemId: string
+      item: Partial<ThreadDisplayItem>
+    }
+  | {
+      op: 'complete_item'
+      itemId: string
+      status?: string
+      item?: ThreadDisplayItem
+    }
+  | {
+      op: 'replace_active_stream'
+      itemId: string
+      item: ThreadDisplayItem | null
+    }
+  | {
+      op: 'update_counts'
+      counts: ThreadDisplayCounts
+    }
+
+export type ThreadDisplayPatch = {
+  threadId: string
+  sessionId?: string
+  generatedAt: string
+  operations: ThreadDisplayPatchOperation[]
+  counts?: ThreadDisplayCounts
+}
+
 export type ThreadStartResult = {
   thread: AppServerThread
 }
 
 export type ThreadResumeResult = {
   thread: AppServerThread
+  /**
+   * Compatibility payload for older clients. Desktop history display must use
+   * displaySnapshot instead of treating this as the full visible timeline.
+   */
   messages: AppServerThreadMessage[]
+  messagesSemantics: ThreadMessagesSemantics
+  displaySnapshot: ThreadDisplaySnapshot
 }
+
+export type ThreadMessagesListResult = {
+  /**
+   * Compatibility/current-context payload. Desktop visible history must use
+   * displaySnapshot and must not replay this field as UI history.
+   */
+  messages: AppServerThreadMessage[]
+  messagesSemantics: Extract<ThreadMessagesSemantics, 'current_context_compat'>
+  displaySnapshot: ThreadDisplaySnapshot
+}
+
+export type ThreadMessagesSemantics =
+  | 'current_context_compat'
+  | 'display_replay_compat'
 
 export type ThreadListResult = {
   threads: AppServerThread[]
@@ -813,6 +972,11 @@ export type SessionHistoryWorkspaceGroup = {
 export type SessionHistoryListResult = {
   groups: SessionHistoryWorkspaceGroup[]
   nextCursor?: string
+}
+
+export type SessionHistoryRenameResult = {
+  sessionId: string
+  title: string
 }
 
 export type TurnContentSource = CcrContentSource
@@ -867,6 +1031,10 @@ export type TurnInterruptResult = {
 
 export type PermissionRespondResult = {
   accepted: boolean
+}
+
+export type PermissionPendingListResult = {
+  permissions: CorePermissionRequest[]
 }
 
 export type PermissionSettingsGetResult = CorePermissionSettingsSnapshot

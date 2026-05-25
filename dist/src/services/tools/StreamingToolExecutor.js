@@ -4,6 +4,18 @@ import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js';
 import { createChildAbortController } from '../../utils/abortController.js';
 import { validateUuid } from '../../utils/uuid.js';
 import { runToolUse } from './toolExecution.js';
+function createTimedToolResultBlock(input) {
+    const { toolUseId, content, timing } = input;
+    return {
+        type: 'tool_result',
+        content,
+        is_error: true,
+        tool_use_id: toolUseId,
+        durationMs: timing.durationMs,
+        startedAt: timing.startedAt,
+        completedAt: timing.completedAt,
+    };
+}
 /**
  * Executes tools as they stream in with concurrency control.
  * - Concurrent-safe tools can execute in parallel with other concurrent-safe tools
@@ -45,6 +57,7 @@ export class StreamingToolExecutor {
         const toolDefinition = findToolByName(this.toolDefinitions, block.name);
         if (!toolDefinition) {
             const sourceToolAssistantUUID = validateUuid(assistantMessage.uuid);
+            const timing = this.createToolTiming();
             this.tools.push({
                 id: block.id,
                 block,
@@ -55,12 +68,11 @@ export class StreamingToolExecutor {
                 results: [
                     createUserMessage({
                         content: [
-                            {
-                                type: 'tool_result',
+                            createTimedToolResultBlock({
+                                toolUseId: block.id,
                                 content: `<tool_use_error>Error: No such tool available: ${block.name}</tool_use_error>`,
-                                is_error: true,
-                                tool_use_id: block.id,
-                            },
+                                timing,
+                            }),
                         ],
                         toolUseResult: `Error: No such tool available: ${block.name}`,
                         ...(sourceToolAssistantUUID ? { sourceToolAssistantUUID } : {}),
@@ -115,19 +127,19 @@ export class StreamingToolExecutor {
             }
         }
     }
-    createSyntheticErrorMessage(toolUseId, reason, assistantMessage) {
+    createSyntheticErrorMessage(toolUseId, reason, assistantMessage, startedAtMs) {
         const sourceToolAssistantUUID = validateUuid(assistantMessage.uuid);
+        const timing = this.createToolTiming(startedAtMs);
         // For user interruptions (ESC to reject), use REJECT_MESSAGE so the UI shows
         // "User rejected edit" instead of "Error editing file"
         if (reason === 'user_interrupted') {
             return createUserMessage({
                 content: [
-                    {
-                        type: 'tool_result',
+                    createTimedToolResultBlock({
+                        toolUseId,
                         content: withMemoryCorrectionHint(REJECT_MESSAGE),
-                        is_error: true,
-                        tool_use_id: toolUseId,
-                    },
+                        timing,
+                    }),
                 ],
                 toolUseResult: 'User rejected tool use',
                 ...(sourceToolAssistantUUID ? { sourceToolAssistantUUID } : {}),
@@ -136,12 +148,11 @@ export class StreamingToolExecutor {
         if (reason === 'streaming_fallback') {
             return createUserMessage({
                 content: [
-                    {
-                        type: 'tool_result',
+                    createTimedToolResultBlock({
+                        toolUseId,
                         content: '<tool_use_error>Error: Streaming fallback - tool execution discarded</tool_use_error>',
-                        is_error: true,
-                        tool_use_id: toolUseId,
-                    },
+                        timing,
+                    }),
                 ],
                 toolUseResult: 'Streaming fallback - tool execution discarded',
                 ...(sourceToolAssistantUUID ? { sourceToolAssistantUUID } : {}),
@@ -153,12 +164,11 @@ export class StreamingToolExecutor {
             : 'Cancelled: parallel tool call errored';
         return createUserMessage({
             content: [
-                {
-                    type: 'tool_result',
+                createTimedToolResultBlock({
+                    toolUseId,
                     content: `<tool_use_error>${msg}</tool_use_error>`,
-                    is_error: true,
-                    tool_use_id: toolUseId,
-                },
+                    timing,
+                }),
             ],
             toolUseResult: msg,
             ...(sourceToolAssistantUUID ? { sourceToolAssistantUUID } : {}),
@@ -207,6 +217,17 @@ export class StreamingToolExecutor {
         }
         return tool.block.name;
     }
+    createToolTiming(startedAtMs) {
+        const completedAtMs = Date.now();
+        const safeStart = typeof startedAtMs === 'number' && Number.isFinite(startedAtMs)
+            ? startedAtMs
+            : completedAtMs;
+        return {
+            durationMs: Math.max(0, completedAtMs - safeStart),
+            startedAt: new Date(safeStart).toISOString(),
+            completedAt: new Date(completedAtMs).toISOString(),
+        };
+    }
     updateInterruptibleState() {
         const executing = this.tools.filter(t => t.status === 'executing');
         this.toolUseContext.setHasInterruptibleToolInProgress?.(executing.length > 0 &&
@@ -217,6 +238,7 @@ export class StreamingToolExecutor {
      */
     async executeTool(tool) {
         tool.status = 'executing';
+        tool.startedAtMs = Date.now();
         this.toolUseContext.setInProgressToolUseIDs(prev => new Set(prev).add(tool.id));
         this.updateInterruptibleState();
         const messages = [];
@@ -225,7 +247,7 @@ export class StreamingToolExecutor {
             // If already aborted (by error or user), generate synthetic error block instead of running the tool
             const initialAbortReason = this.getAbortReason(tool);
             if (initialAbortReason) {
-                messages.push(this.createSyntheticErrorMessage(tool.id, initialAbortReason, tool.assistantMessage));
+                messages.push(this.createSyntheticErrorMessage(tool.id, initialAbortReason, tool.assistantMessage, tool.startedAtMs));
                 tool.results = messages;
                 tool.contextModifiers = contextModifiers;
                 tool.status = 'completed';
@@ -257,7 +279,7 @@ export class StreamingToolExecutor {
                 // Only add the synthetic error if THIS tool didn't produce the error.
                 const abortReason = this.getAbortReason(tool);
                 if (abortReason && !thisToolErrored) {
-                    messages.push(this.createSyntheticErrorMessage(tool.id, abortReason, tool.assistantMessage));
+                    messages.push(this.createSyntheticErrorMessage(tool.id, abortReason, tool.assistantMessage, tool.startedAtMs));
                     break;
                 }
                 const isErrorResult = update.message.type === 'user' &&

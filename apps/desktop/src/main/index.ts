@@ -9,6 +9,7 @@ import {
   startManagedStdioAppServerClient,
   type ManagedStdioAppServerClient,
 } from '../../../../src/app-server/client/index.js'
+import { mergeThreadDisplaySnapshot } from './threadDisplaySnapshotMerge.js'
 import { DesktopUpdateService } from './updateService.js'
 import type { DesktopUpdateState, DesktopUpdateStatus } from './updateState.js'
 import { extractImageGenerationPrompt } from './imageGenerationIntent.js'
@@ -58,12 +59,17 @@ import type {
   ModelSetResult,
   ModelTestParams,
   ModelTestResult,
+  PermissionPendingListResult,
   PermissionRespondParams,
   PermissionSettingsGetResult,
   PermissionSettingsUpdateParams,
   SessionHistoryListParams,
   SessionHistoryListResult,
   ThreadListResult,
+  ThreadDisplayItem,
+  ThreadDisplayPatch,
+  ThreadDisplayPatchOperation,
+  ThreadDisplaySnapshot,
   ThreadResumeParams,
   ThreadResumeResult,
   ThreadStartResult,
@@ -123,6 +129,8 @@ type DesktopStatus = {
   compact: CompactStatusResult | null
   memory: MemorySessionStatusResult | null
   permissionSettings: PermissionSettingsGetResult | null
+  pendingPermissions: PermissionPendingListResult['permissions']
+  threadDisplaySnapshot: ThreadDisplaySnapshot | null
   thread: ThreadStartResult['thread'] | null
   lastTurn: TurnStartResult['turn'] | null
   updates: DesktopUpdateState | null
@@ -283,6 +291,8 @@ const status: DesktopStatus = {
   compact: null,
   memory: null,
   permissionSettings: null,
+  pendingPermissions: [],
+  threadDisplaySnapshot: null,
   thread: null,
   lastTurn: null,
   updates: null,
@@ -805,6 +815,7 @@ async function bootstrapAppServer(): Promise<void> {
     }
     status.config = await managedClient.client.getConfig()
     status.permissionSettings = await managedClient.client.getPermissionSettings()
+    await refreshPendingPermissionsSnapshot()
     status.auth = await managedClient.client.getAuthStatus()
     status.mcp = await managedClient.client.listMcp({ includeDisabled: true })
     await refreshRuntimeSnapshots()
@@ -820,6 +831,10 @@ async function bootstrapAppServer(): Promise<void> {
 
 function handleNotification(notification: JsonRpcNotification): void {
   const params = notification.params
+
+  if (notification.method === 'thread/display/patch') {
+    handleThreadDisplayPatchNotification(params)
+  }
 
   if (notification.method === 'thread/started') {
     const thread = params?.thread
@@ -859,11 +874,138 @@ function handleNotification(notification: JsonRpcNotification): void {
   if (notification.method === 'turn/cancelled') {
     updateTurnFinishedState(params, 'cancelled')
   }
+}
 
-  if (notification.method === 'turn/failed') {
-    updateTurnFinishedState(params, 'failed', params?.error)
-    status.lastError = 'Turn failed. Open event details for more information.'
+function handleThreadDisplayPatchNotification(
+  params: JsonRpcNotification['params'],
+): void {
+  const patch = toThreadDisplayPatch(params)
+  if (!patch) {
+    return
   }
+
+  for (const operation of patch.operations) {
+    handleThreadDisplayPatchOperation(patch, operation)
+  }
+}
+
+function handleThreadDisplayPatchOperation(
+  patch: ThreadDisplayPatch,
+  operation: ThreadDisplayPatchOperation,
+): void {
+  if (operation.op === 'append_item') {
+    handleThreadDisplayPatchAppendItem(patch, operation.item)
+    return
+  }
+
+  if (operation.op === 'complete_item' && operation.item) {
+    handleThreadDisplayPatchAppendItem(patch, operation.item)
+    return
+  }
+
+  if (operation.op !== 'update_item') {
+    return
+  }
+
+  const metadata = getNestedObject(operation.item.metadata)
+  if (
+    operation.item.status === 'cancelled' &&
+    metadata.coreEventType === 'permission_cancelled'
+  ) {
+    status.pendingPermissions = status.pendingPermissions.filter(
+      request => request.permissionRequestId !== operation.itemId,
+    )
+  }
+}
+
+function handleThreadDisplayPatchAppendItem(
+  patch: ThreadDisplayPatch,
+  item: ThreadDisplayItem,
+): void {
+  if (item.type === 'permission_request') {
+    const request = toPendingPermissionRequest(item.content)
+    if (request) {
+      status.pendingPermissions = upsertPendingPermission(
+        status.pendingPermissions,
+        request,
+      )
+    }
+    return
+  }
+
+  const metadata = getNestedObject(item.metadata)
+  if (metadata.coreEventType !== 'turn_failed') {
+    return
+  }
+
+  const threadId = item.identity?.threadId ?? patch.threadId
+  const turnId = item.identity?.turnId
+  updateTurnFinishedState(
+    {
+      threadId,
+      ...(turnId ? { turnId } : {}),
+      metadata: item.metadata,
+      error: item.content ?? item.text,
+    },
+    'failed',
+    item.content ?? item.text,
+  )
+  status.lastError = 'Turn failed. Open event details for more information.'
+}
+
+function toThreadDisplayPatch(
+  value: JsonRpcNotification['params'],
+): ThreadDisplayPatch | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+  const patch = value as Partial<ThreadDisplayPatch>
+  if (typeof patch.threadId !== 'string' || !Array.isArray(patch.operations)) {
+    return null
+  }
+  return patch as ThreadDisplayPatch
+}
+
+type PendingPermissionRequest = PermissionPendingListResult['permissions'][number]
+
+function toPendingPermissionRequest(
+  value: unknown,
+): PendingPermissionRequest | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+  const request = value as Partial<PendingPermissionRequest>
+  if (
+    typeof request.permissionRequestId !== 'string' ||
+    typeof request.threadId !== 'string' ||
+    typeof request.turnId !== 'string' ||
+    typeof request.toolUseId !== 'string' ||
+    typeof request.createdAt !== 'string' ||
+    !request.tool ||
+    typeof request.tool !== 'object' ||
+    typeof request.tool.name !== 'string' ||
+    !request.input ||
+    typeof request.input !== 'object'
+  ) {
+    return null
+  }
+  return request as PendingPermissionRequest
+}
+
+function upsertPendingPermission(
+  current: PendingPermissionRequest[],
+  request: PendingPermissionRequest,
+): PendingPermissionRequest[] {
+  return [
+    request,
+    ...current.filter(
+      item => item.permissionRequestId !== request.permissionRequestId,
+    ),
+  ]
+}
+
+function clearThreadDisplayState(): void {
+  status.threadDisplaySnapshot = null
 }
 
 function updateTurnFinishedState(
@@ -963,6 +1105,31 @@ async function refreshPermissionSettingsSnapshot(): Promise<void> {
   status.permissionSettings = await client.client.getPermissionSettings()
 }
 
+async function refreshPendingPermissionsSnapshot(): Promise<void> {
+  const client = managedClient
+  if (!client) {
+    return
+  }
+  status.pendingPermissions = (
+    await client.client.listPendingPermissions()
+  ).permissions
+}
+
+async function refreshThreadDisplaySnapshot(): Promise<void> {
+  const client = managedClient
+  const threadId = status.thread?.threadId
+  if (!client || !threadId) {
+    status.threadDisplaySnapshot = null
+    return
+  }
+  const result = await client.client.listThreadMessages({ threadId })
+  status.threadDisplaySnapshot = mergeThreadDisplaySnapshot(
+    status.threadDisplaySnapshot,
+    result.displaySnapshot ?? null,
+    threadId,
+  )
+}
+
 async function getAppServerClient() {
   await ensureAppServer()
   if (!managedClient) {
@@ -1012,6 +1179,8 @@ function refreshRuntimeSnapshotsAfterTurn(
   void (async () => {
     try {
       await refreshRuntimeSnapshots()
+      await refreshPendingPermissionsSnapshot()
+      await refreshThreadDisplaySnapshot()
       await appendDesktopLog('main.log', {
         type: 'runtime-snapshots-refreshed',
         reason,
@@ -1115,13 +1284,23 @@ async function openWorkspace(path: string): Promise<WorkspaceOpenResult> {
     throw new Error('App Server client is not available.')
   }
 
+  const previousWorkspacePath = status.workspacePath
   const result = await managedClient.client.openWorkspace({
     path,
     trust: 'trusted',
   })
+  const workspaceChanged =
+    !previousWorkspacePath ||
+    !pathsEqual(previousWorkspacePath, result.workspace.path)
   status.workspacePath = result.workspace.path
+  if (workspaceChanged) {
+    status.thread = null
+    status.lastTurn = null
+    clearThreadDisplayState()
+  }
   await refreshPermissionSettingsSnapshot()
   await refreshRuntimeSnapshots()
+  await refreshThreadDisplaySnapshot()
   broadcast('state', { message: 'workspace opened', workspace: result.workspace })
   return result
 }
@@ -1140,7 +1319,9 @@ async function startThread(title = 'CCR 会话'): Promise<ThreadStartResult> {
   status.thread = result.thread
   status.lastTurn = null
   status.lastError = null
+  clearThreadDisplayState()
   await refreshRuntimeSnapshots()
+  await refreshThreadDisplaySnapshot()
   broadcast('state', { message: 'thread started', thread: result.thread })
   return result
 }
@@ -1195,7 +1376,39 @@ async function resumeThread(params: ThreadResumeParams): Promise<ThreadResumeRes
   status.lastTurn = null
   status.lastError = null
   await refreshRuntimeSnapshots()
+  status.threadDisplaySnapshot = result.displaySnapshot ?? null
   broadcast('state', { message: 'thread resumed', thread: result.thread })
+  return result
+}
+
+async function renameSessionHistory(params: {
+  sessionId: string
+  title: string
+  transcriptPath?: string
+}): Promise<{ sessionId: string; title: string }> {
+  await ensureAppServer()
+  if (!managedClient) {
+    throw new Error('App Server client is not available.')
+  }
+  const result = await managedClient.client.renameSessionHistory(params)
+  const threadMetadata = getNestedObject(status.thread?.metadata)
+  const currentSessionId =
+    typeof threadMetadata.sessionId === 'string'
+      ? threadMetadata.sessionId
+      : undefined
+  if (currentSessionId === result.sessionId && status.thread) {
+    status.thread = {
+      ...status.thread,
+      title: result.title,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+  broadcast('state', {
+    message: 'session history renamed',
+    sessionId: result.sessionId,
+    title: result.title,
+    thread: status.thread,
+  })
   return result
 }
 
@@ -1483,6 +1696,8 @@ async function startTurn(input: DesktopStartTurnInput): Promise<TurnStartResult>
     }
   }
   await refreshRuntimeSnapshots()
+  await refreshPendingPermissionsSnapshot()
+  await refreshThreadDisplaySnapshot()
   broadcast('state', { message: 'turn queued', turn: result.turn })
   return result
 }
@@ -2591,6 +2806,9 @@ function ensureUpdateService(): DesktopUpdateService {
 ipcMain.handle('ccr:get-status', async () => {
   ensureUpdateService()
   await ensureAppServer().catch(() => undefined)
+  await refreshRuntimeSnapshots().catch(() => undefined)
+  await refreshPendingPermissionsSnapshot().catch(() => undefined)
+  await refreshThreadDisplaySnapshot().catch(() => undefined)
   return getSafeStatus()
 })
 
@@ -2691,6 +2909,16 @@ ipcMain.handle(
       })
     }
     return resumeThread(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:rename-session-history',
+  async (
+    _event,
+    input: { sessionId: string; title: string; transcriptPath?: string },
+  ) => {
+    return renameSessionHistory(input)
   },
 )
 
@@ -2796,7 +3024,13 @@ ipcMain.handle('ccr:compact-run', async (_event, instruction?: string) => {
     { timeoutMs: COMPACT_RUN_TIMEOUT_MS },
   )
   await refreshRuntimeSnapshots()
-  broadcast('state', { message: 'compact completed', compact: result })
+  broadcast('state', {
+    message: 'compact completed',
+    compact: result,
+    context: status.context,
+    compactStatus: status.compact,
+    memory: status.memory,
+  })
   return result
 })
 
@@ -2889,6 +3123,10 @@ ipcMain.handle('ccr:copy-text', async (_event, text: string) => {
   return { copied: true }
 })
 
+ipcMain.handle('ccr:read-clipboard-text', async () => {
+  return clipboard.readText()
+})
+
 ipcMain.handle(
   'ccr:permission-respond',
   async (
@@ -2899,7 +3137,16 @@ ipcMain.handle(
     if (!managedClient) {
       throw new Error('App Server client is not available.')
     }
-    return managedClient.client.respondPermission(input)
+    const result = await managedClient.client.respondPermission(input)
+    await refreshPendingPermissionsSnapshot().catch(() => undefined)
+    await refreshThreadDisplaySnapshot().catch(() => undefined)
+    broadcast('state', {
+      message: 'permission responded',
+      permissionRequestId: input.permissionRequestId,
+      behavior: input.behavior,
+      pendingPermissions: status.pendingPermissions,
+    })
+    return result
   },
 )
 

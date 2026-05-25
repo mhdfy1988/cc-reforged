@@ -46,6 +46,12 @@ export const runCoreQueryTurn = async (input) => {
         mcpRuntime: await loadAppServerMcpRuntimeState(),
         toolPermissionContext: await createAppServerToolPermissionContext(),
     });
+    wireContextCompactionProgress({
+        emit,
+        threadId: turn.threadId,
+        turnId: turn.turnId,
+        toolUseContext: runtime.toolUseContext,
+    });
     const defaultSystemPrompt = await getSystemPrompt(runtime.toolUseContext.options.tools, turn.model, Array.from(runtime.getAppState().toolPermissionContext.additionalWorkingDirectories.keys()), runtime.toolUseContext.options.mcpClients);
     const systemPrompt = asSystemPrompt([
         ...defaultSystemPrompt,
@@ -102,14 +108,7 @@ export const runCoreQueryTurn = async (input) => {
             }
             if (event.type === 'assistant' && assistantStream) {
                 collectAssistantMetadata(runtimeMetadata, event);
-                emit({
-                    type: 'item_completed',
-                    threadId: turn.threadId,
-                    turnId: turn.turnId,
-                    itemId: assistantStream.itemId,
-                    status: 'completed',
-                    content: contentFromAssistantStream(assistantStream),
-                });
+                emitCompletedAssistantStreamItem(emit, turn, assistantStream);
                 assistantStream = null;
                 hasStreamedAssistantContent = true;
                 const content = nonStreamedAssistantContent(event);
@@ -146,14 +145,7 @@ export const runCoreQueryTurn = async (input) => {
             }
         }
         if (assistantStream) {
-            emit({
-                type: 'item_completed',
-                threadId: turn.threadId,
-                turnId: turn.turnId,
-                itemId: assistantStream.itemId,
-                status: 'completed',
-                content: contentFromAssistantStream(assistantStream),
-            });
+            emitCompletedAssistantStreamItem(emit, turn, assistantStream);
         }
     }
     finally {
@@ -192,6 +184,25 @@ function collectStreamEventMetadata(metadata, event) {
             metadata.stopReason = stopReason;
         }
     }
+}
+function wireContextCompactionProgress(input) {
+    let active = false;
+    input.toolUseContext.onCompactProgress = (event) => {
+        if (event.type === 'compact_start' && !active) {
+            active = true;
+            input.emit({
+                type: 'context_compaction_started',
+                threadId: input.threadId,
+                turnId: input.turnId,
+                startedAt: new Date().toISOString(),
+                trigger: 'auto',
+            });
+            return;
+        }
+        if (event.type === 'compact_end') {
+            active = false;
+        }
+    };
 }
 function collectAssistantMetadata(metadata, message) {
     const requestId = getString(message.requestId ?? message.message.id);
@@ -397,20 +408,15 @@ function handleStreamEvent(input) {
     let streamed = false;
     const startStream = (input) => {
         if (stream) {
-            emit({
-                type: 'item_completed',
-                threadId: turn.threadId,
-                turnId: turn.turnId,
-                itemId: stream.itemId,
-                status: 'completed',
-                content: contentFromAssistantStream(stream),
-            });
+            emitCompletedAssistantStreamItem(emit, turn, stream);
         }
+        const startedAt = new Date().toISOString();
         stream = {
             itemId: createItemId(),
             text: input.initialText ?? '',
             kind: input.kind,
             blockType: input.blockType,
+            startedAt,
         };
         emit({
             type: 'item_started',
@@ -420,6 +426,7 @@ function handleStreamEvent(input) {
                 turnId: turn.turnId,
                 kind: stream.kind,
                 status: 'streaming',
+                startedAt,
                 content: [],
             },
         });
@@ -483,14 +490,7 @@ function handleStreamEvent(input) {
         streamed = true;
     }
     if (streamEvent.type === 'content_block_stop' && stream) {
-        emit({
-            type: 'item_completed',
-            threadId: turn.threadId,
-            turnId: turn.turnId,
-            itemId: stream.itemId,
-            status: 'completed',
-            content: contentFromAssistantStream(stream),
-        });
+        emitCompletedAssistantStreamItem(emit, turn, stream);
         stream = null;
         streamed = true;
     }
@@ -506,11 +506,16 @@ function emitMessageItem(emit, turn, message) {
     });
 }
 function emitCompletedItem(emit, item) {
+    const startedAt = new Date().toISOString();
+    const completedAt = startedAt;
     emit({
         type: 'item_started',
         item: {
             ...item,
             status: 'completed',
+            startedAt,
+            completedAt,
+            durationMs: 0,
         },
     });
     emit({
@@ -518,9 +523,36 @@ function emitCompletedItem(emit, item) {
         threadId: item.threadId,
         turnId: item.turnId,
         itemId: item.itemId,
+        kind: item.kind,
         status: 'completed',
         content: item.content,
+        startedAt,
+        completedAt,
+        durationMs: 0,
     });
+}
+function emitCompletedAssistantStreamItem(emit, turn, stream) {
+    const completedAt = new Date().toISOString();
+    emit({
+        type: 'item_completed',
+        threadId: turn.threadId,
+        turnId: turn.turnId,
+        itemId: stream.itemId,
+        kind: stream.kind,
+        status: 'completed',
+        content: contentFromAssistantStream(stream),
+        startedAt: stream.startedAt,
+        completedAt,
+        durationMs: inferDurationMs(stream.startedAt, completedAt),
+    });
+}
+function inferDurationMs(startedAt, completedAt) {
+    const startedMs = Date.parse(startedAt);
+    const completedMs = Date.parse(completedAt);
+    if (!Number.isFinite(startedMs) || !Number.isFinite(completedMs)) {
+        return 0;
+    }
+    return Math.max(0, completedMs - startedMs);
 }
 function isCoreRenderableMessage(event) {
     return Boolean(event &&
@@ -615,20 +647,24 @@ function contentBlocks(content, displayToolResult) {
             };
         }
         if ('type' in block && block.type === 'tool_use') {
+            const timing = getTimingFieldsFromRecord(block);
             return {
                 type: 'tool_use',
                 id: 'id' in block ? block.id : undefined,
                 name: 'name' in block ? block.name : undefined,
                 input: 'input' in block ? block.input : undefined,
+                ...timing,
             };
         }
         if ('type' in block && block.type === 'tool_result') {
+            const timing = getTimingFieldsFromRecord(block);
             return {
                 type: 'tool_result',
                 toolUseId: 'tool_use_id' in block ? block.tool_use_id : undefined,
                 isError: 'is_error' in block ? block.is_error : undefined,
                 content: 'content' in block ? block.content : undefined,
                 ...(displayToolResult ? { result: displayToolResult } : {}),
+                ...timing,
             };
         }
         if ('type' in block &&
@@ -640,6 +676,60 @@ function contentBlocks(content, displayToolResult) {
         }
         return { type: String('type' in block ? block.type : 'json'), value: block };
     });
+}
+function getTimingFieldsFromRecord(value) {
+    if (!value) {
+        return {};
+    }
+    const durationMs = getTimingNumberField(value, [
+        'durationMs',
+        'duration_ms',
+        'elapsedTimeMs',
+        'elapsed_ms',
+    ]);
+    const startedAt = getTimingStringField(value, [
+        'startedAt',
+        'started_at',
+        'startTime',
+        'start_time',
+    ]);
+    const completedAt = getTimingStringField(value, [
+        'completedAt',
+        'completed_at',
+        'endedAt',
+        'ended_at',
+        'endTime',
+        'end_time',
+    ]);
+    return {
+        ...(durationMs !== undefined ? { durationMs } : {}),
+        ...(startedAt ? { startedAt } : {}),
+        ...(completedAt ? { completedAt } : {}),
+    };
+}
+function getTimingNumberField(value, keys) {
+    for (const key of keys) {
+        const fieldValue = value[key];
+        if (typeof fieldValue === 'number' && Number.isFinite(fieldValue)) {
+            return fieldValue;
+        }
+        if (typeof fieldValue === 'string' && fieldValue.trim()) {
+            const parsed = Number(fieldValue);
+            if (Number.isFinite(parsed)) {
+                return parsed;
+            }
+        }
+    }
+    return undefined;
+}
+function getTimingStringField(value, keys) {
+    for (const key of keys) {
+        const fieldValue = value[key];
+        if (typeof fieldValue === 'string' && fieldValue.trim()) {
+            return fieldValue;
+        }
+    }
+    return undefined;
 }
 function getDisplayToolResult(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {

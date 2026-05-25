@@ -6,13 +6,16 @@ import {
   getAttachmentMeta,
   isRemotePath,
 } from './AttachmentImagePreview.js'
+import { MessageAvatar } from './MessageAvatar.js'
 import { MessageContent } from './MessageContent.js'
+import type { MessageAvatarRuntime } from '../../domain/avatarEvents.js'
 import { displayEventToChatMessage, type DisplayEvent } from '../../domain/displayEvents.js'
 import type { AttachmentSnapshot } from '../../domain/fileEvents.js'
 
 export function MessageFrame(props: {
-  label: string
+  label?: string
   event: DisplayEvent
+  avatarRuntime?: MessageAvatarRuntime
   compactCarryover?: boolean
   children?: ReactNode
 }) {
@@ -28,7 +31,13 @@ export function MessageFrame(props: {
 
   return (
     <div className={`message ${message.role} ${message.kind ?? ''}`}>
-      <b>{props.label}</b>
+      {props.label ? (
+        <b className="message-avatar">
+          <span>{props.label}</span>
+        </b>
+      ) : (
+        <MessageAvatar event={props.event} runtime={props.avatarRuntime} />
+      )}
       <div className="message-body">
         {hideMessageText ? null : <MessageContent message={message} />}
         <MessageAttachmentStrip

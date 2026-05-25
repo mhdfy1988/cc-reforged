@@ -1,5 +1,4 @@
 import {
-  chatMessageToDisplayEvent,
   createDisplayEventFromCompletedItem,
   createSystemNoticeEvent,
   displayEventToChatMessage,
@@ -34,14 +33,7 @@ export type SessionState = {
 
 export type SessionAction =
   | { type: 'reset-session'; notice?: string; noticeId?: string }
-  | {
-      type: 'replace-messages'
-      messages: ChatMessage[]
-      notice?: string
-      noticeId?: string
-    }
   | { type: 'append-display-event'; event: DisplayEvent }
-  | { type: 'append-message'; message: ChatMessage }
   | {
       type: 'upsert-assistant-delta'
       itemId: string
@@ -67,6 +59,7 @@ export type SessionAction =
   | { type: 'clear-permissions' }
   | { type: 'clear-noninteractive-permissions' }
   | { type: 'add-permission'; permission: PermissionCard }
+  | { type: 'replace-pending-permissions'; permissions: PermissionCard[] }
   | { type: 'remove-permission'; permissionRequestId: string }
   | {
       type: 'set-permission-status'
@@ -86,13 +79,21 @@ export const initialSessionState: SessionState = {
   turnMetadata: null,
 }
 
+const MAX_VISIBLE_THINKING_CHARS = 6000
+const THINKING_PREFIX = '思考\n'
+const THINKING_TRUNCATED_NOTICE =
+  '思考内容较长，已折叠前面部分，仅显示最近内容。'
+
 export function selectChatMessages(state: SessionState): ChatMessage[] {
   return selectTimelineEvents(state).map(displayEventToChatMessage)
 }
 
 export function selectTimelineEvents(state: SessionState): DisplayEvent[] {
   return state.displayEvents.filter(
-    event => event.type !== 'todo_list' && !event.timelineHidden,
+    event =>
+      event.type !== 'todo_list' &&
+      event.type !== 'thinking_summary' &&
+      !event.timelineHidden,
   )
 }
 
@@ -126,26 +127,10 @@ export function sessionReducer(
     case 'reset-session':
       return createResetSessionState(action.notice, action.noticeId)
 
-    case 'replace-messages':
-      return createReplacedMessageState(
-        action.messages,
-        action.notice,
-        action.noticeId,
-      )
-
     case 'append-display-event':
       return {
         ...state,
         displayEvents: [...state.displayEvents, action.event],
-      }
-
-    case 'append-message':
-      return {
-        ...state,
-        displayEvents: [
-          ...state.displayEvents,
-          chatMessageToDisplayEvent(action.message),
-        ],
       }
 
     case 'upsert-assistant-delta':
@@ -246,7 +231,14 @@ export function sessionReducer(
         )
         const permissions = syncInternalPlanDraftsWithPermissions(
           state.displayEvents,
-          [resolvedPermission, ...state.permissions],
+          [
+            resolvedPermission,
+            ...state.permissions.filter(
+              permission =>
+                permission.permissionRequestId !==
+                resolvedPermission.permissionRequestId,
+            ),
+          ],
         )
         return {
           ...state,
@@ -254,6 +246,34 @@ export function sessionReducer(
           displayEvents: markToolPermissionRequested(
             state.displayEvents,
             resolvedPermission,
+          ),
+        }
+      }
+
+    case 'replace-pending-permissions':
+      {
+        const resolvedPendingPermissions = action.permissions.map(permission =>
+          resolvePermissionAnchorFromEvents(
+            state.displayEvents,
+            permission,
+            state.permissions,
+          ),
+        )
+        const permissions = syncInternalPlanDraftsWithPermissions(
+          state.displayEvents,
+          [
+            ...resolvedPendingPermissions,
+            ...state.permissions.filter(
+              permission => permission.status !== 'pending',
+            ),
+          ],
+        )
+        return {
+          ...state,
+          permissions,
+          displayEvents: markPendingPermissionsOnEvents(
+            state.displayEvents,
+            permissions,
           ),
         }
       }
@@ -306,29 +326,6 @@ function createResetSessionState(
         noticeId ?? `session-reset-${Date.now()}`,
         notice,
       ),
-    ],
-    permissions: [],
-    activeTurnId: null,
-    turnMetadata: null,
-  }
-}
-
-function createReplacedMessageState(
-  messages: ChatMessage[],
-  notice?: string,
-  noticeId?: string,
-): SessionState {
-  return {
-    displayEvents: [
-      ...(notice
-        ? [
-            createSystemNoticeEvent(
-              noticeId ?? `session-replaced-${Date.now()}`,
-              notice,
-            ),
-          ]
-        : []),
-      ...messages.map(message => chatMessageToDisplayEvent(message)),
     ],
     permissions: [],
     activeTurnId: null,
@@ -901,34 +898,10 @@ function upsertThinkingDelta(
   thinking: string,
   context?: DisplayEventContractContext,
 ): DisplayEvent[] {
-  if (!thinking.trim()) {
-    return events
-  }
-
-  const index = events.findIndex(event => event.id === itemId)
-  if (index === -1) {
-    return [
-      ...events,
-      {
-        id: itemId,
-        type: 'thinking_summary',
-        text: `思考\n${thinking}`,
-        status: 'streaming',
-        identity: context ? createDisplayEventIdentity(context) : undefined,
-      },
-    ]
-  }
-
-  return events.map((event, eventIndex) =>
-    eventIndex === index
-      ? {
-          ...event,
-          type: 'thinking_summary',
-          text: `${event.text}${thinking}`,
-          status: 'streaming',
-        }
-      : event,
-  )
+  void itemId
+  void thinking
+  void context
+  return events
 }
 
 function upsertCompletedItemMessage(
@@ -939,12 +912,14 @@ function upsertCompletedItemMessage(
   statusText: string,
   context?: DisplayEventContractContext,
 ): DisplayEvent[] {
-  const nextEvent = createDisplayEventFromCompletedItem(
+  const nextEvent = limitThinkingDisplayEvent(
+    createDisplayEventFromCompletedItem(
     itemId,
     kind,
     content,
     statusText,
     context,
+    ),
   )
 
   if (!nextEvent) {
@@ -968,6 +943,10 @@ function upsertCompletedItemMessage(
         ? mergeCompletedDisplayEvent(event, nextEvent, statusText)
         : event,
     )
+  }
+
+  if (isThreadDisplayProtocolContext(context)) {
+    return [...events, nextEvent]
   }
 
   const toolLifecycleIndex = findMatchingToolLifecycleEventIndex(
@@ -1002,6 +981,10 @@ function mergeCompletedDisplayEvent(
   nextEvent: DisplayEvent,
   statusText: string,
 ): DisplayEvent {
+  const nextText =
+    nextEvent.type === 'thinking_summary'
+      ? limitThinkingDisplayText(nextEvent.text)
+      : nextEvent.text
   return {
     ...currentEvent,
     type: nextEvent.type,
@@ -1018,12 +1001,45 @@ function mergeCompletedDisplayEvent(
       nextEvent.attachmentSnapshots ?? currentEvent.attachmentSnapshots,
     referenceSnapshot:
       nextEvent.referenceSnapshot ?? currentEvent.referenceSnapshot,
+    compactSnapshot: nextEvent.compactSnapshot ?? currentEvent.compactSnapshot,
     status: statusText,
     text:
-      nextEvent.type === 'assistant_message' && currentEvent.text.trim()
+      nextEvent.type === 'assistant_message' &&
+      currentEvent.text.trim() &&
+      !nextEvent.text.trim()
         ? currentEvent.text
-        : nextEvent.text,
+        : nextText,
   }
+}
+
+function limitThinkingDisplayEvent(
+  event: DisplayEvent | null,
+): DisplayEvent | null {
+  if (event?.type !== 'thinking_summary') {
+    return event
+  }
+  return {
+    ...event,
+    text: limitThinkingDisplayText(event.text),
+  }
+}
+
+function limitThinkingDisplayText(text: string): string {
+  if (text.length <= MAX_VISIBLE_THINKING_CHARS) {
+    return text
+  }
+  const visibleText = stripThinkingTruncationNotice(text)
+  const prefix = visibleText.startsWith(THINKING_PREFIX) ? THINKING_PREFIX : ''
+  const body = prefix ? visibleText.slice(prefix.length) : visibleText
+  const tail = body.slice(-MAX_VISIBLE_THINKING_CHARS)
+  return `${prefix}${THINKING_TRUNCATED_NOTICE}\n\n${tail}`
+}
+
+function stripThinkingTruncationNotice(text: string): string {
+  const marker = `${THINKING_PREFIX}${THINKING_TRUNCATED_NOTICE}\n\n`
+  return text.startsWith(marker)
+    ? `${THINKING_PREFIX}${text.slice(marker.length)}`
+    : text
 }
 
 function findMatchingToolLifecycleEventIndex(
@@ -1047,18 +1063,6 @@ function findMatchingToolLifecycleEventIndex(
       }
     }
     return -1
-  }
-
-  const nextFallbackKey = getToolLifecycleFallbackKey(nextEvent)
-  if (!nextFallbackKey) {
-    return -1
-  }
-
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index]
-    if (isMatchingToolLifecycleFallbackTarget(event, nextFallbackKey)) {
-      return index
-    }
   }
 
   return -1
@@ -1117,6 +1121,7 @@ function mergeToolSnapshots(
     statusLabel: nextSnapshot.statusLabel ?? getToolStatusLabel(status),
     result: nextSnapshot.result ?? currentSnapshot.result,
     durationMs: nextSnapshot.durationMs ?? currentSnapshot.durationMs,
+    startedAt: nextSnapshot.startedAt ?? currentSnapshot.startedAt,
     completedAt: nextSnapshot.completedAt ?? currentSnapshot.completedAt,
     errorClass,
     errorMessage: nextSnapshot.errorMessage ?? currentSnapshot.errorMessage,
@@ -1284,7 +1289,6 @@ function getToolStatusFromPermissionStatus(
 function getToolUseId(event: DisplayEvent): string | undefined {
   return (
     event.toolSnapshot?.identity?.toolUseId ??
-    getRawToolUseId(event.toolSnapshot?.raw) ??
     event.fileToolSnapshot?.toolUseId ??
     event.fileToolSnapshot?.identity?.toolUseId ??
     event.fileSnapshot?.toolUseId ??
@@ -1293,19 +1297,6 @@ function getToolUseId(event: DisplayEvent): string | undefined {
     event.referenceSnapshot?.identity?.toolUseId ??
     event.identity?.toolUseId
   )
-}
-
-function getRawToolUseId(value: unknown): string | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined
-  }
-  const object = value as Record<string, unknown>
-  const id =
-    object.id ??
-    object.toolUseId ??
-    object.toolUseID ??
-    object.tool_use_id
-  return typeof id === 'string' && id.trim() ? id : undefined
 }
 
 function getParentToolUseId(event: DisplayEvent): string | undefined {
@@ -1317,23 +1308,6 @@ function getParentToolUseId(event: DisplayEvent): string | undefined {
 
 function getToolLifecycleMatchId(event: DisplayEvent): string | undefined {
   return getParentToolUseId(event) ?? getToolUseId(event)
-}
-
-function getToolLifecycleFallbackKey(event: DisplayEvent): string | undefined {
-  const identity = event.toolSnapshot?.identity ?? event.identity
-  if (
-    !identity?.turnId ||
-    !identity.itemId ||
-    identity.contentIndex === undefined
-  ) {
-    return undefined
-  }
-  return [
-    identity.threadId ?? '',
-    identity.turnId,
-    identity.itemId,
-    String(identity.contentIndex),
-  ].join(':')
 }
 
 function isMatchingToolLifecycleTarget(
@@ -1351,13 +1325,12 @@ function isMatchingToolLifecycleTarget(
   return event.toolSnapshot?.kind === 'call'
 }
 
-function isMatchingToolLifecycleFallbackTarget(
-  event: DisplayEvent,
-  fallbackKey: string,
+function isThreadDisplayProtocolContext(
+  context: DisplayEventContractContext | undefined,
 ): boolean {
-  return (
-    event.toolSnapshot?.kind === 'call' &&
-    getToolLifecycleFallbackKey(event) === fallbackKey
+  const source = context?.params?.source
+  return Boolean(
+    context?.item && (source === 'history' || source === 'live'),
   )
 }
 

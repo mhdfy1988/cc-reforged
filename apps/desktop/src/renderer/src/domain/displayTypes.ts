@@ -1,3 +1,13 @@
+import type {
+  ThreadDisplayCounts as AppServerThreadDisplayCounts,
+  ThreadDisplayIdentity as AppServerThreadDisplayIdentity,
+  ThreadDisplayItem as AppServerThreadDisplayItem,
+  ThreadDisplayItemType as AppServerThreadDisplayItemType,
+  ThreadDisplayPatch as AppServerThreadDisplayPatch,
+  ThreadDisplayPatchOperation as AppServerThreadDisplayPatchOperation,
+  ThreadDisplaySnapshot as AppServerThreadDisplaySnapshot,
+} from '../../../../../../src/app-server/protocol.js'
+
 export type McpWritableScope = 'user' | 'project' | 'local'
 
 export type McpServerSummary = {
@@ -245,6 +255,8 @@ export type DesktopStatus = {
   compact: RuntimeCompactStatus | null
   memory: RuntimeMemoryStatus | null
   permissionSettings: PermissionSettingsState | null
+  pendingPermissions?: PendingPermissionRequest[]
+  threadDisplaySnapshot?: ThreadDisplaySnapshot | null
   thread: {
     threadId: string
     title: string
@@ -257,6 +269,32 @@ export type DesktopStatus = {
   updates: DesktopUpdateState | null
   lastError: string | null
 }
+
+export type PendingPermissionRequest = {
+  permissionRequestId: string
+  threadId: string
+  turnId: string
+  toolUseId: string
+  tool: {
+    name: string
+    displayName?: string
+    description?: string
+  }
+  input: JsonObject
+  permissionSuggestions?: readonly JsonObject[]
+  blockedPath?: string
+  decisionReason?: string
+  agentId?: string
+  createdAt: string
+}
+
+export type ThreadDisplayItemType = AppServerThreadDisplayItemType
+export type ThreadDisplayIdentity = AppServerThreadDisplayIdentity
+export type ThreadDisplayItem = AppServerThreadDisplayItem
+export type ThreadDisplayCounts = AppServerThreadDisplayCounts
+export type ThreadDisplaySnapshot = AppServerThreadDisplaySnapshot
+export type ThreadDisplayPatchOperation = AppServerThreadDisplayPatchOperation
+export type ThreadDisplayPatch = AppServerThreadDisplayPatch
 
 export type TurnUsage = {
   inputTokens?: number

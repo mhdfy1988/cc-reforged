@@ -4,6 +4,9 @@ import {
   getAttachmentActionPath,
   getAttachmentDisplayPath,
 } from './AttachmentImagePreview.js'
+import { MessageAvatar } from './MessageAvatar.js'
+import { PathActionLink } from './PathActionLink.js'
+import { ToolDurationBadge } from './ToolDurationBadge.js'
 import type { DisplayEvent } from '../../domain/displayEvents.js'
 import type {
   AttachmentSnapshot,
@@ -13,6 +16,7 @@ import type {
   FileToolSnapshot,
   ReferenceSnapshot,
 } from '../../domain/fileEvents.js'
+import { isGlobPatternPath } from '../../domain/fileEvents.js'
 
 type FileCardSnapshot =
   | { type: 'file'; value: FileSnapshot }
@@ -27,7 +31,7 @@ export function FileCard(props: { event: DisplayEvent }) {
 
   return (
     <div className="message system file-card">
-      <b>{getAvatarText(snapshot)}</b>
+      <MessageAvatar event={props.event} />
       <FileSnapshotPanel event={props.event} />
     </div>
   )
@@ -51,16 +55,37 @@ export function FileSnapshotPanel(props: {
   const referenceText = getReferenceText(snapshot)
   const excerpt = getExcerpt(snapshot)
   const actionPath = getActionPath(snapshot)
+  const copyPathText = getCopyPathText(snapshot)
   const variant = props.variant ?? 'default'
   const fileToolSnapshot = props.event.fileToolSnapshot
+  const standaloneDurationMs =
+    props.event.type === 'file_change' ||
+    props.event.type === 'file_reference' ||
+    props.event.type === 'attachment'
+      ? props.event.toolSnapshot?.durationMs
+      : undefined
   const imageAttachment = getImageAttachment(snapshot)
   const compactActions = getCompactActions(fileToolSnapshot, {
     actionPath,
+    copyPathText,
     referenceText,
   })
   const pathNode = (
     <p className="file-card-path" title={path}>
-      {path}
+      {actionPath ? (
+        <PathActionLink
+          className="file-card-path-link"
+          displayPath={path}
+          icon={false}
+          onStatusChange={setActionStatus}
+          path={actionPath}
+          title={path}
+        >
+          {path}
+        </PathActionLink>
+      ) : (
+        path
+      )}
     </p>
   )
   const metaNode = (
@@ -85,8 +110,8 @@ export function FileSnapshotPanel(props: {
         await window.ccr.showItemInFolder(actionPath)
         setActionStatus('已请求定位')
       }
-      if (action === 'copyPath' && actionPath) {
-        await window.ccr.copyText(actionPath)
+      if (action === 'copyPath' && copyPathText) {
+        await window.ccr.copyText(copyPathText)
         setActionStatus('已复制路径')
       }
       if (action === 'copyReference' && referenceText) {
@@ -116,10 +141,15 @@ export function FileSnapshotPanel(props: {
               {pathNode}
             </div>
           </div>
+          <ToolDurationBadge durationMs={standaloneDurationMs} />
           <div className="file-card-actions file-card-actions-compact">
             {compactActions.map(action => (
               <button
-                disabled={isActionDisabled(action, { actionPath, referenceText })}
+                disabled={isActionDisabled(action, {
+                  actionPath,
+                  copyPathText,
+                  referenceText,
+                })}
                 key={action}
                 onClick={() => void runAction(action)}
                 type="button"
@@ -180,7 +210,7 @@ export function FileSnapshotPanel(props: {
           打开
         </button>
         <button
-          disabled={!actionPath}
+          disabled={!copyPathText}
           onClick={() => void runAction('copyPath')}
           type="button"
         >
@@ -215,16 +245,6 @@ function getPrimarySnapshot(event: DisplayEvent): FileCardSnapshot | null {
     return { type: 'attachment', value: event.attachmentSnapshot }
   }
   return null
-}
-
-function getAvatarText(snapshot: FileCardSnapshot): string {
-  if (snapshot.type === 'attachment') {
-    return '+'
-  }
-  if (snapshot.type === 'reference') {
-    return '@'
-  }
-  return 'F'
 }
 
 function getSnapshotTitle(snapshot: FileCardSnapshot): string {
@@ -352,7 +372,7 @@ function getCompactStatusPrefix(status: string | undefined): string {
 
 function getCompactActions(
   fileToolSnapshot: FileToolSnapshot | undefined,
-  context: { actionPath?: string; referenceText?: string },
+  context: { actionPath?: string; copyPathText?: string; referenceText?: string },
 ): FileToolAction[] {
   const sourceActions =
     fileToolSnapshot?.actions.length && fileToolSnapshot.actions.length > 0
@@ -363,19 +383,22 @@ function getCompactActions(
     if (action === 'copyReference') {
       return Boolean(context.referenceText)
     }
-    return action === 'copyPath' || Boolean(context.actionPath)
+    if (action === 'copyPath') {
+      return Boolean(context.copyPathText)
+    }
+    return Boolean(context.actionPath)
   })
 }
 
 function isActionDisabled(
   action: FileToolAction,
-  context: { actionPath?: string; referenceText?: string },
+  context: { actionPath?: string; copyPathText?: string; referenceText?: string },
 ): boolean {
   if (action === 'copyReference') {
     return !context.referenceText
   }
   if (action === 'copyPath') {
-    return !context.actionPath
+    return !context.copyPathText
   }
   return !context.actionPath
 }
@@ -475,10 +498,26 @@ function getActionPath(snapshot: FileCardSnapshot): string | undefined {
   }
 
   if (snapshot.type === 'attachment') {
-    return getAttachmentActionPath(snapshot.value)
+    const path = getAttachmentActionPath(snapshot.value)
+    return isOpenablePathCandidate(path) ? path : undefined
   }
 
+  const path = snapshot.value.absolutePath ?? snapshot.value.path
+  return isOpenablePathCandidate(path) ? path : undefined
+}
+
+function getCopyPathText(snapshot: FileCardSnapshot): string | undefined {
+  if (snapshot.type === 'reference') {
+    return snapshot.value.path
+  }
+  if (snapshot.type === 'attachment') {
+    return getAttachmentActionPath(snapshot.value)
+  }
   return snapshot.value.absolutePath ?? snapshot.value.path
+}
+
+function isOpenablePathCandidate(path: string | undefined): path is string {
+  return Boolean(path && !isGlobPatternPath(path))
 }
 
 function getImageAttachment(

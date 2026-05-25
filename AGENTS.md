@@ -121,7 +121,28 @@
 4. 截图后必须同时记录并汇报关键尺寸：`windowRect`、`windowSize`、`showCmd`、`screen`。若尺寸异常，例如 `159x27`、小于预期窗口、或与屏幕/用户截图明显不一致，该截图视为无效。
 5. Desktop 视觉结论以用户实际截图和肉眼确认为准；本机截图只能作为辅助证据。截图异常或与用户所见不一致时，先判定为截图环境问题，不得据此擅自修改 UI。
 
-## 13. 详细规则入口
+## 13. 历史恢复与回放口径护栏
+
+1. 历史恢复至少有三套数量口径：transcript 原始链路长度、Core 可续跑消息数、Desktop 时间线可见卡片数。解释或展示数量时必须先说明使用哪一套，不得把内部 replay action 数量当成用户可见记录数。
+2. 普通历史恢复只恢复原会话主线；“短链 / 长链”只是错误恢复尾部后产生的异常解释，不是正式设计概念。正常路径不得再保留“最长链优先”兜底；旧 parent leaf 只能作为 legacy 诊断，不得决定当前上下文尾部。
+3. Core 当前模型上下文和 Desktop 可见历史是同源双投影：`currentContextMessages` 用于继续对话，`ThreadDisplaySnapshot` / `displayReplayEvents` 用于 UI 历史。compact boundary 只裁剪当前模型上下文，不裁掉 UI 可见历史。
+4. 工具展示必须按来源 ID 归并：一个 `tool_use` 对应一个工具展示项，`tool_result` 按 `tool_use_id` / 等价来源 ID 回填；工具结果不参与 leaf 竞争，也不能按返回先后绑定。
+5. Desktop / Renderer 主展示路径只能消费合法 `ThreadDisplaySnapshot` / `ThreadDisplayPatch` projection。缺失或非法 projection 必须展示协议错误卡，不得恢复 raw content fallback 把它伪装成正常工具卡、文件卡或 assistant 文本。
+6. 普通恢复成功提示默认不展示“已恢复 N 条 / 已回放 N 条”这类数量；必须解释数量时，只能在调试或诊断里区分 raw transcript events、Core context messages、projected display items、visible timeline items。
+7. `canonicalLeafUuid` 只是兼容字段，语义等同 `currentContextTailUuid`，不得再解释为 parent graph leaf。新增恢复能力必须从 ordered transcript / classified events / current context tail 语义出发。
+8. `sessionStorage.ts` / `buildConversationChain(...)` 是原生读侧 helper，不是 CCR 恢复主路径。不得再向其中新增 ordered/rawIndex、display replay、currentContextTail、UI 计数或 compact 展示裁剪职责；第 3 层 `conversationMaterialization.ts` 才是恢复物化主入口。
+9. 原始共享层不是绝对冻结，但每次修改 `sessionStorage.ts`、`messages.ts`、`query.ts`、`QueryEngine.ts`、`compact.ts` 前必须先说明属于共享正确性还是 CCR 物化语义迁出。只有 provider/API/SDK/UUID/tool pairing/compact metadata/transcript 持久化一致性这类共享正确性可以留在共享层。
+10. 详细恢复语义以 [docs/architecture/session-resume-transcript-semantics.md](D:/agent_project/claude-code-reforged/docs/architecture/session-resume-transcript-semantics.md)、[docs/architecture/session-context-materialization-repair.md](D:/agent_project/claude-code-reforged/docs/architecture/session-context-materialization-repair.md)、[docs/architecture/realtime-history-display-contract.md](D:/agent_project/claude-code-reforged/docs/architecture/realtime-history-display-contract.md) 和 [docs/architecture/session-semantics-codex-migration.md](D:/agent_project/claude-code-reforged/docs/architecture/session-semantics-codex-migration.md) 为准；修改 `thread/resume`、sessionStorage、Desktop replay、AgentTool、branch/fork、工具展示投影前必须先阅读这些文档。
+
+## 14. 原始 Claude Code 基线保护护栏
+
+1. 原始 Claude Code 源码、transcript 格式、CLI/TUI 原生恢复语义和本机基线仓库 `D:/C_Project/claude-code-source-main` 默认视为保护基线；除非用户明确要求，不得直接修改或把 App Server / Desktop 的展示修复写回原始 Claude Code 语义。
+2. 历史恢复、展示增强、计数修复、异常 transcript 兼容等问题，优先在 CCR App Server / Desktop 适配层解决；不得为了快速修 UI 现象，随手改 `parentUuid`、`sidechain`、`branch/fork`、原生 `/resume`、CLI/TUI 输出等共享基线行为。
+3. 如果确实需要修改继承自原始 Claude Code 的共享链路，必须先停下来做评估并征求用户明确同意。评估至少包含：源码证据、改动目的、影响入口、对原生 CLI/TUI 的影响、对 App Server/Desktop 的影响、旧 transcript 兼容性、回滚方案和验证命令。
+4. 未完成上条评估前，只允许新增旁路适配、诊断日志、App Server 协议映射、Desktop renderer 展示转换或文档说明；不得直接改动原始 transcript 存储语义。
+5. 解释影响面时必须明确标注：本次改动是保护基线外的 CCR 适配层改动，还是会触碰原始 Claude Code 共享基线。触碰共享基线时，必须等用户确认后再实施。
+
+## 15. 详细规则入口
 
 按需读取，不要一次性加载全部分册：
 

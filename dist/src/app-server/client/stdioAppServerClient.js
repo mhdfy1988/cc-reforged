@@ -101,8 +101,14 @@ export class StdioAppServerClient {
     listThreads(options) {
         return this.rpc.request('thread/list', {}, options);
     }
+    listThreadMessages(params, options) {
+        return this.rpc.request('thread/messages/list', params, options);
+    }
     listSessionHistory(params = {}, options) {
         return this.rpc.request('session/history/list', params, options);
+    }
+    renameSessionHistory(params, options) {
+        return this.rpc.request('session/history/rename', params, options);
     }
     resumeThread(params, options) {
         return this.rpc.request('thread/resume', params, options);
@@ -115,6 +121,9 @@ export class StdioAppServerClient {
     }
     respondPermission(params, options) {
         return this.rpc.request('permission/respond', params, options);
+    }
+    listPendingPermissions(options) {
+        return this.rpc.request('permission/pending/list', {}, options);
     }
     getPermissionSettings(options) {
         return this.rpc.request('permission/settings/get', {}, options);

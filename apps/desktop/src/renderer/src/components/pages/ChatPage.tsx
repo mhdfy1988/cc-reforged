@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChatTimeline } from '../chat/ChatTimeline.js'
 import { Composer } from '../layout/Composer.js'
 import type {
@@ -31,9 +31,11 @@ export function ChatPage(props: {
   contextStatus: RuntimeContextStatus | null | undefined
   events: DisplayEvent[]
   memoryStatus: RuntimeMemoryStatus | null | undefined
+  model: string | undefined
   modelCapabilities: LlmModelCapabilities | null | undefined
   permissions: PermissionCard[]
   prompt: string
+  provider: string | undefined
   threadHistory: ThreadHistoryState
   threadTitle: string | undefined
   turnMetadata: TurnRuntimeMetadata | null
@@ -49,6 +51,11 @@ export function ChatPage(props: {
     attachments: ComposerPrepareAttachmentInput[],
   ) => Promise<ComposerPreparedAttachment[]>
   onRunCompact: () => void
+  onCopyHistorySessionId: (thread: ThreadHistoryItem) => Promise<void> | void
+  onRenameHistoryThread: (
+    thread: ThreadHistoryItem,
+    title: string,
+  ) => Promise<void> | void
   onShowHistory: () => void
   onResumeHistoryThread: (thread: ThreadHistoryItem) => void
   onRespondPermission: (
@@ -122,6 +129,7 @@ export function ChatPage(props: {
           activeTurnId={props.activeTurnId}
           canInterruptTurn={props.canInterruptTurn}
           events={props.events}
+          avatarRuntime={{ model: props.model, provider: props.provider }}
           permissions={props.permissions}
           todoOverlay={props.todoOverlay}
           onOpenLogs={props.onOpenLogs}
@@ -137,6 +145,8 @@ export function ChatPage(props: {
         onClose={props.onCloseHistory}
         onQueryChange={props.onHistoryQueryChange}
         onReload={props.onHistoryReload}
+        onCopySessionId={props.onCopyHistorySessionId}
+        onRenameThread={props.onRenameHistoryThread}
         onResumeThread={props.onResumeHistoryThread}
       />
 
@@ -160,14 +170,27 @@ function ThreadHistoryModal(props: {
   busy: boolean
   history: ThreadHistoryState
   onClose: () => void
+  onCopySessionId: (thread: ThreadHistoryItem) => Promise<void> | void
   onQueryChange: (query: string) => void
   onReload: () => void
+  onRenameThread: (
+    thread: ThreadHistoryItem,
+    title: string,
+  ) => Promise<void> | void
   onResumeThread: (thread: ThreadHistoryItem) => void
 }) {
   const history = props.history
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string | null>(
     null,
   )
+  const [contextMenu, setContextMenu] = useState<ThreadHistoryContextMenu | null>(
+    null,
+  )
+  const [renameTarget, setRenameTarget] = useState<ThreadHistoryItem | null>(null)
+  const [renameTitle, setRenameTitle] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
+  const [renameSaving, setRenameSaving] = useState(false)
+  const renameInputRef = useRef<HTMLInputElement | null>(null)
   const activeGroup = useMemo(
     () => selectActiveHistoryGroup(history.groups, selectedWorkspacePath),
     [history.groups, selectedWorkspacePath],
@@ -176,16 +199,75 @@ function ThreadHistoryModal(props: {
     (total, group) => total + group.sessionCount,
     0,
   )
+  useEffect(() => {
+    if (renameTarget) {
+      renameInputRef.current?.focus()
+      renameInputRef.current?.select()
+    }
+  }, [renameTarget])
+
   if (history.status === 'closed') {
     return null
   }
 
+  const closeContextMenu = () => setContextMenu(null)
+  const openRenameDialog = (thread: ThreadHistoryItem) => {
+    setRenameTarget(thread)
+    setRenameTitle(formatThreadHistoryTitle(thread))
+    setRenameError(null)
+    closeContextMenu()
+  }
+  const closeRenameDialog = () => {
+    if (renameSaving) {
+      return
+    }
+    setRenameTarget(null)
+    setRenameTitle('')
+    setRenameError(null)
+  }
+  const submitRename = () => {
+    if (!renameTarget || renameSaving) {
+      return
+    }
+    const title = normalizeRenameTitle(renameTitle)
+    if (!title) {
+      setRenameError('标题不能为空。')
+      return
+    }
+    setRenameSaving(true)
+    Promise.resolve(props.onRenameThread(renameTarget, title))
+      .then(() => {
+        setRenameTarget(null)
+        setRenameTitle('')
+        setRenameError(null)
+      })
+      .catch(error => {
+        setRenameError(error instanceof Error ? error.message : String(error))
+      })
+      .finally(() => setRenameSaving(false))
+  }
+
   return (
-    <div className="thread-history-backdrop" onClick={props.onClose}>
+    <div
+      className="thread-history-backdrop"
+      onClick={() => {
+        closeContextMenu()
+        props.onClose()
+      }}
+    >
       <section
         aria-modal="true"
         className={`thread-history-dialog is-${history.status}`}
-        onClick={event => event.stopPropagation()}
+        onClick={event => {
+          event.stopPropagation()
+          closeContextMenu()
+        }}
+        onContextMenu={event => {
+          if (!contextMenu) {
+            return
+          }
+          event.preventDefault()
+        }}
         role="dialog"
       >
         <div className="thread-history-head">
@@ -275,9 +357,23 @@ function ThreadHistoryModal(props: {
                       )
                       return (
                         <button
-                          disabled={Boolean(disabledReason)}
+                          aria-disabled={Boolean(disabledReason)}
+                          className={disabledReason ? 'is-disabled' : undefined}
                           key={getThreadHistoryKey(thread, index)}
-                          onClick={() => props.onResumeThread(thread)}
+                          onClick={() => {
+                            if (!disabledReason) {
+                              props.onResumeThread(thread)
+                            }
+                          }}
+                          onContextMenu={event => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            setContextMenu({
+                              thread,
+                              x: event.clientX,
+                              y: event.clientY,
+                            })
+                          }}
                           title={disabledReason ?? '恢复这个历史会话'}
                           type="button"
                         >
@@ -315,8 +411,99 @@ function ThreadHistoryModal(props: {
           </div>
         ) : null}
       </section>
+
+      {contextMenu ? (
+        <div
+          className="thread-history-context-menu"
+          onClick={event => event.stopPropagation()}
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y,
+          }}
+        >
+          <button type="button" onClick={() => openRenameDialog(contextMenu.thread)}>
+            重命名对话
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void Promise.resolve(props.onCopySessionId(contextMenu.thread))
+              closeContextMenu()
+            }}
+          >
+            复制会话 ID
+          </button>
+        </div>
+      ) : null}
+
+      {renameTarget ? (
+        <div
+          className="thread-title-dialog-backdrop"
+          onClick={event => {
+            event.stopPropagation()
+            closeRenameDialog()
+          }}
+        >
+          <form
+            aria-modal="true"
+            className="thread-title-dialog"
+            onClick={event => event.stopPropagation()}
+            onSubmit={event => {
+              event.preventDefault()
+              submitRename()
+            }}
+            role="dialog"
+          >
+            <div className="thread-title-dialog-head">
+              <span>
+                <strong>重命名对话</strong>
+                <small>保持简短且易于识别</small>
+              </span>
+              <button
+                aria-label="关闭"
+                disabled={renameSaving}
+                onClick={closeRenameDialog}
+                title="关闭"
+                type="button"
+              >
+                <CloseIcon />
+              </button>
+            </div>
+            <input
+              maxLength={80}
+              ref={renameInputRef}
+              value={renameTitle}
+              onChange={event => {
+                setRenameTitle(event.currentTarget.value)
+                setRenameError(null)
+              }}
+            />
+            {renameError ? (
+              <p className="thread-title-dialog-error">{renameError}</p>
+            ) : null}
+            <div className="thread-title-dialog-actions">
+              <button
+                disabled={renameSaving}
+                onClick={closeRenameDialog}
+                type="button"
+              >
+                取消
+              </button>
+              <button disabled={renameSaving} type="submit">
+                保存
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   )
+}
+
+type ThreadHistoryContextMenu = {
+  thread: ThreadHistoryItem
+  x: number
+  y: number
 }
 
 function CloseIcon() {
@@ -460,6 +647,10 @@ function normalizeDisplayTitle(value: unknown): string | null {
   }
   const title = value.replace(/\s+/g, ' ').trim()
   return title || null
+}
+
+function normalizeRenameTitle(value: string): string {
+  return value.replace(/\s+/g, ' ').trim()
 }
 
 function isGenericThreadTitle(title: string): boolean {

@@ -17,7 +17,12 @@ import {
 } from '../services/tools/appServerToolFilters.js'
 import { getDefaultAppState, type AppState } from '../state/AppStateStore.js'
 import type { Command } from '../commands.js'
-import type { Tool, ToolPermissionContext, ToolUseContext } from '../Tool.js'
+import type {
+  CompactProgressEvent,
+  Tool,
+  ToolPermissionContext,
+  ToolUseContext,
+} from '../Tool.js'
 import { assembleToolPool } from '../tools.js'
 import type { AttributionState } from '../utils/commitAttribution.js'
 import { errorMessage } from '../utils/errors.js'
@@ -54,6 +59,7 @@ type AssistantStream = {
   text: string
   kind: 'assistant_message' | 'assistant_thinking'
   blockType: 'text' | 'thinking' | 'redacted_thinking'
+  startedAt: string
 }
 
 export type CoreQueryTurnRunnerInput = {
@@ -127,6 +133,12 @@ export const runCoreQueryTurn: CoreQueryTurnRunner = async input => {
     mcpRuntime: await loadAppServerMcpRuntimeState(),
     toolPermissionContext: await createAppServerToolPermissionContext(),
   })
+  wireContextCompactionProgress({
+    emit,
+    threadId: turn.threadId,
+    turnId: turn.turnId,
+    toolUseContext: runtime.toolUseContext,
+  })
 
   const defaultSystemPrompt = await getSystemPrompt(
     runtime.toolUseContext.options.tools,
@@ -199,14 +211,7 @@ export const runCoreQueryTurn: CoreQueryTurnRunner = async input => {
 
       if (event.type === 'assistant' && assistantStream) {
         collectAssistantMetadata(runtimeMetadata, event)
-        emit({
-          type: 'item_completed',
-          threadId: turn.threadId,
-          turnId: turn.turnId,
-          itemId: assistantStream.itemId,
-          status: 'completed',
-          content: contentFromAssistantStream(assistantStream),
-        })
+        emitCompletedAssistantStreamItem(emit, turn, assistantStream)
         assistantStream = null
         hasStreamedAssistantContent = true
         const content = nonStreamedAssistantContent(event)
@@ -246,14 +251,7 @@ export const runCoreQueryTurn: CoreQueryTurnRunner = async input => {
     }
 
     if (assistantStream) {
-      emit({
-        type: 'item_completed',
-        threadId: turn.threadId,
-        turnId: turn.turnId,
-        itemId: assistantStream.itemId,
-        status: 'completed',
-        content: contentFromAssistantStream(assistantStream),
-      })
+      emitCompletedAssistantStreamItem(emit, turn, assistantStream)
     }
   } finally {
     signal.removeEventListener('abort', abortRuntime)
@@ -297,6 +295,34 @@ function collectStreamEventMetadata(
     const stopReason = getString(delta?.stop_reason ?? delta?.stopReason)
     if (stopReason) {
       metadata.stopReason = stopReason
+    }
+  }
+}
+
+function wireContextCompactionProgress(input: {
+  emit: CoreEventEmitter
+  threadId: string
+  turnId: string
+  toolUseContext: ToolUseContext
+}): void {
+  let active = false
+  input.toolUseContext.onCompactProgress = (
+    event: CompactProgressEvent,
+  ): void => {
+    if (event.type === 'compact_start' && !active) {
+      active = true
+      input.emit({
+        type: 'context_compaction_started',
+        threadId: input.threadId,
+        turnId: input.turnId,
+        startedAt: new Date().toISOString(),
+        trigger: 'auto',
+      })
+      return
+    }
+
+    if (event.type === 'compact_end') {
+      active = false
     }
   }
 }
@@ -568,20 +594,15 @@ function handleStreamEvent(input: {
     initialText?: string
   }) => {
     if (stream) {
-      emit({
-        type: 'item_completed',
-        threadId: turn.threadId,
-        turnId: turn.turnId,
-        itemId: stream.itemId,
-        status: 'completed',
-        content: contentFromAssistantStream(stream),
-      })
+      emitCompletedAssistantStreamItem(emit, turn, stream)
     }
+    const startedAt = new Date().toISOString()
     stream = {
       itemId: createItemId(),
       text: input.initialText ?? '',
       kind: input.kind,
       blockType: input.blockType,
+      startedAt,
     }
     emit({
       type: 'item_started',
@@ -591,6 +612,7 @@ function handleStreamEvent(input: {
         turnId: turn.turnId,
         kind: stream.kind,
         status: 'streaming',
+        startedAt,
         content: [],
       },
     })
@@ -661,14 +683,7 @@ function handleStreamEvent(input: {
   }
 
   if (streamEvent.type === 'content_block_stop' && stream) {
-    emit({
-      type: 'item_completed',
-      threadId: turn.threadId,
-      turnId: turn.turnId,
-      itemId: stream.itemId,
-      status: 'completed',
-      content: contentFromAssistantStream(stream),
-    })
+    emitCompletedAssistantStreamItem(emit, turn, stream)
     stream = null
     streamed = true
   }
@@ -700,11 +715,16 @@ function emitCompletedItem(
     content: readonly CoreJsonObject[]
   },
 ): void {
+  const startedAt = new Date().toISOString()
+  const completedAt = startedAt
   emit({
     type: 'item_started',
     item: {
       ...item,
       status: 'completed',
+      startedAt,
+      completedAt,
+      durationMs: 0,
     },
   })
   emit({
@@ -712,9 +732,42 @@ function emitCompletedItem(
     threadId: item.threadId,
     turnId: item.turnId,
     itemId: item.itemId,
+    kind: item.kind,
     status: 'completed',
     content: item.content,
+    startedAt,
+    completedAt,
+    durationMs: 0,
   })
+}
+
+function emitCompletedAssistantStreamItem(
+  emit: CoreEventEmitter,
+  turn: CoreTurn,
+  stream: AssistantStream,
+): void {
+  const completedAt = new Date().toISOString()
+  emit({
+    type: 'item_completed',
+    threadId: turn.threadId,
+    turnId: turn.turnId,
+    itemId: stream.itemId,
+    kind: stream.kind,
+    status: 'completed',
+    content: contentFromAssistantStream(stream),
+    startedAt: stream.startedAt,
+    completedAt,
+    durationMs: inferDurationMs(stream.startedAt, completedAt),
+  })
+}
+
+function inferDurationMs(startedAt: string, completedAt: string): number {
+  const startedMs = Date.parse(startedAt)
+  const completedMs = Date.parse(completedAt)
+  if (!Number.isFinite(startedMs) || !Number.isFinite(completedMs)) {
+    return 0
+  }
+  return Math.max(0, completedMs - startedMs)
 }
 
 function isCoreRenderableMessage(event: unknown): event is Message {

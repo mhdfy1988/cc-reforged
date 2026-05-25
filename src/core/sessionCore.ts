@@ -48,6 +48,7 @@ import { getSessionMemoryPath } from '../utils/permissions/filesystem.js'
 import { errorMessage } from '../utils/errors.js'
 import type { ContextData } from '../utils/analyzeContext.js'
 import { provisionContentReplacementState } from '../utils/toolResultStorage.js'
+import { materializeConversationFromTranscript } from '../utils/conversationMaterialization.js'
 import {
   createFileStateCacheWithSizeLimit,
   READ_FILE_STATE_CACHE_SIZE,
@@ -59,6 +60,7 @@ import {
   cleanMessagesForLogging,
   getProjectDir,
   getProjectsDir,
+  flushSessionStorage,
   isChainParticipant,
   recordTranscript,
   resetSessionFilePointer,
@@ -88,6 +90,10 @@ type ThreadTranscriptState = {
   storageStatus: 'active' | 'disabled' | 'failed'
   lastError?: string
 }
+
+type ResumedConversation = NonNullable<
+  Awaited<ReturnType<typeof loadConversationForResume>>
+>
 
 export class CoreSessionService {
   readonly #threads = new Map<string, CoreThread>()
@@ -132,6 +138,20 @@ export class CoreSessionService {
 
   listThreadMessages(threadId: string): Message[] {
     return [...this.getThreadMessages(threadId)]
+  }
+
+  renameThreadBySessionId(sessionId: string, title: string): CoreThread | null {
+    const thread = this.findThreadBySessionId(sessionId)
+    if (!thread) {
+      return null
+    }
+    const normalizedTitle = normalizeThreadTitle(title)
+    if (!normalizedTitle) {
+      return null
+    }
+    thread.title = normalizedTitle
+    thread.updatedAt = new Date().toISOString()
+    return thread
   }
 
   startThread(params: {
@@ -187,34 +207,31 @@ export class CoreSessionService {
       throw new CoreError('workspace_not_open', 'Workspace is not open.')
     }
 
+    const resumed = await this.loadThreadResume(params, workspace.path)
     const existingThread = this.findThreadBySessionId(params.sessionId)
     if (existingThread) {
+      if (resumed?.messages.length && resumed.sessionId) {
+        this.hydrateExistingThreadFromResume(
+          existingThread,
+          resumed,
+          params,
+          workspace.path,
+        )
+      }
       this.markCurrentThread(existingThread.threadId)
       return existingThread
     }
 
-    const resumed = await loadConversationForResume(
-      params.transcriptPath
-        ? createLiteLogForTranscriptResume({
-            sessionId: params.sessionId,
-            transcriptPath: params.transcriptPath,
-            projectPath: params.projectPath ?? workspace.path,
-          })
-        : params.sessionId,
-      undefined,
-    )
     if (!resumed?.messages.length || !resumed.sessionId) {
       throw new CoreError('thread_not_found', 'Session transcript not found.')
     }
 
     const now = new Date().toISOString()
-    const transcriptPath =
-      resumed.fullPath ??
-      params.transcriptPath ??
-      join(
-        getProjectDir(params.projectPath ?? workspace.path),
-        `${resumed.sessionId}.jsonl`,
-      )
+    const transcriptPath = this.getResumeTranscriptPath(
+      resumed,
+      params,
+      workspace.path,
+    )
     const transcriptState: ThreadTranscriptState = {
       sessionId: resumed.sessionId,
       transcriptPath,
@@ -597,6 +614,15 @@ export class CoreSessionService {
     })
 
     try {
+      const startedAt = new Date().toISOString()
+      this.options.emit({
+        type: 'context_compaction_started',
+        threadId: thread.threadId,
+        startedAt,
+        trigger: 'manual',
+        metadata: this.createContextMetadata(thread.threadId),
+      })
+
       const commandContext: LocalJSXCommandContext = {
         ...runtime.toolUseContext,
         setMessages: updater => {
@@ -616,8 +642,22 @@ export class CoreSessionService {
       }
 
       const postCompactMessages = buildPostCompactMessages(result.compactionResult)
+      const preCompactMessages = [...this.getThreadMessages(thread.threadId)]
       this.#threadMessages.set(thread.threadId, postCompactMessages)
-      await this.persistThreadMessages(thread.threadId)
+      const persisted = await this.persistThreadMessages(thread.threadId)
+      if (!persisted) {
+        this.#threadMessages.set(thread.threadId, preCompactMessages)
+        throw new CoreError(
+          'compact_failed',
+          this.getThreadTranscriptPersistError(thread.threadId),
+        )
+      }
+      // recordTranscript queues JSONL writes. Flush before reading the
+      // transcript back, otherwise the live context can be restored from the
+      // pre-compact file snapshot and keep showing the old token count.
+      await flushSessionStorage()
+      const materializationStatus =
+        await this.refreshThreadContextFromMaterializedTranscript(thread)
       const metadata = this.createContextMetadata(thread.threadId)
       thread.updatedAt = new Date().toISOString()
       this.options.emit({
@@ -640,7 +680,8 @@ export class CoreSessionService {
       return {
         compacted: true,
         threadId: thread.threadId,
-        messageCount: postCompactMessages.length,
+        messageCount: this.getThreadMessages(thread.threadId).length,
+        materializationStatus,
         metadata,
         displayText: result.displayText,
       }
@@ -863,8 +904,11 @@ export class CoreSessionService {
   ): Promise<void> {
     const messages = this.getThreadMessages(threadId)
     messages.push(message)
-    await this.persistThreadMessages(threadId)
+    const persisted = await this.persistThreadMessages(threadId)
     if (message.type === 'system' && message.subtype === 'compact_boundary') {
+      if (!persisted) {
+        return
+      }
       const boundaryIndex = messages.length - 1
       if (boundaryIndex > 0) {
         messages.splice(0, boundaryIndex)
@@ -914,25 +958,142 @@ export class CoreSessionService {
     }
   }
 
+  private async loadThreadResume(
+    params: {
+      sessionId: string
+      transcriptPath?: string
+      projectPath?: string
+    },
+    workspacePath: string,
+  ): Promise<ResumedConversation | null> {
+    return loadConversationForResume(
+      params.transcriptPath
+        ? createLiteLogForTranscriptResume({
+            sessionId: params.sessionId,
+            transcriptPath: params.transcriptPath,
+            projectPath: params.projectPath ?? workspacePath,
+          })
+        : params.sessionId,
+      undefined,
+    )
+  }
+
+  private getResumeTranscriptPath(
+    resumed: ResumedConversation,
+    params: {
+      transcriptPath?: string
+      projectPath?: string
+    },
+    workspacePath: string,
+  ): string {
+    return (
+      resumed.fullPath ??
+      params.transcriptPath ??
+      join(
+        getProjectDir(params.projectPath ?? workspacePath),
+        `${resumed.sessionId}.jsonl`,
+      )
+    )
+  }
+
+  private hydrateExistingThreadFromResume(
+    thread: CoreThread,
+    resumed: ResumedConversation,
+    params: {
+      transcriptPath?: string
+      projectPath?: string
+      metadata?: CoreJsonObject
+    },
+    workspacePath: string,
+  ): void {
+    const currentMessages = this.getThreadMessages(thread.threadId)
+    const currentTranscriptState = this.getThreadTranscriptState(thread.threadId)
+    const transcriptPath = this.getResumeTranscriptPath(
+      resumed,
+      params,
+      workspacePath,
+    )
+    const resumedLastParentUuid = getLastPersistedParentUuid(resumed.messages)
+    const transcriptState: ThreadTranscriptState = {
+      sessionId: resumed.sessionId,
+      transcriptPath,
+      lastRecordedLength: Math.max(
+        currentMessages.length,
+        resumed.messages.length,
+      ),
+      lastParentUuid: resumedLastParentUuid,
+      firstMessageUuid: getFirstMessageUuid(resumed.messages),
+      storageStatus:
+        this.options.persistTranscripts === false ? 'disabled' : 'active',
+    }
+
+    thread.metadata = {
+      ...thread.metadata,
+      ...(params.metadata ?? {}),
+      resumedFromSessionId: resumed.sessionId,
+      sessionId: resumed.sessionId,
+      sessionStoragePath: redactTranscriptPath(transcriptPath),
+      sessionStorageStatus: transcriptState.storageStatus,
+    }
+    this.#threadTranscriptStates.set(thread.threadId, transcriptState)
+
+    const hasNewTranscriptTip =
+      resumedLastParentUuid !== undefined &&
+      resumedLastParentUuid !== currentTranscriptState?.lastParentUuid
+    if (
+      resumed.messages.length <= currentMessages.length &&
+      !hasNewTranscriptTip
+    ) {
+      return
+    }
+
+    const derivedTitle = deriveThreadTitleFromMessages(resumed.messages)
+    thread.metadata = {
+      ...thread.metadata,
+      derivedTitle,
+    }
+    if (isGenericThreadTitle(thread.title)) {
+      thread.title =
+        normalizeThreadTitle(resumed.customTitle) ??
+        derivedTitle ??
+        normalizeThreadTitle(resumed.agentName) ??
+        thread.title
+    }
+    thread.updatedAt = new Date().toISOString()
+    this.#threadMessages.set(thread.threadId, [...resumed.messages])
+    this.#threadReadFileStates.set(
+      thread.threadId,
+      extractReadFilesFromMessages(
+        resumed.messages,
+        workspacePath,
+        READ_FILE_STATE_CACHE_SIZE,
+      ),
+    )
+    this.#threadRuntimeStates.set(
+      thread.threadId,
+      createThreadRuntimeState(resumed.messages),
+    )
+  }
+
   private getThreadTranscriptState(
     threadId: string,
   ): ThreadTranscriptState | undefined {
     return this.#threadTranscriptStates.get(threadId)
   }
 
-  private async persistThreadMessages(threadId: string): Promise<void> {
+  private async persistThreadMessages(threadId: string): Promise<boolean> {
     const transcriptState = this.getThreadTranscriptState(threadId)
     if (!transcriptState) {
-      return
+      return true
     }
     if (this.options.persistTranscripts === false) {
       transcriptState.storageStatus = 'disabled'
-      return
+      return true
     }
 
     const messages = this.getThreadMessages(threadId)
     if (messages.length === 0) {
-      return
+      return true
     }
 
     const currentFirstUuid = getFirstMessageUuid(messages)
@@ -950,7 +1111,7 @@ export class CoreSessionService {
       previousLength > messages.length
     const startIndex = isIncremental ? previousLength : 0
     if (startIndex === messages.length) {
-      return
+      return true
     }
 
     const slice = startIndex === 0 ? messages : messages.slice(startIndex)
@@ -981,11 +1142,78 @@ export class CoreSessionService {
       transcriptState.firstMessageUuid = currentFirstUuid
       transcriptState.storageStatus = 'active'
       transcriptState.lastError = undefined
+      return true
     } catch (error) {
       transcriptState.storageStatus = 'failed'
       transcriptState.lastError =
         error instanceof Error ? error.message : String(error)
+      return false
     }
+  }
+
+  private async refreshThreadContextFromMaterializedTranscript(
+    thread: CoreThread,
+  ): Promise<CoreJsonObject> {
+    const transcriptState = this.getThreadTranscriptState(thread.threadId)
+    if (!transcriptState || this.options.persistTranscripts === false) {
+      return { status: 'skipped', reason: 'transcript_not_active' }
+    }
+
+    try {
+      const materialized = await materializeConversationFromTranscript(
+        transcriptState.transcriptPath,
+      )
+      if (materialized.status !== 'ok') {
+        const codes = materialized.diagnostics
+          .filter(diagnostic => diagnostic.level === 'error')
+          .map(diagnostic => diagnostic.code)
+        throw new Error(
+          `history materialization failed: ${codes.join(', ') || 'unknown'}`,
+        )
+      }
+
+      const materializedMessages = [
+        ...materialized.currentContextMessages,
+      ] as Message[]
+      this.#threadMessages.set(thread.threadId, materializedMessages)
+      this.#threadReadFileStates.set(
+        thread.threadId,
+        extractReadFilesFromMessages(
+          materializedMessages,
+          thread.workspacePath,
+          READ_FILE_STATE_CACHE_SIZE,
+        ),
+      )
+      this.#threadRuntimeStates.set(
+        thread.threadId,
+        createThreadRuntimeState(materializedMessages),
+      )
+      transcriptState.lastRecordedLength = materializedMessages.length
+      transcriptState.firstMessageUuid = getFirstMessageUuid(materializedMessages)
+      transcriptState.lastParentUuid =
+        getLastPersistedParentUuid(materializedMessages)
+      transcriptState.storageStatus = 'active'
+      transcriptState.lastError = undefined
+
+      return {
+        status: 'ok',
+        messageCount: materializedMessages.length,
+        rawTranscriptEvents: materialized.rawTranscriptEvents,
+        coreContextMessages: materialized.coreContextMessages,
+      }
+    } catch (error) {
+      transcriptState.storageStatus = 'failed'
+      transcriptState.lastError = errorMessage(error)
+      return {
+        status: 'failed',
+        error: transcriptState.lastError,
+      }
+    }
+  }
+
+  private getThreadTranscriptPersistError(threadId: string): string {
+    const transcriptState = this.getThreadTranscriptState(threadId)
+    return transcriptState?.lastError ?? 'Transcript persistence failed.'
   }
 
   private async activateTranscriptSession(
@@ -1230,6 +1458,7 @@ function truncateTitle(value: string, maxLength: number): string {
 function isGenericThreadTitle(title: string): boolean {
   return (
     title === 'CCR Desktop 会话' ||
+    title === 'CCR 会话' ||
     title === 'New thread' ||
     title === 'Resumed thread' ||
     title.startsWith('CCR Desktop 会话 ')

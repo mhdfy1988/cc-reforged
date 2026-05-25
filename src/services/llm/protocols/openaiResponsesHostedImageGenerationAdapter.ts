@@ -3,6 +3,9 @@ import {
   normalizeOpenAiImageGenerationCall,
   type OpenAiImageGenerationCallItem,
 } from './openaiImageGenerationAdapter.js'
+import {
+  collectOpenAiResponsesImageGenerationCalls,
+} from './openaiResponsesImageGenerationCalls.js'
 import type {
   CcrGeneratedArtifactSnapshot,
   CcrImageContentBlock,
@@ -267,46 +270,7 @@ function getImageGenerationCalls(input: {
   raw?: OpenAiResponsesImageGenerationRawResponse
   events: readonly Record<string, unknown>[]
 }): OpenAiImageGenerationCallItem[] {
-  const calls: OpenAiImageGenerationCallItem[] = []
-  const seen = new Set<string>()
-  for (const item of input.raw?.output ?? []) {
-    addImageGenerationCall(calls, seen, item)
-  }
-
-  for (const event of input.events) {
-    addImageGenerationCall(calls, seen, event)
-    const item = toRecord(event.item)
-    if (item) {
-      addImageGenerationCall(calls, seen, item)
-    }
-    const response = toRecord(event.response)
-    for (const outputItem of toRecordArray(response?.output)) {
-      addImageGenerationCall(calls, seen, outputItem)
-    }
-    for (const outputItem of toRecordArray(event.output)) {
-      addImageGenerationCall(calls, seen, outputItem)
-    }
-  }
-  return calls
-}
-
-function addImageGenerationCall(
-  calls: OpenAiImageGenerationCallItem[],
-  seen: Set<string>,
-  value: Record<string, unknown> | undefined,
-): void {
-  if (!value || value.type !== 'image_generation_call') {
-    return
-  }
-  const call = value as OpenAiImageGenerationCallItem
-  const key = getNonEmptyString(call.id) ?? getNonEmptyString(call.call_id)
-  if (key) {
-    if (seen.has(key)) {
-      return
-    }
-    seen.add(key)
-  }
-  calls.push(call)
+  return collectOpenAiResponsesImageGenerationCalls(input)
 }
 
 function findCompletedResponse(

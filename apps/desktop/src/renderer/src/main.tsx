@@ -8,7 +8,12 @@ import {
   sessionReducer,
   type SessionAction,
 } from './app/sessionState.js'
-import { routeDesktopEvent } from './app/notificationRouter.js'
+import {
+  createPermissionCardFromPayload,
+  createThreadDisplaySnapshotActions,
+  routeDesktopEvent,
+  shouldReplayThreadDisplaySnapshotFromStatusEvent,
+} from './app/notificationRouter.js'
 import { Sidebar } from './components/layout/Sidebar.js'
 import { Topbar } from './components/layout/Topbar.js'
 import { WindowTitlebar } from './components/layout/WindowTitlebar.js'
@@ -31,13 +36,7 @@ import {
   createUserDisplayEvent,
   type DisplayEvent,
 } from './domain/displayEvents.js'
-import { normalizeContentBlocks } from './domain/contentBlocks.js'
-import {
-  createCompletedItemContractContext,
-  withContentBlock,
-} from './domain/eventContract.js'
 import type {
-  ChatMessage,
   DesktopStatus,
   JsonObject,
   LlmModelAvailability,
@@ -54,9 +53,12 @@ import type {
   McpTestState,
   McpWritableScope,
   PageId,
+  PendingPermissionRequest,
+  PermissionCard,
   PermissionRespondPayload,
   PermissionSettingsState,
   PermissionSettingsUpdateInput,
+  ThreadDisplaySnapshot,
   ThreadHistoryItem,
   ThreadHistoryState,
   TurnRuntimeMetadata,
@@ -158,11 +160,40 @@ function App({ initialStatus = null }: AppProps) {
   const itemMetadataRef = useRef<Map<string, JsonObject>>(new Map())
   const modelAuthLoginRunRef = useRef(0)
 
+  function applyDesktopStatusSnapshot(nextStatus: DesktopStatus): number {
+    setStatus(nextStatus)
+    setPermissionSettings(nextStatus.permissionSettings ?? null)
+    setWorkspaceInput(nextStatus.workspacePath ?? nextStatus.repoRoot ?? '')
+
+    if (nextStatus.threadDisplaySnapshot) {
+      const replayActions = createStatusReplayActions(nextStatus)
+      itemMetadataRef.current.clear()
+      dispatchSession({ type: 'reset-session' })
+      replayActions.forEach(action => dispatchSession(action))
+    }
+
+    const pendingPermissions = createPendingPermissionCards(
+      nextStatus.pendingPermissions ?? [],
+    )
+    dispatchSession({
+      type: 'replace-pending-permissions',
+      permissions: pendingPermissions,
+    })
+    dispatchSession({
+      type: 'set-active-turn',
+      turnId: getActiveTurnIdFromStatus(nextStatus),
+    })
+    return pendingPermissions.length
+  }
+
+  async function refreshDesktopStatusSnapshot(): Promise<number> {
+    const nextStatus = (await window.ccr.getStatus()) as DesktopStatus
+    return applyDesktopStatusSnapshot(nextStatus)
+  }
+
   useEffect(() => {
     window.ccr.getStatus().then((nextStatus: DesktopStatus) => {
-      setStatus(nextStatus)
-      setPermissionSettings(nextStatus.permissionSettings ?? null)
-      setWorkspaceInput(nextStatus.workspacePath ?? nextStatus.repoRoot ?? '')
+      applyDesktopStatusSnapshot(nextStatus)
       void refreshModelList().catch(() => undefined)
     })
     refreshLogs().catch(() => undefined)
@@ -170,6 +201,10 @@ function App({ initialStatus = null }: AppProps) {
     return window.ccr.onEvent(event => {
       setEvents(current => [event, ...current].slice(0, 80))
       const nextStatus = event.status as DesktopStatus
+      if (shouldReplayThreadDisplaySnapshotFromStatusEvent(event, nextStatus)) {
+        applyDesktopStatusSnapshot(nextStatus)
+        return
+      }
       setStatus(nextStatus)
       setPermissionSettings(nextStatus.permissionSettings ?? null)
       const routedEvent = routeDesktopEvent(event, itemMetadataRef.current)
@@ -454,13 +489,29 @@ function App({ initialStatus = null }: AppProps) {
         })
       }
     }).catch(error => {
-      dispatchSession({ type: 'set-active-turn', turnId: null })
-      appendDisplayEvent(
-        createErrorDisplayEvent(
-          `${Date.now()}-send-error`,
-          error instanceof Error ? error.message : String(error),
-        ),
-      )
+      void (async () => {
+        if (isOperationInProgressError(error)) {
+          const pendingCount = await refreshDesktopStatusSnapshot().catch(
+            () => 0,
+          )
+          appendDisplayEvent(
+            createSystemNoticeEvent(
+              `${Date.now()}-operation-in-progress`,
+              pendingCount > 0
+                ? '当前有待确认操作，请先处理确认卡。'
+                : '当前已有任务正在运行，请等待完成或先停止当前任务。',
+            ),
+          )
+          return
+        }
+        dispatchSession({ type: 'set-active-turn', turnId: null })
+        appendDisplayEvent(
+          createErrorDisplayEvent(
+            `${Date.now()}-send-error`,
+            error instanceof Error ? error.message : String(error),
+          ),
+        )
+      })()
     })
   }
 
@@ -615,7 +666,6 @@ function App({ initialStatus = null }: AppProps) {
     await runAction(async () => {
       const resumeResult = await window.ccr.resumeThread({
         sessionId,
-        ...(selectedThread.title ? { title: selectedThread.title } : {}),
         ...(selectedThread.transcriptPath
           ? { transcriptPath: selectedThread.transcriptPath }
           : {}),
@@ -623,16 +673,21 @@ function App({ initialStatus = null }: AppProps) {
           ? { projectPath: selectedThread.projectPath }
           : {}),
       })
-      const thread = resumeResult?.thread
-      const replayActions = createHistoryReplayActions(resumeResult?.messages)
+      const resumePayload = resumeResult as {
+        thread?: { threadId?: string; title?: string }
+        displaySnapshot?: ThreadDisplaySnapshot
+      }
+      const thread = resumePayload.thread
+      const replayActions = createResumeReplayActions(resumePayload.displaySnapshot)
+      const resumeNotice = formatHistoryResumeNotice({
+        thread,
+      })
       itemMetadataRef.current.clear()
       setPrompt('')
       setThreadHistory(createClosedThreadHistory(threadHistory))
       dispatchSession({
         type: 'reset-session',
-        notice: thread?.threadId
-          ? `已恢复历史会话：${thread.title ?? '历史会话'}（${shortId(thread.threadId)}）。已回放 ${replayActions.length} 条历史事件。`
-          : `已恢复历史会话。已回放 ${replayActions.length} 条历史事件。`,
+        notice: resumeNotice,
         noticeId: thread?.threadId
           ? `thread-resumed-${thread.threadId}`
           : `${Date.now()}-thread-resumed`,
@@ -648,6 +703,51 @@ function App({ initialStatus = null }: AppProps) {
         error: error instanceof Error ? error.message : String(error),
       })
     })
+  }
+
+  async function renameThreadFromHistory(
+    selectedThread: ThreadHistoryItem,
+    title: string,
+  ): Promise<void> {
+    const sessionId = getThreadSessionId(selectedThread)
+    if (!sessionId) {
+      throw new Error('该会话缺少 sessionId，当前版本无法重命名。')
+    }
+    const result = await window.ccr.renameSessionHistory({
+      sessionId,
+      title,
+      ...(selectedThread.transcriptPath
+        ? { transcriptPath: selectedThread.transcriptPath }
+        : {}),
+    })
+    const nextTitle = result?.title ?? title
+    setThreadHistory(current => renameThreadHistoryItem(current, sessionId, nextTitle))
+    setStatus(current => {
+      if (!current?.thread) {
+        return current
+      }
+      const currentSessionId = getThreadSessionId(
+        current.thread as ThreadHistoryItem,
+      )
+      if (currentSessionId !== sessionId) {
+        return current
+      }
+      return {
+        ...current,
+        thread: {
+          ...current.thread,
+          title: nextTitle,
+        },
+      }
+    })
+  }
+
+  async function copyHistorySessionId(thread: ThreadHistoryItem): Promise<void> {
+    const sessionId = getThreadSessionId(thread)
+    if (!sessionId) {
+      throw new Error('该会话缺少 sessionId，无法复制。')
+    }
+    await window.ccr.copyText(sessionId)
   }
 
   async function interruptCurrentTurn(): Promise<void> {
@@ -1216,9 +1316,11 @@ function App({ initialStatus = null }: AppProps) {
                 contextStatus={status?.context}
                 events={timelineEvents}
                 memoryStatus={status?.memory}
+                model={model}
                 modelCapabilities={modelCapabilities}
                 permissions={session.permissions}
                 prompt={prompt}
+                provider={provider}
                 threadHistory={threadHistory}
                 threadTitle={status?.thread?.title}
                 todoOverlay={todoOverlay}
@@ -1236,6 +1338,8 @@ function App({ initialStatus = null }: AppProps) {
                 onOpenModels={openModelsFromErrorCard}
                 onPrepareAttachments={prepareComposerAttachments}
                 onRespondPermission={respondPermission}
+                onCopyHistorySessionId={copyHistorySessionId}
+                onRenameHistoryThread={renameThreadFromHistory}
                 onResumeHistoryThread={resumeThreadFromHistory}
                 onRunCompact={() => void runCompactFromDesktop()}
                 onSend={sendPrompt}
@@ -1405,226 +1509,28 @@ function getThreadSessionId(thread: ThreadHistoryItem | undefined): string | nul
   return typeof sessionId === 'string' && sessionId.trim() ? sessionId : null
 }
 
-function createHistoryReplayActions(value: unknown): SessionAction[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-
-  return value.flatMap((message, index) =>
-    createHistoryReplayActionsForMessage(message, index),
-  )
+function createStatusReplayActions(status: DesktopStatus): SessionAction[] {
+  return status.threadDisplaySnapshot
+    ? createThreadDisplaySnapshotActions(status.threadDisplaySnapshot)
+    : []
 }
 
-function createHistoryReplayActionsForMessage(
-  value: unknown,
-  index: number,
+function createResumeReplayActions(
+  snapshot: ThreadDisplaySnapshot | null | undefined,
 ): SessionAction[] {
-  const message = normalizeHistoryThreadMessage(value, index)
-  if (!message) {
-    return []
+  if (!snapshot) {
+    throw new Error('thread/resume 响应缺少必需的 displaySnapshot')
   }
-
-  const object = value as Record<string, unknown>
-  const content = 'content' in object ? object.content : undefined
-  const blocks = normalizeContentBlocks(content)
-  if (
-    content === undefined ||
-    !shouldReplayHistoryContentAsCompletedItem(message, blocks)
-  ) {
-    return [{ type: 'append-message', message }]
-  }
-
-  const itemId = message.id
-  const kind = getHistoryCompletedItemKind(
-    message.kind,
-    object.sourceType,
-    message.role,
-    blocks,
-  )
-  const statusText = message.status ?? 'completed'
-  const context = createCompletedItemContractContext({
-    itemId,
-    params: compactJsonObject({
-      source: 'history',
-      sourceType: object.sourceType,
-      createdAt: object.createdAt,
-    }),
-  })
-  if (shouldSplitHistoryBlocks(blocks)) {
-    return blocks.map((block, contentIndex) => ({
-      type: 'upsert-completed-item-message',
-      itemId: createHistorySplitItemId(itemId, block, contentIndex),
-      kind,
-      content: [block],
-      statusText,
-      context: withContentBlock(context, block, contentIndex),
-    }))
-  }
-
-  return [
-    {
-      type: 'upsert-completed-item-message',
-      itemId,
-      kind,
-      content,
-      statusText,
-      context,
-    },
-  ]
+  return createThreadDisplaySnapshotActions(snapshot)
 }
 
-function normalizeHistoryThreadMessage(
-  value: unknown,
-  index: number,
-): ChatMessage | null {
-  if (!value || typeof value !== 'object') {
-    return null
-  }
-  const object = value as Record<string, unknown>
-  const blocks = normalizeContentBlocks(object.content)
-  const text =
-    (typeof object.text === 'string' ? object.text.trim() : '') ||
-    getTextFromHistoryContentBlocks(blocks)
-  if (!text && blocks.length === 0) {
-    return null
-  }
-
-  return {
-    id:
-      typeof object.id === 'string' && object.id.trim()
-        ? object.id
-        : `history-message-${index}`,
-    role: normalizeChatRole(object.role),
-    text,
-    ...(typeof object.status === 'string' ? { status: object.status } : {}),
-    ...(typeof object.kind === 'string' ? { kind: object.kind } : {}),
-  }
-}
-
-function shouldReplayHistoryContentAsCompletedItem(
-  message: ChatMessage,
-  blocks: JsonObject[],
-): boolean {
-  if (message.role === 'user') {
-    return blocks.some(
-      block =>
-        isHistoryToolLifecycleBlock(block) || isHistoryAttachmentBlock(block),
-    )
-  }
-  return blocks.some(
-    block =>
-      isHistoryToolLifecycleBlock(block) || isHistoryAttachmentBlock(block),
-  )
-}
-
-function getTextFromHistoryContentBlocks(blocks: JsonObject[]): string {
-  return blocks
-    .map(getHistoryTextBlockValue)
-    .filter(Boolean)
-    .join('\n\n')
-}
-
-function getHistoryTextBlockValue(block: JsonObject): string {
-  const type = typeof block.type === 'string' ? block.type : ''
-  if (
-    (type === 'text' || type === 'input_text' || type === 'output_text') &&
-    typeof block.text === 'string'
-  ) {
-    return block.text.trim()
-  }
-  if (type === 'json' && typeof block.value === 'string') {
-    return block.value.trim()
-  }
-  return ''
-}
-
-function getHistoryCompletedItemKind(
-  kind: string | undefined,
-  sourceType: unknown,
-  role: ChatMessage['role'],
-  blocks: JsonObject[],
-): string | undefined {
-  if (blocks.some(isHistoryToolLifecycleBlock)) {
-    return typeof sourceType === 'string' ? sourceType : kind
-  }
-  if (role === 'assistant' || sourceType === 'assistant') {
-    return 'assistant_message'
-  }
-  if (role === 'user' || sourceType === 'user') {
-    return 'user_message'
-  }
-  if (sourceType === 'progress') {
-    return 'tool_progress'
-  }
-  return typeof sourceType === 'string' ? sourceType : kind
-}
-
-function normalizeChatRole(value: unknown): ChatMessage['role'] {
-  if (
-    value === 'user' ||
-    value === 'assistant' ||
-    value === 'system' ||
-    value === 'error'
-  ) {
-    return value
-  }
-  return 'system'
-}
-
-function shouldSplitHistoryBlocks(blocks: JsonObject[]): boolean {
-  return blocks.length > 1 && blocks.some(isHistoryToolLifecycleBlock)
-}
-
-function isHistoryToolLifecycleBlock(block: JsonObject): boolean {
-  const type = typeof block.type === 'string' ? block.type : ''
-  return type === 'tool_use' || type === 'tool_result' || type === 'progress'
-}
-
-function isHistoryAttachmentBlock(block: JsonObject): boolean {
-  const type = typeof block.type === 'string' ? block.type : ''
-  if (
-    type === 'image' ||
-    type === 'file' ||
-    type === 'audio' ||
-    type === 'attachment'
-  ) {
-    return true
-  }
-  return (
-    type === 'tool_result' &&
-    Array.isArray(block.content) &&
-    block.content.some(
-      item =>
-        !!item &&
-        typeof item === 'object' &&
-        !Array.isArray(item) &&
-        isHistoryAttachmentBlock(item as JsonObject),
-    )
-  )
-}
-
-function createHistorySplitItemId(
-  itemId: string,
-  block: JsonObject,
-  contentIndex: number,
-): string {
-  const lifecycleId = getStringFromUnknown(
-    block.id ??
-      block.toolUseId ??
-      block.toolUseID ??
-      block.tool_use_id ??
-      block.parentToolUseId ??
-      block.parentToolUseID ??
-      block.parent_tool_use_id,
-  )
-  const suffix = lifecycleId
-    ? sanitizeHistoryItemIdPart(lifecycleId)
-    : String(contentIndex)
-  return `${itemId}:${contentIndex}:${suffix}`
-}
-
-function sanitizeHistoryItemIdPart(value: string): string {
-  return value.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 80)
+function formatHistoryResumeNotice(input: {
+  thread?: { threadId?: string; title?: string }
+}): string {
+  const prefix = input.thread?.threadId
+    ? `已恢复历史会话：${input.thread.title ?? '历史会话'}（${shortId(input.thread.threadId)}）`
+    : '已恢复历史会话'
+  return `${prefix}。历史上下文已加载，可继续对话。`
 }
 
 function getStringFromUnknown(value: unknown): string | undefined {
@@ -1644,6 +1550,26 @@ function shortId(value: unknown): string {
   return typeof value === 'string' && value.length > 10
     ? value.slice(0, 10)
     : String(value ?? 'unknown')
+}
+
+function renameThreadHistoryItem(
+  current: ThreadHistoryState,
+  sessionId: string,
+  title: string,
+): ThreadHistoryState {
+  const renameThread = (thread: ThreadHistoryItem): ThreadHistoryItem => {
+    return getThreadSessionId(thread) === sessionId
+      ? { ...thread, title, titleSource: 'customTitle' }
+      : thread
+  }
+  return {
+    ...current,
+    threads: current.threads.map(renameThread),
+    groups: current.groups.map(group => ({
+      ...group,
+      sessions: group.sessions.map(renameThread),
+    })),
+  }
 }
 
 function createClosedThreadHistory(
@@ -1674,6 +1600,55 @@ function mergeStatusTurnMetadata(
       ...(sessionMetadata?.usage ?? {}),
     },
   }
+}
+
+function createPendingPermissionCards(
+  permissions: PendingPermissionRequest[],
+): PermissionCard[] {
+  return permissions
+    .map(permission =>
+      createPermissionCardFromPayload(
+        compactJsonObject({ ...permission }) as JsonObject,
+      ),
+    )
+    .filter(
+      (permission): permission is PermissionCard => permission !== null,
+    )
+}
+
+function getActiveTurnIdFromStatus(status: DesktopStatus): string | null {
+  const thread = status.thread as
+    | (NonNullable<DesktopStatus['thread']> & { activeTurnId?: unknown })
+    | null
+  const threadActiveTurnId = getStringFromUnknown(thread?.activeTurnId)
+  if (threadActiveTurnId) {
+    return threadActiveTurnId
+  }
+
+  const lastTurnId = getStringFromUnknown(status.lastTurn?.turnId)
+  if (lastTurnId && isActiveTurnStatus(status.lastTurn?.status)) {
+    return lastTurnId
+  }
+
+  return status.pendingPermissions?.[0]?.turnId ?? null
+}
+
+function isActiveTurnStatus(status: unknown): boolean {
+  return (
+    status === 'pending' ||
+    status === 'preparing' ||
+    status === 'running' ||
+    status === 'streaming' ||
+    status === 'waiting_permission'
+  )
+}
+
+function isOperationInProgressError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return (
+    message.includes('operation_in_progress') ||
+    message.includes('Operation is already in progress')
+  )
 }
 
 function wait(ms: number): Promise<void> {

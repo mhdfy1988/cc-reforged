@@ -496,11 +496,17 @@ async function assertToolErrorClassifications() {
       import assert from 'node:assert/strict'
       import { readFile } from 'node:fs/promises'
       import { createDisplayEventFromCompletedItem, createErrorDisplayEvent } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
+      import { isGlobPatternPath } from '../../apps/desktop/src/renderer/src/domain/fileEvents.ts'
+      import { routeDesktopEvent } from '../../apps/desktop/src/renderer/src/app/notificationRouter.ts'
       import { getAttachmentActionPath, getAttachmentImagePreviewSrc } from '../../apps/desktop/src/renderer/src/components/chat/AttachmentImagePreview.tsx'
       import { getConfirmDialogToneClass } from '../../apps/desktop/src/renderer/src/components/common/ConfirmDialog.tsx'
       import { createToolDetailBlocks, getToolMetaItems } from '../../apps/desktop/src/renderer/src/components/chat/ToolCard.tsx'
       import { createErrorDiagnostics, getErrorActionViewModels, getPolicyBoundaryHint, getPolicyBoundaryLabel, getQuotaHint, getRateLimitHint } from '../../apps/desktop/src/renderer/src/components/chat/ErrorCard.tsx'
       import { formatInstalledRecord, formatManifest, formatMcpScopeLabel, formatServerSubtitle, formatToolAnnotations, getCandidateInstallState, getCandidateKey, getServerStatusLabel, getServerTone, mergeMcpServers, normalizeMcpState } from '../../apps/desktop/src/renderer/src/components/pages/McpPage.tsx'
+      import { coreEventToJsonRpcNotification, coreEventToThreadDisplayPatchNotification } from '../../src/app-server/coreEventMapper.ts'
+      import { enrichToolResultReplayContentWithGeneratedOutputs } from '../../src/app-server/threadReplayContent.ts'
+      import { projectThreadDisplayItem } from '../../src/display/threadDisplayProjection.ts'
+      import { collectOpenAiResponsesImageGenerationCalls } from '../../src/services/llm/protocols/openaiResponsesImageGenerationCalls.ts'
       import { createCcrErrorSnapshot } from '../../src/types/errorSnapshot.ts'
       import { persistGeneratedArtifactFromBase64, prepareGeneratedImageCallForModelReplay, sanitizeGeneratedArtifactsForResume, shouldIncludeGeneratedImageResultForReplay } from '../../src/utils/generatedArtifacts.ts'
       import { stripToolTimingMetadataFromContentBlock } from '../../src/utils/toolTimingMetadata.ts'
@@ -632,6 +638,194 @@ async function assertToolErrorClassifications() {
       assert.equal(mcpProgressEvent?.toolSnapshot?.category, 'mcp')
       assert.equal(mcpProgressEvent?.toolSnapshot?.summary, 'MCP demo / search：failed')
       assert.equal(mcpProgressEvent?.toolSnapshot?.durationMs, 3800)
+
+      assert.equal(isGlobPatternPath('**/*'), true)
+      const globPatternEvent = createDisplayEventFromCompletedItem(
+        'fixture-glob-pattern-tool-call',
+        'assistant_message',
+        [
+          {
+            type: 'tool_use',
+            id: 'toolu_glob_pattern',
+            name: 'Glob',
+            input: {
+              glob: '**/*',
+            },
+          },
+        ],
+        'completed',
+        {
+          itemId: 'fixture-glob-pattern-tool-call',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_glob_pattern',
+        },
+      )
+      assert.deepEqual(globPatternEvent?.fileToolSnapshot?.actions, ['copyReference'])
+      assert.equal(globPatternEvent?.referenceSnapshot?.path, '**/*')
+
+      const legacyCompletedNotification = coreEventToJsonRpcNotification({
+        type: 'item_completed',
+        threadId: 'thread_fixture',
+        turnId: 'turn_fixture',
+        itemId: 'fixture-mapped-timed-item',
+        status: 'completed',
+        content: [{ type: 'text', text: 'ok' }],
+        startedAt: '2026-05-22T08:20:00.000Z',
+        completedAt: '2026-05-22T08:20:01.250Z',
+        durationMs: 1250,
+      })
+      assert.equal(legacyCompletedNotification, null)
+
+      const mappedCompletedPatch = coreEventToThreadDisplayPatchNotification({
+        type: 'item_completed',
+        threadId: 'thread_fixture',
+        turnId: 'turn_fixture',
+        itemId: 'fixture-routed-timed-read',
+        status: 'completed',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_routed_timed_read',
+            name: 'Read',
+            input: { file_path: 'README.md' },
+          },
+        ],
+        startedAt: '2026-05-22T08:10:00.000Z',
+        completedAt: '2026-05-22T08:10:02.500Z',
+        durationMs: 2500,
+      })
+      assert.equal(mappedCompletedPatch?.method, 'thread/display/patch')
+      const routedToolCompleted = routeDesktopEvent(
+        {
+          type: 'notification',
+          at: '2026-05-22T08:10:02.500Z',
+          status: null,
+          payload: mappedCompletedPatch,
+        },
+        new Map(),
+      )
+      const routedToolAction = routedToolCompleted.sessionActions[0]
+      assert.equal(routedToolAction.context?.item?.metadata?.completedAt, '2026-05-22T08:10:02.500Z')
+      const routedTimedToolEvent = createDisplayEventFromCompletedItem(
+        routedToolAction.itemId,
+        routedToolAction.kind,
+        routedToolAction.content,
+        routedToolAction.statusText,
+        routedToolAction.context,
+      )
+      assert.equal(routedTimedToolEvent?.toolSnapshot?.durationMs, 2500)
+
+      const compactStartedPatch = coreEventToThreadDisplayPatchNotification({
+        type: 'context_compaction_started',
+        threadId: 'thread_fixture',
+        turnId: 'turn_fixture',
+        startedAt: '2026-05-22T08:30:00.000Z',
+        trigger: 'auto',
+      })
+      assert.equal(compactStartedPatch?.method, 'thread/display/patch')
+      const routedCompactStarted = routeDesktopEvent(
+        {
+          type: 'notification',
+          at: '2026-05-22T08:30:00.000Z',
+          status: null,
+          payload: compactStartedPatch,
+        },
+        new Map(),
+      )
+      const compactStartedAction = routedCompactStarted.sessionActions[0]
+      const compactStartedEvent = createDisplayEventFromCompletedItem(
+        compactStartedAction.itemId,
+        compactStartedAction.kind,
+        compactStartedAction.content,
+        compactStartedAction.statusText,
+        compactStartedAction.context,
+      )
+      assert.equal(compactStartedEvent?.sourceKind, 'context_compaction')
+      assert.equal(compactStartedEvent?.status, 'running')
+      assert.equal(compactStartedEvent?.compactSnapshot?.status, 'running')
+      assert.equal(compactStartedEvent?.compactSnapshot?.trigger, 'auto')
+
+      const compactedPatch = coreEventToThreadDisplayPatchNotification({
+        type: 'context_compacted',
+        threadId: 'thread_fixture',
+        compactedAt: '2026-05-22T08:30:05.000Z',
+        result: {
+          preCompactTokenCount: 163820,
+          postCompactTokenCount: 152840,
+          truePostCompactTokenCount: 7680,
+          summaryMessageCount: 1,
+          attachmentCount: 5,
+          hookResultCount: 0,
+        },
+      })
+      assert.equal(compactedPatch?.method, 'thread/display/patch')
+      const routedCompacted = routeDesktopEvent(
+        {
+          type: 'notification',
+          at: '2026-05-22T08:30:05.000Z',
+          status: null,
+          payload: compactedPatch,
+        },
+        new Map(),
+      )
+      const compactedAction = routedCompacted.sessionActions[0]
+      const compactedEvent = createDisplayEventFromCompletedItem(
+        compactedAction.itemId,
+        compactedAction.kind,
+        compactedAction.content,
+        compactedAction.statusText,
+        compactedAction.context,
+      )
+      assert.equal(compactedEvent?.sourceKind, 'context_compaction')
+      assert.equal(compactedEvent?.status, 'completed')
+      assert.equal(compactedEvent?.compactSnapshot?.truePostCompactTokenCount, 7680)
+      assert.equal(compactedEvent?.text.includes('preCompactTokenCount'), false)
+      assert.equal(compactedEvent?.text.includes('{'), false)
+
+      const todoWritePatch = coreEventToThreadDisplayPatchNotification({
+        type: 'item_completed',
+        threadId: 'thread_fixture',
+        turnId: 'turn_fixture_todo_overlay',
+        itemId: 'fixture-todowrite-live',
+        kind: 'assistant_message',
+        status: 'completed',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_todowrite_live',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                {
+                  content: '修复一个问题',
+                  status: 'in_progress',
+                  activeForm: '正在修复一个问题',
+                },
+              ],
+            },
+          },
+        ],
+      })
+      const routedTodoWrite = routeDesktopEvent(
+        {
+          type: 'notification',
+          at: '2026-05-22T09:20:00.000Z',
+          status: null,
+          payload: todoWritePatch,
+        },
+        new Map(),
+      )
+      const todoWriteAction = routedTodoWrite.sessionActions[0]
+      const todoWriteEvent = createDisplayEventFromCompletedItem(
+        todoWriteAction.itemId,
+        todoWriteAction.kind,
+        todoWriteAction.content,
+        todoWriteAction.statusText,
+        todoWriteAction.context,
+      )
+      assert.equal(todoWriteEvent?.type, 'todo_list')
+      assert.equal(todoWriteEvent?.todoSnapshot?.identity?.turnId, 'turn_fixture_todo_overlay')
 
       const timedToolResultEvent = createDisplayEventFromCompletedItem(
         'fixture-timed-tool-result',
@@ -1308,6 +1502,138 @@ async function assertToolErrorClassifications() {
       assert.equal(userEvent?.contentBlocks?.[1]?.type, 'image')
       assert.equal(userEvent?.attachmentSnapshots?.[0]?.previewKind, 'image')
 
+      const userImagePlaceholderEvent = createDisplayEventFromCompletedItem(
+        'fixture-history-user-image-placeholder',
+        'user_message',
+        [
+          {
+            type: 'text',
+            text: '[图片]',
+          },
+          {
+            type: 'image',
+            displayName: 'image.png',
+            mimeType: 'image/png',
+            source: { kind: 'file', path: 'C:\\\\tmp\\\\image.png' },
+          },
+        ],
+        'completed',
+        {
+          itemId: 'fixture-history-user-image-placeholder',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          params: { source: 'history' },
+        },
+      )
+      assert.equal(userImagePlaceholderEvent?.type, 'user_message')
+      assert.equal(userImagePlaceholderEvent?.text, '')
+      assert.equal(
+        userImagePlaceholderEvent?.attachmentSnapshots?.[0]?.previewKind,
+        'image',
+      )
+
+      const userImagePlaceholderProjection = projectThreadDisplayItem({
+        itemId: 'fixture-user-image-placeholder-projection',
+        id: 'fixture-user-image-placeholder-projection',
+        type: 'user_message',
+        sourceKind: 'user_message',
+        text: '[图片]',
+        status: 'completed',
+        identity: {
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture_user_image_placeholder',
+          itemId: 'fixture-user-image-placeholder-projection',
+        },
+        content: [
+          {
+            type: 'text',
+            text: '[图片]',
+          },
+          {
+            type: 'image',
+            displayName: 'image.png',
+            mimeType: 'image/png',
+            source: { kind: 'file', path: 'C:\\\\tmp\\\\image.png' },
+          },
+        ],
+      })
+      const userImagePlaceholderProjectionEvent = createDisplayEventFromCompletedItem(
+        'fixture-user-image-placeholder-projection',
+        'user_message',
+        [],
+        'completed',
+        {
+          itemId: 'fixture-user-image-placeholder-projection',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture_user_image_placeholder',
+          item: { projection: userImagePlaceholderProjection },
+          params: { source: 'live' },
+        },
+      )
+      assert.equal(userImagePlaceholderProjectionEvent?.type, 'user_message')
+      assert.equal(userImagePlaceholderProjectionEvent?.text, '')
+      assert.equal(
+        userImagePlaceholderProjectionEvent?.attachmentSnapshots?.[0]?.previewKind,
+        'image',
+      )
+
+      const thinkingProjection = projectThreadDisplayItem({
+        id: 'fixture-thinking-summary-projection',
+        type: 'thinking_summary',
+        text: '分析中',
+        status: 'completed',
+        identity: {
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture_thinking_summary',
+          itemId: 'fixture-thinking-summary-projection',
+        },
+        content: [
+          {
+            type: 'thinking',
+            thinking: '先理解用户问题，再给出答案。',
+          },
+        ],
+      })
+      assert.equal(thinkingProjection?.event?.type, 'thinking_summary')
+      assert.match(thinkingProjection?.event?.text ?? '', /思考/)
+      assert.match(
+        thinkingProjection?.event?.text ?? '',
+        /先理解用户问题/,
+      )
+
+      const legacyMissingProjectionThinkingEvent = createDisplayEventFromCompletedItem(
+        'fixture-legacy-thinking-missing-projection',
+        'assistant_message',
+        [
+          {
+            type: 'thinking',
+            thinking: '',
+            signature: '{"summary":[]}',
+          },
+        ],
+        'completed',
+        {
+          itemId: 'fixture-legacy-thinking-missing-projection',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture_legacy_thinking',
+          item: {
+            id: 'fixture-legacy-thinking-missing-projection',
+            type: 'thinking_summary',
+            text: '',
+            status: 'completed',
+            content: [
+              {
+                type: 'thinking',
+                thinking: '',
+                signature: '{"summary":[]}',
+              },
+            ],
+          },
+          params: { source: 'history' },
+        },
+      )
+      assert.notEqual(legacyMissingProjectionThinkingEvent?.type, 'error')
+
       const persistedArtifact = await persistGeneratedArtifactFromBase64({
         ccrHome: generatedArtifactsHome,
         sessionId: 'thread_fixture',
@@ -1427,6 +1753,262 @@ async function assertToolErrorClassifications() {
       assert.equal(generatedUrlAttachment?.path, generatedImageUrl)
       assert.equal(getAttachmentActionPath(generatedUrlAttachment), generatedImageUrl)
       assert.equal(getAttachmentImagePreviewSrc(generatedUrlAttachment), '')
+
+      const assistantGeneratedOutputPath =
+        'C:\\\\Users\\\\luoji\\\\.ccr\\\\generated_outputs\\\\thread_fixture\\\\out_img_1.png'
+      const assistantGeneratedPathPatch = coreEventToThreadDisplayPatchNotification({
+        type: 'item_completed',
+        threadId: 'thread_fixture',
+        turnId: 'turn_fixture_generated_path_text',
+        itemId: 'fixture-assistant-generated-image-path-text',
+        kind: 'assistant_message',
+        status: 'completed',
+        content: [
+          {
+            type: 'text',
+            text: '已生成一张图片：\\n\\n' + assistantGeneratedOutputPath,
+          },
+        ],
+      })
+      assert.equal(assistantGeneratedPathPatch?.method, 'thread/display/patch')
+      const assistantGeneratedPathAction = routeDesktopEvent(
+        {
+          type: 'notification',
+          at: '2026-05-22T09:10:00.000Z',
+          status: null,
+          payload: assistantGeneratedPathPatch,
+        },
+        new Map(),
+      ).sessionActions[0]
+      const assistantGeneratedPathEvent = createDisplayEventFromCompletedItem(
+        assistantGeneratedPathAction.itemId,
+        assistantGeneratedPathAction.kind,
+        assistantGeneratedPathAction.content,
+        assistantGeneratedPathAction.statusText,
+        assistantGeneratedPathAction.context,
+      )
+      const assistantGeneratedPathAttachment =
+        assistantGeneratedPathEvent?.attachmentSnapshots?.[0]
+      assert.equal(assistantGeneratedPathEvent?.type, 'assistant_message')
+      assert.equal(
+        assistantGeneratedPathEvent?.text.includes(assistantGeneratedOutputPath),
+        false,
+      )
+      assert.equal(assistantGeneratedPathEvent?.text, '已生成一张图片')
+      assert.equal(assistantGeneratedPathAttachment?.source, 'ModelOutput')
+      assert.equal(assistantGeneratedPathAttachment?.previewKind, 'image')
+      assert.equal(assistantGeneratedPathAttachment?.origin, 'model_output')
+      assert.equal(assistantGeneratedPathAttachment?.savedPath, assistantGeneratedOutputPath)
+      assert.equal(assistantGeneratedPathAttachment?.path, assistantGeneratedOutputPath)
+
+      const assistantGeneratedPathFallbackEvent = createDisplayEventFromCompletedItem(
+        'fixture-assistant-generated-image-path-text-fallback',
+        'assistant_message',
+        [
+          {
+            type: 'text',
+            text: '已生成图片：\\n' + assistantGeneratedOutputPath,
+          },
+        ],
+        'completed',
+      )
+      assert.equal(
+        assistantGeneratedPathFallbackEvent?.text.includes(assistantGeneratedOutputPath),
+        false,
+      )
+      assert.equal(assistantGeneratedPathFallbackEvent?.text, '已生成图片')
+      assert.equal(
+        assistantGeneratedPathFallbackEvent?.attachmentSnapshots?.[0]?.source,
+        'ModelOutput',
+      )
+
+      const codexOauthToolReplayContent = enrichToolResultReplayContentWithGeneratedOutputs(
+        [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu_generate_image',
+            content: 'Generated 1 image(s) with codex-oauth/gpt-5.5.\\n- out_codex_oauth: ' + persistedArtifact.savedPath,
+          },
+        ],
+        {
+          provider: 'codex-oauth',
+          model: 'gpt-5.5',
+          output: [
+            {
+              type: 'image',
+              attachmentId: 'out_codex_oauth',
+              displayName: 'out_codex_oauth.png',
+              mimeType: 'image/png',
+              origin: 'model_output',
+              lifecycle: 'persisted',
+              safety: 'needs_review',
+              provider: 'codex-oauth',
+              model: 'gpt-5.5',
+              outputId: 'out_codex_oauth',
+              savedPath: persistedArtifact.savedPath,
+              prompt: '白色中华田园猫',
+              generatedArtifact: persistedArtifact,
+              source: {
+                kind: 'file',
+                path: persistedArtifact.savedPath,
+              },
+            },
+          ],
+        },
+      )
+      assert.equal(Array.isArray(codexOauthToolReplayContent), true)
+      assert.equal(codexOauthToolReplayContent[0].content[1].type, 'image')
+
+      const codexOauthToolEvent = createDisplayEventFromCompletedItem(
+        'fixture-codex-oauth-image-tool-result',
+        'tool_result',
+        codexOauthToolReplayContent,
+        'completed',
+        {
+          itemId: 'fixture-codex-oauth-image-tool-result',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture',
+          toolUseId: 'toolu_generate_image',
+        },
+      )
+      assert.equal(codexOauthToolEvent?.attachmentSnapshots?.[0]?.source, 'ModelOutput')
+      assert.equal(codexOauthToolEvent?.attachmentSnapshots?.[0]?.previewKind, 'image')
+      assert.equal(codexOauthToolEvent?.attachmentSnapshots?.[0]?.provider, 'codex-oauth')
+      assert.equal(codexOauthToolEvent?.attachmentSnapshots?.[0]?.savedPath, persistedArtifact.savedPath)
+
+      const liveGenerateToolUseId = 'toolu_live_generate_image'
+      const liveGenerateStartedPatch = coreEventToThreadDisplayPatchNotification({
+        type: 'item_started',
+        item: {
+          itemId: 'fixture-live-generate-image-tool',
+          threadId: 'thread_fixture',
+          turnId: 'turn_fixture_live_image',
+          kind: 'assistant_message',
+          status: 'running',
+          content: [
+            {
+              type: 'tool_use',
+              id: liveGenerateToolUseId,
+              name: 'GenerateImage',
+              input: { prompt: '一只美短加白' },
+            },
+          ],
+          startedAt: '2026-05-22T09:00:00.000Z',
+        },
+      })
+      assert.equal(liveGenerateStartedPatch?.method, 'thread/display/patch')
+      routeDesktopEvent(
+        {
+          type: 'notification',
+          at: '2026-05-22T09:00:00.000Z',
+          status: null,
+          payload: liveGenerateStartedPatch,
+        },
+        new Map(),
+      )
+
+      const liveGenerateCompletedPatch = coreEventToThreadDisplayPatchNotification({
+        type: 'item_completed',
+        threadId: 'thread_fixture',
+        turnId: 'turn_fixture_live_image',
+        itemId: 'fixture-live-generate-image-tool-result',
+        kind: 'tool_result',
+        status: 'completed',
+        content: [
+          {
+            type: 'tool_result',
+            toolUseId: liveGenerateToolUseId,
+            content:
+              'Generated 1 image(s) with codex-oauth/gpt-5.5.\\n- out_live_generate_image: ' +
+              persistedArtifact.savedPath,
+            result: {
+              provider: 'codex-oauth',
+              model: 'gpt-5.5',
+              output: [
+                {
+                  type: 'image',
+                  attachmentId: 'out_live_generate_image',
+                  displayName: 'out_live_generate_image.png',
+                  mimeType: 'image/png',
+                  origin: 'model_output',
+                  lifecycle: 'persisted',
+                  safety: 'needs_review',
+                  provider: 'codex-oauth',
+                  model: 'gpt-5.5',
+                  outputId: 'out_live_generate_image',
+                  savedPath: persistedArtifact.savedPath,
+                  prompt: '一只美短加白',
+                  generatedArtifact: persistedArtifact,
+                  source: {
+                    kind: 'file',
+                    path: persistedArtifact.savedPath,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        startedAt: '2026-05-22T09:00:00.000Z',
+        completedAt: '2026-05-22T09:00:50.000Z',
+        durationMs: 50000,
+      })
+      assert.equal(liveGenerateCompletedPatch?.method, 'thread/display/patch')
+      const liveGenerateCompleted = routeDesktopEvent(
+        {
+          type: 'notification',
+          at: '2026-05-22T09:00:50.000Z',
+          status: null,
+          payload: liveGenerateCompletedPatch,
+        },
+        new Map(),
+      )
+      const liveGenerateAction = liveGenerateCompleted.sessionActions[0]
+      const liveGenerateEvent = createDisplayEventFromCompletedItem(
+        liveGenerateAction.itemId,
+        liveGenerateAction.kind,
+        liveGenerateAction.content,
+        liveGenerateAction.statusText,
+        liveGenerateAction.context,
+      )
+      assert.equal(liveGenerateEvent?.toolSnapshot?.name, 'GenerateImage')
+      assert.equal(liveGenerateEvent?.toolSnapshot?.durationMs, 50000)
+      assert.equal(liveGenerateEvent?.toolSnapshot?.result?.[1]?.type, 'image')
+      assert.equal(liveGenerateEvent?.attachmentSnapshots?.[0]?.source, 'ModelOutput')
+      assert.equal(liveGenerateEvent?.attachmentSnapshots?.[0]?.previewKind, 'image')
+      assert.equal(liveGenerateEvent?.attachmentSnapshots?.[0]?.provider, 'codex-oauth')
+      assert.equal(liveGenerateEvent?.attachmentSnapshots?.[0]?.savedPath, persistedArtifact.savedPath)
+
+      const codexSseCalls = collectOpenAiResponsesImageGenerationCalls(
+        {
+          raw: {
+            output: [],
+          },
+          events: [
+            {
+              type: 'response.output_item.added',
+              item: {
+                type: 'image_generation_call',
+                id: 'ig_codex_duplicate',
+                status: 'in_progress',
+              },
+            },
+            {
+              type: 'response.output_item.done',
+              item: {
+                type: 'image_generation_call',
+                id: 'ig_codex_duplicate',
+                status: 'generating',
+                result: 'aGVsbG8=',
+                revised_prompt: 'A classroom scene.',
+              },
+            },
+          ],
+        },
+      )
+      assert.equal(codexSseCalls.length, 1)
+      assert.equal(codexSseCalls[0]?.id, 'ig_codex_duplicate')
+      assert.equal(codexSseCalls[0]?.status, 'generating')
+      assert.equal(codexSseCalls[0]?.result, 'aGVsbG8=')
 
       const resumePayload = sanitizeGeneratedArtifactsForResume({
         image: {

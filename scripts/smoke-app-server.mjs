@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,6 +19,9 @@ const tempDir = mkdtempSync(join(tmpdir(), 'ccr-app-server-smoke-'));
 
 try {
   seedSmokeLlmConfig();
+  await runToolDisplayLifecycleSmoke();
+  await runThreadDisplaySnapshotToolSplitSmoke();
+  await runRealtimeToolDisplayPatchLifecycleSmoke();
   const messages = [
     'not json',
     { jsonrpc: '2.0', id: 1, method: 'config/get', params: {} },
@@ -444,7 +454,11 @@ try {
   const memoryStatusResponse = getResponseById(sessionResponses, 7);
   const turnStartResponse = getResponseById(sessionResponses, 8);
   const sessionHistoryResponse = getResponseById(sessionResponses, 9);
-  const threadResumeResponse = getResponseById(sessionResponses, 10);
+  const sessionHistoryRenameResponse = getResponseById(sessionResponses, 10);
+  const threadResumeResponse = getResponseById(sessionResponses, 11);
+  const threadMessagesResponse = getResponseById(sessionResponses, 12);
+  const threadResumeRefreshResponse = getResponseById(sessionResponses, 13);
+  const threadMessagesRefreshResponse = getResponseById(sessionResponses, 14);
 
   assert.equal(initializeResponse.result.protocolVersion, '0.1');
   assert.equal(initializeResponse.result.serverVersion, '0.1');
@@ -486,7 +500,13 @@ try {
     }
   }
   assertNoSecretKeys(sessionHistoryResponse.result);
+  assert.equal(sessionHistoryRenameResponse.result.title, 'Renamed smoke session');
   assert.equal(Array.isArray(threadResumeResponse.result.messages), true);
+  assert.equal(threadResumeResponse.result.thread.title, 'Renamed smoke session');
+  assert.equal(
+    threadResumeResponse.result.messagesSemantics,
+    'display_replay_compat',
+  );
   assert.ok(
     threadResumeResponse.result.messages.some(
       message =>
@@ -501,7 +521,201 @@ try {
         message.text.includes('assistant reply from smoke transcript'),
     ),
   );
+  assert.ok(
+    threadResumeResponse.result.messages.some(
+      message =>
+        message.role === 'user' &&
+        message.text.includes('new user after compact boundary'),
+    ),
+  );
+  assert.ok(threadResumeResponse.result.displaySnapshot);
+  assert.equal(threadResumeResponse.result.displaySnapshot.source, 'history');
+  assert.equal(
+    threadResumeResponse.result.displaySnapshot.threadId,
+    threadResumeResponse.result.thread.threadId,
+  );
+  assert.equal(
+    threadResumeResponse.result.displaySnapshot.counts.rawTranscriptEvents,
+    6,
+  );
+  assertDisplayCounts(threadResumeResponse.result.displaySnapshot);
+  assert.equal(
+    threadResumeResponse.result.displaySnapshot.counts.projectedDisplayItems,
+    4,
+  );
+  assert.equal(
+    threadResumeResponse.result.displaySnapshot.counts.filteredTranscriptEvents,
+    2,
+  );
+  assert.equal(
+    threadResumeResponse.result.displaySnapshot.counts.hiddenTimelineItems,
+    2,
+  );
+  assert.ok(
+    threadResumeResponse.result.displaySnapshot.items.some(
+      item =>
+        item.type === 'user_message' &&
+        item.text.includes('hello from smoke transcript'),
+    ),
+  );
+  const historyUserDisplayItem =
+    threadResumeResponse.result.displaySnapshot.items.find(
+      item =>
+        item.type === 'user_message' &&
+        item.text.includes('hello from smoke transcript'),
+    );
+  assert.equal(historyUserDisplayItem.projection?.version, 1);
+  assert.equal(historyUserDisplayItem.projection?.event?.type, 'user_message');
+  assert.ok(
+    historyUserDisplayItem.projection?.event?.contentBlocks?.some(
+      block => block.type === 'text',
+    ),
+    'history snapshot item should carry App Server rich projection content blocks',
+  );
+  assert.ok(
+    threadResumeResponse.result.displaySnapshot.items.some(
+      item =>
+        item.type === 'assistant_message' &&
+        item.text.includes('assistant reply from smoke transcript'),
+    ),
+  );
+  assert.ok(
+    threadResumeResponse.result.displaySnapshot.items.some(
+      item =>
+        item.type === 'user_message' &&
+        item.text.includes('new user after compact boundary'),
+    ),
+    'history snapshot should replay UI-visible messages after compact boundary',
+  );
+  assert.equal(
+    threadResumeResponse.result.displaySnapshot.items.some(item =>
+      item.text.includes('Conversation compacted'),
+    ),
+    false,
+    'history snapshot should hide compact boundary markers',
+  );
+  assert.ok(
+    threadResumeResponse.result.displaySnapshot.items.some(
+      item =>
+        item.type === 'system_notice' &&
+        item.text.includes('上下文已压缩'),
+    ),
+    'history snapshot should show a concise compact notice',
+  );
+  assert.equal(
+    threadResumeResponse.result.displaySnapshot.items.some(item =>
+      item.text.includes('This session is being continued from a previous conversation'),
+    ),
+    false,
+    'history snapshot should hide model-facing compact summary prompts',
+  );
   assertNoSecretKeys(threadResumeResponse.result);
+  assert.equal(Array.isArray(threadMessagesResponse.result.messages), true);
+  assert.equal(
+    threadMessagesResponse.result.messagesSemantics,
+    'current_context_compat',
+  );
+  assert.ok(threadMessagesResponse.result.displaySnapshot);
+  assert.equal(threadMessagesResponse.result.displaySnapshot.source, 'thread');
+  assertDisplayCounts(threadMessagesResponse.result.displaySnapshot);
+  assert.ok(
+    threadMessagesResponse.result.messages.some(
+      message =>
+        message.role === 'user' &&
+        message.text.includes('new user after compact boundary'),
+    ),
+    'Core current context should include the post-compact user message',
+  );
+  assert.equal(
+    threadMessagesResponse.result.messages.some(message =>
+      message.text.includes('hello from smoke transcript'),
+    ),
+    false,
+    'Core current context should not include pre-compact user message',
+  );
+  assert.equal(
+    threadMessagesResponse.result.messages.some(message =>
+      message.text.includes('assistant reply from smoke transcript'),
+    ),
+    false,
+    'Core current context should not include pre-compact assistant message',
+  );
+  assert.equal(
+    threadMessagesResponse.result.messages.some(message =>
+      message.text.includes('This session is being continued from a previous conversation'),
+    ),
+    false,
+    'Core current context compatibility messages should hide compact summary prompts from UI',
+  );
+  assert.ok(
+    threadResumeResponse.result.displaySnapshot.items.some(item =>
+      item.text.includes('hello from smoke transcript'),
+    ),
+    'UI history snapshot should retain pre-compact user message',
+  );
+  assert.ok(
+    threadResumeResponse.result.displaySnapshot.items.some(item =>
+      item.text.includes('assistant reply from smoke transcript'),
+    ),
+    'UI history snapshot should retain pre-compact assistant message',
+  );
+  assertNoSecretKeys(threadMessagesResponse.result);
+  assert.equal(
+    threadResumeRefreshResponse.result.thread.threadId,
+    threadResumeResponse.result.thread.threadId,
+  );
+  assert.equal(
+    threadResumeRefreshResponse.result.messagesSemantics,
+    'display_replay_compat',
+  );
+  assert.ok(
+    threadResumeRefreshResponse.result.messages.some(
+      message =>
+        message.role === 'user' &&
+        message.text.includes('second user line from smoke transcript'),
+    ),
+  );
+  assert.equal(
+    threadResumeRefreshResponse.result.displaySnapshot.counts.rawTranscriptEvents,
+    7,
+  );
+  assertDisplayCounts(threadResumeRefreshResponse.result.displaySnapshot);
+  assert.equal(
+    threadResumeRefreshResponse.result.displaySnapshot.counts.projectedDisplayItems,
+    5,
+  );
+  assert.equal(
+    threadResumeRefreshResponse.result.displaySnapshot.counts.filteredTranscriptEvents,
+    2,
+  );
+  assert.equal(
+    threadResumeRefreshResponse.result.displaySnapshot.counts.hiddenTimelineItems,
+    2,
+  );
+  assert.ok(
+    threadResumeRefreshResponse.result.displaySnapshot.items.some(
+      item =>
+        item.type === 'user_message' &&
+        item.text.includes('second user line from smoke transcript'),
+    ),
+  );
+  assert.ok(
+    threadMessagesRefreshResponse.result.messages.length >
+      threadMessagesResponse.result.messages.length,
+  );
+  assert.equal(
+    threadMessagesRefreshResponse.result.messagesSemantics,
+    'current_context_compat',
+  );
+  assert.ok(
+    threadMessagesRefreshResponse.result.messages.some(
+      message =>
+        message.role === 'user' &&
+        message.text.includes('second user line from smoke transcript'),
+    ),
+  );
+  assertNoSecretKeys(threadResumeRefreshResponse.result);
+  assertNoSecretKeys(threadMessagesRefreshResponse.result);
   assert.ok(
     sessionNotifications.some(
       notification => notification.method === 'thread/started',
@@ -515,26 +729,90 @@ try {
   assert.equal(turnStartedNotification.params.metadata.model, 'gpt-5.4');
   assert.equal(turnStartedNotification.params.metadata.contextWindow, 200000);
 
-  const turnFailedNotification = sessionNotifications.find(
-    notification => notification.method === 'turn/failed',
+  for (const legacyDisplayMethod of [
+    'item/started',
+    'item/delta',
+    'item/completed',
+    'turn/failed',
+    'context/compacted',
+    'permission/requested',
+    'permission/cancelled',
+  ]) {
+    assert.equal(
+      sessionNotifications.some(
+        notification => notification.method === legacyDisplayMethod,
+      ),
+      false,
+      `${legacyDisplayMethod} should not be emitted after display patch takeover`,
+    );
+  }
+  const displayPatchNotifications = sessionNotifications.filter(
+    notification => notification.method === 'thread/display/patch',
   );
-  assert.ok(turnFailedNotification);
-  assert.equal(turnFailedNotification.params.metadata.stopReason, 'error');
-  assert.equal(turnFailedNotification.params.metadata.errorKind, 'auth_required');
-  assert.equal(typeof turnFailedNotification.params.metadata.latencyMs, 'number');
+  const firstFailurePatchIndex = sessionNotifications.findIndex(
+    notification =>
+      notification.method === 'thread/display/patch' &&
+      notification.params.operations?.some(
+        operation =>
+          operation.op === 'append_item' &&
+          operation.item?.type === 'error' &&
+          operation.item?.status === 'failed',
+      ),
+  );
+  assert.ok(
+    firstFailurePatchIndex !== -1,
+    'turn failure should emit a display patch error item',
+  );
+  assert.ok(
+    displayPatchNotifications.some(notification =>
+      notification.params.operations?.some(
+        operation =>
+          operation.op === 'append_item' &&
+          operation.item?.type === 'error' &&
+          operation.item?.status === 'failed',
+      ),
+    ),
+    'turn failure should also emit a display patch error item',
+  );
+  const failurePatchItem = displayPatchNotifications
+    .flatMap(notification => notification.params.operations ?? [])
+    .find(
+      operation =>
+        operation.op === 'append_item' &&
+        operation.item?.type === 'error' &&
+      operation.item?.status === 'failed',
+    )?.item;
+  assert.equal(failurePatchItem.metadata?.stopReason, 'error');
+  assert.equal(failurePatchItem.metadata?.errorKind, 'auth_required');
+  assert.equal(typeof failurePatchItem.metadata?.latencyMs, 'number');
+  assert.equal(failurePatchItem.projection?.version, 1);
+  assert.equal(failurePatchItem.projection?.event?.type, 'error');
+  assert.equal(
+    failurePatchItem.projection?.event?.errorSnapshot?.source,
+    'app_server',
+    'live display patch error item should carry App Server rich error projection',
+  );
 
   const permissionSmoke = runPermissionSmoke();
   assert.equal(permissionSmoke.status, 0, permissionSmoke.stderr);
   assert.equal(permissionSmoke.stderr, '');
   const permissionSmokeResult = JSON.parse(permissionSmoke.stdout);
   assert.equal(permissionSmokeResult.ok, true);
-  assert.ok(permissionSmokeResult.checked.includes('permission/requested'));
+  assert.ok(
+    permissionSmokeResult.checked.includes(
+      'thread/display/patch_permission_requested',
+    ),
+  );
   assert.ok(permissionSmokeResult.checked.includes('permission/respond_allow'));
   assert.ok(
     permissionSmokeResult.checked.includes('permission/respond_duplicate'),
   );
   assert.ok(permissionSmokeResult.checked.includes('permission/respond_missing'));
-  assert.ok(permissionSmokeResult.checked.includes('permission/cancelled'));
+  assert.ok(
+    permissionSmokeResult.checked.includes(
+      'thread/display/patch_permission_cancelled',
+    ),
+  );
 
   console.log(
     JSON.stringify(
@@ -569,17 +847,29 @@ try {
           'unsupported_transport',
           'thread/start',
           'thread/list',
+          'thread/messages/list',
           'session/history/list',
+          'session/history/rename',
           'thread/resume_history_messages',
+          'thread/display/snapshot_counts',
+          'thread/display/snapshot_thread_messages',
+          'thread/display/snapshot_materialized_resume',
+          'thread/display/hides_compact_internal_messages',
+          'thread/display/compact_notice',
+          'thread/display/patch_replaces_legacy_display_notifications',
           'context/status',
           'compact/status',
           'memory/session/status',
           'turn/start_auth_required_failure',
-          'permission/requested',
+          'thread/display/patch',
+          'thread/display/patch_permission_requested',
           'permission/respond_allow',
           'permission/respond_duplicate',
           'permission/respond_missing',
-          'permission/cancelled',
+          'thread/display/patch_permission_cancelled',
+          'tool/display/lifecycle_source_binding',
+          'thread/display/snapshot_parallel_tool_split',
+          'thread/display/patch_parallel_tool_lifecycle',
         ],
       },
       null,
@@ -588,6 +878,378 @@ try {
   );
 } finally {
   rmSync(tempDir, { recursive: true, force: true });
+}
+
+async function runToolDisplayLifecycleSmoke() {
+  const {
+    createToolDisplayLifecycleReducer,
+    normalizeToolResultSourceIdFromBlock,
+    normalizeToolUseIdFromBlock,
+  } = await import('../dist/src/app-server/toolDisplayLifecycle.js');
+
+  assert.equal(normalizeToolUseIdFromBlock({ id: 'tool-a' }), 'tool-a');
+  assert.equal(
+    normalizeToolResultSourceIdFromBlock({ tool_use_id: 'tool-a' }),
+    'tool-a',
+  );
+
+  const reducer = createToolDisplayLifecycleReducer();
+  reducer.accept({
+    kind: 'tool_use',
+    block: { type: 'tool_use', id: 'tool-a', name: 'Read' },
+    source: { messageUuid: 'assistant-1', rawIndex: 1, contentIndex: 0 },
+  });
+  reducer.accept({
+    kind: 'tool_use',
+    block: { type: 'tool_use', id: 'tool-b', name: 'Write' },
+    source: { messageUuid: 'assistant-1', rawIndex: 1, contentIndex: 1 },
+  });
+  reducer.accept({
+    kind: 'tool_result',
+    block: { type: 'tool_result', tool_use_id: 'tool-b', content: 'B done' },
+    source: { messageUuid: 'user-2', rawIndex: 2, contentIndex: 0 },
+  });
+  reducer.accept({
+    kind: 'tool_result',
+    block: { type: 'tool_result', tool_use_id: 'tool-a', content: 'A done' },
+    source: { messageUuid: 'user-2', rawIndex: 2, contentIndex: 1 },
+  });
+  reducer.accept({
+    kind: 'tool_use',
+    block: { type: 'tool_use', id: 'tool-a', name: 'Read' },
+    source: { messageUuid: 'assistant-duplicate', rawIndex: 3, contentIndex: 0 },
+  });
+  reducer.accept({
+    kind: 'tool_result',
+    block: { type: 'tool_result', content: 'missing source' },
+    source: { messageUuid: 'user-3', rawIndex: 4, contentIndex: 0 },
+  });
+
+  const items = reducer.getItems();
+  assert.equal(items.length, 3);
+  assert.deepEqual(
+    items.map(item => item.itemId),
+    ['tool:tool-a', 'tool:tool-b', 'missing_tool_result_source_id:user-3:0'],
+  );
+  assert.deepEqual(
+    items.slice(0, 2).map(item => item.resultBlock?.content),
+    ['A done', 'B done'],
+  );
+  assert.equal(items[0].status, 'completed');
+  assert.equal(items[1].status, 'completed');
+  assert.equal(items[2].status, 'diagnostic');
+  assert.equal(items[2].diagnostic?.code, 'missing_tool_result_source_id');
+}
+
+async function runThreadDisplaySnapshotToolSplitSmoke() {
+  const { buildThreadDisplaySnapshot } = await import(
+    '../dist/src/app-server/threadDisplay.js'
+  );
+  const snapshot = buildThreadDisplaySnapshot({
+    threadId: 'thread-tool-split',
+    source: 'history',
+    rawTranscriptEvents: 2,
+    coreContextMessages: 2,
+    messages: [
+      {
+        id: 'assistant-tools',
+        role: 'assistant',
+        text: 'parallel tools',
+        status: 'completed',
+        kind: 'assistant',
+        content: [
+          { type: 'text', text: 'parallel tools' },
+          { type: 'tool_use', id: 'tool-a', name: 'Read', input: { path: 'a' } },
+          { type: 'tool_use', id: 'tool-b', name: 'Read', input: { path: 'b' } },
+        ],
+      },
+      {
+        id: 'user-tool-results',
+        role: 'user',
+        text: 'tool results',
+        status: 'completed',
+        kind: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 'tool-b', content: 'B result' },
+          { type: 'tool_result', tool_use_id: 'tool-a', content: 'A result' },
+        ],
+      },
+      {
+        id: 'user-orphan-tool-results',
+        role: 'user',
+        text: 'orphan tool results',
+        status: 'completed',
+        kind: 'user',
+        content: [
+          { type: 'tool_result', content: 'missing source id' },
+          {
+            type: 'tool_result',
+            tool_use_id: 'tool-missing',
+            content: 'missing tool use',
+          },
+        ],
+      },
+    ],
+  });
+
+  const toolItems = snapshot.items.filter(item => item.id.startsWith('tool:'));
+  assert.deepEqual(
+    toolItems.map(item => item.id),
+    ['tool:tool-a', 'tool:tool-b'],
+  );
+  assert.deepEqual(
+    toolItems.map(item => item.identity?.contentIndex),
+    [1, 2],
+  );
+  assert.deepEqual(
+    toolItems.map(item => item.projection?.event?.identity?.contentIndex),
+    [1, 2],
+  );
+  assert.deepEqual(
+    toolItems.map(item => item.projection?.event?.identity?.rawIndex),
+    [0, 0],
+  );
+  assert.deepEqual(
+    toolItems.map(item => item.status),
+    ['completed', 'completed'],
+  );
+  assert.deepEqual(
+    toolItems.map(item => item.content?.[0]?.result),
+    ['A result', 'B result'],
+  );
+  assert.deepEqual(
+    toolItems.map(item => item.projection?.event?.toolSnapshot?.result),
+    ['A result', 'B result'],
+  );
+  assert.equal(
+    toolItems.every(
+      item => item.projection?.event?.toolSnapshot?.kind === 'call',
+    ),
+    true,
+  );
+  const diagnosticItems = snapshot.items.filter(item => item.type === 'error');
+  assert.deepEqual(
+    diagnosticItems.map(item => item.id),
+    [
+      'missing_tool_result_source_id:user-orphan-tool-results:0',
+      'orphan_tool_result:user-orphan-tool-results:1',
+    ],
+  );
+  assert.deepEqual(
+    diagnosticItems.map(item => item.metadata?.toolLifecycle?.diagnostic?.code),
+    ['missing_tool_result_source_id', 'orphan_tool_result'],
+  );
+  assert.equal(
+    diagnosticItems.every(
+      item => item.projection?.event?.type === 'error',
+    ),
+    true,
+  );
+  assert.equal(snapshot.items.length, 5);
+  assert.equal(snapshot.counts.projectedDisplayItems, 5);
+}
+
+async function runRealtimeToolDisplayPatchLifecycleSmoke() {
+  const { buildThreadDisplaySnapshot, coreEventToThreadDisplayPatch } = await import(
+    '../dist/src/app-server/threadDisplay.js'
+  );
+  const threadId = 'thread-live-tool-split';
+  const turnId = 'turn-live-tool-split';
+  const startedAt = '2026-05-24T00:00:00.000Z';
+  const toolContent = [
+    { type: 'tool_use', id: 'live-tool-a', name: 'Read', input: { path: 'a' } },
+    { type: 'tool_use', id: 'live-tool-b', name: 'Read', input: { path: 'b' } },
+  ];
+
+  const startPatch = coreEventToThreadDisplayPatch({
+    type: 'item_started',
+    item: {
+      itemId: 'live-assistant-tools',
+      threadId,
+      turnId,
+      kind: 'assistant_message',
+      status: 'completed',
+      startedAt,
+      content: toolContent,
+    },
+  });
+  assert.deepEqual(
+    startPatch.operations.map(operation => operation.op),
+    ['append_item', 'append_item'],
+  );
+  assert.deepEqual(
+    startPatch.operations.map(operation => operation.item?.id),
+    ['tool:live-tool-a', 'tool:live-tool-b'],
+  );
+  assert.deepEqual(
+    startPatch.operations.map(
+      operation => operation.item?.projection?.event?.identity?.toolUseId,
+    ),
+    ['live-tool-a', 'live-tool-b'],
+  );
+  assert.deepEqual(
+    startPatch.operations.map(
+      operation => operation.item?.projection?.event?.toolSnapshot?.startedAt,
+    ),
+    [startedAt, startedAt],
+  );
+
+  const toolUseCompletedPatch = coreEventToThreadDisplayPatch({
+    type: 'item_completed',
+    threadId,
+    turnId,
+    itemId: 'live-assistant-tools',
+    kind: 'assistant_message',
+    status: 'completed',
+    content: toolContent,
+    startedAt,
+    completedAt: '2026-05-24T00:00:01.000Z',
+    durationMs: 1000,
+  });
+  assert.equal(toolUseCompletedPatch, null);
+
+  const resultPatch = coreEventToThreadDisplayPatch({
+    type: 'item_completed',
+    threadId,
+    turnId,
+    itemId: 'live-user-tool-results',
+    kind: 'tool_result',
+    status: 'completed',
+    content: [
+      { type: 'tool_result', tool_use_id: 'live-tool-b', content: 'B live result' },
+      { type: 'tool_result', tool_use_id: 'live-tool-a', content: 'A live result' },
+    ],
+    startedAt: '2026-05-24T00:00:02.000Z',
+    completedAt: '2026-05-24T00:00:03.000Z',
+    durationMs: 1000,
+  });
+  assert.deepEqual(
+    resultPatch.operations.map(operation => operation.op),
+    ['complete_item', 'complete_item'],
+  );
+  assert.deepEqual(
+    resultPatch.operations.map(operation => operation.itemId),
+    ['tool:live-tool-b', 'tool:live-tool-a'],
+  );
+  assert.deepEqual(
+    resultPatch.operations.map(
+      operation => operation.item?.projection?.event?.toolSnapshot?.result,
+    ),
+    ['B live result', 'A live result'],
+  );
+  assert.deepEqual(
+    resultPatch.operations.map(
+      operation => operation.item?.projection?.event?.toolSnapshot?.startedAt,
+    ),
+    [startedAt, startedAt],
+  );
+  assert.deepEqual(
+    resultPatch.operations.map(
+      operation => operation.item?.projection?.event?.toolSnapshot?.completedAt,
+    ),
+    ['2026-05-24T00:00:03.000Z', '2026-05-24T00:00:03.000Z'],
+  );
+  assert.deepEqual(
+    resultPatch.operations.map(
+      operation => operation.item?.projection?.event?.toolSnapshot?.durationMs,
+    ),
+    [3000, 3000],
+  );
+  const liveItems = new Map(
+    startPatch.operations.map(operation => [
+      operation.item.id,
+      operation.item,
+    ]),
+  );
+  for (const operation of resultPatch.operations) {
+    liveItems.set(operation.itemId, operation.item);
+  }
+  const historySnapshot = buildThreadDisplaySnapshot({
+    threadId,
+    source: 'history',
+    rawTranscriptEvents: 2,
+    coreContextMessages: 2,
+    messages: [
+      {
+        id: 'live-assistant-tools',
+        role: 'assistant',
+        text: 'parallel live tools',
+        status: 'completed',
+        kind: 'assistant',
+        createdAt: startedAt,
+        content: toolContent,
+      },
+      {
+        id: 'live-user-tool-results',
+        role: 'user',
+        text: 'parallel live tool results',
+        status: 'completed',
+        kind: 'tool_result',
+        createdAt: '2026-05-24T00:00:02.000Z',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'live-tool-b',
+            content: 'B live result',
+            completedAt: '2026-05-24T00:00:03.000Z',
+          },
+          {
+            type: 'tool_result',
+            tool_use_id: 'live-tool-a',
+            content: 'A live result',
+            completedAt: '2026-05-24T00:00:03.000Z',
+          },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(
+    summarizeToolItems(Array.from(liveItems.values())),
+    summarizeToolItems(historySnapshot.items),
+    'realtime patch final tool timeline should match history snapshot projection',
+  );
+
+  const orphanPatch = coreEventToThreadDisplayPatch({
+    type: 'item_completed',
+    threadId: 'thread-live-orphan',
+    turnId: 'turn-live-orphan',
+    itemId: 'live-orphan-results',
+    kind: 'tool_result',
+    status: 'completed',
+    content: [
+      {
+        type: 'tool_result',
+        tool_use_id: 'missing-live-tool',
+        content: 'orphan result',
+      },
+    ],
+  });
+  assert.deepEqual(
+    orphanPatch.operations.map(operation => operation.op),
+    ['append_item'],
+  );
+  assert.equal(orphanPatch.operations[0].item?.type, 'error');
+  assert.equal(
+    orphanPatch.operations[0].item?.projection?.event?.type,
+    'error',
+  );
+  assert.ok(
+    orphanPatch.operations[0].item?.text.includes('工具结果引用的工具调用不存在'),
+  );
+}
+
+function summarizeToolItems(items) {
+  return items
+    .filter(item => item.id?.startsWith?.('tool:'))
+    .map(item => ({
+      id: item.id,
+      status: item.status,
+      toolUseId: item.identity?.toolUseId,
+      result: item.projection?.event?.toolSnapshot?.result,
+      startedAt: item.projection?.event?.toolSnapshot?.startedAt,
+      completedAt: item.projection?.event?.toolSnapshot?.completedAt,
+      durationMs: item.projection?.event?.toolSnapshot?.durationMs,
+    }));
 }
 
 function runAppServer(messages) {
@@ -753,7 +1415,14 @@ async function runInteractiveSessionSmoke() {
   await waitForMessage(
     messages,
     waiters,
-    message => message.method === 'turn/failed',
+    message =>
+      message.method === 'thread/display/patch' &&
+      message.params.operations?.some(
+        operation =>
+          operation.op === 'append_item' &&
+          operation.item?.type === 'error' &&
+          operation.item?.metadata?.coreEventType === 'turn_failed',
+      ),
   );
 
   send({
@@ -768,6 +1437,18 @@ async function runInteractiveSessionSmoke() {
   send({
     jsonrpc: '2.0',
     id: 10,
+    method: 'session/history/rename',
+    params: {
+      sessionId: smokeTranscript.sessionId,
+      transcriptPath: smokeTranscript.transcriptPath,
+      title: 'Renamed smoke session',
+    },
+  });
+  await waitForMessage(messages, waiters, message => message.id === 10);
+
+  send({
+    jsonrpc: '2.0',
+    id: 11,
     method: 'thread/resume',
     params: {
       sessionId: smokeTranscript.sessionId,
@@ -775,7 +1456,44 @@ async function runInteractiveSessionSmoke() {
       projectPath: repoRoot,
     },
   });
-  await waitForMessage(messages, waiters, message => message.id === 10);
+  const resumedThreadResponse = await waitForMessage(
+    messages,
+    waiters,
+    message => message.id === 11,
+  );
+
+  send({
+    jsonrpc: '2.0',
+    id: 12,
+    method: 'thread/messages/list',
+    params: { threadId: resumedThreadResponse.result.thread.threadId },
+  });
+  await waitForMessage(messages, waiters, message => message.id === 12);
+
+  appendSmokeTranscriptMessage(smokeTranscript);
+  send({
+    jsonrpc: '2.0',
+    id: 13,
+    method: 'thread/resume',
+    params: {
+      sessionId: smokeTranscript.sessionId,
+      transcriptPath: smokeTranscript.transcriptPath,
+      projectPath: repoRoot,
+    },
+  });
+  const refreshedThreadResponse = await waitForMessage(
+    messages,
+    waiters,
+    message => message.id === 13,
+  );
+
+  send({
+    jsonrpc: '2.0',
+    id: 14,
+    method: 'thread/messages/list',
+    params: { threadId: refreshedThreadResponse.result.thread.threadId },
+  });
+  await waitForMessage(messages, waiters, message => message.id === 14);
 
   child.stdin.end();
   const status = await waitForExit(child);
@@ -787,7 +1505,11 @@ async function runInteractiveSessionSmoke() {
 function writeSmokeTranscript() {
   const sessionId = randomUUID();
   const userUuid = randomUUID();
+  const metaUuid = randomUUID();
   const assistantUuid = randomUUID();
+  const compactBoundaryUuid = randomUUID();
+  const compactSummaryUuid = randomUUID();
+  const afterCompactUserUuid = randomUUID();
   const timestamp = new Date().toISOString();
   const transcriptPath = join(tempDir, `${sessionId}.jsonl`);
   const entries = [
@@ -808,9 +1530,23 @@ function writeSmokeTranscript() {
       },
     },
     {
+      type: 'system',
+      uuid: metaUuid,
+      parentUuid: userUuid,
+      isSidechain: false,
+      isMeta: true,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      content: 'hidden smoke metadata event',
+    },
+    {
       type: 'assistant',
       uuid: assistantUuid,
-      parentUuid: userUuid,
+      parentUuid: metaUuid,
       isSidechain: false,
       timestamp,
       sessionId,
@@ -828,13 +1564,106 @@ function writeSmokeTranscript() {
         ],
       },
     },
+    {
+      type: 'system',
+      subtype: 'compact_boundary',
+      uuid: compactBoundaryUuid,
+      parentUuid: assistantUuid,
+      isSidechain: false,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      content: 'Conversation compacted',
+    },
+    {
+      type: 'user',
+      uuid: compactSummaryUuid,
+      parentUuid: compactBoundaryUuid,
+      isSidechain: false,
+      isCompactSummary: true,
+      isVisibleInTranscriptOnly: true,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      message: {
+        role: 'user',
+        content:
+          'This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.\n\nSummary:\n\nInternal smoke compact summary.',
+      },
+    },
+    {
+      type: 'user',
+      uuid: afterCompactUserUuid,
+      parentUuid: compactSummaryUuid,
+      isSidechain: false,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      message: {
+        role: 'user',
+        content: 'new user after compact boundary',
+      },
+    },
   ];
   writeFileSync(
     transcriptPath,
     `${entries.map(entry => JSON.stringify(entry)).join('\n')}\n`,
     'utf8',
   );
-  return { sessionId, transcriptPath };
+  return { sessionId, transcriptPath, parentUuid: afterCompactUserUuid };
+}
+
+function appendSmokeTranscriptMessage(smokeTranscript) {
+  const userUuid = randomUUID();
+  const timestamp = new Date().toISOString();
+  const entry = {
+    type: 'user',
+    uuid: userUuid,
+    parentUuid: smokeTranscript.parentUuid,
+    isSidechain: false,
+    timestamp,
+    sessionId: smokeTranscript.sessionId,
+    cwd: repoRoot,
+    version: 'smoke',
+    userType: 'external',
+    entrypoint: 'app-server',
+    message: {
+      role: 'user',
+      content: 'second user line from smoke transcript',
+    },
+  };
+  appendFileSync(smokeTranscript.transcriptPath, `${JSON.stringify(entry)}\n`, 'utf8');
+  smokeTranscript.parentUuid = userUuid;
+}
+
+function assertDisplayCounts(snapshot) {
+  const visibleTimelineItems = snapshot.items.filter(
+    item => !item.timelineHidden,
+  ).length;
+  const hiddenDisplayItems = snapshot.items.filter(
+    item => item.timelineHidden,
+  ).length;
+  const filteredTranscriptEvents = Math.max(
+    0,
+    snapshot.counts.rawTranscriptEvents - snapshot.items.length,
+  );
+  assert.equal(snapshot.counts.projectedDisplayItems, snapshot.items.length);
+  assert.equal(snapshot.counts.visibleTimelineItems, visibleTimelineItems);
+  assert.equal(snapshot.counts.hiddenDisplayItems, hiddenDisplayItems);
+  assert.equal(snapshot.counts.filteredTranscriptEvents, filteredTranscriptEvents);
+  assert.equal(
+    snapshot.counts.hiddenTimelineItems,
+    hiddenDisplayItems + filteredTranscriptEvents,
+  );
 }
 
 function waitForMessage(messages, waiters, predicate) {

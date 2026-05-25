@@ -1,4 +1,10 @@
-import { useRef, useState, type ClipboardEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type MouseEvent,
+} from 'react'
 import type { LlmModelCapabilities } from '../../domain/displayTypes.js'
 
 type AttachmentModality = 'image' | 'file' | 'audio'
@@ -41,6 +47,16 @@ type AttachmentStatus = {
   label: string
   detail: string
   policy: AttachmentPolicy
+}
+
+type ComposerEditMenuState = {
+  x: number
+  y: number
+  selectionStart: number
+  selectionEnd: number
+  hasSelection: boolean
+  hasText: boolean
+  status?: string
 }
 
 export type ComposerPrepareAttachmentInput = {
@@ -108,7 +124,9 @@ export function Composer(props: {
   onSend: (input?: ComposerSubmitInput) => Promise<void> | void
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const promptInputRef = useRef<HTMLInputElement | null>(null)
   const [attachments, setAttachments] = useState<ComposerAttachmentDraft[]>([])
+  const [editMenu, setEditMenu] = useState<ComposerEditMenuState | null>(null)
   const imageCount = attachments.filter(
     attachment => attachment.modality === 'image',
   ).length
@@ -126,6 +144,27 @@ export function Composer(props: {
     busy: props.busy,
     prompt: props.prompt,
   })
+
+  useEffect(() => {
+    if (!editMenu) {
+      return
+    }
+
+    const close = () => setEditMenu(null)
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        close()
+      }
+    }
+    window.addEventListener('click', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [editMenu])
 
   function handleFilesSelected(
     files: FileList | null,
@@ -148,6 +187,129 @@ export function Composer(props: {
     }
     event.preventDefault()
     await addAttachmentFiles(files, 'paste')
+  }
+
+  function openEditMenu(event: MouseEvent<HTMLInputElement>): void {
+    const input = event.currentTarget
+    const selectionStart = input.selectionStart ?? 0
+    const selectionEnd = input.selectionEnd ?? selectionStart
+    event.preventDefault()
+    event.stopPropagation()
+    input.focus()
+    setEditMenu({
+      x: clampComposerMenuX(event.clientX),
+      y: clampComposerMenuY(event.clientY),
+      selectionStart,
+      selectionEnd,
+      hasSelection: selectionEnd > selectionStart,
+      hasText: input.value.length > 0,
+    })
+  }
+
+  function selectAllPromptText(): void {
+    const input = promptInputRef.current
+    if (!input || !props.prompt) {
+      return
+    }
+    input.focus()
+    input.select()
+    setEditMenu(current =>
+      current
+        ? {
+            ...current,
+            selectionStart: 0,
+            selectionEnd: props.prompt.length,
+            hasSelection: props.prompt.length > 0,
+            status: '已全选',
+          }
+        : current,
+    )
+  }
+
+  async function copyPromptSelection(): Promise<void> {
+    if (!editMenu?.hasSelection) {
+      return
+    }
+    const selectedText = props.prompt.slice(
+      editMenu.selectionStart,
+      editMenu.selectionEnd,
+    )
+    if (!selectedText) {
+      return
+    }
+    try {
+      await window.ccr.copyText(selectedText)
+      setEditMenu({ ...editMenu, status: '已复制' })
+      window.setTimeout(() => setEditMenu(null), 560)
+    } catch (error) {
+      setEditMenu({
+        ...editMenu,
+        status: error instanceof Error ? error.message : '复制失败',
+      })
+    }
+  }
+
+  async function cutPromptSelection(): Promise<void> {
+    if (!editMenu?.hasSelection) {
+      return
+    }
+    const selectedText = props.prompt.slice(
+      editMenu.selectionStart,
+      editMenu.selectionEnd,
+    )
+    if (!selectedText) {
+      return
+    }
+    try {
+      await window.ccr.copyText(selectedText)
+      replacePromptSelection('', editMenu.selectionStart, editMenu.selectionEnd)
+      setEditMenu(null)
+    } catch (error) {
+      setEditMenu({
+        ...editMenu,
+        status: error instanceof Error ? error.message : '剪切失败',
+      })
+    }
+  }
+
+  async function pastePromptText(): Promise<void> {
+    if (!editMenu) {
+      return
+    }
+    try {
+      const text = await window.ccr.readClipboardText()
+      if (!text) {
+        setEditMenu({ ...editMenu, status: '剪贴板为空' })
+        return
+      }
+      replacePromptSelection(text, editMenu.selectionStart, editMenu.selectionEnd)
+      setEditMenu(null)
+    } catch (error) {
+      setEditMenu({
+        ...editMenu,
+        status: error instanceof Error ? error.message : '粘贴失败',
+      })
+    }
+  }
+
+  function replacePromptSelection(
+    replacement: string,
+    selectionStart: number,
+    selectionEnd: number,
+  ): void {
+    const before = props.prompt.slice(0, selectionStart)
+    const after = props.prompt.slice(selectionEnd)
+    const nextPrompt = `${before}${replacement}${after}`
+    const nextCaret = before.length + replacement.length
+    props.onChangePrompt(nextPrompt)
+    window.requestAnimationFrame(() => {
+      const input = promptInputRef.current
+      if (!input) {
+        return
+      }
+      input.focus()
+      input.setSelectionRange(nextCaret, nextCaret)
+    })
   }
 
   async function addAttachmentFiles(
@@ -341,8 +503,10 @@ export function Composer(props: {
           type="file"
         />
         <input
+          ref={promptInputRef}
           value={props.prompt}
           onChange={event => props.onChangePrompt(event.target.value)}
+          onContextMenu={openEditMenu}
           onKeyDown={event => {
             if (event.key === 'Enter' && !submitDisabledReason) {
               void submit()
@@ -351,6 +515,42 @@ export function Composer(props: {
           onPaste={event => void handlePaste(event)}
           placeholder="输入任务，按 Enter 发送..."
         />
+        {editMenu ? (
+          <div
+            className="composer-edit-menu"
+            onClick={event => event.stopPropagation()}
+            onContextMenu={event => event.preventDefault()}
+            style={{ left: editMenu.x, top: editMenu.y }}
+          >
+            {editMenu.status ? (
+              <span className="composer-edit-menu-status">{editMenu.status}</span>
+            ) : null}
+            <button
+              disabled={!editMenu.hasText}
+              onClick={selectAllPromptText}
+              type="button"
+            >
+              全选
+            </button>
+            <button
+              disabled={!editMenu.hasSelection}
+              onClick={() => void cutPromptSelection()}
+              type="button"
+            >
+              剪切
+            </button>
+            <button
+              disabled={!editMenu.hasSelection}
+              onClick={() => void copyPromptSelection()}
+              type="button"
+            >
+              复制
+            </button>
+            <button onClick={() => void pastePromptText()} type="button">
+              粘贴
+            </button>
+          </div>
+        ) : null}
         {props.activeTurnId ? (
           <button
             className="send stop"
@@ -384,6 +584,16 @@ function getClipboardFiles(data: DataTransfer): File[] {
     .filter(item => item.kind === 'file')
     .map(item => item.getAsFile())
     .filter((file): file is File => Boolean(file))
+}
+
+function clampComposerMenuX(value: number): number {
+  const width = 132
+  return Math.max(8, Math.min(value, window.innerWidth - width - 8))
+}
+
+function clampComposerMenuY(value: number): number {
+  const height = 168
+  return Math.max(8, Math.min(value, window.innerHeight - height - 8))
 }
 
 async function createAttachmentCandidate(

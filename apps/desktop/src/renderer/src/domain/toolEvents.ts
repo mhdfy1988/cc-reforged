@@ -181,7 +181,7 @@ function extractToolTiming(
   nested: JsonObject | null,
   context: DisplayEventContractContext | undefined,
 ): Pick<ToolSnapshot, 'durationMs' | 'startedAt' | 'completedAt'> {
-  const durationMs =
+  const explicitDurationMs =
     getNumber(block, ['durationMs', 'duration_ms', 'elapsedTimeMs', 'elapsed_ms']) ??
     getNumber(nested, ['durationMs', 'duration_ms', 'elapsedTimeMs', 'elapsed_ms']) ??
     getNumber(context?.item, [
@@ -235,11 +235,29 @@ function extractToolTiming(
       'end_time',
     ])
 
+  const durationMs =
+    explicitDurationMs ?? inferDurationMsFromTimestamps(startedAt, completedAt)
+
   return {
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(startedAt ? { startedAt } : {}),
     ...(completedAt ? { completedAt } : {}),
   }
+}
+
+function inferDurationMsFromTimestamps(
+  startedAt: string | undefined,
+  completedAt: string | undefined,
+): number | undefined {
+  if (!startedAt || !completedAt) {
+    return undefined
+  }
+  const startedMs = Date.parse(startedAt)
+  const completedMs = Date.parse(completedAt)
+  if (!Number.isFinite(startedMs) || !Number.isFinite(completedMs)) {
+    return undefined
+  }
+  return Math.max(0, completedMs - startedMs)
 }
 
 function getToolResultTimingSource(value: unknown): JsonObject | null {

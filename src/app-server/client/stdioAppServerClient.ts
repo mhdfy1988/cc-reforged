@@ -61,6 +61,7 @@ import type {
   ModelSetResult,
   ModelTestParams,
   ModelTestResult,
+  PermissionPendingListResult,
   PermissionRespondParams,
   PermissionRespondResult,
   PermissionSettingsGetResult,
@@ -68,6 +69,10 @@ import type {
   PermissionSettingsUpdateResult,
   SessionHistoryListParams,
   SessionHistoryListResult,
+  SessionHistoryRenameParams,
+  SessionHistoryRenameResult,
+  ThreadMessagesListParams,
+  ThreadMessagesListResult,
   ShutdownResult,
   ThreadListResult,
   ThreadResumeParams,
@@ -319,11 +324,25 @@ export class StdioAppServerClient {
     return this.rpc.request('thread/list', {}, options)
   }
 
+  listThreadMessages(
+    params: ThreadMessagesListParams,
+    options?: RequestOptions,
+  ): Promise<ThreadMessagesListResult> {
+    return this.rpc.request('thread/messages/list', params, options)
+  }
+
   listSessionHistory(
     params: SessionHistoryListParams = {},
     options?: RequestOptions,
   ): Promise<SessionHistoryListResult> {
     return this.rpc.request('session/history/list', params, options)
+  }
+
+  renameSessionHistory(
+    params: SessionHistoryRenameParams,
+    options?: RequestOptions,
+  ): Promise<SessionHistoryRenameResult> {
+    return this.rpc.request('session/history/rename', params, options)
   }
 
   resumeThread(
@@ -352,6 +371,12 @@ export class StdioAppServerClient {
     options?: RequestOptions,
   ): Promise<PermissionRespondResult> {
     return this.rpc.request('permission/respond', params, options)
+  }
+
+  listPendingPermissions(
+    options?: RequestOptions,
+  ): Promise<PermissionPendingListResult> {
+    return this.rpc.request('permission/pending/list', {}, options)
   }
 
   getPermissionSettings(

@@ -177,11 +177,16 @@ function emitCompletedItem(
     content: readonly CoreJsonObject[]
   },
 ): void {
+  const startedAt = new Date().toISOString()
+  const completedAt = startedAt
   emit({
     type: 'item_started',
     item: {
       ...item,
       status: 'completed',
+      startedAt,
+      completedAt,
+      durationMs: 0,
     },
   })
   emit({
@@ -189,8 +194,12 @@ function emitCompletedItem(
     threadId: item.threadId,
     turnId: item.turnId,
     itemId: item.itemId,
+    kind: item.kind,
     status: 'completed',
     content: item.content,
+    startedAt,
+    completedAt,
+    durationMs: 0,
   })
 }
 

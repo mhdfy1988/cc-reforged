@@ -167,6 +167,11 @@ export function extractAttachmentSnapshotsFromContentBlocks(input: {
   identity?: DisplayEventIdentity
 }): AttachmentSnapshot[] {
   const attachmentBlocks = collectAttachmentBlocks(input.blocks)
+  if (input.source === 'ModelOutput') {
+    attachmentBlocks.push(
+      ...collectGeneratedOutputImagePathBlocks(input.blocks, attachmentBlocks),
+    )
+  }
   return attachmentBlocks.map((block, index) =>
     createAttachmentSnapshotFromBlock({
       block,
@@ -177,6 +182,78 @@ export function extractAttachmentSnapshotsFromContentBlocks(input: {
     }),
   )
 }
+
+export function removeGeneratedOutputImagePathsFromText(
+  text: string,
+  attachmentSnapshots: readonly AttachmentSnapshot[] | undefined,
+): string {
+  if (!text || !attachmentSnapshots?.length) {
+    return text
+  }
+  const generatedImagePathKeys = new Set(
+    attachmentSnapshots
+      .filter(
+        attachment =>
+          attachment.source === 'ModelOutput' &&
+          attachment.previewKind === 'image' &&
+          attachment.path,
+      )
+      .map(attachment => normalizePathKey(attachment.path ?? '')),
+  )
+  if (generatedImagePathKeys.size === 0) {
+    return text
+  }
+
+  const cleanedLines = text
+    .split(/\r?\n/)
+    .map(line =>
+      extractGeneratedOutputImagePaths(line).some(path =>
+        generatedImagePathKeys.has(normalizePathKey(path)),
+      )
+        ? removeGeneratedOutputImagePathText(line, generatedImagePathKeys)
+        : line,
+    )
+    .filter(line => line.trim())
+
+  return cleanedLines.join('\n').trim().replace(/[：:\-\s]+$/u, '')
+}
+
+export function removeUserUploadImagePlaceholderFromText(
+  text: string,
+  attachmentSnapshots: readonly AttachmentSnapshot[] | undefined,
+): string {
+  if (!text || !attachmentSnapshots?.length) {
+    return text
+  }
+  const hasUserImageAttachment = attachmentSnapshots.some(
+    attachment =>
+      attachment.source === 'UserUpload' && attachment.previewKind === 'image',
+  )
+  if (!hasUserImageAttachment) {
+    return text
+  }
+  return text
+    .split(/\r?\n/)
+    .filter(line => line.trim() !== '[图片]')
+    .join('\n')
+    .trim()
+}
+
+function removeGeneratedOutputImagePathText(
+  line: string,
+  generatedImagePathKeys: ReadonlySet<string>,
+): string {
+  let cleaned = line
+  for (const path of extractGeneratedOutputImagePaths(line)) {
+    if (generatedImagePathKeys.has(normalizePathKey(path))) {
+      cleaned = cleaned.replace(path, '')
+    }
+  }
+  return cleaned.replace(/[`"'：:\-\s]+$/u, '').trim()
+}
+
+const GENERATED_OUTPUT_IMAGE_PATH_PATTERN =
+  /[A-Za-z]:\\[^\r\n`"<>|]*?\.ccr\\generated_outputs\\[^\r\n`"<>|]*?\.(?:png|jpe?g|webp|gif)/gi
 
 export function extractFileDisplaySnapshotsFromToolSnapshot(
   snapshot: ToolSnapshot,
@@ -263,8 +340,120 @@ function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
         )
       }
     }
+
+    if (type === 'tool_use' && Array.isArray(block.result)) {
+      collected.push(
+        ...collectAttachmentBlocks(
+          block.result.filter(
+            (item): item is JsonObject =>
+              !!item && typeof item === 'object' && !Array.isArray(item),
+          ),
+        ),
+      )
+    }
+
+    if (type === 'tool_use') {
+      const result = getJsonObject(block.result)
+      if (Array.isArray(result?.output)) {
+        collected.push(
+          ...collectAttachmentBlocks(
+            result.output.filter(
+              (item): item is JsonObject =>
+                !!item && typeof item === 'object' && !Array.isArray(item),
+            ),
+          ),
+        )
+      }
+    }
   }
   return collected
+}
+
+function collectGeneratedOutputImagePathBlocks(
+  blocks: readonly JsonObject[],
+  existingBlocks: readonly JsonObject[],
+): JsonObject[] {
+  const existingPaths = new Set(
+    existingBlocks
+      .map(block => getAttachmentPath(block, getGeneratedArtifactSnapshotFromBlock(block)))
+      .filter((path): path is string => Boolean(path))
+      .map(normalizePathKey),
+  )
+  const generatedBlocks: JsonObject[] = []
+  for (const block of blocks) {
+    const type = getString(block, ['type'])
+    if (type !== 'text') {
+      continue
+    }
+    const text = getString(block, ['text'])
+    if (!text) {
+      continue
+    }
+    for (const path of extractGeneratedOutputImagePaths(text)) {
+      const key = normalizePathKey(path)
+      if (existingPaths.has(key)) {
+        continue
+      }
+      existingPaths.add(key)
+      generatedBlocks.push(createGeneratedOutputImageBlockFromPath(path))
+    }
+  }
+  return generatedBlocks
+}
+
+function extractGeneratedOutputImagePaths(text: string): string[] {
+  return Array.from(text.matchAll(GENERATED_OUTPUT_IMAGE_PATH_PATTERN), match =>
+    match[0].trim(),
+  )
+}
+
+function createGeneratedOutputImageBlockFromPath(path: string): JsonObject {
+  const displayName = getPathBasename(path)
+  const outputId = displayName.replace(/\.[^.]+$/, '')
+  const mimeType = getImageMimeTypeFromPath(path)
+  return {
+    type: 'image',
+    attachmentId: outputId,
+    displayName,
+    mimeType,
+    origin: 'model_output',
+    lifecycle: 'persisted',
+    safety: 'needs_review',
+    outputId,
+    savedPath: path,
+    generatedArtifact: {
+      id: outputId,
+      type: 'image',
+      status: 'saved',
+      savedPath: path,
+      mimeType,
+      outputId,
+      lifecycle: 'persisted',
+      safety: 'needs_review',
+    },
+    source: {
+      kind: 'file',
+      path,
+    },
+  }
+}
+
+function getImageMimeTypeFromPath(path: string): string {
+  const lower = path.toLowerCase()
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+    return 'image/jpeg'
+  }
+  if (lower.endsWith('.webp')) {
+    return 'image/webp'
+  }
+  if (lower.endsWith('.gif')) {
+    return 'image/gif'
+  }
+  return 'image/png'
+}
+
+function normalizePathKey(path: string): string {
+  return path.replace(/\//g, '\\').toLowerCase()
 }
 
 function createAttachmentSnapshotFromBlock(input: {
@@ -548,7 +737,7 @@ function extractFileToolSnapshot(
     diff: getFileToolDiff(snapshot),
     resultText: getFileToolResultText(snapshot.result),
     errorClass: snapshot.errorClass,
-    actions: getFileToolActions(pathFields.safety, operation),
+    actions: getFileToolActions(pathFields.safety, operation, path),
     toolUseId: snapshot.identity?.toolUseId,
     identity: snapshot.identity,
     raw: {
@@ -796,13 +985,18 @@ function getFileToolResultText(value: unknown): string | undefined {
 function getFileToolActions(
   safety: PathSafety,
   operation: FileToolOperation,
+  path?: string,
 ): FileToolAction[] {
   if (safety === 'remote' || operation === 'unknown') {
     return []
   }
 
+  if (operation === 'search' && isGlobPatternPath(path)) {
+    return ['copyReference']
+  }
+
   const actions: FileToolAction[] = ['copyPath']
-  if (safety !== 'unknown') {
+  if (safety !== 'unknown' && !isGlobPatternPath(path)) {
     actions.unshift('open')
     actions.push('reveal')
   }
@@ -810,6 +1004,10 @@ function getFileToolActions(
     actions.push('copyReference')
   }
   return actions
+}
+
+export function isGlobPatternPath(path: string | undefined): boolean {
+  return Boolean(path && /[*?[\]{}]/.test(path))
 }
 
 function inferEndLine(

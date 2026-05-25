@@ -21,6 +21,7 @@ import { quote } from './bash/shellQuote.js';
 import { formatNumber, formatTokens } from './format.js';
 import { getPewterLedgerVariant } from './planModeV2.js';
 import { jsonStringify } from './slowOperations.js';
+import { stripToolTimingMetadataFromContentBlock } from './toolTimingMetadata.js';
 const require = createRequire(import.meta.url);
 function isHookAttachmentWithName(attachment) {
     if (!isObject(attachment) || !('type' in attachment)) {
@@ -368,12 +369,17 @@ export function createProgressMessage({ toolUseID, parentToolUseID, data, }) {
         timestamp: new Date().toISOString(),
     };
 }
-export function createToolResultStopMessage(toolUseID) {
+export function createToolResultStopMessage(toolUseID, timing) {
     return {
         type: 'tool_result',
         content: CANCEL_MESSAGE,
         is_error: true,
         tool_use_id: toolUseID,
+        ...(timing?.durationMs !== undefined
+            ? { durationMs: timing.durationMs }
+            : {}),
+        ...(timing?.startedAt ? { startedAt: timing.startedAt } : {}),
+        ...(timing?.completedAt ? { completedAt: timing.completedAt } : {}),
     };
 }
 export function extractTag(html, tagName) {
@@ -1359,6 +1365,29 @@ function sanitizeErrorToolResultContent(messages) {
         return { ...msg, message: { ...msg.message, content: newContent } };
     });
 }
+function stripToolTimingMetadataFromUserMessage(message) {
+    const content = message.message.content;
+    if (!Array.isArray(content)) {
+        return message;
+    }
+    let changed = false;
+    const sanitizedContent = content.map(block => {
+        const sanitized = stripToolTimingMetadataFromContentBlock(block);
+        if (sanitized !== block) {
+            changed = true;
+        }
+        return sanitized;
+    });
+    return changed
+        ? {
+            ...message,
+            message: {
+                ...message.message,
+                content: sanitizedContent,
+            },
+        }
+        : message;
+}
 /**
  * Move text-block siblings off user messages that contain tool_reference.
  *
@@ -1570,6 +1599,8 @@ export function normalizeMessagesForAPI(messages, tools = []) {
                         }
                     }
                 }
+                normalizedMessage =
+                    stripToolTimingMetadataFromUserMessage(normalizedMessage);
                 // Server renders tool_reference expansion as <functions>...</functions>
                 // (same tags as the system prompt's tool block). When this is at the
                 // prompt tail, capybara models sample the stop sequence at ~10% (A/B:
@@ -1637,11 +1668,11 @@ export function normalizeMessagesForAPI(messages, tools = []) {
                                 const canonicalName = tool?.name ?? block.name;
                                 // When tool search is enabled, preserve all fields including 'caller'
                                 if (toolSearchEnabled) {
-                                    return {
+                                    return stripToolTimingMetadataFromContentBlock({
                                         ...block,
                                         name: canonicalName,
                                         input: normalizedInput,
-                                    };
+                                    });
                                 }
                                 // When tool search is NOT enabled, explicitly construct tool_use
                                 // block with only standard API fields to avoid sending fields like

@@ -186,8 +186,12 @@ export type CoreTurnEvent =
       threadId: string
       turnId: string
       itemId: string
+      kind?: string
       status: string
       content?: readonly CoreJsonObject[]
+      startedAt?: string
+      completedAt?: string
+      durationMs?: number
     }
   | {
       type: 'turn_completed'
@@ -207,6 +211,14 @@ export type CoreTurnEvent =
       threadId: string
       turnId: string
       reason: string
+      metadata?: CoreTurnMetadata
+    }
+  | {
+      type: 'context_compaction_started'
+      threadId: string
+      startedAt: string
+      trigger: 'manual' | 'auto'
+      turnId?: string
       metadata?: CoreTurnMetadata
     }
   | {
