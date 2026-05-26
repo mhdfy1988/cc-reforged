@@ -42,6 +42,9 @@ export function modelSupports1M(model) {
     return canonical.includes('claude-sonnet-4') || canonical.includes('opus-4-6');
 }
 export function getContextWindowForModel(model, betas) {
+    // Legacy Claude/model-string resolver. CCR multi-provider runtime code should
+    // use resolveRuntimeContextBudget so provider/profile model catalogs remain
+    // the single authority for context windows.
     // Allow override via environment variable (ant-only)
     // This takes precedence over all other context window resolution, including 1M detection,
     // so users can cap the effective context window for local decisions (auto-compact, etc.)

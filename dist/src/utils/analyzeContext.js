@@ -2,11 +2,11 @@ import { feature } from 'bun:bundle';
 import { createRequire } from 'node:module';
 import { getSystemPrompt, SYSTEM_PROMPT_DYNAMIC_BOUNDARY, } from 'src/constants/prompts.js';
 import { microcompactMessages } from 'src/services/compact/microCompact.js';
-import { getSdkBetas } from '../bootstrap/state.js';
 import { getCommandName } from '../commands.js';
 import { getSystemContext } from '../context.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js';
-import { AUTOCOMPACT_BUFFER_TOKENS, getEffectiveContextWindowSize, isAutoCompactEnabled, MANUAL_COMPACT_BUFFER_TOKENS, } from '../services/compact/autoCompact.js';
+import { getAutoCompactThreshold, isAutoCompactEnabled, MANUAL_COMPACT_BUFFER_TOKENS, } from '../services/compact/autoCompact.js';
+import { resolveRuntimeContextBudget } from '../services/llm/contextBudget.js';
 import { countMessagesTokensWithAPI, countTokensViaHaikuFallback, roughTokenCountEstimation, } from '../services/tokenEstimation.js';
 import { estimateSkillFrontmatterTokens } from '../skills/loadSkillsDir.js';
 import { findToolByName, toolMatchesName, } from '../Tool.js';
@@ -14,7 +14,6 @@ import { SKILL_TOOL_NAME } from '../tools/SkillTool/constants.js';
 import { getLimitedSkillToolCommands, getSkillToolInfo as getSlashCommandInfo, } from '../tools/SkillTool/prompt.js';
 import { toolToAPISchema } from './api.js';
 import { filterInjectedMemoryFiles, getMemoryFiles } from './claudemd.js';
-import { getContextWindowForModel } from './context.js';
 import { getCwd } from './cwd.js';
 import { logForDebugging } from './debug.js';
 import { isEnvTruthy } from './envUtils.js';
@@ -501,7 +500,9 @@ originalMessages) {
         mainLoopModel: model,
     });
     // Get context window size
-    const contextWindow = getContextWindowForModel(runtimeModel, getSdkBetas());
+    const contextWindow = resolveRuntimeContextBudget({
+        model: runtimeModel,
+    }).totalContextWindow;
     // Build the effective system prompt using the shared utility
     const defaultSystemPrompt = await getSystemPrompt(tools, runtimeModel);
     const effectiveSystemPrompt = buildEffectiveSystemPrompt({
@@ -533,7 +534,7 @@ originalMessages) {
     // Check if autocompact is enabled and calculate threshold
     const isAutoCompact = isAutoCompactEnabled();
     const autoCompactThreshold = isAutoCompact
-        ? getEffectiveContextWindowSize(model) - AUTOCOMPACT_BUFFER_TOKENS
+        ? getAutoCompactThreshold(model)
         : undefined;
     // Create categories
     const cats = [];

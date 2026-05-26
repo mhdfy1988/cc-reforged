@@ -67,9 +67,11 @@ export function Topbar(props: {
       : '未配置模型'
   const modelSwitchDisabled = props.busy || Boolean(props.contextStatus?.activeTurnId)
   const contextWindow =
+    props.contextStatus?.contextBudget?.totalContextWindow ??
     props.contextStatus?.contextWindow ??
-    props.compactStatus?.effectiveContextWindow ??
+    props.turnMetadata?.contextBudget?.totalContextWindow ??
     props.turnMetadata?.contextWindow ??
+    props.compactStatus?.contextBudget?.totalContextWindow ??
     props.contextWindow ??
     200_000
   const usedTokens =
@@ -463,6 +465,12 @@ function getContextTitle(
   compactStatus: RuntimeCompactStatus | null | undefined,
   memoryStatus: RuntimeMemoryStatus | null | undefined,
 ): string {
+  const effectiveInputWindow =
+    contextStatus?.contextBudget?.effectiveInputWindow ??
+    compactStatus?.contextBudget?.effectiveInputWindow
+  const autoCompactThreshold =
+    contextStatus?.contextBudget?.autoCompactThreshold ??
+    compactStatus?.contextBudget?.autoCompactThreshold
   const parts = [
     contextStatus?.available === false ? '上下文状态：尚未开始会话' : null,
     metadata?.profileName ?? contextStatus?.profileName
@@ -496,6 +504,16 @@ function getContextTitle(
       : null,
     compactStatus?.distanceToAutoCompact !== undefined
       ? `距离自动压缩：${formatTokenCount(compactStatus.distanceToAutoCompact)}`
+      : null,
+    effectiveInputWindow
+      ? `有效输入窗口：${formatTokenCount(
+          effectiveInputWindow,
+        )}`
+      : null,
+    autoCompactThreshold
+      ? `自动压缩阈值：${formatTokenCount(
+          autoCompactThreshold,
+        )}`
       : null,
     memoryStatus?.hookRegistered !== undefined
       ? `SessionMemory Hook：${memoryStatus.hookRegistered ? '已注册' : '未注册'}`

@@ -84,6 +84,7 @@ export type CoreTurnMetadata = {
   model?: string
   requestedModel?: string
   contextWindow?: number
+  contextBudget?: CoreJsonObject
   messageCount?: number
   lastMessageTypes?: string[]
   compactBoundaryCount?: number

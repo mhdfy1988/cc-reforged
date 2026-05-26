@@ -36,4 +36,28 @@ const NULL_RENDERING_ATTACHMENT_TYPE_SET = new Set(NULL_RENDERING_ATTACHMENT_TYP
 export function isNullRenderingAttachmentType(type) {
     return (typeof type === 'string' && NULL_RENDERING_ATTACHMENT_TYPE_SET.has(type));
 }
+export function isNullRenderingAttachmentValue(value) {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    const attachment = value;
+    const nestedFile = attachment.file && typeof attachment.file === 'object'
+        ? attachment.file
+        : undefined;
+    return [
+        attachment.type,
+        attachment.name,
+        attachment.displayName,
+        attachment.display_name,
+        attachment.fileName,
+        attachment.filename,
+        attachment.displayPath,
+        attachment.path,
+        nestedFile?.type,
+        nestedFile?.name,
+        nestedFile?.fileName,
+        nestedFile?.filename,
+        nestedFile?.path,
+    ].some(isNullRenderingAttachmentType);
+}
 //# sourceMappingURL=nullRenderingAttachmentTypes.js.map

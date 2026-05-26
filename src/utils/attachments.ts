@@ -85,7 +85,8 @@ import type { Command } from '../types/command.js'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { getProjectRoot } from '../bootstrap/state.js'
 import { formatCommandsWithinBudget } from '../tools/SkillTool/prompt.js'
-import { getContextWindowForModel } from './context.js'
+import { resolveRuntimeContextBudget } from '../services/llm/contextBudget.js'
+import { loadLlmConfig } from '../services/llm/llmConfig.js'
 import type { DiscoverySignal } from '../services/skillSearch/signals.js'
 
 const require = createRequire(import.meta.url)
@@ -147,7 +148,6 @@ import type { TaskType, TaskStatus } from '../Task.js'
 import {
   getOriginalCwd,
   getSessionId,
-  getSdkBetas,
   getTotalCostUSD,
   getTotalOutputTokens,
   getCurrentTurnTokenBudget,
@@ -2725,10 +2725,11 @@ async function getSkillListingAttachments(
   )
 
   // Format within budget using existing logic
-  const contextWindowTokens = getContextWindowForModel(
-    toolUseContext.options.mainLoopModel,
-    getSdkBetas(),
-  )
+  const llmConfig = loadLlmConfig()
+  const contextWindowTokens = resolveRuntimeContextBudget({
+    config: llmConfig,
+    model: toolUseContext.options.mainLoopModel,
+  }).totalContextWindow
   const content = formatCommandsWithinBudget(newSkills, contextWindowTokens)
 
   return [
@@ -3931,12 +3932,18 @@ export function getCompactionReminderAttachment(
     return []
   }
 
-  const contextWindow = getContextWindowForModel(model, getSdkBetas())
+  const llmConfig = loadLlmConfig()
+  const contextWindow = resolveRuntimeContextBudget({
+    config: llmConfig,
+    model,
+  }).totalContextWindow
   if (contextWindow < 1_000_000) {
     return []
   }
 
-  const effectiveWindow = getEffectiveContextWindowSize(model)
+  const effectiveWindow = getEffectiveContextWindowSize(model, {
+    config: llmConfig,
+  })
   const usedTokens = tokenCountWithEstimation(messages)
   if (usedTokens < effectiveWindow * 0.25) {
     return []

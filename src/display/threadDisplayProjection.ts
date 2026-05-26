@@ -12,7 +12,10 @@ import {
   createCcrErrorSnapshot,
   type CcrErrorSnapshot,
 } from '../types/errorSnapshot.js'
-import { isNullRenderingAttachmentType } from '../utils/nullRenderingAttachmentTypes.js'
+import {
+  isNullRenderingAttachmentType,
+  isNullRenderingAttachmentValue,
+} from '../utils/nullRenderingAttachmentTypes.js'
 import {
   getCcrToolDisplayMetadata,
   type CcrToolDisplayCategory,
@@ -287,6 +290,21 @@ export function projectThreadDisplayItem(
   const contentBlocks = normalizeCcrContentBlocks(content)
   const identity = createProjectionIdentity(item)
   const compactSnapshot = getCompactSnapshot(item.metadata)
+
+  if (isRawThinkingOnly(blocks) && item.type === 'assistant_message') {
+    return {
+      version: 1,
+      event: {
+        type: 'system_notice',
+        text: '模型只返回了推理内容，未返回最终回复。',
+        status: item.status,
+        sourceKind: item.sourceKind,
+        timelineHidden: true,
+        identity,
+        contentBlocks,
+      },
+    }
+  }
 
   if (
     (isRawThinkingOnly(blocks) && item.type !== 'thinking_summary') ||
@@ -681,10 +699,7 @@ function isNullRenderingContentBlock(block: JsonObject, type: string): boolean {
   if (type !== 'attachment') {
     return false
   }
-  const attachment = getJsonObject(block.attachment)
-  return Boolean(
-    attachment && isNullRenderingAttachmentType(getString(attachment, ['type']) ?? ''),
-  )
+  return isNullRenderingAttachmentValue(block.attachment)
 }
 
 function isRawThinkingOnly(blocks: Array<{ type?: unknown }>): boolean {
@@ -1783,8 +1798,7 @@ function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
     }
     if (type === 'attachment') {
       const attachment = getJsonObject(block.attachment)
-      const attachmentType = getString(attachment, ['type'])
-      if (attachment && !isNullRenderingAttachmentType(attachmentType ?? 'attachment')) {
+      if (attachment && !isNullRenderingAttachmentValue(attachment)) {
         collected.push(attachment)
       }
       continue
@@ -2139,6 +2153,9 @@ function getPathBasename(path: string): string {
 }
 
 function formatAttachmentSummary(value: unknown): string {
+  if (isNullRenderingAttachmentValue(value)) {
+    return ''
+  }
   const attachment = getJsonObject(value)
   if (!attachment) {
     return '附件'

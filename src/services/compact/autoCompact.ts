@@ -1,12 +1,10 @@
 import { feature } from 'bun:bundle'
 import { createRequire } from 'node:module'
 import { markPostCompaction } from 'src/bootstrap/state.js'
-import { getSdkBetas } from '../../bootstrap/state.js'
 import type { QuerySource } from '../../constants/querySource.js'
 import type { ToolUseContext } from '../../Tool.js'
 import type { Message } from '../../types/message.js'
 import { getGlobalConfig } from '../../utils/config.js'
-import { getContextWindowForModel } from '../../utils/context.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 import { hasExactErrorMessage } from '../../utils/errors.js'
@@ -14,8 +12,16 @@ import type { CacheSafeParams } from '../../utils/forkedAgent.js'
 import { logError } from '../../utils/log.js'
 import { tokenCountWithEstimation } from '../../utils/tokens.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../analytics/growthbook.js'
-import { getMaxOutputTokensForModel } from '../api/claude.js'
 import { notifyCompaction } from '../api/promptCacheBreakDetection.js'
+import {
+  CONTEXT_BUDGET_AUTO_COMPACT_BUFFER,
+  CONTEXT_BUDGET_ERROR_BUFFER,
+  CONTEXT_BUDGET_MANUAL_COMPACT_BUFFER,
+  CONTEXT_BUDGET_SUMMARY_OUTPUT_RESERVE,
+  CONTEXT_BUDGET_WARNING_BUFFER,
+  resolveRuntimeContextBudget,
+  type RuntimeContextBudgetInput,
+} from '../llm/contextBudget.js'
 import { setLastSummarizedMessageId } from '../SessionMemory/sessionMemoryUtils.js'
 import {
   type CompactionResult,
@@ -28,27 +34,17 @@ import { trySessionMemoryCompaction } from './sessionMemoryCompact.js'
 
 const require = createRequire(import.meta.url)
 
-// Reserve this many tokens for output during compaction
-// Based on p99.99 of compact summary output being 17,387 tokens.
-const MAX_OUTPUT_TOKENS_FOR_SUMMARY = 20_000
-
 // Returns the context window size minus the max output tokens for the model
-export function getEffectiveContextWindowSize(model: string): number {
-  const reservedTokensForSummary = Math.min(
-    getMaxOutputTokensForModel(model),
-    MAX_OUTPUT_TOKENS_FOR_SUMMARY,
-  )
-  let contextWindow = getContextWindowForModel(model, getSdkBetas())
-
-  const autoCompactWindow = process.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW
-  if (autoCompactWindow) {
-    const parsed = parseInt(autoCompactWindow, 10)
-    if (!isNaN(parsed) && parsed > 0) {
-      contextWindow = Math.min(contextWindow, parsed)
-    }
-  }
-
-  return contextWindow - reservedTokensForSummary
+export function getEffectiveContextWindowSize(
+  model: string,
+  input: RuntimeContextBudgetInput = {},
+): number {
+  return resolveRuntimeContextBudget({
+    ...input,
+    model,
+    reservedOutputTokens:
+      input.reservedOutputTokens ?? CONTEXT_BUDGET_SUMMARY_OUTPUT_RESERVE,
+  }).effectiveInputWindow
 }
 
 export type AutoCompactTrackingState = {
@@ -62,21 +58,27 @@ export type AutoCompactTrackingState = {
   consecutiveFailures?: number
 }
 
-export const AUTOCOMPACT_BUFFER_TOKENS = 13_000
-export const WARNING_THRESHOLD_BUFFER_TOKENS = 20_000
-export const ERROR_THRESHOLD_BUFFER_TOKENS = 20_000
-export const MANUAL_COMPACT_BUFFER_TOKENS = 3_000
+export const AUTOCOMPACT_BUFFER_TOKENS = CONTEXT_BUDGET_AUTO_COMPACT_BUFFER
+export const WARNING_THRESHOLD_BUFFER_TOKENS = CONTEXT_BUDGET_WARNING_BUFFER
+export const ERROR_THRESHOLD_BUFFER_TOKENS = CONTEXT_BUDGET_ERROR_BUFFER
+export const MANUAL_COMPACT_BUFFER_TOKENS = CONTEXT_BUDGET_MANUAL_COMPACT_BUFFER
 
 // Stop trying autocompact after this many consecutive failures.
 // BQ 2026-03-10: 1,279 sessions had 50+ consecutive failures (up to 3,272)
 // in a single session, wasting ~250K API calls/day globally.
 const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3
 
-export function getAutoCompactThreshold(model: string): number {
-  const effectiveContextWindow = getEffectiveContextWindowSize(model)
-
-  const autocompactThreshold =
-    effectiveContextWindow - AUTOCOMPACT_BUFFER_TOKENS
+export function getAutoCompactThreshold(
+  model: string,
+  input: RuntimeContextBudgetInput = {},
+): number {
+  const budget = resolveRuntimeContextBudget({
+    ...input,
+    model,
+    reservedOutputTokens:
+      input.reservedOutputTokens ?? CONTEXT_BUDGET_SUMMARY_OUTPUT_RESERVE,
+  })
+  const autocompactThreshold = budget.autoCompactThreshold
 
   // Override for easier testing of autocompact
   const envPercent = process.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE
@@ -84,7 +86,7 @@ export function getAutoCompactThreshold(model: string): number {
     const parsed = parseFloat(envPercent)
     if (!isNaN(parsed) && parsed > 0 && parsed <= 100) {
       const percentageThreshold = Math.floor(
-        effectiveContextWindow * (parsed / 100),
+        budget.effectiveInputWindow * (parsed / 100),
       )
       return Math.min(percentageThreshold, autocompactThreshold)
     }
@@ -96,6 +98,7 @@ export function getAutoCompactThreshold(model: string): number {
 export function calculateTokenWarningState(
   tokenUsage: number,
   model: string,
+  input: RuntimeContextBudgetInput = {},
 ): {
   percentLeft: number
   isAboveWarningThreshold: boolean
@@ -103,10 +106,10 @@ export function calculateTokenWarningState(
   isAboveAutoCompactThreshold: boolean
   isAtBlockingLimit: boolean
 } {
-  const autoCompactThreshold = getAutoCompactThreshold(model)
+  const autoCompactThreshold = getAutoCompactThreshold(model, input)
   const threshold = isAutoCompactEnabled()
     ? autoCompactThreshold
-    : getEffectiveContextWindowSize(model)
+    : getEffectiveContextWindowSize(model, input)
 
   const percentLeft = Math.max(
     0,
@@ -122,7 +125,7 @@ export function calculateTokenWarningState(
   const isAboveAutoCompactThreshold =
     isAutoCompactEnabled() && tokenUsage >= autoCompactThreshold
 
-  const actualContextWindow = getEffectiveContextWindowSize(model)
+  const actualContextWindow = getEffectiveContextWindowSize(model, input)
   const defaultBlockingLimit =
     actualContextWindow - MANUAL_COMPACT_BUFFER_TOKENS
 

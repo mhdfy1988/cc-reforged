@@ -726,8 +726,9 @@ function TurnRuntimeDetails(props: {
               )}{' '}
               /{' '}
               {formatNumber(
-                contextStatus?.contextWindow ??
-                  compactStatus?.effectiveContextWindow ??
+                contextStatus?.contextBudget?.totalContextWindow ??
+                  contextStatus?.contextWindow ??
+                  compactStatus?.contextBudget?.totalContextWindow ??
                   metadata?.contextWindow,
               )}
             </dd>

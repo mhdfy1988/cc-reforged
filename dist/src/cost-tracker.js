@@ -1,9 +1,10 @@
 import chalk from 'chalk';
-import { addToTotalCostState, addToTotalLinesChanged, getCostCounter, getModelUsage, getSdkBetas, getSessionId, getTokenCounter, getTotalAPIDuration, getTotalAPIDurationWithoutRetries, getTotalCacheCreationInputTokens, getTotalCacheReadInputTokens, getTotalCostUSD, getTotalDuration, getTotalInputTokens, getTotalLinesAdded, getTotalLinesRemoved, getTotalOutputTokens, getTotalToolDuration, getTotalWebSearchRequests, getUsageForModel, hasUnknownModelCost, resetCostState, resetStateForTests, setCostStateForRestore, setHasUnknownModelCost, } from './bootstrap/state.js';
+import { addToTotalCostState, addToTotalLinesChanged, getCostCounter, getModelUsage, getSessionId, getTokenCounter, getTotalAPIDuration, getTotalAPIDurationWithoutRetries, getTotalCacheCreationInputTokens, getTotalCacheReadInputTokens, getTotalCostUSD, getTotalDuration, getTotalInputTokens, getTotalLinesAdded, getTotalLinesRemoved, getTotalOutputTokens, getTotalToolDuration, getTotalWebSearchRequests, getUsageForModel, hasUnknownModelCost, resetCostState, resetStateForTests, setCostStateForRestore, setHasUnknownModelCost, } from './bootstrap/state.js';
 import { logEvent, } from './services/analytics/index.js';
 import { getAdvisorUsage } from './utils/advisor.js';
 import { getCurrentProjectConfig, saveCurrentProjectConfig, } from './utils/config.js';
-import { getContextWindowForModel, getModelMaxOutputTokens, } from './utils/context.js';
+import { resolveRuntimeContextBudget } from './services/llm/contextBudget.js';
+import { loadLlmConfig } from './services/llm/llmConfig.js';
 import { isFastModeEnabled } from './utils/fastMode.js';
 import { formatDuration, formatNumber } from './utils/format.js';
 import { getCanonicalName } from './utils/model/model.js';
@@ -27,8 +28,8 @@ export function getStoredSessionCosts(sessionId) {
             model,
             {
                 ...usage,
-                contextWindow: getContextWindowForModel(model, getSdkBetas()),
-                maxOutputTokens: getModelMaxOutputTokens(model).default,
+                contextWindow: usage.contextWindow ?? 0,
+                maxOutputTokens: usage.maxOutputTokens ?? 0,
             },
         ]));
     }
@@ -86,6 +87,8 @@ export function saveCurrentSessionCosts(fpsMetrics) {
                 cacheCreationInputTokens: usage.cacheCreationInputTokens,
                 webSearchRequests: usage.webSearchRequests,
                 costUSD: usage.costUSD,
+                contextWindow: usage.contextWindow,
+                maxOutputTokens: usage.maxOutputTokens,
             },
         ])),
         lastSessionId: getSessionId(),
@@ -170,8 +173,13 @@ function addToTotalModelUsage(cost, usage, model) {
     modelUsage.webSearchRequests +=
         usage.server_tool_use?.web_search_requests ?? 0;
     modelUsage.costUSD += cost;
-    modelUsage.contextWindow = getContextWindowForModel(model, getSdkBetas());
-    modelUsage.maxOutputTokens = getModelMaxOutputTokens(model).default;
+    const config = loadLlmConfig();
+    const contextBudget = resolveRuntimeContextBudget({
+        config,
+        model,
+    });
+    modelUsage.contextWindow = contextBudget.totalContextWindow;
+    modelUsage.maxOutputTokens = contextBudget.maxOutputTokens;
     return modelUsage;
 }
 export function addToTotalSessionCost(cost, usage, model) {

@@ -93,7 +93,7 @@ import { VALID_INSTALLABLE_SCOPES, VALID_UPDATE_SCOPES } from './services/plugin
 import { initBundledSkills } from './skills/bundled/index.js';
 import { getActiveAgentsFromList, getAgentDefinitionsWithOverrides, isBuiltInAgent, isCustomAgent, parseAgentsFromJson } from './tools/AgentTool/loadAgentsDir.js';
 import { assertMinVersion } from './utils/autoUpdater.js';
-import { getContextWindowForModel } from './utils/context.js';
+import { resolveRuntimeContextBudget } from './services/llm/contextBudget.js';
 import { loadConversationForResume } from './utils/conversationRecovery.js';
 import { buildDeepLinkBanner } from './utils/deepLink/banner.js';
 import { hasNodeOption, isBareMode, isEnvTruthy, isInProtectedNamespace } from './utils/envUtils.js';
@@ -152,7 +152,7 @@ import { setCwd } from 'src/utils/Shell.js';
 import { processResumedConversation } from 'src/utils/sessionRestore.js';
 import { parseSettingSourcesFlag } from 'src/utils/settings/constants.js';
 import { plural } from 'src/utils/stringUtils.js';
-import { getInitialMainLoopModel, getIsNonInteractiveSession, getSdkBetas, getSessionId, getUserMsgOptIn, setAllowedChannels, setAllowedSettingSources, setChromeFlagOverride, setClientType, setCwdState, setDirectConnectServerUrl, setFlagSettingsPath, setInitialMainLoopModel, setInlinePlugins, setIsInteractive, setKairosActive, setOriginalCwd, setQuestionPreviewFormat, setSdkBetas, setSessionBypassPermissionsMode, setSessionPersistenceDisabled, setSessionSource, setUserMsgOptIn, switchSession } from './bootstrap/state.js';
+import { getInitialMainLoopModel, getIsNonInteractiveSession, getSessionId, getUserMsgOptIn, setAllowedChannels, setAllowedSettingSources, setChromeFlagOverride, setClientType, setCwdState, setDirectConnectServerUrl, setFlagSettingsPath, setInitialMainLoopModel, setInlinePlugins, setIsInteractive, setKairosActive, setOriginalCwd, setQuestionPreviewFormat, setSdkBetas, setSessionBypassPermissionsMode, setSessionPersistenceDisabled, setSessionSource, setUserMsgOptIn, switchSession } from './bootstrap/state.js';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('./utils/permissions/autoModeState.js') : null;
 // TeleportRepoMismatchDialog, TeleportResumeWrapper dynamically imported at call sites
@@ -258,7 +258,7 @@ if (COMPILE_TIME_USER_TYPE !== 'ant' && isBeingDebugged()) {
  */
 function logSessionTelemetry() {
     const model = parseUserSpecifiedModel(getInitialMainLoopModel() ?? getDefaultMainLoopModel());
-    void logSkillsLoaded(getCwd(), getContextWindowForModel(model, getSdkBetas()));
+    void logSkillsLoaded(getCwd(), resolveRuntimeContextBudget({ model }).totalContextWindow);
     void loadAllPluginsCacheOnly().then(({ enabled, errors }) => {
         const managedNames = getManagedPluginNames();
         logPluginsEnabledForSession(enabled, managedNames, getPluginSeedDirs());

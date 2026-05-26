@@ -179,6 +179,18 @@ export function createDisplayEventFromCompletedItem(
   const blocks = normalizeContentBlocks(content)
   const contentBlocks = normalizeCcrContentBlocks(content)
   const identity = createDisplayEventIdentity(context ?? { itemId })
+  if (kind === 'assistant_message' && isRawThinkingOnly(blocks)) {
+    return {
+      id: itemId,
+      type: 'system_notice',
+      text: '模型只返回了推理内容，未返回最终回复。',
+      status: statusText,
+      sourceKind: kind,
+      timelineHidden: true,
+      identity,
+      contentBlocks,
+    }
+  }
   if (isRawThinkingOnly(blocks) || isSyntheticMessageOnly(blocks)) {
     return null
   }

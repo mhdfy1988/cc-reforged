@@ -4,6 +4,7 @@ import {
   getLlmRuntimeDisplayStatus,
 } from '../services/llm/runtimeStatus.js'
 import { loadLlmConfig } from '../services/llm/llmConfig.js'
+import { resolveRuntimeContextBudget } from '../services/llm/contextBudget.js'
 import { redactUrl } from './redaction.js'
 
 export function getCoreConfigSnapshot(): Record<string, unknown> {
@@ -24,6 +25,7 @@ export function getCoreConfigSnapshot(): Record<string, unknown> {
     }
   }
   const status = getLlmRuntimeDisplayStatus(config)
+  const contextBudget = resolveRuntimeContextBudget({ config })
 
   return {
     llm: {
@@ -31,6 +33,8 @@ export function getCoreConfigSnapshot(): Record<string, unknown> {
       provider: status.providerId,
       providerDisplayName: status.providerDisplayName,
       model: status.model,
+      contextWindow: contextBudget.totalContextWindow,
+      contextBudget,
       authStrategy: status.authStrategy,
       apiMode: status.apiMode,
       capabilities: status.capabilities,

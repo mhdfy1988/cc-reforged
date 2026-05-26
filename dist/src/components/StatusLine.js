@@ -4,7 +4,7 @@ import * as React from 'react';
 import { memo, useCallback, useEffect, useRef } from 'react';
 import { logEvent } from 'src/services/analytics/index.js';
 import { useAppState, useSetAppState } from 'src/state/AppState.js';
-import { getIsRemoteMode, getKairosActive, getMainThreadAgentType, getOriginalCwd, getSdkBetas, getSessionId } from '../bootstrap/state.js';
+import { getIsRemoteMode, getKairosActive, getMainThreadAgentType, getOriginalCwd, getSessionId } from '../bootstrap/state.js';
 import { DEFAULT_OUTPUT_STYLE_NAME } from '../constants/outputStyles.js';
 import { useNotifications } from '../context/notifications.js';
 import { getTotalAPIDuration, getTotalCost, getTotalDuration, getTotalInputTokens, getTotalLinesAdded, getTotalLinesRemoved, getTotalOutputTokens } from '../cost-tracker.js';
@@ -13,7 +13,8 @@ import { useSettings } from '../hooks/useSettings.js';
 import { Ansi, Box, Text } from '../ink.js';
 import { getRawUtilization } from '../services/claudeAiLimits.js';
 import { checkHasTrustDialogAccepted } from '../utils/config.js';
-import { calculateContextPercentages, getContextWindowForModel } from '../utils/context.js';
+import { calculateContextPercentages } from '../utils/context.js';
+import { resolveRuntimeContextBudget } from '../services/llm/contextBudget.js';
 import { getCwd } from '../utils/cwd.js';
 import { logForDebugging } from '../utils/debug.js';
 import { isFullscreenEnvEnabled } from '../utils/fullscreen.js';
@@ -44,7 +45,9 @@ function buildStatusLineCommandInput(permissionMode, exceeds200kTokens, settings
     });
     const outputStyleName = settings?.outputStyle || DEFAULT_OUTPUT_STYLE_NAME;
     const currentUsage = getCurrentUsage(messages);
-    const contextWindowSize = getContextWindowForModel(runtimeModel, getSdkBetas());
+    const contextWindowSize = resolveRuntimeContextBudget({
+        model: runtimeModel,
+    }).totalContextWindow;
     const contextPercentages = calculateContextPercentages(currentUsage, contextWindowSize);
     const sessionId = getSessionId();
     const sessionName = getCurrentSessionTitle(sessionId);

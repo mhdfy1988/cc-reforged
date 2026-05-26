@@ -404,10 +404,43 @@ function threadMessageToDisplayItem(
     contentIndex?: number
   },
 ): ThreadDisplayItem {
+  const content = sanitizeThreadDisplayContent(message.content)
+  if (
+    isThinkingOnlyContent(message.content) &&
+    message.role === 'assistant'
+  ) {
+    return createReasoningOnlyNoticeItem({
+      id: message.id,
+      text: message.text,
+      status: message.status,
+      sourceKind: message.kind,
+      createdAt: message.createdAt,
+      identity: {
+        threadId: context.threadId,
+        ...(context.sessionId ? { sessionId: context.sessionId } : {}),
+        itemId: message.id,
+        messageUuid: message.id,
+        sourceIndex: context.sourceIndex,
+        rawIndex: context.sourceIndex,
+        materializedIndex: context.sourceIndex,
+        ...(context.contentIndex !== undefined
+          ? { contentIndex: context.contentIndex }
+          : {}),
+      },
+      metadata: {
+        role: message.role,
+        ...(message.sourceType ? { sourceType: message.sourceType } : {}),
+      },
+    })
+  }
+
   return withThreadDisplayProjection({
     id: message.id,
-    type: getThreadDisplayItemType(message),
-    text: message.text,
+    type: getThreadDisplayItemType({
+      ...message,
+      ...(content !== undefined ? { content } : {}),
+    }),
+    text: extractDisplayText(content ?? message.text),
     ...(message.status ? { status: message.status } : {}),
     ...(message.kind ? { sourceKind: message.kind } : {}),
     ...(message.createdAt ? { createdAt: message.createdAt } : {}),
@@ -423,7 +456,7 @@ function threadMessageToDisplayItem(
         ? { contentIndex: context.contentIndex }
         : {}),
     },
-    ...(message.content !== undefined ? { content: message.content } : {}),
+    ...(content !== undefined ? { content } : {}),
     metadata: {
       role: message.role,
       ...(message.sourceType ? { sourceType: message.sourceType } : {}),
@@ -511,6 +544,9 @@ function getCoreEventDisplayPatchOperations(
       }
 
     case 'item_delta':
+      if (isThinkingContentBlock(event.delta)) {
+        return []
+      }
       return [
         {
           op: 'update_item',
@@ -839,14 +875,15 @@ function coreItemToThreadMessage(
   },
   content: CoreJsonObject[],
 ): AppServerThreadMessage {
+  const displayContent = sanitizeThreadDisplayContent(content)
   return {
     id: item.itemId,
     role: getThreadMessageRoleFromKind(item.kind),
-    text: extractDisplayText(content),
+    text: extractDisplayText(displayContent ?? content),
     status: item.status,
     kind: item.kind,
     createdAt: getStringField(item, ['startedAt', 'createdAt']),
-    content,
+    ...(displayContent !== undefined ? { content: displayContent } : {}),
   }
 }
 
@@ -854,14 +891,15 @@ function coreCompletedItemToThreadMessage(
   event: Extract<CoreTurnEvent, { type: 'item_completed' }>,
   content: CoreJsonObject[],
 ): AppServerThreadMessage {
+  const displayContent = sanitizeCoreJsonBlocks(content)
   return {
     id: event.itemId,
     role: getThreadMessageRoleFromKind(event.kind),
-    text: extractDisplayText(content),
+    text: extractDisplayText(displayContent ?? content),
     status: event.status,
     ...(event.kind ? { kind: event.kind } : {}),
     createdAt: event.startedAt,
-    content,
+    ...(displayContent !== undefined ? { content: displayContent } : {}),
   }
 }
 
@@ -901,10 +939,30 @@ function coreItemToThreadDisplayItem(item: CoreJsonObject & {
   kind: string
   status: string
 }): ThreadDisplayItem {
+  const content = sanitizeThreadDisplayContent(item.content)
+  if (isThinkingOnlyContent(item.content) && item.kind === 'assistant_message') {
+    return createReasoningOnlyNoticeItem({
+      id: item.itemId,
+      text: extractDisplayText(item.content),
+      status: item.status,
+      sourceKind: item.kind,
+      createdAt: getStringField(item, ['startedAt', 'createdAt']),
+      identity: {
+        threadId: item.threadId,
+        turnId: item.turnId,
+        itemId: item.itemId,
+        toolUseId: getStringField(item, ['toolUseId', 'toolUseID', 'tool_use_id']),
+      },
+      metadata: {
+        coreEventType: 'item_started',
+      },
+    })
+  }
+
   return withThreadDisplayProjection({
     id: item.itemId,
     type: getThreadDisplayItemTypeFromKind(item.kind),
-    text: extractDisplayText(item.content ?? item.text ?? item.summary),
+    text: extractDisplayText(content ?? item.text ?? item.summary),
     status: item.status,
     sourceKind: item.kind,
     createdAt: getStringField(item, ['startedAt', 'createdAt']),
@@ -914,7 +972,7 @@ function coreItemToThreadDisplayItem(item: CoreJsonObject & {
       itemId: item.itemId,
       toolUseId: getStringField(item, ['toolUseId', 'toolUseID', 'tool_use_id']),
     },
-    content: item.content,
+    ...(content !== undefined ? { content } : {}),
     metadata: {
       coreEventType: 'item_started',
     },
@@ -924,14 +982,39 @@ function coreItemToThreadDisplayItem(item: CoreJsonObject & {
 function completedCoreItemToThreadDisplayItem(
   event: Extract<CoreTurnEvent, { type: 'item_completed' }>,
 ): ThreadDisplayItem | null {
-  const type = getCompletedThreadDisplayItemType(event)
+  const content = sanitizeCoreJsonBlocks(event.content)
+  if (isThinkingOnlyContent(event.content) && event.kind === 'assistant_message') {
+    return createReasoningOnlyNoticeItem({
+      id: event.itemId,
+      text: extractDisplayText(event.content),
+      status: event.status,
+      sourceKind: event.kind,
+      createdAt: event.startedAt,
+      identity: {
+        threadId: event.threadId,
+        turnId: event.turnId,
+        itemId: event.itemId,
+        toolUseId: getToolUseIdFromContent(event.content),
+      },
+      metadata: {
+        coreEventType: event.type,
+        ...(event.completedAt ? { completedAt: event.completedAt } : {}),
+        ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+      },
+    })
+  }
+
+  const type = getCompletedThreadDisplayItemType({
+    ...event,
+    content: content ?? [],
+  })
   if (!type) {
     return null
   }
   return withThreadDisplayProjection({
     id: event.itemId,
     type,
-    text: extractDisplayText(event.content),
+    text: extractDisplayText(content),
     status: event.status,
     ...(event.kind ? { sourceKind: event.kind } : {}),
     createdAt: event.startedAt,
@@ -939,9 +1022,9 @@ function completedCoreItemToThreadDisplayItem(
       threadId: event.threadId,
       turnId: event.turnId,
       itemId: event.itemId,
-      toolUseId: getToolUseIdFromContent(event.content),
+      toolUseId: getToolUseIdFromContent(content),
     },
-    content: event.content,
+    ...(content !== undefined ? { content } : {}),
     metadata: {
       coreEventType: event.type,
       ...(event.completedAt ? { completedAt: event.completedAt } : {}),
@@ -958,6 +1041,70 @@ function getCompletedThreadDisplayItemType(
   }
   const type = getThreadDisplayItemTypeFromContent(event.content)
   return type === 'assistant_message' ? undefined : type
+}
+
+function sanitizeThreadDisplayContent(content: unknown): unknown {
+  if (!Array.isArray(content)) {
+    return content
+  }
+  return sanitizeCoreJsonBlocks(content.filter(isCoreJsonObject))
+}
+
+function sanitizeCoreJsonBlocks(
+  content: readonly CoreJsonObject[],
+): CoreJsonObject[] | undefined {
+  const displayBlocks = content.filter(
+    block => !isThinkingContentBlock(block),
+  )
+  return displayBlocks.length > 0 ? displayBlocks : undefined
+}
+
+function isThinkingOnlyContent(content: unknown): boolean {
+  return (
+    Array.isArray(content) &&
+    content.length > 0 &&
+    content.every(isThinkingContentBlock)
+  )
+}
+
+function isThinkingContentBlock(block: unknown): boolean {
+  if (!block || typeof block !== 'object' || Array.isArray(block)) {
+    return false
+  }
+  const type = (block as { type?: unknown }).type
+  return (
+    type === 'thinking' ||
+    type === 'redacted_thinking' ||
+    type === 'reasoning' ||
+    type === 'thinking_summary' ||
+    type === 'reasoning_summary' ||
+    type === 'summary_text'
+  )
+}
+
+function createReasoningOnlyNoticeItem(input: {
+  id: string
+  text?: string
+  status?: string
+  sourceKind?: string
+  createdAt?: string
+  identity: ThreadDisplayItem['identity']
+  metadata?: ThreadDisplayItem['metadata']
+}): ThreadDisplayItem {
+  return withThreadDisplayProjection({
+    id: input.id,
+    type: 'system_notice',
+    text: '模型只返回了推理内容，未返回最终回复。',
+    timelineHidden: true,
+    ...(input.status ? { status: input.status } : {}),
+    ...(input.sourceKind ? { sourceKind: input.sourceKind } : {}),
+    ...(input.createdAt ? { createdAt: input.createdAt } : {}),
+    ...(input.identity ? { identity: input.identity } : {}),
+    metadata: {
+      ...(input.metadata ?? {}),
+      displayReason: 'reasoning_only_without_final_response',
+    },
+  })
 }
 
 function withThreadDisplayProjection(item: ThreadDisplayItem): ThreadDisplayItem {

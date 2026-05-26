@@ -1,6 +1,6 @@
 import { normalizeCcrContentBlocks, } from '../types/contentBlocks.js';
 import { createCcrErrorSnapshot, } from '../types/errorSnapshot.js';
-import { isNullRenderingAttachmentType } from '../utils/nullRenderingAttachmentTypes.js';
+import { isNullRenderingAttachmentType, isNullRenderingAttachmentValue, } from '../utils/nullRenderingAttachmentTypes.js';
 import { getCcrToolDisplayMetadata, } from '../services/tools/toolDisplayCatalog.js';
 const SYNTHETIC_MESSAGE_TEXT = new Set([
     '[Request interrupted by user]',
@@ -19,7 +19,22 @@ export function projectThreadDisplayItem(item) {
     const contentBlocks = normalizeCcrContentBlocks(content);
     const identity = createProjectionIdentity(item);
     const compactSnapshot = getCompactSnapshot(item.metadata);
-    if (isRawThinkingOnly(blocks) || isSyntheticMessageOnly(blocks)) {
+    if (isRawThinkingOnly(blocks) && item.type === 'assistant_message') {
+        return {
+            version: 1,
+            event: {
+                type: 'system_notice',
+                text: '模型只返回了推理内容，未返回最终回复。',
+                status: item.status,
+                sourceKind: item.sourceKind,
+                timelineHidden: true,
+                identity,
+                contentBlocks,
+            },
+        };
+    }
+    if ((isRawThinkingOnly(blocks) && item.type !== 'thinking_summary') ||
+        isSyntheticMessageOnly(blocks)) {
         return undefined;
     }
     if (item.type === 'user_message' || item.sourceKind === 'user_message') {
@@ -30,11 +45,12 @@ export function projectThreadDisplayItem(item) {
             source: 'UserUpload',
             identity,
         });
+        const displayText = removeUserUploadImagePlaceholderFromMessageText(text, attachmentSnapshots);
         return {
             version: 1,
             event: {
                 type: 'user_message',
-                text,
+                text: displayText,
                 status: item.status ?? 'completed',
                 sourceKind: item.sourceKind ?? 'user_message',
                 identity,
@@ -128,7 +144,7 @@ export function projectThreadDisplayItem(item) {
         source: item.type === 'assistant_message' ? 'ModelOutput' : 'ToolResult',
         identity,
     });
-    const messageText = getMessageText(item, blocks);
+    const messageText = removeGeneratedOutputImagePathsFromMessageText(getMessageText(item, blocks), attachmentSnapshots);
     if (!messageText.trim() && attachmentSnapshots.length === 0) {
         return undefined;
     }
@@ -239,6 +255,49 @@ function getMessageText(item, blocks) {
     }
     return rendered || item.text;
 }
+function removeGeneratedOutputImagePathsFromMessageText(text, attachmentSnapshots) {
+    if (!text || attachmentSnapshots.length === 0) {
+        return text;
+    }
+    const generatedImagePathKeys = new Set(attachmentSnapshots
+        .filter(attachment => attachment.source === 'ModelOutput' &&
+        attachment.previewKind === 'image' &&
+        attachment.path)
+        .map(attachment => normalizePathKey(attachment.path ?? '')));
+    if (generatedImagePathKeys.size === 0) {
+        return text;
+    }
+    const cleanedLines = text
+        .split(/\r?\n/)
+        .map(line => extractGeneratedOutputImagePaths(line).some(path => generatedImagePathKeys.has(normalizePathKey(path)))
+        ? removeGeneratedOutputImagePathText(line, generatedImagePathKeys)
+        : line)
+        .filter(line => line.trim());
+    return cleanedLines.join('\n').trim().replace(/[：:\-\s]+$/u, '');
+}
+function removeGeneratedOutputImagePathText(line, generatedImagePathKeys) {
+    let cleaned = line;
+    for (const path of extractGeneratedOutputImagePaths(line)) {
+        if (generatedImagePathKeys.has(normalizePathKey(path))) {
+            cleaned = cleaned.replace(path, '');
+        }
+    }
+    return cleaned.replace(/[`"'：:\-\s]+$/u, '').trim();
+}
+function removeUserUploadImagePlaceholderFromMessageText(text, attachmentSnapshots) {
+    if (!text || attachmentSnapshots.length === 0) {
+        return text;
+    }
+    const hasUserImageAttachment = attachmentSnapshots.some(attachment => attachment.source === 'UserUpload' && attachment.previewKind === 'image');
+    if (!hasUserImageAttachment) {
+        return text;
+    }
+    return text
+        .split(/\r?\n/)
+        .filter(line => line.trim() !== '[图片]')
+        .join('\n')
+        .trim();
+}
 function isModelOutputAttachmentBlock(block) {
     const type = getString(block, ['type']) ?? '';
     if (type === 'image' || type === 'file' || type === 'audio' || type === 'video') {
@@ -293,8 +352,7 @@ function isNullRenderingContentBlock(block, type) {
     if (type !== 'attachment') {
         return false;
     }
-    const attachment = getJsonObject(block.attachment);
-    return Boolean(attachment && isNullRenderingAttachmentType(getString(attachment, ['type']) ?? ''));
+    return isNullRenderingAttachmentValue(block.attachment);
 }
 function isRawThinkingOnly(blocks) {
     return (blocks.length > 0 &&
@@ -1171,8 +1229,7 @@ function collectAttachmentBlocks(blocks) {
         }
         if (type === 'attachment') {
             const attachment = getJsonObject(block.attachment);
-            const attachmentType = getString(attachment, ['type']);
-            if (attachment && !isNullRenderingAttachmentType(attachmentType ?? 'attachment')) {
+            if (attachment && !isNullRenderingAttachmentValue(attachment)) {
                 collected.push(attachment);
             }
             continue;
@@ -1427,6 +1484,9 @@ function getPathBasename(path) {
     return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 }
 function formatAttachmentSummary(value) {
+    if (isNullRenderingAttachmentValue(value)) {
+        return '';
+    }
     const attachment = getJsonObject(value);
     if (!attachment) {
         return '附件';

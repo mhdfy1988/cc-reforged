@@ -9,6 +9,10 @@ import {
 } from '../services/llm/llmConfig.js'
 import { getLlmModelCatalogEntry } from '../services/llm/modelCatalog.js'
 import {
+  resolveRuntimeContextBudget,
+  type RuntimeContextBudget,
+} from '../services/llm/contextBudget.js'
+import {
   createLlmProviderDefinition,
   getBuiltinLlmProviderDefinition,
 } from '../services/llm/providerDefinitions.js'
@@ -422,6 +426,13 @@ export class CoreSessionService {
     const metadata = this.createContextMetadata(thread.threadId)
     const runtimeState = this.getThreadRuntimeState(thread.threadId)
     const estimatedTokens = tokenCountWithEstimation(messages)
+    const config = loadLlmConfig()
+    const model =
+      latestTurn?.metadata.requestedModel ??
+      latestTurn?.metadata.model ??
+      latestTurn?.model ??
+      config.model
+    const contextBudget = resolveRuntimeContextBudget({ config, model })
 
     return compactObject({
       available: true,
@@ -433,11 +444,10 @@ export class CoreSessionService {
       profileName: latestTurn?.metadata.profileName,
       apiMode: latestTurn?.metadata.apiMode,
       authStrategy: latestTurn?.metadata.authStrategy,
-      model:
-        latestTurn?.metadata.requestedModel ??
-        latestTurn?.metadata.model ??
-        latestTurn?.model,
-      contextWindow: latestTurn?.metadata.contextWindow,
+      model,
+      contextWindow:
+        latestTurn?.metadata.contextWindow ?? contextBudget.totalContextWindow,
+      contextBudget: toCoreContextBudget(contextBudget),
       estimatedTokens,
       usage: latestTurn?.metadata.usage,
       messageCount: metadata.messageCount,
@@ -473,16 +483,20 @@ export class CoreSessionService {
 
     const messages = this.getThreadMessages(thread.threadId)
     const latestTurn = this.getLatestTurnForThread(thread.threadId)
+    const config = loadLlmConfig()
     const model =
       latestTurn?.metadata.requestedModel ??
       latestTurn?.metadata.model ??
       latestTurn?.model ??
-      loadLlmConfig().model
+      config.model
+    const contextBudget = resolveRuntimeContextBudget({ config, model })
     const estimatedTokens = tokenCountWithEstimation(messages)
     const autoCompactEnabled = isAutoCompactEnabled()
-    const autoCompactThreshold = getAutoCompactThreshold(model)
-    const effectiveContextWindow = getEffectiveContextWindowSize(model)
-    const warning = calculateTokenWarningState(estimatedTokens, model)
+    const autoCompactThreshold = getAutoCompactThreshold(model, { config })
+    const effectiveContextWindow = getEffectiveContextWindowSize(model, { config })
+    const warning = calculateTokenWarningState(estimatedTokens, model, {
+      config,
+    })
     const contextCollapseEnabled = isContextCollapseEnabled()
     const contextCollapseStats = getContextCollapseStats()
 
@@ -491,6 +505,8 @@ export class CoreSessionService {
       threadId: thread.threadId,
       model,
       estimatedTokens,
+      contextWindow: contextBudget.totalContextWindow,
+      contextBudget: toCoreContextBudget(contextBudget),
       effectiveContextWindow,
       autoCompactEnabled,
       autoCompactThreshold,
@@ -1347,7 +1363,27 @@ function createInitialTurnMetadata(
     model: config.model,
     requestedModel: config.model,
     contextWindow: resolveContextWindow(config),
+    contextBudget: toCoreContextBudget(resolveRuntimeContextBudget({ config })),
   })
+}
+
+function toCoreContextBudget(
+  budget: RuntimeContextBudget,
+): Record<string, unknown> {
+  return {
+    providerId: budget.providerId,
+    ...(budget.profileId ? { profileId: budget.profileId } : {}),
+    model: budget.model,
+    totalContextWindow: budget.totalContextWindow,
+    maxOutputTokens: budget.maxOutputTokens,
+    reservedOutputTokens: budget.reservedOutputTokens,
+    effectiveInputWindow: budget.effectiveInputWindow,
+    autoCompactThreshold: budget.autoCompactThreshold,
+    warningThreshold: budget.warningThreshold,
+    errorThreshold: budget.errorThreshold,
+    blockingLimit: budget.blockingLimit,
+    source: budget.source,
+  }
 }
 
 function resolveContextWindow(config: ResolvedLlmConfig): number | undefined {

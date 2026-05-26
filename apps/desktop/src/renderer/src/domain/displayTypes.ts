@@ -235,6 +235,7 @@ export type DesktopStatus = {
       profileId?: string
       model?: string
       contextWindow?: number
+      contextBudget?: RuntimeContextBudget
       authStrategy?: LlmAuthStrategy
       apiMode?: LlmApiMode
       capabilities?: LlmProviderCapabilities
@@ -509,6 +510,7 @@ export type TurnRuntimeMetadata = {
   model?: string
   requestedModel?: string
   contextWindow?: number
+  contextBudget?: RuntimeContextBudget
   usage?: TurnUsage
   stopReason?: string
   requestId?: string
@@ -535,6 +537,7 @@ export type RuntimeContextStatus = {
   authStrategy?: LlmAuthStrategy | string
   model?: string
   contextWindow?: number
+  contextBudget?: RuntimeContextBudget
   estimatedTokens?: number
   messageCount?: number
   compactBoundaryCount?: number
@@ -558,12 +561,29 @@ export type RuntimeCompactStatus = {
   available?: boolean
   threadId?: string
   estimatedTokens?: number
+  contextWindow?: number
+  contextBudget?: RuntimeContextBudget
   effectiveContextWindow?: number
   autoCompactEnabled?: boolean
   autoCompactThreshold?: number
   distanceToAutoCompact?: number
   compactBoundaryCount?: number
   lastCompactBoundaryAt?: string
+}
+
+export type RuntimeContextBudget = {
+  providerId?: string
+  profileId?: string
+  model?: string
+  totalContextWindow?: number
+  maxOutputTokens?: number
+  reservedOutputTokens?: number
+  effectiveInputWindow?: number
+  autoCompactThreshold?: number
+  warningThreshold?: number
+  errorThreshold?: number
+  blockingLimit?: number
+  source?: string
 }
 
 export type RuntimeMemoryStatus = {

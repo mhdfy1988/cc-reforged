@@ -12,8 +12,8 @@ import { toolMatchesName, } from '../Tool.js';
 import { formatDeferredToolLine, isDeferredTool, TOOL_SEARCH_TOOL_NAME, } from '../tools/ToolSearchTool/prompt.js';
 import { countToolDefinitionTokens, TOOL_TOKEN_COUNT_OVERHEAD, } from './analyzeContext.js';
 import { count } from './array.js';
-import { getMergedBetas } from './betas.js';
-import { getContextWindowForModel } from './context.js';
+import { resolveRuntimeContextBudget } from '../services/llm/contextBudget.js';
+import { loadLlmConfig } from '../services/llm/llmConfig.js';
 import { logForDebugging } from './debug.js';
 import { isEnvDefinedFalsy, isEnvTruthy } from './envUtils.js';
 import { getAPIProvider, isFirstPartyAnthropicBaseUrl, } from './model/providers.js';
@@ -72,8 +72,10 @@ const CHARS_PER_TOKEN = 2.5;
  * Get the token threshold for auto-enabling tool search for a given model.
  */
 function getAutoToolSearchTokenThreshold(model) {
-    const betas = getMergedBetas(model);
-    const contextWindow = getContextWindowForModel(model, betas);
+    const contextWindow = resolveRuntimeContextBudget({
+        config: loadLlmConfig(),
+        model,
+    }).totalContextWindow;
     const percentage = getAutoToolSearchPercentage() / 100;
     return Math.floor(contextWindow * percentage);
 }

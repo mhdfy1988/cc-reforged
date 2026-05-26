@@ -5,7 +5,6 @@ import {
   addToTotalLinesChanged,
   getCostCounter,
   getModelUsage,
-  getSdkBetas,
   getSessionId,
   getTokenCounter,
   getTotalAPIDuration,
@@ -37,10 +36,8 @@ import {
   getCurrentProjectConfig,
   saveCurrentProjectConfig,
 } from './utils/config.js'
-import {
-  getContextWindowForModel,
-  getModelMaxOutputTokens,
-} from './utils/context.js'
+import { resolveRuntimeContextBudget } from './services/llm/contextBudget.js'
+import { loadLlmConfig } from './services/llm/llmConfig.js'
 import { isFastModeEnabled } from './utils/fastMode.js'
 import { formatDuration, formatNumber } from './utils/format.js'
 import type { FpsMetrics } from './utils/fpsTracker.js'
@@ -106,8 +103,8 @@ export function getStoredSessionCosts(
         model,
         {
           ...usage,
-          contextWindow: getContextWindowForModel(model, getSdkBetas()),
-          maxOutputTokens: getModelMaxOutputTokens(model).default,
+          contextWindow: usage.contextWindow ?? 0,
+          maxOutputTokens: usage.maxOutputTokens ?? 0,
         },
       ]),
     )
@@ -171,6 +168,8 @@ export function saveCurrentSessionCosts(fpsMetrics?: FpsMetrics): void {
           cacheCreationInputTokens: usage.cacheCreationInputTokens,
           webSearchRequests: usage.webSearchRequests,
           costUSD: usage.costUSD,
+          contextWindow: usage.contextWindow,
+          maxOutputTokens: usage.maxOutputTokens,
         },
       ]),
     ),
@@ -274,8 +273,13 @@ function addToTotalModelUsage(
   modelUsage.webSearchRequests +=
     usage.server_tool_use?.web_search_requests ?? 0
   modelUsage.costUSD += cost
-  modelUsage.contextWindow = getContextWindowForModel(model, getSdkBetas())
-  modelUsage.maxOutputTokens = getModelMaxOutputTokens(model).default
+  const config = loadLlmConfig()
+  const contextBudget = resolveRuntimeContextBudget({
+    config,
+    model,
+  })
+  modelUsage.contextWindow = contextBudget.totalContextWindow
+  modelUsage.maxOutputTokens = contextBudget.maxOutputTokens
   return modelUsage
 }
 

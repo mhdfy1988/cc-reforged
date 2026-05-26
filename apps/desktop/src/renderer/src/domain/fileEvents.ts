@@ -1,7 +1,7 @@
 import type { DisplayEventIdentity } from './eventContract.js'
 import type { JsonObject } from './displayTypes.js'
 import type { ToolSnapshot } from './toolEvents.js'
-import { isNullRenderingAttachmentType } from '../../../../../../src/utils/nullRenderingAttachmentTypes.js'
+import { isNullRenderingAttachmentValue } from '../../../../../../src/utils/nullRenderingAttachmentTypes.js'
 import type {
   CcrGeneratedArtifactSnapshot,
   CcrGeneratedArtifactStatus,
@@ -306,11 +306,7 @@ function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
 
     if (type === 'attachment') {
       const attachment = getJsonObject(block.attachment)
-      const attachmentType = getString(attachment, ['type'])
-      if (
-        attachment &&
-        !isNullRenderingAttachmentType(attachmentType ?? 'attachment')
-      ) {
+      if (attachment && !isNullRenderingAttachmentValue(attachment)) {
         collected.push(attachment)
       }
       continue

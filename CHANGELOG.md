@@ -11,6 +11,8 @@
 - 历史恢复新增 Codex-like ordered 语义适配层：transcript 会先生成 `classifiedTranscriptEvents`，再解析 `currentContextTailUuid`；`canonicalLeafUuid` 仅保留为兼容字段，不再表示 parent graph leaf。
 - 会话物化边界收口：`conversationMaterialization.ts` 自己读取 transcript JSONL 生成 ordered/rawIndex/坏行诊断；`sessionStorage.ts` 和 `buildConversationChain(...)` 仅保留为原生读侧 helper，不再承载 UI replay 或 current tail 产品语义。
 - 工具展示按来源 ID 归并：一个 `tool_use` 对应一张工具卡，`tool_result` 按 `tool_use_id` 回填对应工具卡，支持同一 turn 内多个工具调用和结果乱序返回。
+- 新增统一上下文预算 resolver，Core、Desktop 顶栏、自动压缩、附件预算、工具搜索和成本记录统一从当前 provider/profile/model 的模型目录读取上下文窗口，不再用旧 model-string 逻辑静默兜底。
+- 上下文预算状态新增 `totalContextWindow`、`effectiveInputWindow`、`autoCompactThreshold` 等字段，DeepSeek 1M、Codex OAuth 200K 等模型切换后会同步影响展示和压缩阈值。
 - 普通历史恢复提示不再显示易混淆的“已回放 N 条”数量；raw transcript、Core context、visible timeline 等数量仅用于调试和诊断。
 - Desktop 主路径不再支持旧 replay 展示协议、旧实时展示通知或缺失 projection 的 raw fallback；缺失 / 非法 projection 会展示协议错误卡。
 
@@ -24,7 +26,12 @@
 - 修复并行工具结果 sibling 或旧 parent leaf 多候选导致恢复失败，并被误显示成 `Session transcript not found` 的问题；物化失败现在保留具体 diagnostic code。
 - 修复并行工具结果按返回顺序或 raw content 误绑定，导致工具卡重复、错位或变成 assistant 普通文本的问题。
 - 修复权限请求被拒绝后，实时 UI 仍停留在“等待授权”直到刷新才变成失败卡的问题。
+- 修复 DeepSeek 等 1M 上下文模型仍按旧 200K 窗口触发自动压缩或顶部显示错误上限的问题。
+- 修复模型生成图片结果在普通 assistant 消息中只显示本地路径、不渲染附件卡的问题。
+- 修复 `todo_reminder` 等内部附件在 Desktop 主聊天流中被显示成普通“附件”消息的问题。
+- 修复 reasoning / thinking-only 消息把隐藏推理内容送入 Desktop patch，可能导致界面卡顿或出现混淆占位的问题；现在仅显示受控系统提示。
 - 补齐会话恢复 smoke 覆盖：普通恢复、compact 后恢复、compact 前 UI 历史可见、并行工具、tool_result 乱序、多 legacy leaf 诊断、物化失败 diagnostic、App Server snapshot 和 Desktop display events。
+- 新增上下文预算 smoke，固定验证 DeepSeek 1M 和 Codex OAuth 200K 预算口径。
 
 ## 0.5.1 - 2026-05-22
 

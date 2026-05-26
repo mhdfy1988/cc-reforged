@@ -83,6 +83,7 @@ const MAX_VISIBLE_THINKING_CHARS = 6000
 const THINKING_PREFIX = '思考\n'
 const THINKING_TRUNCATED_NOTICE =
   '思考内容较长，已折叠前面部分，仅显示最近内容。'
+const REASONING_ONLY_NOTICE_TEXT = '模型只返回了推理内容，未返回最终回复。'
 
 export function selectChatMessages(state: SessionState): ChatMessage[] {
   return selectTimelineEvents(state).map(displayEventToChatMessage)
@@ -93,6 +94,7 @@ export function selectTimelineEvents(state: SessionState): DisplayEvent[] {
     event =>
       event.type !== 'todo_list' &&
       event.type !== 'thinking_summary' &&
+      event.text !== REASONING_ONLY_NOTICE_TEXT &&
       !event.timelineHidden,
   )
 }

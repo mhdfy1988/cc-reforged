@@ -82,6 +82,13 @@ assert(
 )
 
 assert(
+  fixture.hiddenContentBlocks.some(
+    block => block?.attachment?.name === 'todo_reminder',
+  ),
+  'fixture must include a named todo_reminder hidden content block regression case',
+)
+
+assert(
   !events.some(event => event.text?.includes('todo_reminder')),
   'todo_reminder must not be rendered as a visible attachment event',
 )
@@ -515,6 +522,132 @@ async function assertToolErrorClassifications() {
 
       assert.equal(getConfirmDialogToneClass('warning'), 'confirm-dialog--warning')
       assert.equal(getConfirmDialogToneClass('danger'), 'confirm-dialog--danger')
+
+      const namedTodoReminderEvent = createDisplayEventFromCompletedItem(
+        'fixture-named-todo-reminder',
+        'assistant_message',
+        [
+          {
+            type: 'attachment',
+            attachment: {
+              name: 'todo_reminder',
+              content: [],
+              itemCount: 0,
+            },
+          },
+        ],
+        'completed',
+      )
+      assert.equal(
+        namedTodoReminderEvent,
+        null,
+        'named todo_reminder attachment must not render as a visible assistant message',
+      )
+
+      const namedTodoReminderProjection = projectThreadDisplayItem({
+        id: 'fixture-named-todo-reminder-projection',
+        type: 'assistant_message',
+        sourceKind: 'assistant_message',
+        status: 'completed',
+        text: '',
+        contentBlocks: [
+          {
+            type: 'attachment',
+            attachment: {
+              name: 'todo_reminder',
+              content: [],
+              itemCount: 0,
+            },
+          },
+        ],
+      })
+      assert.equal(
+        namedTodoReminderProjection,
+        undefined,
+        'named todo_reminder attachment must not produce a thread display projection',
+      )
+
+      const reasoningOnlyEvent = createDisplayEventFromCompletedItem(
+        'fixture-reasoning-only-assistant',
+        'assistant_message',
+        [{ type: 'reasoning', text: '内部推理，不应直接展示' }],
+        'completed',
+      )
+      assert.equal(reasoningOnlyEvent?.type, 'system_notice')
+      assert.equal(
+        reasoningOnlyEvent?.text,
+        '模型只返回了推理内容，未返回最终回复。',
+      )
+      assert.equal(
+        reasoningOnlyEvent?.text.includes('内部推理'),
+        false,
+        'reasoning-only fallback must not expose hidden reasoning content',
+      )
+
+      const reasoningOnlyProjection = projectThreadDisplayItem({
+        id: 'fixture-reasoning-only-projection',
+        type: 'assistant_message',
+        sourceKind: 'assistant_message',
+        status: 'completed',
+        text: '',
+        content: [{ type: 'reasoning', text: '内部推理，不应直接展示' }],
+      })
+      assert.equal(reasoningOnlyProjection?.event.type, 'system_notice')
+      assert.equal(
+        reasoningOnlyProjection?.event.text,
+        '模型只返回了推理内容，未返回最终回复。',
+      )
+      assert.equal(
+        reasoningOnlyProjection?.event.text.includes('内部推理'),
+        false,
+        'projection fallback must not expose hidden reasoning content',
+      )
+
+      const reasoningDeltaPatch = coreEventToThreadDisplayPatchNotification({
+        type: 'item_delta',
+        threadId: 'thread_fixture',
+        turnId: 'turn_reasoning_only',
+        itemId: 'item_reasoning_delta',
+        delta: {
+          type: 'reasoning',
+          text: 'DeepSeek streaming reasoning delta',
+        },
+      })
+      assert.equal(
+        reasoningDeltaPatch,
+        null,
+        'reasoning deltas must not be sent to Desktop display patches',
+      )
+
+      const reasoningOnlyCompletedPatch = coreEventToThreadDisplayPatchNotification({
+        type: 'item_completed',
+        threadId: 'thread_fixture',
+        turnId: 'turn_reasoning_only',
+        itemId: 'item_reasoning_completed',
+        kind: 'assistant_message',
+        status: 'completed',
+        content: [
+          {
+            type: 'reasoning',
+            text: 'DeepSeek completed reasoning content',
+          },
+        ],
+      })
+      assert.equal(reasoningOnlyCompletedPatch?.method, 'thread/display/patch')
+      const reasoningCompletedItem =
+        reasoningOnlyCompletedPatch?.params.operations?.[0]?.item
+      assert.equal(reasoningCompletedItem?.type, 'system_notice')
+      assert.equal(
+        reasoningCompletedItem?.text,
+        '模型只返回了推理内容，未返回最终回复。',
+      )
+      assert.equal(
+        JSON.stringify(reasoningCompletedItem).includes(
+          'DeepSeek completed reasoning content',
+        ),
+        false,
+        'reasoning-only completed patch must not send hidden reasoning to Desktop',
+      )
 
       const providerError = createErrorDisplayEvent(
         'fixture-provider-auth-error',

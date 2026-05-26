@@ -47,3 +47,31 @@ export function isNullRenderingAttachmentType(
     typeof type === 'string' && NULL_RENDERING_ATTACHMENT_TYPE_SET.has(type)
   )
 }
+
+export function isNullRenderingAttachmentValue(value: unknown): boolean {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const attachment = value as Record<string, unknown>
+  const nestedFile =
+    attachment.file && typeof attachment.file === 'object'
+      ? (attachment.file as Record<string, unknown>)
+      : undefined
+
+  return [
+    attachment.type,
+    attachment.name,
+    attachment.displayName,
+    attachment.display_name,
+    attachment.fileName,
+    attachment.filename,
+    attachment.displayPath,
+    attachment.path,
+    nestedFile?.type,
+    nestedFile?.name,
+    nestedFile?.fileName,
+    nestedFile?.filename,
+    nestedFile?.path,
+  ].some(isNullRenderingAttachmentType)
+}

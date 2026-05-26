@@ -104,6 +104,8 @@ export type ProjectConfig = {
       cacheCreationInputTokens: number
       webSearchRequests: number
       costUSD: number
+      contextWindow?: number
+      maxOutputTokens?: number
     }
   >
   lastSessionMetrics?: Record<string, number>

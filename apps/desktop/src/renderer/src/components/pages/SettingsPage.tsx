@@ -210,7 +210,9 @@ function DiagnosticsSettingsSection(props: {
       <InfoCard
         title="上下文窗口"
         value={String(
-          props.status?.context?.contextWindow ??
+          props.status?.context?.contextBudget?.totalContextWindow ??
+            props.status?.context?.contextWindow ??
+            props.status?.config?.llm?.contextBudget?.totalContextWindow ??
             props.status?.config?.llm?.contextWindow ??
             'unknown',
         )}

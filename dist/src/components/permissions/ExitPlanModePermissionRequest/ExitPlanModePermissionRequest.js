@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { useNotifications } from 'src/context/notifications.js';
 import { logEvent } from 'src/services/analytics/index.js';
 import { useAppState, useAppStateStore, useSetAppState } from 'src/state/AppState.js';
-import { getSdkBetas, getSessionId, isSessionPersistenceDisabled, setHasExitedPlanMode, setNeedsAutoModeExitAttachment, setNeedsPlanModeExitAttachment } from '../../../bootstrap/state.js';
+import { getSessionId, isSessionPersistenceDisabled, setHasExitedPlanMode, setNeedsAutoModeExitAttachment, setNeedsPlanModeExitAttachment } from '../../../bootstrap/state.js';
 import { generateSessionName } from '../../../commands/rename/generateSessionName.js';
 import { launchUltraplan } from '../../../commands/ultraplan.js';
 import { Box, Text } from '../../../ink.js';
@@ -15,7 +15,8 @@ import { EXIT_PLAN_MODE_V2_TOOL_NAME } from '../../../tools/ExitPlanModeTool/con
 import { TEAM_CREATE_TOOL_NAME } from '../../../tools/TeamCreateTool/constants.js';
 import { getEmptyToolPermissionContext } from '../../../Tool.js';
 import { isAgentSwarmsEnabled } from '../../../utils/agentSwarmsEnabled.js';
-import { calculateContextPercentages, getContextWindowForModel } from '../../../utils/context.js';
+import { calculateContextPercentages } from '../../../utils/context.js';
+import { resolveRuntimeContextBudget } from '../../../services/llm/contextBudget.js';
 import { getExternalEditor } from '../../../utils/editor.js';
 import { getDisplayPath } from '../../../utils/file.js';
 import { toIDEDisplayName } from '../../../utils/ide.js';
@@ -694,7 +695,9 @@ function getContextUsedPercent(usage, permissionMode) {
         mainLoopModel: getMainLoopModel(),
         exceeds200kTokens: false
     });
-    const contextWindowSize = getContextWindowForModel(runtimeModel, getSdkBetas());
+    const contextWindowSize = resolveRuntimeContextBudget({
+        model: runtimeModel,
+    }).totalContextWindow;
     const { used } = calculateContextPercentages({
         input_tokens: usage.input_tokens,
         cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,

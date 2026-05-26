@@ -2,6 +2,7 @@ import { getUserMcpFilePath } from '../services/mcp/config.js';
 import { getClaudeConfigHomeDir } from '../utils/envUtils.js';
 import { getLlmRuntimeDisplayStatus, } from '../services/llm/runtimeStatus.js';
 import { loadLlmConfig } from '../services/llm/llmConfig.js';
+import { resolveRuntimeContextBudget } from '../services/llm/contextBudget.js';
 import { redactUrl } from './redaction.js';
 export function getCoreConfigSnapshot() {
     const config = loadLlmConfig();
@@ -21,12 +22,15 @@ export function getCoreConfigSnapshot() {
         };
     }
     const status = getLlmRuntimeDisplayStatus(config);
+    const contextBudget = resolveRuntimeContextBudget({ config });
     return {
         llm: {
             profileId: status.profileId,
             provider: status.providerId,
             providerDisplayName: status.providerDisplayName,
             model: status.model,
+            contextWindow: contextBudget.totalContextWindow,
+            contextBudget,
             authStrategy: status.authStrategy,
             apiMode: status.apiMode,
             capabilities: status.capabilities,
