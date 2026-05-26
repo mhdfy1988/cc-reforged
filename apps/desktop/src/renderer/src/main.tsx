@@ -31,6 +31,10 @@ import { PluginsPage } from './components/pages/PluginsPage.js'
 import { SettingsPage } from './components/pages/SettingsPage.js'
 import { SkillsPage } from './components/pages/SkillsPage.js'
 import {
+  UsageStatisticsPage,
+  type UsageStatisticsFilters,
+} from './components/pages/UsageStatisticsPage.js'
+import {
   createErrorDisplayEvent,
   createSystemNoticeEvent,
   createUserDisplayEvent,
@@ -62,6 +66,7 @@ import type {
   ThreadHistoryItem,
   ThreadHistoryState,
   TurnRuntimeMetadata,
+  UsageStatisticsState,
 } from './domain/displayTypes.js'
 import type { UpdateActionKind } from './domain/updateDisplay.js'
 import type {
@@ -120,6 +125,8 @@ function App({ initialStatus = null }: AppProps) {
   const [page, setPage] = useState<PageId>('chat')
   const [returnPage, setReturnPage] = useState<AppPageId>('chat')
   const [logSnapshot, setLogSnapshot] = useState<LogSnapshot | null>(null)
+  const [usageStats, setUsageStats] = useState<UsageStatisticsState | null>(null)
+  const [usageStatsError, setUsageStatsError] = useState<string | null>(null)
   const [permissionSettings, setPermissionSettings] =
     useState<PermissionSettingsState | null>(
       initialStatus?.permissionSettings ?? null,
@@ -229,6 +236,13 @@ function App({ initialStatus = null }: AppProps) {
       return
     }
     void refreshMcpManagement().catch(() => undefined)
+  }, [page])
+
+  useEffect(() => {
+    if (page !== 'usage') {
+      return
+    }
+    void refreshUsageStatistics().catch(() => undefined)
   }, [page])
 
   const model = status?.config?.llm?.model ?? '模型待加载'
@@ -1229,6 +1243,21 @@ function App({ initialStatus = null }: AppProps) {
     navigatePage('models')
   }
 
+  async function refreshUsageStatistics(
+    filters?: UsageStatisticsFilters,
+  ): Promise<void> {
+    try {
+      setUsageStatsError(null)
+      const nextStats = (await window.ccr.getUsageStatistics({
+        ...(filters ?? {}),
+        limit: 500,
+      })) as UsageStatisticsState
+      setUsageStats(nextStats)
+    } catch (error) {
+      setUsageStatsError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   function navigatePage(nextPage: PageId): void {
     if (nextPage === 'settings') {
       if (page !== 'settings') {
@@ -1420,6 +1449,15 @@ function App({ initialStatus = null }: AppProps) {
                 onTestConnection={(providerId, modelId, profileId) =>
                   void testModelConnection(providerId, modelId, profileId)
                 }
+              />
+            ) : null}
+
+            {page === 'usage' ? (
+              <UsageStatisticsPage
+                busy={busy}
+                error={usageStatsError}
+                stats={usageStats}
+                onRefresh={refreshUsageStatistics}
               />
             ) : null}
 

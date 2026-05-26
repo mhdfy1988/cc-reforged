@@ -4,6 +4,7 @@ import { switchSession } from '../bootstrap/state.js';
 import { loadLlmConfig, } from '../services/llm/llmConfig.js';
 import { getLlmModelCatalogEntry } from '../services/llm/modelCatalog.js';
 import { resolveRuntimeContextBudget, } from '../services/llm/contextBudget.js';
+import { appendModelUsageEvent } from '../services/usage/modelUsageEvents.js';
 import { createLlmProviderDefinition, getBuiltinLlmProviderDefinition, } from '../services/llm/providerDefinitions.js';
 import { createCoreQueryRuntime, runCoreQueryTurn, } from './coreQueryTurnRunner.js';
 import { runCoreImageGenerationTurn, shouldRunCoreImageGenerationTurn, } from './coreImageGenerationTurnRunner.js';
@@ -19,6 +20,8 @@ import { asSessionId } from '../types/ids.js';
 import { tokenCountWithEstimation } from '../utils/tokens.js';
 import { getSessionMemoryPath } from '../utils/permissions/filesystem.js';
 import { errorMessage } from '../utils/errors.js';
+import { logError } from '../utils/log.js';
+import { calculateKnownCostFromTokens } from '../utils/modelCost.js';
 import { provisionContentReplacementState } from '../utils/toolResultStorage.js';
 import { materializeConversationFromTranscript } from '../utils/conversationMaterialization.js';
 import { createFileStateCacheWithSizeLimit, READ_FILE_STATE_CACHE_SIZE, } from '../utils/fileStateCache.js';
@@ -573,6 +576,11 @@ export class CoreSessionService {
                     latencyMs: computeLatencyMs(turn),
                     stopReason: runtimeMetadata.stopReason ?? 'completed',
                 });
+                recordCoreModelUsageEvent({
+                    turn,
+                    thread,
+                    workspace,
+                });
                 thread.activeTurnId = null;
                 this.options.emit({
                     type: 'turn_completed',
@@ -983,6 +991,117 @@ function createThreadRuntimeState(messages) {
 }
 function isTurnCancelled(turn) {
     return turn.status === 'cancelled';
+}
+function recordCoreModelUsageEvent(input) {
+    const { turn, thread, workspace } = input;
+    const usage = turn.metadata.usage;
+    if (!usage) {
+        logUsageEventSkip('missing_usage', turn);
+        return;
+    }
+    const contextBudget = parseRuntimeContextBudget(turn.metadata.contextBudget);
+    if (!contextBudget) {
+        logUsageEventSkip('missing_context_budget', turn);
+        return;
+    }
+    const model = turn.metadata.model ?? turn.model;
+    const tokens = {
+        inputTokens: usage.inputTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
+        cacheReadInputTokens: usage.cacheReadInputTokens ?? 0,
+        cacheCreationInputTokens: usage.cacheCreationInputTokens ?? 0,
+    };
+    const totalTokens = usage.totalTokens ??
+        tokens.inputTokens +
+            tokens.outputTokens +
+            tokens.cacheReadInputTokens +
+            tokens.cacheCreationInputTokens;
+    const costUSD = calculateKnownCostFromTokens(model, tokens);
+    appendModelUsageEvent({
+        provider: turn.metadata.provider ?? turn.provider,
+        providerDisplayName: turn.metadata.providerDisplayName,
+        profileId: turn.metadata.profileId,
+        profileName: turn.metadata.profileName,
+        model,
+        requestedModel: turn.metadata.requestedModel,
+        contextBudget,
+        usage: {
+            ...tokens,
+            totalTokens,
+        },
+        ...(costUSD !== undefined
+            ? {
+                costUSD,
+                costStatus: 'calculated',
+            }
+            : {
+                costStatus: 'unavailable',
+                costUnavailableReason: 'model_pricing_not_configured',
+            }),
+        sessionId: asString(thread.metadata.sessionId),
+        threadId: thread.threadId,
+        turnId: turn.turnId,
+        requestId: turn.metadata.requestId,
+        cwd: workspace.path,
+        projectPath: workspace.path,
+        source: 'core',
+        timestamp: turn.completedAt ?? undefined,
+    });
+}
+function logUsageEventSkip(reason, turn) {
+    logError(new Error([
+        'Skipped ModelUsageEvent write.',
+        `reason=${reason}`,
+        `threadId=${turn.threadId}`,
+        `turnId=${turn.turnId}`,
+        `model=${turn.metadata.model ?? turn.model}`,
+        `requestId=${turn.metadata.requestId ?? ''}`,
+    ].join(' ')));
+}
+function parseRuntimeContextBudget(value) {
+    if (!value) {
+        return null;
+    }
+    const providerId = asString(value.providerId);
+    const model = asString(value.model);
+    const source = asString(value.source);
+    const totalContextWindow = asNumber(value.totalContextWindow);
+    const maxOutputTokens = asNumber(value.maxOutputTokens);
+    const reservedOutputTokens = asNumber(value.reservedOutputTokens);
+    const effectiveInputWindow = asNumber(value.effectiveInputWindow);
+    const autoCompactThreshold = asNumber(value.autoCompactThreshold);
+    const warningThreshold = asNumber(value.warningThreshold);
+    const errorThreshold = asNumber(value.errorThreshold);
+    const blockingLimit = asNumber(value.blockingLimit);
+    if (!providerId ||
+        !model ||
+        !source ||
+        totalContextWindow === undefined ||
+        maxOutputTokens === undefined ||
+        reservedOutputTokens === undefined ||
+        effectiveInputWindow === undefined ||
+        autoCompactThreshold === undefined ||
+        warningThreshold === undefined ||
+        errorThreshold === undefined ||
+        blockingLimit === undefined) {
+        return null;
+    }
+    return {
+        providerId,
+        ...(asString(value.profileId)
+            ? { profileId: asString(value.profileId) }
+            : {}),
+        model,
+        totalContextWindow,
+        maxOutputTokens,
+        reservedOutputTokens,
+        effectiveInputWindow,
+        autoCompactThreshold,
+        warningThreshold,
+        errorThreshold,
+        blockingLimit,
+        source: source,
+    };
 }
 function createInitialTurnMetadata(config) {
     const profile = config.profiles[config.currentProfileId];

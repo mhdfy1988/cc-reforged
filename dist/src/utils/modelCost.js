@@ -105,6 +105,13 @@ export function getModelCosts(model, usage) {
     }
     return costs;
 }
+export function getKnownModelCosts(model, usage) {
+    const shortName = getCanonicalName(model);
+    if (shortName === firstPartyNameToCanonical(CLAUDE_OPUS_4_6_CONFIG.firstParty)) {
+        return getOpus46CostTier(usage.speed === 'fast');
+    }
+    return MODEL_COSTS[shortName];
+}
 function trackUnknownModelCost(model, shortName) {
     logEvent('tengu_unknown_model_cost', {
         model: model,
@@ -130,6 +137,19 @@ export function calculateCostFromTokens(model, tokens) {
         cache_creation_input_tokens: tokens.cacheCreationInputTokens,
     };
     return calculateUSDCost(model, usage);
+}
+export function calculateKnownCostFromTokens(model, tokens) {
+    const usage = {
+        input_tokens: tokens.inputTokens,
+        output_tokens: tokens.outputTokens,
+        cache_read_input_tokens: tokens.cacheReadInputTokens,
+        cache_creation_input_tokens: tokens.cacheCreationInputTokens,
+    };
+    const modelCosts = getKnownModelCosts(model, usage);
+    if (!modelCosts) {
+        return undefined;
+    }
+    return tokensToUSDCost(modelCosts, usage);
 }
 function formatPrice(price) {
     // Format price: integers without decimals, others with 2 decimal places

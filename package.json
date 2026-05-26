@@ -92,6 +92,7 @@
     "smoke:llm-runtime": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-runtime.mjs",
     "smoke:llm-runtime-status": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-llm-runtime-status.mjs",
     "smoke:context-budget": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-context-budget.mjs",
+    "smoke:model-usage-events": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-model-usage-events.mjs",
     "smoke:system-identity": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-system-identity.mjs",
     "smoke:app-server": "node ./scripts/smoke-app-server.mjs",
     "smoke:app-server-context": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-app-server-context-state.mjs",

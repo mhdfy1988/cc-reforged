@@ -13,6 +13,8 @@
 - 工具展示按来源 ID 归并：一个 `tool_use` 对应一张工具卡，`tool_result` 按 `tool_use_id` 回填对应工具卡，支持同一 turn 内多个工具调用和结果乱序返回。
 - 新增统一上下文预算 resolver，Core、Desktop 顶栏、自动压缩、附件预算、工具搜索和成本记录统一从当前 provider/profile/model 的模型目录读取上下文窗口，不再用旧 model-string 逻辑静默兜底。
 - 上下文预算状态新增 `totalContextWindow`、`effectiveInputWindow`、`autoCompactThreshold` 等字段，DeepSeek 1M、Codex OAuth 200K 等模型切换后会同步影响展示和压缩阈值。
+- 新增模型调用使用事件流，CLI 和 Desktop / App Server Core 会在模型调用结算后写入用户级 `~/.ccr/usage-events/YYYY-MM.jsonl`，固化 provider、profile、model、contextBudget、usage、cost 状态和 request/session/thread 信息，供后续独立“使用统计”页面聚合；未知价格表不会写入伪造成本。
+- Desktop 新增独立“使用统计”页面，读取 usage event 展示今天、本月、当前筛选、provider、profile、model、project 汇总和单次调用明细，并支持日期、provider、profile、model、project、session、thread 过滤。
 - 普通历史恢复提示不再显示易混淆的“已回放 N 条”数量；raw transcript、Core context、visible timeline 等数量仅用于调试和诊断。
 - Desktop 主路径不再支持旧 replay 展示协议、旧实时展示通知或缺失 projection 的 raw fallback；缺失 / 非法 projection 会展示协议错误卡。
 

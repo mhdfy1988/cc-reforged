@@ -48,6 +48,18 @@ type ModelListInput = {
   provider?: string
 }
 
+type UsageStatisticsInput = {
+  from?: string
+  to?: string
+  provider?: string
+  profileId?: string
+  model?: string
+  projectPath?: string
+  sessionId?: string
+  threadId?: string
+  limit?: number
+}
+
 type AuthLoginInput = {
   profileId?: string
   provider?: string
@@ -337,6 +349,8 @@ const api = {
   runCompact: (instruction?: string) =>
     ipcRenderer.invoke('ccr:compact-run', instruction),
   getLogs: () => ipcRenderer.invoke('ccr:get-logs'),
+  getUsageStatistics: (input?: UsageStatisticsInput) =>
+    ipcRenderer.invoke('ccr:get-usage-statistics', input ?? {}),
   getUpdateStatus: () => ipcRenderer.invoke('ccr:update-status'),
   checkForUpdates: () => ipcRenderer.invoke('ccr:update-check'),
   downloadUpdate: () => ipcRenderer.invoke('ccr:update-download'),

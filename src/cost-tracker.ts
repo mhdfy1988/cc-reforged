@@ -38,11 +38,16 @@ import {
 } from './utils/config.js'
 import { resolveRuntimeContextBudget } from './services/llm/contextBudget.js'
 import { loadLlmConfig } from './services/llm/llmConfig.js'
+import {
+  appendModelUsageEvent,
+  type ModelUsageEventSource,
+} from './services/usage/modelUsageEvents.js'
+import { getCwd } from './utils/cwd.js'
 import { isFastModeEnabled } from './utils/fastMode.js'
 import { formatDuration, formatNumber } from './utils/format.js'
 import type { FpsMetrics } from './utils/fpsTracker.js'
 import { getCanonicalName } from './utils/model/model.js'
-import { calculateUSDCost } from './utils/modelCost.js'
+import { calculateUSDCost, getKnownModelCosts } from './utils/modelCost.js'
 export {
   getTotalCostUSD as getTotalCost,
   getTotalDuration,
@@ -78,6 +83,13 @@ type StoredCostState = {
 
 type CostTrackerUsage = Usage & {
   speed?: string | null
+}
+
+type AddToTotalSessionCostMetadata = {
+  requestId?: string
+  source?: ModelUsageEventSource
+  cwd?: string
+  projectPath?: string
 }
 
 /**
@@ -287,9 +299,11 @@ export function addToTotalSessionCost(
   cost: number,
   usage: CostTrackerUsage,
   model: string,
+  metadata: AddToTotalSessionCostMetadata = {},
 ): number {
   const modelUsage = addToTotalModelUsage(cost, usage, model)
   addToTotalCostState(cost, modelUsage, model)
+  recordCliModelUsageEvent(cost, usage, model, metadata)
 
   const attrs =
     isFastModeEnabled() && usage.speed === 'fast'
@@ -325,7 +339,63 @@ export function addToTotalSessionCost(
       advisorCost,
       advisorUsage,
       advisorUsage.model,
+      {
+        ...metadata,
+        source: 'advisor',
+      },
     )
   }
   return totalCost
+}
+
+function recordCliModelUsageEvent(
+  cost: number,
+  usage: CostTrackerUsage,
+  model: string,
+  metadata: AddToTotalSessionCostMetadata,
+): void {
+  const config = loadLlmConfig()
+  const profile = config.profiles[config.currentProfileId]
+  const providerConfig = config.providers[config.provider]
+  const contextBudget = resolveRuntimeContextBudget({
+    config,
+    model,
+  })
+  const cwd = metadata.cwd ?? getCwd()
+  const hasKnownCost = getKnownModelCosts(model, usage) !== undefined
+  appendModelUsageEvent({
+    provider: config.provider,
+    providerDisplayName: providerConfig?.displayName ?? config.provider,
+    profileId: profile?.id ?? config.currentProfileId,
+    profileName: profile?.name,
+    model,
+    requestedModel: model,
+    contextBudget,
+    usage: {
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+      cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+      totalTokens:
+        usage.input_tokens +
+        usage.output_tokens +
+        (usage.cache_read_input_tokens ?? 0) +
+        (usage.cache_creation_input_tokens ?? 0),
+      webSearchRequests: usage.server_tool_use?.web_search_requests,
+    },
+    ...(hasKnownCost
+      ? {
+          costUSD: cost,
+          costStatus: 'calculated' as const,
+        }
+      : {
+          costStatus: 'unavailable' as const,
+          costUnavailableReason: 'model_pricing_not_configured',
+        }),
+    sessionId: getSessionId(),
+    requestId: metadata.requestId,
+    cwd,
+    projectPath: metadata.projectPath ?? cwd,
+    source: metadata.source ?? 'cli',
+  })
 }

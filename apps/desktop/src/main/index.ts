@@ -9,6 +9,10 @@ import {
   startManagedStdioAppServerClient,
   type ManagedStdioAppServerClient,
 } from '../../../../src/app-server/client/index.js'
+import {
+  readModelUsageStats,
+  type ModelUsageStatsInput,
+} from '../../../../src/services/usage/modelUsageStats.js'
 import { mergeThreadDisplaySnapshot } from './threadDisplaySnapshotMerge.js'
 import { DesktopUpdateService } from './updateService.js'
 import type { DesktopUpdateState, DesktopUpdateStatus } from './updateState.js'
@@ -3037,6 +3041,13 @@ ipcMain.handle('ccr:compact-run', async (_event, instruction?: string) => {
 ipcMain.handle('ccr:get-logs', async () => {
   return readDesktopLogs()
 })
+
+ipcMain.handle(
+  'ccr:get-usage-statistics',
+  async (_event, input?: ModelUsageStatsInput) => {
+    return readModelUsageStats(input ?? {})
+  },
+)
 
 ipcMain.handle('ccr:update-status', async () => {
   return ensureUpdateService().getState()

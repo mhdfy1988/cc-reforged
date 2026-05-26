@@ -4,6 +4,7 @@ type NavIconName =
   | 'chat'
   | 'models'
   | 'mcp'
+  | 'usage'
   | 'skills'
   | 'plugins'
   | 'logs'
@@ -39,6 +40,14 @@ export function Sidebar(props: {
         >
           <NavIcon name="mcp" />
           <span className="nav-label">MCP</span>
+        </button>
+        <button
+          className={`nav-item ${props.page === 'usage' ? 'active' : ''}`}
+          title="使用统计"
+          onClick={() => props.onChangePage('usage')}
+        >
+          <NavIcon name="usage" />
+          <span className="nav-label">统计</span>
         </button>
         <button
           className={`nav-item ${props.page === 'skills' ? 'active' : ''}`}
@@ -111,6 +120,16 @@ function NavIcon(props: { name: NavIconName }) {
           <circle cx="6" cy="12" r="2.6" />
           <circle cx="18" cy="6" r="2.6" />
           <circle cx="18" cy="18" r="2.6" />
+        </>
+      ) : null}
+      {props.name === 'usage' ? (
+        <>
+          <path d="M4 19V5" />
+          <path d="M4 19h16" />
+          <path d="M8 16v-5" />
+          <path d="M12 16V8" />
+          <path d="M16 16v-9" />
+          <path d="M20 16v-3" />
         </>
       ) : null}
       {props.name === 'skills' ? (

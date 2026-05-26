@@ -5,10 +5,12 @@ import { getAdvisorUsage } from './utils/advisor.js';
 import { getCurrentProjectConfig, saveCurrentProjectConfig, } from './utils/config.js';
 import { resolveRuntimeContextBudget } from './services/llm/contextBudget.js';
 import { loadLlmConfig } from './services/llm/llmConfig.js';
+import { appendModelUsageEvent, } from './services/usage/modelUsageEvents.js';
+import { getCwd } from './utils/cwd.js';
 import { isFastModeEnabled } from './utils/fastMode.js';
 import { formatDuration, formatNumber } from './utils/format.js';
 import { getCanonicalName } from './utils/model/model.js';
-import { calculateUSDCost } from './utils/modelCost.js';
+import { calculateUSDCost, getKnownModelCosts } from './utils/modelCost.js';
 export { getTotalCostUSD as getTotalCost, getTotalDuration, getTotalAPIDuration, getTotalAPIDurationWithoutRetries, addToTotalLinesChanged, getTotalLinesAdded, getTotalLinesRemoved, getTotalInputTokens, getTotalOutputTokens, getTotalCacheReadInputTokens, getTotalCacheCreationInputTokens, getTotalWebSearchRequests, formatCost, hasUnknownModelCost, resetStateForTests, resetCostState, setHasUnknownModelCost, getModelUsage, getUsageForModel, };
 /**
  * Gets stored cost state from project config for a specific session.
@@ -182,9 +184,10 @@ function addToTotalModelUsage(cost, usage, model) {
     modelUsage.maxOutputTokens = contextBudget.maxOutputTokens;
     return modelUsage;
 }
-export function addToTotalSessionCost(cost, usage, model) {
+export function addToTotalSessionCost(cost, usage, model, metadata = {}) {
     const modelUsage = addToTotalModelUsage(cost, usage, model);
     addToTotalCostState(cost, modelUsage, model);
+    recordCliModelUsageEvent(cost, usage, model, metadata);
     const attrs = isFastModeEnabled() && usage.speed === 'fast'
         ? { model, speed: 'fast' }
         : { model };
@@ -210,8 +213,56 @@ export function addToTotalSessionCost(cost, usage, model) {
             cache_creation_input_tokens: advisorUsage.cache_creation_input_tokens ?? 0,
             cost_usd_micros: Math.round(advisorCost * 1_000_000),
         });
-        totalCost += addToTotalSessionCost(advisorCost, advisorUsage, advisorUsage.model);
+        totalCost += addToTotalSessionCost(advisorCost, advisorUsage, advisorUsage.model, {
+            ...metadata,
+            source: 'advisor',
+        });
     }
     return totalCost;
+}
+function recordCliModelUsageEvent(cost, usage, model, metadata) {
+    const config = loadLlmConfig();
+    const profile = config.profiles[config.currentProfileId];
+    const providerConfig = config.providers[config.provider];
+    const contextBudget = resolveRuntimeContextBudget({
+        config,
+        model,
+    });
+    const cwd = metadata.cwd ?? getCwd();
+    const hasKnownCost = getKnownModelCosts(model, usage) !== undefined;
+    appendModelUsageEvent({
+        provider: config.provider,
+        providerDisplayName: providerConfig?.displayName ?? config.provider,
+        profileId: profile?.id ?? config.currentProfileId,
+        profileName: profile?.name,
+        model,
+        requestedModel: model,
+        contextBudget,
+        usage: {
+            inputTokens: usage.input_tokens,
+            outputTokens: usage.output_tokens,
+            cacheReadInputTokens: usage.cache_read_input_tokens ?? 0,
+            cacheCreationInputTokens: usage.cache_creation_input_tokens ?? 0,
+            totalTokens: usage.input_tokens +
+                usage.output_tokens +
+                (usage.cache_read_input_tokens ?? 0) +
+                (usage.cache_creation_input_tokens ?? 0),
+            webSearchRequests: usage.server_tool_use?.web_search_requests,
+        },
+        ...(hasKnownCost
+            ? {
+                costUSD: cost,
+                costStatus: 'calculated',
+            }
+            : {
+                costStatus: 'unavailable',
+                costUnavailableReason: 'model_pricing_not_configured',
+            }),
+        sessionId: getSessionId(),
+        requestId: metadata.requestId,
+        cwd,
+        projectPath: metadata.projectPath ?? cwd,
+        source: metadata.source ?? 'cli',
+    });
 }
 //# sourceMappingURL=cost-tracker.js.map

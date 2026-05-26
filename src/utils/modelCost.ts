@@ -167,6 +167,21 @@ export function getModelCosts(model: string, usage: UsageWithSpeed): ModelCosts 
   return costs
 }
 
+export function getKnownModelCosts(
+  model: string,
+  usage: UsageWithSpeed,
+): ModelCosts | undefined {
+  const shortName = getCanonicalName(model)
+
+  if (
+    shortName === firstPartyNameToCanonical(CLAUDE_OPUS_4_6_CONFIG.firstParty)
+  ) {
+    return getOpus46CostTier(usage.speed === 'fast')
+  }
+
+  return MODEL_COSTS[shortName]
+}
+
 function trackUnknownModelCost(model: string, shortName: ModelShortName): void {
   logEvent('tengu_unknown_model_cost', {
     model: model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -203,6 +218,28 @@ export function calculateCostFromTokens(
     cache_creation_input_tokens: tokens.cacheCreationInputTokens,
   } as Usage
   return calculateUSDCost(model, usage)
+}
+
+export function calculateKnownCostFromTokens(
+  model: string,
+  tokens: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadInputTokens: number
+    cacheCreationInputTokens: number
+  },
+): number | undefined {
+  const usage: Usage = {
+    input_tokens: tokens.inputTokens,
+    output_tokens: tokens.outputTokens,
+    cache_read_input_tokens: tokens.cacheReadInputTokens,
+    cache_creation_input_tokens: tokens.cacheCreationInputTokens,
+  } as Usage
+  const modelCosts = getKnownModelCosts(model, usage)
+  if (!modelCosts) {
+    return undefined
+  }
+  return tokensToUSDCost(modelCosts, usage)
 }
 
 function formatPrice(price: number): string {

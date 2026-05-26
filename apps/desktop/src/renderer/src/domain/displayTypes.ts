@@ -783,10 +783,72 @@ export type PageId =
   | 'chat'
   | 'models'
   | 'mcp'
+  | 'usage'
   | 'skills'
   | 'plugins'
   | 'settings'
   | 'logs'
+
+export type UsageStatisticsGroup = {
+  key: string
+  label: string
+  eventCount: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadInputTokens: number
+  cacheCreationInputTokens: number
+  totalTokens: number
+  knownCostUSD: number
+  unknownCostEvents: number
+}
+
+export type UsageStatisticsEvent = {
+  eventId: string
+  timestamp: string
+  provider: string
+  providerDisplayName?: string
+  profileId?: string
+  profileName?: string
+  model: string
+  requestedModel?: string
+  inputTokens: number
+  outputTokens: number
+  cacheReadInputTokens: number
+  cacheCreationInputTokens: number
+  totalTokens: number
+  costStatus: 'calculated' | 'unavailable'
+  costUSD?: number
+  costUnavailableReason?: string
+  requestId?: string
+  sessionId?: string
+  threadId?: string
+  turnId?: string
+  cwd?: string
+  projectPath?: string
+  source: string
+}
+
+export type UsageStatisticsState = {
+  usageEventsDir: string
+  from: string
+  to: string
+  generatedAt: string
+  filesRead: string[]
+  badLineCount: number
+  diagnostics: Array<{
+    file: string
+    line: number
+    error: string
+  }>
+  totals: UsageStatisticsGroup
+  today: UsageStatisticsGroup
+  month: UsageStatisticsGroup
+  byProvider: UsageStatisticsGroup[]
+  byProfile: UsageStatisticsGroup[]
+  byModel: UsageStatisticsGroup[]
+  byProject: UsageStatisticsGroup[]
+  events: UsageStatisticsEvent[]
+}
 
 export type LogSnapshot = {
   logDir: string
