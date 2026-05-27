@@ -14,9 +14,10 @@
 - 新增统一上下文预算 resolver，Core、Desktop 顶栏、自动压缩、附件预算、工具搜索和成本记录统一从当前 provider/profile/model 的模型目录读取上下文窗口，不再用旧 model-string 逻辑静默兜底。
 - 上下文预算状态新增 `totalContextWindow`、`effectiveInputWindow`、`autoCompactThreshold` 等字段，DeepSeek 1M、Codex OAuth 200K 等模型切换后会同步影响展示和压缩阈值。
 - 新增模型调用使用事件流，CLI 和 Desktop / App Server Core 会在模型调用结算后写入用户级 `~/.ccr/usage-events/YYYY-MM.jsonl`，固化 provider、profile、model、contextBudget、usage、cost 状态和 request/session/thread 信息，供后续独立“使用统计”页面聚合；未知价格表不会写入伪造成本。
-- Desktop 新增独立“使用统计”页面，读取 usage event 展示今天、本月、当前筛选、provider、profile、model、project 汇总和单次调用明细，并支持日期、provider、profile、model、project、session、thread 过滤。
+- Desktop 新增独立“使用统计”页面，读取 usage event 按时间范围展示 token 使用量和调用次数报表，支持按 provider、profile、model、project 聚合，并提供调用报表和单次调用事实详情。
 - 普通历史恢复提示不再显示易混淆的“已回放 N 条”数量；raw transcript、Core context、visible timeline 等数量仅用于调试和诊断。
 - Desktop 主路径不再支持旧 replay 展示协议、旧实时展示通知或缺失 projection 的 raw fallback；缺失 / 非法 projection 会展示协议错误卡。
+- MCP Playwright 浏览器工具现在会在 CCR 出站层阻止 `file://` 导航，并提示先启动本地 HTTP 服务后再访问 localhost，避免外部 MCP 长时间卡住。
 
 ### BUG 修复
 
@@ -32,6 +33,7 @@
 - 修复模型生成图片结果在普通 assistant 消息中只显示本地路径、不渲染附件卡的问题。
 - 修复 `todo_reminder` 等内部附件在 Desktop 主聊天流中被显示成普通“附件”消息的问题。
 - 修复 reasoning / thinking-only 消息把隐藏推理内容送入 Desktop patch，可能导致界面卡顿或出现混淆占位的问题；现在仅显示受控系统提示。
+- 修复 Desktop 工具进度事件在 `thread/display` 协议路径下绕过工具生命周期合并，残留为“工具进度 · 正在执行”卡的问题。
 - 补齐会话恢复 smoke 覆盖：普通恢复、compact 后恢复、compact 前 UI 历史可见、并行工具、tool_result 乱序、多 legacy leaf 诊断、物化失败 diagnostic、App Server snapshot 和 Desktop display events。
 - 新增上下文预算 smoke，固定验证 DeepSeek 1M 和 Codex OAuth 200K 预算口径。
 
