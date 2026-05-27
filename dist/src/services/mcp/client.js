@@ -138,6 +138,27 @@ function getMcpToolTimeoutMs() {
     return (parseInt(process.env.MCP_TOOL_TIMEOUT || '', 10) ||
         DEFAULT_MCP_TOOL_TIMEOUT_MS);
 }
+function isFileUrl(value) {
+    if (typeof value !== 'string') {
+        return false;
+    }
+    try {
+        return new URL(value).protocol === 'file:';
+    }
+    catch {
+        return false;
+    }
+}
+function getBlockedFileUrlForMcpTool(tool, args) {
+    const normalizedTool = tool.toLowerCase();
+    if (!normalizedTool.includes('browser_navigate')) {
+        return undefined;
+    }
+    return isFileUrl(args.url) ? args.url : undefined;
+}
+function createMcpFileUrlBlockedError(tool, url) {
+    return new TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(`MCP tool "${tool}" cannot open file:// URLs. Start a local HTTP server for this file and navigate to a localhost URL instead. Blocked URL: ${url}`, 'MCP file URL blocked before tool call');
+}
 import { isClaudeInChromeMCPServer } from '../../utils/claudeInChrome/common.js';
 // Lazy: toolRendering.tsx pulls React/ink; only needed when Claude-in-Chrome MCP server is connected
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -2164,6 +2185,11 @@ export async function callMCPToolWithUrlElicitationRetry({ client: connectedClie
             const serverName = clientConnection.type === 'connected'
                 ? clientConnection.name
                 : 'unknown';
+            const blockedElicitation = elicitations.find(elicitation => isFileUrl(elicitation.url));
+            if (blockedElicitation) {
+                logMCPDebug(serverName, `Tool '${tool}' requested blocked file URL elicitation: ${blockedElicitation.url}`);
+                throw createMcpFileUrlBlockedError(tool, blockedElicitation.url);
+            }
             if (elicitations.length === 0) {
                 logMCPDebug(serverName, `Tool '${tool}' returned -32042 but no valid elicitations in error data`);
                 throw error;
@@ -2261,6 +2287,11 @@ async function callMCPTool({ client: { client, name, config }, tool, args, meta,
     let progressInterval;
     try {
         logMCPDebug(name, `Calling MCP tool: ${tool}`);
+        const blockedFileUrl = getBlockedFileUrlForMcpTool(tool, args);
+        if (blockedFileUrl) {
+            logMCPDebug(name, `Blocked MCP tool '${tool}' from opening file URL: ${blockedFileUrl}`);
+            throw createMcpFileUrlBlockedError(tool, blockedFileUrl);
+        }
         // Set up progress logging for long-running tools (every 30 seconds)
         progressInterval = setInterval((startTime, name, tool) => {
             const elapsed = Date.now() - startTime;

@@ -267,6 +267,38 @@ function getMcpToolTimeoutMs(): number {
   )
 }
 
+function isFileUrl(value: unknown): value is string {
+  if (typeof value !== 'string') {
+    return false
+  }
+  try {
+    return new URL(value).protocol === 'file:'
+  } catch {
+    return false
+  }
+}
+
+function getBlockedFileUrlForMcpTool(
+  tool: string,
+  args: Record<string, unknown>,
+): string | undefined {
+  const normalizedTool = tool.toLowerCase()
+  if (!normalizedTool.includes('browser_navigate')) {
+    return undefined
+  }
+  return isFileUrl(args.url) ? args.url : undefined
+}
+
+function createMcpFileUrlBlockedError(
+  tool: string,
+  url: string,
+): TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS {
+  return new TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(
+    `MCP tool "${tool}" cannot open file:// URLs. Start a local HTTP server for this file and navigate to a localhost URL instead. Blocked URL: ${url}`,
+    'MCP file URL blocked before tool call',
+  )
+}
+
 import { isClaudeInChromeMCPServer } from '../../utils/claudeInChrome/common.js'
 
 // Lazy: toolRendering.tsx pulls React/ink; only needed when Claude-in-Chrome MCP server is connected
@@ -2924,6 +2956,17 @@ export async function callMCPToolWithUrlElicitationRetry({
           ? clientConnection.name
           : 'unknown'
 
+      const blockedElicitation = elicitations.find(elicitation =>
+        isFileUrl(elicitation.url),
+      )
+      if (blockedElicitation) {
+        logMCPDebug(
+          serverName,
+          `Tool '${tool}' requested blocked file URL elicitation: ${blockedElicitation.url}`,
+        )
+        throw createMcpFileUrlBlockedError(tool, blockedElicitation.url)
+      }
+
       if (elicitations.length === 0) {
         logMCPDebug(
           serverName,
@@ -3073,6 +3116,15 @@ async function callMCPTool({
 
   try {
     logMCPDebug(name, `Calling MCP tool: ${tool}`)
+
+    const blockedFileUrl = getBlockedFileUrlForMcpTool(tool, args)
+    if (blockedFileUrl) {
+      logMCPDebug(
+        name,
+        `Blocked MCP tool '${tool}' from opening file URL: ${blockedFileUrl}`,
+      )
+      throw createMcpFileUrlBlockedError(tool, blockedFileUrl)
+    }
 
     // Set up progress logging for long-running tools (every 30 seconds)
     progressInterval = setInterval(

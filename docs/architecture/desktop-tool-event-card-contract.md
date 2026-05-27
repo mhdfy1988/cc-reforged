@@ -22,6 +22,20 @@
 
 如果工具事件缺少 `toolUseId`，Desktop 只能把它作为协议缺口展示或记录，不能退回到“按工具名/标题字符串硬匹配”。
 
+### 工具生命周期合并顺序
+
+Desktop 收到 `tool_use`、`tool_result`、`progress` 这类展示事件时，必须先按稳定身份完成生命周期合并，再决定是否作为普通协议事件追加。
+
+推荐顺序：
+
+1. 先按相同 `itemId` 更新已有展示项。
+2. 再按 `parentToolUseId ?? toolUseId` 查找原工具卡，把 `tool_result` / `progress` 合并回同一张主工具卡。
+3. 对找不到父工具卡的控制型工具结果直接丢弃。
+4. 对找不到父工具卡的 `progress` 直接丢弃，避免残留“工具进度 · 正在执行”卡。
+5. 最后才把 `thread/display` 协议里的普通 `live` / `history` 事件作为独立消息追加。
+
+注意：`isThreadDisplayProtocolContext` 只能说明事件来自标准展示协议，不能说明该事件应该独立展示。它不得早于工具生命周期合并逻辑，否则 `progress` 这类独立内容块会绕过 `parentToolUseId` 合并，残留成假执行中卡片。
+
 ## 状态机
 
 ```mermaid

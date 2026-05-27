@@ -947,10 +947,6 @@ function upsertCompletedItemMessage(
     )
   }
 
-  if (isThreadDisplayProtocolContext(context)) {
-    return [...events, nextEvent]
-  }
-
   const toolLifecycleIndex = findMatchingToolLifecycleEventIndex(
     events,
     nextEvent,
@@ -969,6 +965,10 @@ function upsertCompletedItemMessage(
 
   if (shouldDropOrphanProgress(nextEvent)) {
     return events
+  }
+
+  if (isThreadDisplayProtocolContext(context)) {
+    return [...events, nextEvent]
   }
 
   if (isOrphanToolResult(nextEvent)) {

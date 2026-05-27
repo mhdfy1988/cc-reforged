@@ -103,6 +103,65 @@ try {
 - `snapshotHasExampleDomain: true`
 - 快照里包含 `Page Title: Example Domain`
 
+## 3.1 Playwright MCP 浏览器工具使用边界
+
+模型驱动 Playwright MCP 时允许出现探索性失败，但以下几类属于已知高频误用，CCR 侧应尽量提前阻断或在提示词中给出明确推荐方式。
+
+### 3.1.1 禁止直接导航 `file://`
+
+Playwright MCP 的 `browser_navigate` 不能打开 `file://` URL。遇到本地 HTML 文件时，不要让模型直接调用：
+
+```json
+{
+  "url": "file:///D:/learn_code/snake-game/index.html"
+}
+```
+
+正确做法是先启动本地 HTTP 服务，再导航到 `http://localhost:<port>/`。
+
+Windows 临时预览服务推荐用独立进程启动：
+
+```powershell
+Start-Process -WindowStyle Hidden -FilePath python -ArgumentList "-m http.server 8080" -WorkingDirectory "D:\learn_code\snake-game"
+```
+
+不推荐让模型用 `Start-Job` 拼临时服务链路。`Start-Job` 的生命周期、工作目录和作业查询都更容易出错，尤其是把 Job 对象直接传给 `Get-Job` 时会被当作名称解析。
+
+### 3.1.2 点击前必须刷新快照
+
+`browser_click` 里的 `ref` 是当前页面快照里的临时引用。页面刷新、重新导航或 DOM 变化后，旧 `ref` 可能失效。
+
+推荐流程：
+
+1. `browser_snapshot`
+2. 从最新快照中选择目标元素的 `ref`
+3. `browser_click` 使用该 `ref`
+
+不要复用上一轮页面里的旧 `ref`。
+
+### 3.1.3 不要把自然语言当 CSS selector
+
+`browser_click.target` 如果按 CSS selector 解析，就不能传入类似 `button "重新开始"` 这种自然语言描述。需要么使用快照 `ref`，要么使用 MCP 工具明确支持的定位字段。
+
+错误示例：
+
+```json
+{
+  "target": "button \"重新开始\"",
+  "element": "重新开始按钮"
+}
+```
+
+### 3.1.4 unsafe code 不要假设完整全局环境
+
+`browser_run_code_unsafe` 的运行环境不等同于完整 Node 或页面全局环境。等待时优先使用 Playwright API：
+
+```js
+await page.waitForTimeout(1000)
+```
+
+不要默认使用裸 `setTimeout`。
+
 ## 4. CCR 项目级连接 smoke
 
 `--mcp-config` 是主会话入口参数，不适合直接和 `mcp list` 组合。要验证 `ccr mcp list/get`，用临时目录放 `.mcp.json`：

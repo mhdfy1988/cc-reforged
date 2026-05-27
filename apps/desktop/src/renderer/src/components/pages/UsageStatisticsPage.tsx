@@ -28,10 +28,7 @@ export function UsageStatisticsPage(props: {
     props.stats?.events.find(event => event.eventId === selectedEventId) ??
     props.stats?.events[0] ??
     null
-  const filterOptions = useMemo(
-    () => buildFilterOptions(props.stats),
-    [props.stats],
-  )
+  const report = useMemo(() => buildUsageReport(props.stats), [props.stats])
 
   function updateFilter<K extends keyof UsageStatisticsFilters>(
     key: K,
@@ -44,26 +41,14 @@ export function UsageStatisticsPage(props: {
   }
 
   function refreshWithFilters(): void {
-    void props.onRefresh(normalizeFilters(filters))
-  }
-
-  function clearFilters(): void {
-    setFilters({})
-    void props.onRefresh({})
+    void props.onRefresh(toRequestFilters(filters))
   }
 
   return (
     <section className="page-panel usage-page workbench-main">
       <header className="usage-title">
         <div>
-          <p className="eyebrow">使用统计</p>
-          <h2>Token 与成本</h2>
-          <span>{props.stats?.usageEventsDir ?? 'usage-events 待加载'}</span>
-        </div>
-        <div className="usage-title-actions">
-          <button className="secondary" disabled={props.busy} onClick={refreshWithFilters}>
-            刷新统计
-          </button>
+          <h2>使用统计</h2>
         </div>
       </header>
 
@@ -73,7 +58,7 @@ export function UsageStatisticsPage(props: {
           <input
             type="date"
             value={filters.from ?? ''}
-            onChange={event => updateFilter('from', dateInputToIso(event.target.value, false))}
+            onChange={event => updateFilter('from', event.target.value)}
           />
         </label>
         <label>
@@ -81,51 +66,11 @@ export function UsageStatisticsPage(props: {
           <input
             type="date"
             value={filters.to ?? ''}
-            onChange={event => updateFilter('to', dateInputToIso(event.target.value, true))}
+            onChange={event => updateFilter('to', event.target.value)}
           />
         </label>
-        <FilterSelect
-          label="Provider"
-          options={filterOptions.providers}
-          value={filters.provider}
-          onChange={value => updateFilter('provider', value)}
-        />
-        <FilterSelect
-          label="Profile"
-          options={filterOptions.profiles}
-          value={filters.profileId}
-          onChange={value => updateFilter('profileId', value)}
-        />
-        <FilterSelect
-          label="Model"
-          options={filterOptions.models}
-          value={filters.model}
-          onChange={value => updateFilter('model', value)}
-        />
-        <FilterSelect
-          label="Project"
-          options={filterOptions.projects}
-          value={filters.projectPath}
-          onChange={value => updateFilter('projectPath', value)}
-        />
-        <label>
-          <span>Session</span>
-          <input
-            placeholder="sessionId"
-            value={filters.sessionId ?? ''}
-            onChange={event => updateFilter('sessionId', event.target.value)}
-          />
-        </label>
-        <label>
-          <span>Thread</span>
-          <input
-            placeholder="threadId"
-            value={filters.threadId ?? ''}
-            onChange={event => updateFilter('threadId', event.target.value)}
-          />
-        </label>
-        <button className="secondary" disabled={props.busy} onClick={clearFilters}>
-          清空
+        <button className="secondary" disabled={props.busy} onClick={refreshWithFilters}>
+          查询
         </button>
       </div>
 
@@ -148,106 +93,83 @@ export function UsageStatisticsPage(props: {
             </div>
           </div>
 
-          <div className="usage-grid">
-            <section className="usage-panel">
-              <div className="usage-panel-head">
-                <strong>Provider</strong>
-                <span>{props.stats.byProvider.length} 项</span>
-              </div>
-              <GroupTable groups={props.stats.byProvider} />
-            </section>
-            <section className="usage-panel">
-              <div className="usage-panel-head">
-                <strong>Model</strong>
-                <span>{props.stats.byModel.length} 项</span>
-              </div>
-              <GroupTable groups={props.stats.byModel} />
-            </section>
-            <section className="usage-panel">
-              <div className="usage-panel-head">
-                <strong>Project</strong>
-                <span>{props.stats.byProject.length} 项</span>
-              </div>
-              <GroupTable groups={props.stats.byProject} compact />
-            </section>
-            <section className="usage-panel">
-              <div className="usage-panel-head">
-                <strong>Profile</strong>
-                <span>{props.stats.byProfile.length} 项</span>
-              </div>
-              <GroupTable groups={props.stats.byProfile} />
-            </section>
+          <div className="usage-dashboard-sections">
+            <UsageReportSection
+              title="供应商"
+              days={report.days}
+              tokenSeries={report.tokens.byProvider}
+              eventSeries={report.events.byProvider}
+            />
+            <UsageReportSection
+              title="模型"
+              days={report.days}
+              tokenSeries={report.tokens.byModel}
+              eventSeries={report.events.byModel}
+            />
+            <UsageReportSection
+              title="项目"
+              days={report.days}
+              tokenSeries={report.tokens.byProject}
+              eventSeries={report.events.byProject}
+            />
+            <UsageReportSection
+              title="配置"
+              days={report.days}
+              tokenSeries={report.tokens.byProfile}
+              eventSeries={report.events.byProfile}
+            />
           </div>
 
-          <div className="usage-detail-grid">
-            <section className="usage-panel usage-events-panel">
-              <div className="usage-panel-head">
-                <strong>调用明细</strong>
-                <span>{props.stats.events.length} 条</span>
-              </div>
-              <div className="usage-event-list">
-                {props.stats.events.length === 0 ? (
-                  <div className="usage-empty compact">当前筛选无调用记录</div>
-                ) : (
-                  props.stats.events.map(event => (
-                    <button
-                      className={`usage-event-row ${
-                        event.eventId === selectedEvent?.eventId ? 'active' : ''
-                      }`}
-                      key={event.eventId}
-                      type="button"
-                      onClick={() => setSelectedEventId(event.eventId)}
-                    >
-                      <span>
-                        <strong>{event.model}</strong>
-                        <small>
-                          {formatDateTime(event.timestamp)} ·{' '}
-                          {event.providerDisplayName ?? event.provider}
-                        </small>
-                      </span>
-                      <em>{formatTokens(event.totalTokens)}</em>
-                      <CostBadge event={event} />
-                    </button>
-                  ))
-                )}
-              </div>
-            </section>
+          <section className="usage-report-section">
+            <h3>调用明细</h3>
+            <div className="usage-report-grid">
+              <section className="usage-panel usage-events-panel usage-report-panel">
+                <div className="usage-panel-head">
+                  <strong>调用列表</strong>
+                  <span>{props.stats.events.length} 条</span>
+                </div>
+                <div className="usage-call-list">
+                  {props.stats.events.length === 0 ? (
+                    <div className="usage-empty compact">当前筛选无调用记录</div>
+                  ) : (
+                    props.stats.events.map(event => (
+                      <button
+                        className={`usage-call-row ${
+                          event.eventId === selectedEvent?.eventId ? 'active' : ''
+                        }`}
+                        key={event.eventId}
+                        type="button"
+                        onClick={() => setSelectedEventId(event.eventId)}
+                      >
+                        <span className="usage-call-main">
+                          <strong>{event.model}</strong>
+                          <small>
+                            {formatDateTime(event.timestamp)} ·{' '}
+                            {event.providerDisplayName ?? event.provider} ·{' '}
+                            {compactPath(event.projectPath ?? event.cwd ?? '无')}
+                          </small>
+                        </span>
+                        <span className="usage-call-token">
+                          {formatTokens(event.totalTokens)}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </section>
 
-            <section className="usage-panel usage-event-detail">
-              <div className="usage-panel-head">
-                <strong>调用事实</strong>
-                <span>{selectedEvent ? shortId(selectedEvent.eventId) : '无'}</span>
-              </div>
-              {selectedEvent ? <EventDetail event={selectedEvent} /> : null}
-            </section>
-          </div>
+              <section className="usage-panel usage-event-detail">
+                <div className="usage-panel-head">
+                  <strong>调用事实</strong>
+                  <span>{selectedEvent ? shortId(selectedEvent.eventId) : '无'}</span>
+                </div>
+                {selectedEvent ? <EventDetail event={selectedEvent} /> : null}
+              </section>
+            </div>
+          </section>
         </>
       )}
     </section>
-  )
-}
-
-function FilterSelect(props: {
-  label: string
-  options: Array<{ value: string; label: string }>
-  value?: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <label>
-      <span>{props.label}</span>
-      <select
-        value={props.value ?? ''}
-        onChange={event => props.onChange(event.target.value)}
-      >
-        <option value="">全部</option>
-        {props.options.map(option => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
   )
 }
 
@@ -256,38 +178,9 @@ function SummaryTile(props: { title: string; group: UsageStatisticsGroup }) {
     <div className="usage-summary-tile">
       <span>{props.title}</span>
       <strong>{formatTokens(props.group.totalTokens)}</strong>
-      <small>
-        {props.group.eventCount} 次 · {formatCostGroup(props.group)}
-      </small>
+      <small>{props.group.eventCount} 次调用</small>
     </div>
   )
-}
-
-function GroupTable(props: {
-  groups: UsageStatisticsGroup[]
-  compact?: boolean
-}) {
-  if (props.groups.length === 0) {
-    return <div className="usage-empty compact">暂无数据</div>
-  }
-  return (
-    <div className="usage-table">
-      {props.groups.slice(0, 8).map(group => (
-        <div className="usage-table-row" key={group.key}>
-          <span title={group.label}>{props.compact ? compactPath(group.label) : group.label}</span>
-          <strong>{formatTokens(group.totalTokens)}</strong>
-          <em>{formatCostGroup(group)}</em>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function CostBadge(props: { event: UsageStatisticsEvent }) {
-  if (props.event.costStatus !== 'calculated') {
-    return <span className="usage-cost-badge unknown">未知</span>
-  }
-  return <span className="usage-cost-badge">{formatUsd(props.event.costUSD ?? 0)}</span>
 }
 
 function EventDetail(props: { event: UsageStatisticsEvent }) {
@@ -302,7 +195,6 @@ function EventDetail(props: { event: UsageStatisticsEvent }) {
     ['Cache read', formatTokens(event.cacheReadInputTokens)],
     ['Cache write', formatTokens(event.cacheCreationInputTokens)],
     ['Total', formatTokens(event.totalTokens)],
-    ['Cost', event.costStatus === 'calculated' ? formatUsd(event.costUSD ?? 0) : '未知'],
     ['Request', event.requestId ?? '无'],
     ['Session', event.sessionId ?? '无'],
     ['Thread', event.threadId ?? '无'],
@@ -321,30 +213,349 @@ function EventDetail(props: { event: UsageStatisticsEvent }) {
   )
 }
 
-function buildFilterOptions(stats: UsageStatisticsState | null): {
-  providers: Array<{ value: string; label: string }>
-  profiles: Array<{ value: string; label: string }>
-  models: Array<{ value: string; label: string }>
-  projects: Array<{ value: string; label: string }>
-} {
-  return {
-    providers: (stats?.byProvider ?? []).map(group => ({
-      value: group.key,
-      label: group.label,
-    })),
-    profiles: (stats?.byProfile ?? []).map(group => ({
-      value: group.key,
-      label: group.label,
-    })),
-    models: (stats?.byModel ?? []).map(group => ({
-      value: group.key,
-      label: group.label,
-    })),
-    projects: (stats?.byProject ?? []).map(group => ({
-      value: group.key,
-      label: compactPath(group.label),
-    })),
+type UsageDayPoint = {
+  key: string
+  label: string
+}
+
+type UsageChartSeries = {
+  key: string
+  label: string
+  color: string
+  values: Map<string, number>
+}
+
+type UsageReportMetricSet = {
+  byProvider: UsageChartSeries[]
+  byModel: UsageChartSeries[]
+  byProject: UsageChartSeries[]
+  byProfile: UsageChartSeries[]
+}
+
+type UsageReportData = {
+  days: UsageDayPoint[]
+  tokens: UsageReportMetricSet
+  events: UsageReportMetricSet
+}
+
+type UsageChartSeriesMapSet = {
+  byProvider: Map<string, UsageChartSeries>
+  byModel: Map<string, UsageChartSeries>
+  byProject: Map<string, UsageChartSeries>
+  byProfile: Map<string, UsageChartSeries>
+}
+
+const CHART_COLORS = [
+  '#6f7786',
+  '#1677c6',
+  '#00a878',
+  '#f04b35',
+  '#f5a400',
+  '#7d5bd6',
+  '#c2568f',
+  '#2f9ca0',
+]
+
+function UsageReportSection(props: {
+  title: string
+  days: UsageDayPoint[]
+  tokenSeries: UsageChartSeries[]
+  eventSeries: UsageChartSeries[]
+}) {
+  return (
+    <section className="usage-report-section">
+      <h3>{props.title}</h3>
+      <div className="usage-dashboard-grid">
+        <UsageReportPanel
+          title="Token 使用量"
+          days={props.days}
+          series={props.tokenSeries}
+          valueKind="tokens"
+        />
+        <UsageReportPanel
+          title="调用次数"
+          days={props.days}
+          series={props.eventSeries}
+          valueKind="events"
+        />
+      </div>
+    </section>
+  )
+}
+
+function UsageReportPanel(props: {
+  title: string
+  days: UsageDayPoint[]
+  series: UsageChartSeries[]
+  valueKind: 'tokens' | 'events'
+}) {
+  return (
+    <section className="usage-panel usage-report-card">
+      <div className="usage-panel-head">
+        <strong>{props.title}</strong>
+        <span>{props.series.length} 项</span>
+      </div>
+      <DailyUsageChart
+        days={props.days}
+        series={props.series}
+        valueKind={props.valueKind}
+      />
+    </section>
+  )
+}
+
+function DailyUsageChart(props: {
+  days: UsageDayPoint[]
+  series: UsageChartSeries[]
+  valueKind: 'tokens' | 'events'
+}) {
+  const series = props.series
+  const [tooltip, setTooltip] = useState<{
+    day: string
+    label: string
+    value: number
+    left: number
+    top: number
+    placement: 'above' | 'below'
+  } | null>(null)
+  const points = props.days.length > 0 ? props.days : []
+  const maxValue = Math.max(
+    1,
+    ...points.map(day =>
+      series.reduce((sum, item) => sum + (item.values.get(day.key) ?? 0), 0),
+    ),
+  )
+  const formatValue =
+    props.valueKind === 'tokens' ? formatTokens : (value: number) => String(value)
+  return (
+    <div className="usage-chart">
+      <div className="usage-chart-scale">
+        <span>{formatValue(maxValue)}</span>
+        <span>{formatValue(Math.round(maxValue / 2))}</span>
+        <span>0</span>
+      </div>
+      <svg className="usage-bar-chart" viewBox="0 0 720 210" preserveAspectRatio="none">
+        <line x1="0" y1="26" x2="720" y2="26" />
+        <line x1="0" y1="104" x2="720" y2="104" />
+        <line x1="0" y1="182" x2="720" y2="182" />
+        {points.map((day, index) => {
+          const slot = 720 / Math.max(1, points.length)
+          const width = Math.max(5, Math.min(22, slot * 0.42))
+          const x = index * slot + (slot - width) / 2
+          let stackedHeight = 0
+          return series.map(item => {
+            const value = item.values.get(day.key) ?? 0
+            const height = value > 0 ? Math.max(3, (value / maxValue) * 156) : 0
+            stackedHeight += height
+            const y = 182 - stackedHeight
+            return (
+              <rect
+                key={`${day.key}:${item.key}`}
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                className="usage-chart-segment"
+                rx="3"
+                onMouseEnter={() =>
+                  setTooltip({
+                    day: day.label,
+                    label: item.label,
+                    value,
+                    left: ((index + 0.5) / Math.max(1, points.length)) * 100,
+                    top: (y / 210) * 100,
+                    placement: y < 58 ? 'below' : 'above',
+                  })
+                }
+                onMouseLeave={() => setTooltip(null)}
+                style={{ fill: item.color }}
+              />
+            )
+          })
+        })}
+      </svg>
+      <div className="usage-chart-axis">
+        <span>{points[0]?.label ?? '-'}</span>
+        <span>{points.at(-1)?.label ?? '-'}</span>
+      </div>
+      {tooltip ? (
+        <div
+          className="usage-chart-tooltip"
+          data-placement={tooltip.placement}
+          style={{
+            left: `${tooltip.left}%`,
+            top: `${tooltip.top}%`,
+          }}
+        >
+          <strong>{tooltip.label}</strong>
+          <span>{tooltip.day}</span>
+          <em>{formatValue(tooltip.value)}</em>
+        </div>
+      ) : null}
+      <div className="usage-chart-legend">
+        {series.length === 0 ? (
+          <span>暂无数据</span>
+        ) : (
+          series.map(item => (
+            <span key={item.key}>
+              <i style={{ background: item.color }} />
+              {item.label}
+            </span>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+function buildUsageReport(stats: UsageStatisticsState | null): UsageReportData {
+  if (!stats) {
+    return emptyUsageReport()
   }
+  const dayKeys = new Map<string, UsageDayPoint>()
+  const tokenMaps = createDimensionMaps()
+  const eventMaps = createDimensionMaps()
+
+  for (const event of stats.events) {
+    const dayKey = dateKey(event.timestamp)
+    dayKeys.set(dayKey, { key: dayKey, label: formatDayLabel(dayKey) })
+    addDimensionValue(
+      tokenMaps.byProvider,
+      event.provider,
+      event.providerDisplayName ?? event.provider,
+      dayKey,
+      event.totalTokens,
+    )
+    addDimensionValue(tokenMaps.byModel, event.model, event.model, dayKey, event.totalTokens)
+    addDimensionValue(
+      tokenMaps.byProject,
+      event.projectPath ?? event.cwd ?? '未知项目',
+      compactPath(event.projectPath ?? event.cwd ?? '未知项目'),
+      dayKey,
+      event.totalTokens,
+    )
+    addDimensionValue(
+      tokenMaps.byProfile,
+      event.profileId ?? 'unknown-profile',
+      event.profileName ?? event.profileId ?? '未知配置',
+      dayKey,
+      event.totalTokens,
+    )
+    addDimensionValue(
+      eventMaps.byProvider,
+      event.provider,
+      event.providerDisplayName ?? event.provider,
+      dayKey,
+      1,
+    )
+    addDimensionValue(eventMaps.byModel, event.model, event.model, dayKey, 1)
+    addDimensionValue(
+      eventMaps.byProject,
+      event.projectPath ?? event.cwd ?? '未知项目',
+      compactPath(event.projectPath ?? event.cwd ?? '未知项目'),
+      dayKey,
+      1,
+    )
+    addDimensionValue(
+      eventMaps.byProfile,
+      event.profileId ?? 'unknown-profile',
+      event.profileName ?? event.profileId ?? '未知配置',
+      dayKey,
+      1,
+    )
+  }
+
+  return {
+    days: Array.from(dayKeys.values()).sort((a, b) => a.key.localeCompare(b.key)),
+    tokens: finalizeDimensionMaps(tokenMaps),
+    events: finalizeDimensionMaps(eventMaps),
+  }
+}
+
+function emptyUsageReport(): UsageReportData {
+  return {
+    days: [],
+    tokens: emptyMetricSet(),
+    events: emptyMetricSet(),
+  }
+}
+
+function emptyMetricSet(): UsageReportMetricSet {
+  return {
+    byProvider: [],
+    byModel: [],
+    byProject: [],
+    byProfile: [],
+  }
+}
+
+function createDimensionMaps(): UsageChartSeriesMapSet {
+  return {
+    byProvider: new Map<string, UsageChartSeries>(),
+    byModel: new Map<string, UsageChartSeries>(),
+    byProject: new Map<string, UsageChartSeries>(),
+    byProfile: new Map<string, UsageChartSeries>(),
+  }
+}
+
+function addDimensionValue(
+  target: Map<string, UsageChartSeries>,
+  key: string,
+  label: string,
+  dayKey: string,
+  value: number,
+): void {
+  const series = target.get(key) ?? {
+    key,
+    label,
+    color: CHART_COLORS[target.size % CHART_COLORS.length],
+    values: new Map<string, number>(),
+  }
+  series.values.set(dayKey, (series.values.get(dayKey) ?? 0) + value)
+  target.set(key, series)
+}
+
+function finalizeDimensionMaps(
+  maps: UsageChartSeriesMapSet,
+): UsageReportMetricSet {
+  return {
+    byProvider: finalizeSeries(maps.byProvider),
+    byModel: finalizeSeries(maps.byModel),
+    byProject: finalizeSeries(maps.byProject),
+    byProfile: finalizeSeries(maps.byProfile),
+  }
+}
+
+function finalizeSeries(
+  target: Map<string, UsageChartSeries>,
+): UsageChartSeries[] {
+  return Array.from(target.values())
+    .sort((a, b) => getSeriesTotal(b) - getSeriesTotal(a))
+    .slice(0, 6)
+}
+
+function getSeriesTotal(series: UsageChartSeries): number {
+  return Array.from(series.values.values()).reduce(
+    (sum, value) => sum + value,
+    0,
+  )
+}
+
+function toRequestFilters(
+  filters: UsageStatisticsFilters,
+): UsageStatisticsFilters {
+  return normalizeFilters({
+    ...filters,
+    from: dateInputToIso(filters.from ?? '', false),
+    to: dateInputToIso(filters.to ?? '', true),
+  })
+}
+
+function dateInputToIso(value: string, endOfDay: boolean): string {
+  if (!value) {
+    return ''
+  }
+  return `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`
 }
 
 function normalizeFilters(
@@ -353,13 +564,6 @@ function normalizeFilters(
   return Object.fromEntries(
     Object.entries(filters).filter(([, value]) => value),
   ) as UsageStatisticsFilters
-}
-
-function dateInputToIso(value: string, endOfDay: boolean): string {
-  if (!value) {
-    return ''
-  }
-  return `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}`
 }
 
 function formatTokens(value: number): string {
@@ -372,23 +576,25 @@ function formatTokens(value: number): string {
   return String(value)
 }
 
-function formatUsd(value: number): string {
-  return value >= 1 ? `$${value.toFixed(2)}` : `$${value.toFixed(4)}`
-}
-
-function formatCostGroup(group: UsageStatisticsGroup): string {
-  const known = formatUsd(group.knownCostUSD)
-  return group.unknownCostEvents > 0
-    ? `${known} · ${group.unknownCostEvents} 未知`
-    : known
-}
-
 function formatDateTime(value: string): string {
   const date = new Date(value)
   if (!Number.isFinite(date.getTime())) {
     return value
   }
   return date.toLocaleString()
+}
+
+function dateKey(value: string): string {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) {
+    return value.slice(0, 10)
+  }
+  return date.toISOString().slice(0, 10)
+}
+
+function formatDayLabel(value: string): string {
+  const [, month, day] = value.split('-')
+  return month && day ? `${Number(month)}/${Number(day)}` : value
 }
 
 function compactPath(value: string): string {

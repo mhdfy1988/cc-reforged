@@ -42,14 +42,6 @@ export function Sidebar(props: {
           <span className="nav-label">MCP</span>
         </button>
         <button
-          className={`nav-item ${props.page === 'usage' ? 'active' : ''}`}
-          title="使用统计"
-          onClick={() => props.onChangePage('usage')}
-        >
-          <NavIcon name="usage" />
-          <span className="nav-label">统计</span>
-        </button>
-        <button
           className={`nav-item ${props.page === 'skills' ? 'active' : ''}`}
           title="技能"
           onClick={() => props.onChangePage('skills')}
@@ -64,6 +56,14 @@ export function Sidebar(props: {
         >
           <NavIcon name="plugins" />
           <span className="nav-label">插件</span>
+        </button>
+        <button
+          className={`nav-item ${props.page === 'usage' ? 'active' : ''}`}
+          title="使用统计"
+          onClick={() => props.onChangePage('usage')}
+        >
+          <NavIcon name="usage" />
+          <span className="nav-label">统计</span>
         </button>
         <button
           className={`nav-item ${props.page === 'logs' ? 'active' : ''}`}
