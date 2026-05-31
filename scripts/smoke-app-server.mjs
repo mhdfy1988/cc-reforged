@@ -19,6 +19,7 @@ const tempDir = mkdtempSync(join(tmpdir(), 'ccr-app-server-smoke-'));
 
 try {
   seedSmokeLlmConfig();
+  await runThreadDisplayAttachmentProjectionSmoke();
   await runToolDisplayLifecycleSmoke();
   await runThreadDisplaySnapshotToolSplitSmoke();
   await runRealtimeToolDisplayPatchLifecycleSmoke();
@@ -856,6 +857,7 @@ try {
           'thread/display/snapshot_materialized_resume',
           'thread/display/hides_compact_internal_messages',
           'thread/display/compact_notice',
+          'thread/display/attachment_projection',
           'thread/display/patch_replaces_legacy_display_notifications',
           'context/status',
           'compact/status',
@@ -939,6 +941,117 @@ async function runToolDisplayLifecycleSmoke() {
   assert.equal(items[1].status, 'completed');
   assert.equal(items[2].status, 'diagnostic');
   assert.equal(items[2].diagnostic?.code, 'missing_tool_result_source_id');
+}
+
+async function runThreadDisplayAttachmentProjectionSmoke() {
+  const { buildThreadDisplaySnapshot, coreEventToThreadDisplayPatch } = await import(
+    '../dist/src/app-server/threadDisplay.js'
+  );
+  const generatedPath =
+    'C:\\Users\\luoji\\.ccr\\generated_outputs\\53ad3489-dacc-4b7e-9bf1-41c2aa555a3c\\out_9b5eef00-a4c0-4b39-8ae7-0472d5d99ef9.png';
+  const snapshot = buildThreadDisplaySnapshot({
+    threadId: 'thread-attachment-projection',
+    source: 'history',
+    rawTranscriptEvents: 2,
+    coreContextMessages: 2,
+    messages: [
+      {
+        id: 'user-image-upload',
+        role: 'user',
+        text: '[图片]',
+        status: 'completed',
+        kind: 'user_message',
+        content: [
+          { type: 'text', text: '[图片]' },
+          {
+            type: 'image',
+            attachmentId: 'upload-image-1',
+            displayName: 'image.png',
+            mimeType: 'image/png',
+            path: 'C:\\Users\\luoji\\AppData\\Roaming\\CCR\\attachments\\clipboard\\image.png',
+            sizeBytes: 218700,
+          },
+        ],
+      },
+      {
+        id: 'assistant-generated-image',
+        role: 'assistant',
+        text: `已生成图片：\n${generatedPath}`,
+        status: 'completed',
+        kind: 'assistant_message',
+        content: [
+          { type: 'text', text: `已生成图片：\n${generatedPath}` },
+          {
+            type: 'image',
+            attachmentId: 'generated-image-1',
+            displayName: 'out_9b5eef00-a4c0-4b39-8ae7-0472d5d99ef9.png',
+            mimeType: 'image/png',
+            origin: 'model_output',
+            lifecycle: 'persisted',
+            safety: 'needs_review',
+            provider: 'codex-oauth',
+            model: 'gpt-5.5',
+            savedPath: generatedPath,
+          },
+        ],
+      },
+    ],
+  });
+  const userImageItem = snapshot.items.find(item => item.id === 'user-image-upload');
+  assert.equal(userImageItem?.projection?.event?.text, '');
+  assert.equal(
+    userImageItem?.projection?.event?.attachmentSnapshots?.[0]?.source,
+    'UserUpload',
+  );
+  assert.equal(
+    userImageItem?.projection?.event?.attachmentSnapshots?.[0]?.previewKind,
+    'image',
+  );
+  const generatedImageItem = snapshot.items.find(
+    item => item.id === 'assistant-generated-image',
+  );
+  assert.equal(
+    generatedImageItem?.projection?.event?.attachmentSnapshots?.[0]?.source,
+    'ModelOutput',
+  );
+  assert.equal(
+    generatedImageItem?.projection?.event?.attachmentSnapshots?.[0]?.savedPath,
+    generatedPath,
+  );
+  assert.equal(
+    generatedImageItem?.projection?.event?.text.includes(generatedPath),
+    false,
+    'generated image local path should be removed from message text when attachment projection exists',
+  );
+
+  const patch = coreEventToThreadDisplayPatch({
+    type: 'item_completed',
+    threadId: 'thread-attachment-projection',
+    turnId: 'turn-attachment-projection',
+    itemId: 'assistant-live-generated-image',
+    kind: 'assistant_message',
+    status: 'completed',
+    content: [
+      { type: 'text', text: `已生成图片：\n${generatedPath}` },
+      {
+        type: 'image',
+        attachmentId: 'generated-image-live',
+        displayName: 'out_live.png',
+        mimeType: 'image/png',
+        origin: 'model_output',
+        lifecycle: 'persisted',
+        safety: 'needs_review',
+        savedPath: generatedPath,
+      },
+    ],
+  });
+  const liveItem = patch?.operations[0]?.item;
+  assert.equal(patch?.operations[0]?.op, 'complete_item');
+  assert.equal(
+    liveItem?.projection?.event?.attachmentSnapshots?.[0]?.source,
+    'ModelOutput',
+  );
+  assert.equal(liveItem?.projection?.event?.text.includes(generatedPath), false);
 }
 
 async function runThreadDisplaySnapshotToolSplitSmoke() {

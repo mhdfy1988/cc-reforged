@@ -1,8 +1,38 @@
 import type { CoreJsonObject, CoreTurnEvent } from '../core/types.js'
 import { projectThreadDisplayItem } from '../display/threadDisplayProjection.js'
 import { assertThreadDisplayProjection } from '../display/threadDisplayProjectionSchema.js'
+import {
+  createDisplayFactMetadata,
+  isThreadDisplayControlFact,
+  isThreadDisplayMessageLikeFact,
+  isThreadDisplaySystemFact,
+  isThreadDisplayToolLikeFact,
+  resolveThreadDisplayFacts,
+  type ThreadDisplayAttachmentFact,
+  type ThreadDisplayControlFact,
+  type ThreadDisplayErrorFact,
+  type ThreadDisplayFact,
+  type ThreadDisplayMessageFact,
+  type ThreadDisplaySystemFact,
+  type ThreadDisplayToolLikeFact,
+  type ThreadDisplayUnsupportedFact,
+} from './threadDisplayFacts.js'
+import { materializeGeneratedOutputImageBlocks } from './threadDisplayGeneratedOutputMaterializer.js'
+import {
+  appServerThreadMessagesToDisplayReducerInputEvents,
+  assertThreadDisplayHistoryInputEvent,
+  assertThreadDisplayRealtimeInputEvent,
+  coreTurnEventToDisplayReducerInputEvent,
+  type ThreadDisplayOrderKey,
+  type ThreadDisplayHistoryMessageInputEvent,
+  type ThreadDisplayInputDiagnostic,
+  type ThreadDisplayRealtimeInputEvent,
+  type ThreadDisplayReducerInputEvent,
+  type ThreadDisplaySourceIdentity,
+} from './threadDisplayInputEvent.js'
 import type {
   AppServerThreadMessage,
+  ThreadDisplayCounts,
   ThreadDisplayDiagnostic,
   ThreadDisplayItem,
   ThreadDisplayItemType,
@@ -13,7 +43,6 @@ import type {
 import {
   createToolDisplayLifecycleReducer,
   normalizeToolUseIdFromBlock,
-  normalizeToolResultSourceIdFromBlock,
   type ToolDisplayLifecycleItem,
 } from './toolDisplayLifecycle.js'
 
@@ -28,153 +57,892 @@ export type BuildThreadDisplaySnapshotInput = {
   diagnostics?: ThreadDisplayDiagnostic[]
 }
 
+type ProjectedDisplayItemInput = {
+  base?: Partial<ThreadDisplayItem>
+  id: string
+  type: ThreadDisplayItemType
+  text: string
+  status?: string
+  sourceKind?: string
+  createdAt?: string
+  timelineHidden?: boolean
+  identity?: ThreadDisplayItem['identity']
+  content?: unknown
+  metadata?: ThreadDisplayItem['metadata']
+}
+
+type ThreadDisplayReducerState = {
+  orderedItemIds: string[]
+  itemsById: Map<string, ThreadDisplayItem>
+  orderKeysByItemId: Map<string, ThreadDisplayOrderKey>
+  displayIdBySourceIdentity: Map<string, string>
+  toolLifecycleByToolUseId: Map<string, string>
+  diagnostics: ThreadDisplayDiagnostic[]
+  counts: Partial<ThreadDisplayCounts>
+}
+
 const activeContextCompactionItemIds = new Map<string, string>()
-const liveToolLifecycles = new Map<
-  string,
-  ReturnType<typeof createToolDisplayLifecycleReducer>
->()
+const liveThreadDisplayReducers = new Map<string, ThreadDisplayReducer>()
+
+function createEmptyThreadDisplayReducerState(): ThreadDisplayReducerState {
+  return {
+    orderedItemIds: [],
+    itemsById: new Map(),
+    orderKeysByItemId: new Map(),
+    displayIdBySourceIdentity: new Map(),
+    toolLifecycleByToolUseId: new Map(),
+    diagnostics: [],
+    counts: {},
+  }
+}
 
 export function buildThreadDisplaySnapshot(
   input: BuildThreadDisplaySnapshotInput,
 ): ThreadDisplaySnapshot {
-  const items = threadMessagesToDisplayItems(input.messages, {
+  const reducer = createThreadDisplayReducer({
+    threadId: input.threadId,
+    sessionId: input.sessionId,
+  })
+  const inputEvents = appServerThreadMessagesToDisplayReducerInputEvents(
+    input.messages,
+    {
       threadId: input.threadId,
       sessionId: input.sessionId,
-  })
-  const projectedDisplayItems = items.length
-  const visibleTimelineItems = countVisibleThreadDisplayItems(items)
-  const hiddenDisplayItems = Math.max(
-    0,
-    projectedDisplayItems - visibleTimelineItems,
+    },
   )
-  const rawTranscriptEvents = input.rawTranscriptEvents ?? input.messages.length
-  const filteredTranscriptEvents = Math.max(
-    0,
-    rawTranscriptEvents - projectedDisplayItems,
-  )
-
-  return {
-    threadId: input.threadId,
-    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+  return reducer.acceptMany(inputEvents).toSnapshot({
     source: input.source,
-    generatedAt: new Date().toISOString(),
-    ...(input.canonicalLeafUuid
-      ? { canonicalLeafUuid: input.canonicalLeafUuid }
-      : {}),
-    items,
-    counts: {
-      rawTranscriptEvents,
-      coreContextMessages: input.coreContextMessages ?? input.messages.length,
+    rawTranscriptEvents: input.rawTranscriptEvents ?? input.messages.length,
+    coreContextMessages: input.coreContextMessages ?? input.messages.length,
+    canonicalLeafUuid: input.canonicalLeafUuid,
+    diagnostics: input.diagnostics,
+  })
+}
+
+export class ThreadDisplayReducer {
+  private toolLifecycle = createToolDisplayLifecycleReducer()
+  private state = createEmptyThreadDisplayReducerState()
+  private pendingPatchOperations: ThreadDisplayPatchOperation[] = []
+
+  constructor(
+    private readonly context: {
+      threadId: string
+      sessionId?: string
+    },
+  ) {}
+
+  acceptMany(
+    inputEvents: readonly ThreadDisplayHistoryMessageInputEvent[],
+  ): this {
+    this.resetState()
+    this.toolLifecycle = createToolDisplayLifecycleReducer()
+    for (const rawInputEvent of inputEvents) {
+      const inputEvent = assertThreadDisplayHistoryInputEvent(
+        rawInputEvent,
+        'ThreadDisplayReducer.acceptMany',
+      )
+      this.recordInputDiagnostics(inputEvent)
+      this.acceptHistoryInputEvent(inputEvent)
+    }
+    return this
+  }
+
+  acceptOne(inputEvent: ThreadDisplayRealtimeInputEvent): this {
+    const checkedInputEvent = assertThreadDisplayRealtimeInputEvent(
+      inputEvent,
+      'ThreadDisplayReducer.acceptOne',
+    )
+    this.recordInputDiagnostics(checkedInputEvent)
+    const operations = this.acceptRealtimeInputEvent(checkedInputEvent)
+    this.pendingPatchOperations.push(...operations)
+    return this
+  }
+
+  toSnapshotItems(): ThreadDisplayItem[] {
+    this.refreshStateCounts()
+    return this.state.orderedItemIds
+      .map(itemId => this.state.itemsById.get(itemId))
+      .filter((item): item is ThreadDisplayItem => Boolean(item))
+  }
+
+  toSnapshot(input: {
+    source: ThreadDisplaySnapshot['source']
+    rawTranscriptEvents?: number
+    coreContextMessages?: number
+    canonicalLeafUuid?: string
+    diagnostics?: ThreadDisplayDiagnostic[]
+  }): ThreadDisplaySnapshot {
+    const items = this.toSnapshotItems()
+    const diagnostics = [...(input.diagnostics ?? []), ...this.getDiagnostics()]
+    const projectedDisplayItems = items.length
+    const visibleTimelineItems = countVisibleThreadDisplayItems(items)
+    const hiddenDisplayItems = Math.max(
+      0,
+      projectedDisplayItems - visibleTimelineItems,
+    )
+    const rawTranscriptEvents = input.rawTranscriptEvents ?? projectedDisplayItems
+    const filteredTranscriptEvents = Math.max(
+      0,
+      rawTranscriptEvents - projectedDisplayItems,
+    )
+
+    return {
+      threadId: this.context.threadId,
+      ...(this.context.sessionId ? { sessionId: this.context.sessionId } : {}),
+      source: input.source,
+      generatedAt: new Date().toISOString(),
+      ...(input.canonicalLeafUuid
+        ? { canonicalLeafUuid: input.canonicalLeafUuid }
+        : {}),
+      items,
+      counts: {
+        rawTranscriptEvents,
+        coreContextMessages: input.coreContextMessages ?? projectedDisplayItems,
+        projectedDisplayItems,
+        visibleTimelineItems,
+        hiddenDisplayItems,
+        filteredTranscriptEvents,
+        hiddenTimelineItems: hiddenDisplayItems + filteredTranscriptEvents,
+      },
+      ...(diagnostics.length ? { diagnostics } : {}),
+    }
+  }
+
+  consumePatchOperations(): ThreadDisplayPatchOperation[] {
+    const operations = this.pendingPatchOperations
+    this.pendingPatchOperations = []
+    return operations
+  }
+
+  getDiagnostics(): ThreadDisplayDiagnostic[] {
+    return [...this.state.diagnostics]
+  }
+
+  private recordInputDiagnostics(inputEvent: ThreadDisplayReducerInputEvent): void {
+    for (const diagnostic of inputEvent.diagnostics) {
+      this.state.diagnostics.push(
+        threadDisplayInputDiagnosticToDisplayDiagnostic(diagnostic, inputEvent),
+      )
+    }
+  }
+
+  private acceptHistoryInputEvent(
+    inputEvent: ThreadDisplayHistoryMessageInputEvent,
+  ): void {
+    for (const fact of resolveThreadDisplayFacts(inputEvent)) {
+      this.acceptDisplayFact(fact, inputEvent)
+    }
+  }
+
+  private acceptDisplayFact(
+    fact: ThreadDisplayFact,
+    inputEvent: ThreadDisplayHistoryMessageInputEvent | ThreadDisplayRealtimeInputEvent,
+  ): ThreadDisplayPatchOperation | null {
+    if (isThreadDisplayToolLikeFact(fact)) {
+      return this.acceptToolLikeDisplayFact(fact, inputEvent)
+    }
+    if (isThreadDisplayMessageLikeFact(fact)) {
+      const item = createMessageLikeDisplayItem(fact)
+      this.appendStateItem(item, inputEvent)
+      return { op: 'append_item', item }
+    }
+    if (fact.factType === 'unsupported') {
+      const item = createInputDiagnosticDisplayItem(inputEvent, fact)
+      this.appendStateItem(item, inputEvent)
+      return { op: 'append_item', item }
+    }
+    return null
+  }
+
+  private acceptToolLikeDisplayFact(
+    fact: ThreadDisplayToolLikeFact,
+    inputEvent: ThreadDisplayHistoryMessageInputEvent | ThreadDisplayRealtimeInputEvent,
+  ): ThreadDisplayPatchOperation {
+    const toolUseId = fact.toolUseId ?? normalizeToolUseIdFromBlock(fact.block)
+    const hadToolUseId = Boolean(toolUseId && this.toolLifecycle.hasToolUseId(toolUseId))
+    const existingToolItemId = toolUseId
+      ? this.state.toolLifecycleByToolUseId.get(toolUseId)
+      : undefined
+    const parentToolItemId = fact.parentToolUseId
+      ? this.state.toolLifecycleByToolUseId.get(fact.parentToolUseId)
+      : undefined
+    const existingItemId = parentToolItemId ?? (hadToolUseId ? existingToolItemId : undefined)
+    const existingItem = existingItemId
+      ? this.state.itemsById.get(existingItemId)
+      : undefined
+    const state = this.toolLifecycle.accept({
+      kind: fact.lifecycleKind,
+      block: fact.block,
+      source: fact.source,
+    })
+    const item = createToolLifecycleDisplayItem(
+      fact.message,
+      state,
+      fact.identity.sourceIndex,
+      existingItem,
+      createToolLikeDisplayFactMetadata(fact, existingItem),
+    )
+    if (existingItem) {
+      this.replaceStateItem(item, inputEvent)
+    } else {
+      this.appendStateItem(item, inputEvent)
+    }
+    if (state.toolUseId) {
+      this.state.toolLifecycleByToolUseId.set(state.toolUseId, item.id)
+    }
+    if (state.diagnostic) {
+      return { op: 'append_item', item }
+    }
+    if (fact.lifecycleKind === 'tool_progress') {
+      return { op: 'update_item', itemId: item.id, item }
+    }
+    if (fact.lifecycleKind === 'tool_result') {
+      return {
+        op: 'complete_item',
+        itemId: item.id,
+        status: state.status,
+        item,
+      }
+    }
+    if (existingItem || hadToolUseId) {
+      return { op: 'update_item', itemId: item.id, item }
+    }
+    return { op: 'append_item', item }
+  }
+
+  private resetState(): void {
+    this.state = createEmptyThreadDisplayReducerState()
+    this.pendingPatchOperations = []
+  }
+
+  private appendStateItem(
+    item: ThreadDisplayItem,
+    inputEvent: ThreadDisplayHistoryMessageInputEvent | ThreadDisplayRealtimeInputEvent,
+  ): void {
+    this.upsertStateItem(item, inputEvent)
+  }
+
+  private replaceStateItem(
+    item: ThreadDisplayItem,
+    inputEvent: ThreadDisplayHistoryMessageInputEvent | ThreadDisplayRealtimeInputEvent,
+  ): void {
+    this.upsertStateItem(item, inputEvent)
+  }
+
+  private upsertStateItem(
+    item: ThreadDisplayItem,
+    inputEvent: ThreadDisplayHistoryMessageInputEvent | ThreadDisplayRealtimeInputEvent,
+  ): void {
+    const itemId = item.id
+    const existed = this.state.itemsById.has(itemId)
+    this.state.itemsById.set(itemId, item)
+    if (!existed) {
+      this.insertOrderedItemId(itemId, inputEvent.orderKey)
+    }
+    this.state.orderKeysByItemId.set(itemId, inputEvent.orderKey)
+    this.bindSourceIdentityToItem(inputEvent.sourceIdentity, item)
+    this.refreshStateCounts()
+  }
+
+  private insertOrderedItemId(
+    itemId: string,
+    orderKey: ThreadDisplayOrderKey,
+  ): void {
+    if (this.state.orderedItemIds.includes(itemId)) {
+      return
+    }
+    const insertAt = this.state.orderedItemIds.findIndex(existingItemId => {
+      const existingOrderKey = this.state.orderKeysByItemId.get(existingItemId)
+      return existingOrderKey
+        ? compareThreadDisplayOrderKeys(orderKey, existingOrderKey) < 0
+        : false
+    })
+    if (insertAt === -1) {
+      this.state.orderedItemIds.push(itemId)
+      return
+    }
+    this.state.orderedItemIds.splice(insertAt, 0, itemId)
+  }
+
+  private bindSourceIdentityToItem(
+    sourceIdentity: ThreadDisplaySourceIdentity,
+    item: ThreadDisplayItem,
+  ): void {
+    const sourceToolUseId =
+      sourceIdentity.kind === 'tool' ? sourceIdentity.toolUseId : undefined
+    const itemToolUseId = item.identity?.toolUseId
+    if (
+      sourceIdentity.kind !== 'tool' ||
+      !sourceToolUseId ||
+      !itemToolUseId ||
+      sourceToolUseId === itemToolUseId
+    ) {
+      this.state.displayIdBySourceIdentity.set(
+        getSourceIdentityKey(sourceIdentity),
+        item.id,
+      )
+    }
+
+    if (itemToolUseId) {
+      this.state.toolLifecycleByToolUseId.set(itemToolUseId, item.id)
+    }
+  }
+
+  private updateStateItem(
+    itemId: string,
+    patch: Partial<ThreadDisplayItem>,
+  ): boolean {
+    const existingItem = this.state.itemsById.get(itemId)
+    if (!existingItem) {
+      return false
+    }
+    this.state.itemsById.set(itemId, {
+      ...existingItem,
+      ...patch,
+      identity: patch.identity ?? existingItem.identity,
+      metadata: {
+        ...(existingItem.metadata ?? {}),
+        ...(patch.metadata ?? {}),
+      },
+    })
+    this.refreshStateCounts()
+    return true
+  }
+
+  private removeStateItem(itemId: string): void {
+    this.state.itemsById.delete(itemId)
+    this.state.orderKeysByItemId.delete(itemId)
+    this.state.orderedItemIds = this.state.orderedItemIds.filter(
+      existingItemId => existingItemId !== itemId,
+    )
+    for (const [key, displayItemId] of [
+      ...this.state.displayIdBySourceIdentity.entries(),
+    ]) {
+      if (displayItemId === itemId) {
+        this.state.displayIdBySourceIdentity.delete(key)
+      }
+    }
+    for (const [toolUseId, displayItemId] of [
+      ...this.state.toolLifecycleByToolUseId.entries(),
+    ]) {
+      if (displayItemId === itemId) {
+        this.state.toolLifecycleByToolUseId.delete(toolUseId)
+      }
+    }
+    this.refreshStateCounts()
+  }
+
+  private refreshStateCounts(): void {
+    const projectedDisplayItems = this.state.itemsById.size
+    const visibleTimelineItems = countVisibleThreadDisplayItems(
+      this.state.orderedItemIds
+        .map(itemId => this.state.itemsById.get(itemId))
+        .filter((item): item is ThreadDisplayItem => Boolean(item)),
+    )
+    this.state.counts = {
+      ...this.state.counts,
       projectedDisplayItems,
       visibleTimelineItems,
-      hiddenDisplayItems,
-      filteredTranscriptEvents,
-      hiddenTimelineItems: hiddenDisplayItems + filteredTranscriptEvents,
-    },
-    ...(input.diagnostics?.length ? { diagnostics: input.diagnostics } : {}),
+      hiddenDisplayItems: Math.max(0, projectedDisplayItems - visibleTimelineItems),
+    }
+  }
+
+  private appendStateItemPatch(
+    item: ThreadDisplayItem,
+    inputEvent: ThreadDisplayRealtimeInputEvent,
+  ): ThreadDisplayPatchOperation {
+    this.appendStateItem(item, inputEvent)
+    return { op: 'append_item', item }
+  }
+
+  private completeStateItemPatch(
+    itemId: string,
+    status: string | undefined,
+    item: ThreadDisplayItem | undefined,
+    inputEvent: ThreadDisplayRealtimeInputEvent,
+  ): ThreadDisplayPatchOperation | null {
+    if (item) {
+      this.replaceStateItem(item, inputEvent)
+      return {
+        op: 'complete_item',
+        itemId,
+        ...(status ? { status } : {}),
+        item,
+      }
+    }
+    if (this.updateStateItem(itemId, { status })) {
+      return {
+        op: 'complete_item',
+        itemId,
+        ...(status ? { status } : {}),
+      }
+    }
+    return this.appendStateTargetDiagnosticPatch(
+      inputEvent,
+      itemId,
+      'complete_item',
+    )
+  }
+
+  private updateStateItemPatch(
+    itemId: string,
+    item: Partial<ThreadDisplayItem>,
+    inputEvent: ThreadDisplayRealtimeInputEvent,
+  ): ThreadDisplayPatchOperation | null {
+    if (!this.updateStateItem(itemId, item)) {
+      return this.appendStateTargetDiagnosticPatch(
+        inputEvent,
+        itemId,
+        'update_item',
+      )
+    }
+    return { op: 'update_item', itemId, item }
+  }
+
+  private upsertStreamingDeltaPatch(
+    itemId: string,
+    item: Partial<ThreadDisplayItem>,
+    inputEvent: ThreadDisplayRealtimeInputEvent,
+  ): ThreadDisplayPatchOperation {
+    if (!this.updateStateItem(itemId, item)) {
+      this.appendStateItem(
+        createProjectedDisplayItem({
+          id: itemId,
+          type: item.type ?? 'assistant_message',
+          text: item.text ?? '',
+          ...(item.status ? { status: item.status } : {}),
+          identity: {
+            threadId: inputEvent.threadId,
+            ...(inputEvent.sessionId ? { sessionId: inputEvent.sessionId } : {}),
+            ...(inputEvent.turnId ? { turnId: inputEvent.turnId } : {}),
+            itemId,
+          },
+          content:
+            typeof item.text === 'string'
+              ? [{ type: 'text', text: item.text }]
+              : undefined,
+          metadata: item.metadata,
+        }),
+        inputEvent,
+      )
+    }
+    return { op: 'update_item', itemId, item }
+  }
+
+  private appendStateTargetDiagnosticPatch(
+    inputEvent: ThreadDisplayRealtimeInputEvent,
+    targetItemId: string,
+    operation: 'update_item' | 'complete_item' | 'replace_active_stream',
+  ): ThreadDisplayPatchOperation {
+    const fact = resolveThreadDisplayFacts(inputEvent)[0]
+    const diagnostic: ThreadDisplayDiagnostic = {
+      level: 'error',
+      code: 'thread_display_orphan_state_update',
+      message: `展示状态更新找不到目标项：${targetItemId}`,
+      details: {
+        operation,
+        targetItemId,
+        source: inputEvent.source,
+        inputKind: inputEvent.kind,
+        sourceIdentityKind: inputEvent.sourceIdentity.kind,
+        sourceId: inputEvent.sourceIdentity.sourceId,
+      },
+    }
+    this.state.diagnostics.push(diagnostic)
+    const item = createStateDiagnosticDisplayItem(inputEvent, diagnostic, fact)
+    this.appendStateItem(item, inputEvent)
+    return { op: 'append_item', item }
+  }
+
+  private acceptRealtimeInputEvent(
+    inputEvent: ThreadDisplayRealtimeInputEvent,
+  ): ThreadDisplayPatchOperation[] {
+    const event = inputEvent.raw.event
+    const facts = resolveThreadDisplayFacts(inputEvent)
+    const firstFact = facts[0]
+    if (inputEvent.payload.type === 'unsupported') {
+      return facts
+        .map(fact => this.acceptDisplayFact(fact, inputEvent))
+        .filter(
+          (operation): operation is ThreadDisplayPatchOperation =>
+            operation !== null,
+        )
+    }
+    switch (event.type) {
+      case 'item_started':
+        {
+          const toolOperations = facts
+            .filter(isThreadDisplayToolLikeFact)
+            .filter(fact => fact.lifecycleKind === 'tool_use')
+            .map(fact => this.acceptDisplayFact(fact, inputEvent))
+            .filter(
+              (operation): operation is ThreadDisplayPatchOperation =>
+                operation !== null,
+            )
+          if (toolOperations.length > 0) {
+            return toolOperations
+          }
+          const item = coreItemToThreadDisplayItem(
+            event.item,
+            facts.find(isThreadDisplayMessageLikeFact),
+          )
+          return item.projection ? [this.appendStateItemPatch(item, inputEvent)] : []
+        }
+
+      case 'item_delta':
+        if (isThinkingContentBlock(event.delta)) {
+          return []
+        }
+        {
+          const toolOperations = facts
+            .filter(isThreadDisplayToolLikeFact)
+            .map(fact => this.acceptDisplayFact(fact, inputEvent))
+            .filter(
+              (operation): operation is ThreadDisplayPatchOperation =>
+                operation !== null,
+            )
+          if (toolOperations.length > 0) {
+            return toolOperations
+          }
+        }
+        {
+          const operation = this.upsertStreamingDeltaPatch(
+            event.itemId,
+            {
+              type: getThreadDisplayItemTypeFromDelta(event.delta),
+              status: 'streaming',
+              text: getCoreDeltaDisplayText(event.delta),
+              metadata: {
+                coreEventType: event.type,
+                deltaMode: 'append_text',
+                delta: event.delta,
+                ...(firstFact ? createDisplayFactMetadata(firstFact) : {}),
+              },
+            },
+            inputEvent,
+          )
+          return operation ? [operation] : []
+        }
+
+      case 'item_completed':
+        {
+          const toolFacts = facts.filter(isThreadDisplayToolLikeFact)
+          if (toolFacts.length > 0) {
+            const toolOperations = toolFacts
+              .filter(fact => {
+                if (fact.lifecycleKind !== 'tool_use') {
+                  return true
+                }
+                const toolUseId =
+                  fact.toolUseId ?? normalizeToolUseIdFromBlock(fact.block)
+                return !toolUseId || !this.toolLifecycle.hasToolUseId(toolUseId)
+              })
+              .map(fact => this.acceptDisplayFact(fact, inputEvent))
+              .filter(
+                (operation): operation is ThreadDisplayPatchOperation =>
+                  operation !== null,
+              )
+            return toolOperations
+          }
+          const item = completedCoreItemToThreadDisplayItem(
+            event,
+            facts.find(isThreadDisplayMessageLikeFact),
+          )
+          return item?.projection
+            ? [
+                this.completeStateItemPatch(
+                  event.itemId,
+                  event.status,
+                  item,
+                  inputEvent,
+                ),
+              ].filter(
+                (operation): operation is ThreadDisplayPatchOperation =>
+                  operation !== null,
+              )
+            : []
+        }
+
+      case 'turn_failed':
+        return [
+          this.appendStateItemPatch(
+            createProjectedDisplayItem({
+              id: `${event.turnId}:error`,
+              type: 'error',
+              text: extractDisplayText(event.error) || '当前 turn 失败。',
+              status: 'failed',
+              identity: {
+                threadId: event.threadId,
+                turnId: event.turnId,
+                itemId: `${event.turnId}:error`,
+              },
+              content: event.error,
+              metadata: {
+                coreEventType: event.type,
+                ...(event.metadata ?? {}),
+                ...(firstFact ? createDisplayFactMetadata(firstFact) : {}),
+              },
+            }),
+            inputEvent,
+          ),
+        ]
+
+      case 'context_compaction_started':
+        return [
+          this.appendStateItemPatch(
+            createContextCompactionStartedItem(
+              event,
+              facts.find(isThreadDisplaySystemFact),
+            ),
+            inputEvent,
+          ),
+        ]
+
+      case 'context_compacted':
+        {
+          const itemId = getContextCompactedDisplayItemId(event)
+          const operation = this.completeStateItemPatch(
+            itemId,
+            'completed',
+            createContextCompactedItem(
+              event,
+              itemId,
+              facts.find(isThreadDisplaySystemFact),
+            ),
+            inputEvent,
+          )
+          return operation ? [operation] : []
+        }
+
+      case 'permission_requested':
+        {
+          const controlFact = facts.find(isThreadDisplayControlFact)
+          return [
+            this.appendStateItemPatch(
+              createPermissionRequestedItem(event, controlFact),
+              inputEvent,
+            ),
+          ]
+        }
+
+      case 'permission_cancelled':
+        {
+          const controlFact = facts.find(isThreadDisplayControlFact)
+          const operation = this.updateStateItemPatch(
+            controlFact?.itemId ?? event.permissionRequestId,
+            {
+              status: 'cancelled',
+              metadata: {
+                coreEventType: event.type,
+                reason: event.reason,
+                ...(controlFact ? createDisplayFactMetadata(controlFact) : {}),
+              },
+            },
+            inputEvent,
+          )
+          return operation ? [operation] : []
+        }
+
+      case 'thread_started':
+      case 'turn_started':
+      case 'turn_completed':
+      case 'turn_cancelled':
+        return []
+    }
   }
 }
 
-function threadMessagesToDisplayItems(
-  messages: AppServerThreadMessage[],
-  context: {
-    threadId: string
-    sessionId?: string
-  },
-): ThreadDisplayItem[] {
-  const items: ThreadDisplayItem[] = []
-  const lifecycle = createToolDisplayLifecycleReducer()
-  const toolItemIndexes = new Map<string, number>()
+export function createThreadDisplayReducer(context: {
+  threadId: string
+  sessionId?: string
+}): ThreadDisplayReducer {
+  return new ThreadDisplayReducer(context)
+}
 
-  for (const [sourceIndex, message] of messages.entries()) {
-    const blocks = getMessageJsonBlocks(message)
-    if (!blocks.some(isToolLifecycleBlock)) {
-      items.push(
-        threadMessageToDisplayItem(message, {
-          ...context,
-          sourceIndex,
-        }),
-      )
-      continue
-    }
-
-    let pendingBlocks: CoreJsonObject[] = []
-    let pendingStartIndex: number | undefined
-    const flushPendingBlocks = (): void => {
-      if (pendingBlocks.length === 0) return
-      items.push(
-        threadMessageToDisplayItem(
-          {
-            ...message,
-            id:
-              pendingStartIndex === undefined
-                ? message.id
-                : `${message.id}:content:${pendingStartIndex}`,
-            content: pendingBlocks,
-            text: extractDisplayText(pendingBlocks),
-          },
-          {
-            ...context,
-            sourceIndex,
-            contentIndex: pendingStartIndex,
-          },
-        ),
-      )
-      pendingBlocks = []
-      pendingStartIndex = undefined
-    }
-
-    for (const [contentIndex, block] of blocks.entries()) {
-      const blockType = getContentBlockType(block)
-      if (blockType !== 'tool_use' && blockType !== 'tool_result') {
-        pendingStartIndex ??= contentIndex
-        pendingBlocks.push(block)
-        continue
-      }
-
-      flushPendingBlocks()
-      const source = {
-        threadId: context.threadId,
-        ...(context.sessionId ? { sessionId: context.sessionId } : {}),
-        messageUuid: message.id,
-        rawIndex: sourceIndex,
-        materializedIndex: sourceIndex,
-        contentIndex,
-        ...(message.createdAt ? { createdAt: message.createdAt } : {}),
-      }
-
-      if (blockType === 'tool_use') {
-        const state = lifecycle.accept({ kind: 'tool_use', block, source })
-        const item = createToolLifecycleDisplayItem(message, state, sourceIndex)
-        const itemIndex = items.length
-        items.push(item)
-        if (state.toolUseId) {
-          toolItemIndexes.set(state.toolUseId, itemIndex)
-        }
-        continue
-      }
-
-      const state = lifecycle.accept({ kind: 'tool_result', block, source })
-      const sourceToolUseId = normalizeToolResultSourceIdFromBlock(block)
-      const existingItemIndex = sourceToolUseId
-        ? toolItemIndexes.get(sourceToolUseId)
-        : undefined
-      if (existingItemIndex !== undefined) {
-        items[existingItemIndex] = createToolLifecycleDisplayItem(
-          message,
-          state,
-          sourceIndex,
-          items[existingItemIndex],
-        )
-      } else {
-        items.push(createToolLifecycleDisplayItem(message, state, sourceIndex))
-      }
-    }
-
-    flushPendingBlocks()
+function compareThreadDisplayOrderKeys(
+  left: ThreadDisplayOrderKey,
+  right: ThreadDisplayOrderKey,
+): number {
+  if (left.source !== right.source) {
+    return left.source === 'history' ? -1 : 1
   }
+  if (left.ordinal !== right.ordinal) {
+    return left.ordinal - right.ordinal
+  }
+  const leftTimestamp = left.timestamp ?? ''
+  const rightTimestamp = right.timestamp ?? ''
+  if (leftTimestamp !== rightTimestamp) {
+    return leftTimestamp.localeCompare(rightTimestamp)
+  }
+  return (left.itemId ?? '').localeCompare(right.itemId ?? '')
+}
 
-  return items
+function getSourceIdentityKey(sourceIdentity: ThreadDisplaySourceIdentity): string {
+  return `${sourceIdentity.kind}:${sourceIdentity.sourceId}`
+}
+
+function threadDisplayInputDiagnosticToDisplayDiagnostic(
+  diagnostic: ThreadDisplayInputDiagnostic,
+  inputEvent: ThreadDisplayReducerInputEvent,
+): ThreadDisplayDiagnostic {
+  return {
+    level: 'error',
+    code: diagnostic.code,
+    message: diagnostic.message,
+    details: {
+      ...(diagnostic.details ?? {}),
+      source: inputEvent.source,
+      payloadType: inputEvent.payload.type,
+      sourceIdentityKind: inputEvent.sourceIdentity.kind,
+      sourceId: inputEvent.sourceIdentity.sourceId,
+    },
+  }
+}
+
+function createInputDiagnosticDisplayItem(
+  inputEvent: ThreadDisplayReducerInputEvent,
+  fact?: ThreadDisplayUnsupportedFact,
+): ThreadDisplayItem {
+  const diagnostic =
+    inputEvent.diagnostics[0] ??
+    ({
+      code: 'thread_display_input_diagnostic',
+      message: '展示输入协议诊断。',
+    } satisfies ThreadDisplayInputDiagnostic)
+  const displayDiagnostic = threadDisplayInputDiagnosticToDisplayDiagnostic(
+    diagnostic,
+    inputEvent,
+  )
+  const itemId = `diagnostic:${inputEvent.sourceIdentity.sourceId}`
+  const text = `展示协议错误（protocol error）：${displayDiagnostic.message}`
+  return createProjectedDisplayItem({
+    id: itemId,
+    type: 'error',
+    text,
+    status: 'diagnostic',
+    sourceKind: 'thread_display_input_diagnostic',
+    identity: {
+      threadId: inputEvent.threadId,
+      ...(inputEvent.sessionId ? { sessionId: inputEvent.sessionId } : {}),
+      ...('turnId' in inputEvent && inputEvent.turnId
+        ? { turnId: inputEvent.turnId }
+        : {}),
+      itemId,
+    },
+    content: [{ type: 'text', text }],
+    metadata: {
+      inputDiagnostic: displayDiagnostic,
+      orderKey: inputEvent.orderKey,
+      sourceIdentity: inputEvent.sourceIdentity,
+      ...(fact ? createDisplayFactMetadata(fact) : {}),
+    },
+  })
+}
+
+function createStateDiagnosticDisplayItem(
+  inputEvent: ThreadDisplayRealtimeInputEvent,
+  diagnostic: ThreadDisplayDiagnostic,
+  fact?: ThreadDisplayFact,
+): ThreadDisplayItem {
+  const itemId = `diagnostic:${inputEvent.sourceIdentity.sourceId}:state`
+  const text = `展示状态诊断：${diagnostic.message}`
+  return createProjectedDisplayItem({
+    id: itemId,
+    type: 'error',
+    text,
+    status: 'diagnostic',
+    sourceKind: 'thread_display_state_diagnostic',
+    identity: {
+      threadId: inputEvent.threadId,
+      ...(inputEvent.sessionId ? { sessionId: inputEvent.sessionId } : {}),
+      ...(inputEvent.turnId ? { turnId: inputEvent.turnId } : {}),
+      itemId,
+    },
+    content: [{ type: 'text', text }],
+    metadata: {
+      stateDiagnostic: diagnostic,
+      orderKey: inputEvent.orderKey,
+      sourceIdentity: inputEvent.sourceIdentity,
+      ...(fact ? createDisplayFactMetadata(fact) : {}),
+    },
+  })
+}
+
+function createToolLikeDisplayFactMetadata(
+  fact: ThreadDisplayToolLikeFact,
+  existingItem?: ThreadDisplayItem,
+): Record<string, unknown> {
+  const metadata = createDisplayFactMetadata(fact)
+  const existingDisplayFact = getMetadataObject(
+    existingItem?.metadata,
+    'displayFact',
+  )
+  if (
+    fact.lifecycleKind !== 'tool_use' &&
+    existingDisplayFact?.factType === 'file'
+  ) {
+    metadata.displayFact = {
+      ...existingDisplayFact,
+      inputKind: fact.inputKind,
+      orderKey: fact.orderKey,
+      contentIndex: fact.contentIndex,
+      parentToolUseId: fact.parentToolUseId,
+    }
+  }
+  if (fact.completedAt) {
+    metadata.completedAt = fact.completedAt
+  }
+  if (fact.durationMs !== undefined) {
+    metadata.durationMs = fact.durationMs
+  }
+  return metadata
+}
+
+function createDisplayFactMetadataWithoutContent(
+  fact: ThreadDisplayFact,
+): Record<string, unknown> {
+  const metadata = createDisplayFactMetadata(fact)
+  delete metadata.primaryBlock
+  delete metadata.attachmentBlocks
+  return metadata
+}
+
+function getMetadataObject(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): Record<string, unknown> | undefined {
+  const value = metadata?.[key]
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined
+}
+
+function createMessageLikeDisplayItem(
+  fact:
+    | ThreadDisplayMessageFact
+    | ThreadDisplayAttachmentFact
+    | ThreadDisplayErrorFact
+    | ThreadDisplaySystemFact,
+): ThreadDisplayItem {
+  const fallbackText =
+    fact.factType === 'error' || fact.factType === 'system'
+      ? fact.text
+      : extractDisplayText(fact.blocks)
+  const message =
+    fact.message ??
+    ({
+      id: fact.itemId,
+      role: fact.factType === 'error' ? 'error' : 'system',
+      text: fallbackText,
+      content: fact.blocks,
+    } satisfies AppServerThreadMessage)
+  return threadMessageToDisplayItem(message, {
+    threadId: fact.threadId,
+    ...(fact.sessionId ? { sessionId: fact.sessionId } : {}),
+    sourceIndex: fact.identity.sourceIndex ?? 0,
+    ...(fact.contentIndex !== undefined ? { contentIndex: fact.contentIndex } : {}),
+    displayFact: fact,
+  })
 }
 
 function createToolLifecycleDisplayItem(
@@ -185,10 +953,11 @@ function createToolLifecycleDisplayItem(
   extraMetadata?: Record<string, unknown>,
 ): ThreadDisplayItem {
   const isDiagnostic = Boolean(state.diagnostic)
-  const primaryBlock = state.callBlock ?? state.resultBlock
   const content = isDiagnostic
     ? [{ type: 'text', text: state.diagnostic?.message ?? '工具结果诊断。' }]
     : createToolLifecycleItemContent(state)
+  const primaryBlock =
+    !isDiagnostic && isCoreJsonObject(content[0]) ? content[0] : undefined
   const sourceIndex = state.firstSeen.rawIndex ?? fallbackSourceIndex
   const contentIndex = state.firstSeen.contentIndex
   const itemId = existingItem?.id ?? state.itemId
@@ -200,8 +969,8 @@ function createToolLifecycleDisplayItem(
     extraMetadata,
   )
 
-  return withThreadDisplayProjection({
-    ...(existingItem ?? {}),
+  return createProjectedDisplayItem({
+    base: existingItem,
     id: itemId,
     type: isDiagnostic
       ? 'error'
@@ -305,6 +1074,7 @@ function createToolLifecycleItemContent(
         ...state.callBlock,
         historyStatus: state.status,
         status: state.status,
+        ...(state.progressBlock ? { progress: state.progressBlock } : {}),
         ...(state.resultBlock
           ? { result: createToolUseDisplayResult(state.resultBlock) }
           : {}),
@@ -382,15 +1152,6 @@ function getMessageJsonBlocks(message: AppServerThreadMessage): CoreJsonObject[]
   return message.content.filter(isCoreJsonObject)
 }
 
-function isToolLifecycleBlock(block: CoreJsonObject): boolean {
-  const type = getContentBlockType(block)
-  return type === 'tool_use' || type === 'tool_result'
-}
-
-function getContentBlockType(block: CoreJsonObject): string {
-  return typeof block.type === 'string' ? block.type : ''
-}
-
 function countVisibleThreadDisplayItems(items: ThreadDisplayItem[]): number {
   return items.filter(item => item.timelineHidden !== true).length
 }
@@ -402,9 +1163,12 @@ function threadMessageToDisplayItem(
     sessionId?: string
     sourceIndex: number
     contentIndex?: number
+    displayFact?: ThreadDisplayFact
   },
 ): ThreadDisplayItem {
-  const content = sanitizeThreadDisplayContent(message.content)
+  const content = sanitizeThreadDisplayContent(message.content, {
+    materializeGeneratedOutputImages: message.role === 'assistant',
+  })
   if (
     isThinkingOnlyContent(message.content) &&
     message.role === 'assistant'
@@ -430,11 +1194,14 @@ function threadMessageToDisplayItem(
       metadata: {
         role: message.role,
         ...(message.sourceType ? { sourceType: message.sourceType } : {}),
+        ...(context.displayFact
+          ? createDisplayFactMetadataWithoutContent(context.displayFact)
+          : {}),
       },
     })
   }
 
-  return withThreadDisplayProjection({
+  return createProjectedDisplayItem({
     id: message.id,
     type: getThreadDisplayItemType({
       ...message,
@@ -460,6 +1227,7 @@ function threadMessageToDisplayItem(
     metadata: {
       role: message.role,
       ...(message.sourceType ? { sourceType: message.sourceType } : {}),
+      ...(context.displayFact ? createDisplayFactMetadata(context.displayFact) : {}),
     },
   })
 }
@@ -505,12 +1273,26 @@ function getSpecificThreadDisplayItemTypeFromUnknownContent(
 export function coreEventToThreadDisplayPatch(
   event: CoreTurnEvent,
 ): ThreadDisplayPatch | null {
-  const threadId = getCoreEventThreadId(event)
+  const inputEvent = coreTurnEventToDisplayReducerInputEvent(event)
+  const threadId = inputEvent.threadId
   if (!threadId) {
     return null
   }
 
-  const operations = getCoreEventDisplayPatchOperations(event)
+  if (event.type === 'thread_started') {
+    clearLiveThreadDisplayReducersForThread(event.thread.threadId)
+    return null
+  }
+
+  const reducer = getLiveThreadDisplayReducer(inputEvent)
+  const operations = reducer.acceptOne(inputEvent).consumePatchOperations()
+  if (
+    event.type === 'turn_completed' ||
+    event.type === 'turn_failed' ||
+    event.type === 'turn_cancelled'
+  ) {
+    clearLiveThreadDisplayReducer(threadId, event.turnId)
+  }
   if (operations.length === 0) {
     return null
   }
@@ -522,350 +1304,45 @@ export function coreEventToThreadDisplayPatch(
   }
 }
 
-function getCoreEventDisplayPatchOperations(
-  event: CoreTurnEvent,
-): ThreadDisplayPatchOperation[] {
-  switch (event.type) {
-    case 'item_started':
-      {
-        const toolOperations = getItemStartedToolLifecyclePatchOperations(event)
-        if (toolOperations) {
-          return toolOperations
-        }
-        const item = coreItemToThreadDisplayItem(event.item)
-        return item.projection
-          ? [
-              {
-                op: 'append_item',
-                item,
-              },
-            ]
-          : []
-      }
-
-    case 'item_delta':
-      if (isThinkingContentBlock(event.delta)) {
-        return []
-      }
-      return [
-        {
-          op: 'update_item',
-          itemId: event.itemId,
-          item: {
-            type: getThreadDisplayItemTypeFromDelta(event.delta),
-            status: 'streaming',
-            text: getCoreDeltaDisplayText(event.delta),
-            metadata: {
-              coreEventType: event.type,
-              deltaMode: 'append_text',
-              delta: event.delta,
-            },
-          },
-        },
-      ]
-
-    case 'item_completed':
-      {
-        const toolOperations = getItemCompletedToolLifecyclePatchOperations(event)
-        if (toolOperations) {
-          return toolOperations
-        }
-        const item = completedCoreItemToThreadDisplayItem(event)
-        return item?.projection
-          ? [
-              {
-                op: 'complete_item',
-                itemId: event.itemId,
-                status: event.status,
-                item,
-              },
-            ]
-          : []
-      }
-
-    case 'turn_failed':
-      {
-        const operations: ThreadDisplayPatchOperation[] = [
-          {
-            op: 'append_item',
-            item: withThreadDisplayProjection({
-              id: `${event.turnId}:error`,
-              type: 'error',
-              text: extractDisplayText(event.error) || '当前 turn 失败。',
-              status: 'failed',
-              identity: {
-                threadId: event.threadId,
-                turnId: event.turnId,
-                itemId: `${event.turnId}:error`,
-              },
-              content: event.error,
-              metadata: {
-                coreEventType: event.type,
-                ...(event.metadata ?? {}),
-              },
-            }),
-          },
-        ]
-        clearLiveToolLifecycle(event.threadId, event.turnId)
-        return operations
-      }
-
-    case 'context_compaction_started':
-      return [
-        {
-          op: 'append_item',
-          item: createContextCompactionStartedItem(event),
-        },
-      ]
-
-    case 'context_compacted':
-      {
-        const itemId = getContextCompactedDisplayItemId(event)
-        return [
-          {
-            op: 'complete_item',
-            itemId,
-            status: 'completed',
-            item: createContextCompactedItem(event, itemId),
-          },
-        ]
-      }
-
-    case 'permission_requested':
-      return [
-        {
-          op: 'append_item',
-          item: withThreadDisplayProjection({
-            id: event.request.permissionRequestId,
-            type: 'permission_request',
-            text: `权限请求：${event.request.tool.displayName ?? event.request.tool.name}`,
-            status: 'pending',
-            createdAt: event.request.createdAt,
-            identity: {
-              threadId: event.request.threadId,
-              turnId: event.request.turnId,
-              itemId: event.request.permissionRequestId,
-              toolUseId: event.request.toolUseId,
-            },
-            content: event.request,
-            metadata: {
-              coreEventType: event.type,
-            },
-          }),
-        },
-      ]
-
-    case 'permission_cancelled':
-      return [
-        {
-          op: 'update_item',
-          itemId: event.permissionRequestId,
-          item: {
-            status: 'cancelled',
-            metadata: {
-              coreEventType: event.type,
-              reason: event.reason,
-            },
-          },
-        },
-      ]
-
-    case 'thread_started':
-      clearLiveToolLifecyclesForThread(event.thread.threadId)
-      return []
-    case 'turn_started':
-    case 'turn_completed':
-      clearLiveToolLifecycle(event.threadId, event.turnId)
-      return []
-    case 'turn_cancelled':
-      clearLiveToolLifecycle(event.threadId, event.turnId)
-      return []
-  }
-}
-
-function getItemStartedToolLifecyclePatchOperations(
-  event: Extract<CoreTurnEvent, { type: 'item_started' }>,
-): ThreadDisplayPatchOperation[] | null {
-  const blocks = getCoreJsonBlocksFromUnknownContent(event.item.content)
-  if (!blocks.some(isToolLifecycleBlock)) {
-    return null
-  }
-
-  const lifecycle = getLiveToolLifecycle(event.item.threadId, event.item.turnId)
-  const message = coreItemToThreadMessage(event.item, blocks)
-  const operations: ThreadDisplayPatchOperation[] = []
-
-  for (const [contentIndex, block] of blocks.entries()) {
-    if (getContentBlockType(block) !== 'tool_use') {
-      continue
-    }
-
-    const toolUseId = normalizeToolUseIdFromBlock(block)
-    const existing = toolUseId ? lifecycle.hasToolUseId(toolUseId) : false
-    const state = lifecycle.accept({
-      kind: 'tool_use',
-      block,
-      source: createLiveToolLifecycleSource(event.item, contentIndex),
+function getLiveThreadDisplayReducer(
+  inputEvent: ThreadDisplayRealtimeInputEvent,
+): ThreadDisplayReducer {
+  const key = getLiveThreadDisplayReducerKey(inputEvent)
+  let reducer = liveThreadDisplayReducers.get(key)
+  if (!reducer) {
+    reducer = createThreadDisplayReducer({
+      threadId: inputEvent.threadId,
+      ...(inputEvent.sessionId ? { sessionId: inputEvent.sessionId } : {}),
     })
-    const item = createToolLifecycleDisplayItem(
-      message,
-      state,
-      undefined,
-      undefined,
-      {
-        coreEventType: event.type,
-      },
-    )
-    operations.push(
-      existing
-        ? {
-            op: 'update_item',
-            itemId: item.id,
-            item,
-          }
-        : {
-            op: 'append_item',
-            item,
-          },
-    )
+    liveThreadDisplayReducers.set(key, reducer)
   }
-
-  return operations
+  return reducer
 }
 
-function getItemCompletedToolLifecyclePatchOperations(
-  event: Extract<CoreTurnEvent, { type: 'item_completed' }>,
-): ThreadDisplayPatchOperation[] | null {
-  const blocks = getCoreJsonBlocksFromUnknownContent(event.content)
-  if (!blocks.some(isToolLifecycleBlock)) {
-    return null
-  }
-
-  const lifecycle = getLiveToolLifecycle(event.threadId, event.turnId)
-  const message = coreCompletedItemToThreadMessage(event, blocks)
-  const operations: ThreadDisplayPatchOperation[] = []
-
-  for (const [contentIndex, block] of blocks.entries()) {
-    const blockType = getContentBlockType(block)
-    if (blockType === 'tool_use') {
-      const toolUseId = normalizeToolUseIdFromBlock(block)
-      if (toolUseId && lifecycle.hasToolUseId(toolUseId)) {
-        continue
-      }
-      const state = lifecycle.accept({
-        kind: 'tool_use',
-        block,
-        source: createLiveToolLifecycleSource(event, contentIndex),
-      })
-      operations.push({
-        op: 'append_item',
-        item: createToolLifecycleDisplayItem(
-          message,
-          state,
-          undefined,
-          undefined,
-          getItemCompletedMetadata(event),
-        ),
-      })
-      continue
-    }
-
-    if (blockType !== 'tool_result') {
-      continue
-    }
-
-    const state = lifecycle.accept({
-      kind: 'tool_result',
-      block,
-      source: createLiveToolLifecycleSource(event, contentIndex),
-    })
-    const item = createToolLifecycleDisplayItem(
-      message,
-      state,
-      undefined,
-      undefined,
-      getItemCompletedMetadata(event),
-    )
-    operations.push(
-      state.diagnostic
-        ? {
-            op: 'append_item',
-            item,
-          }
-        : {
-            op: 'complete_item',
-            itemId: item.id,
-            status: state.status,
-            item,
-          },
-    )
-  }
-
-  return operations
+function clearLiveThreadDisplayReducer(threadId: string, turnId: string): void {
+  liveThreadDisplayReducers.delete(`${threadId}:${turnId}`)
 }
 
-function getLiveToolLifecycle(
-  threadId: string,
-  turnId: string,
-): ReturnType<typeof createToolDisplayLifecycleReducer> {
-  const key = getLiveToolLifecycleKey(threadId, turnId)
-  let lifecycle = liveToolLifecycles.get(key)
-  if (!lifecycle) {
-    lifecycle = createToolDisplayLifecycleReducer()
-    liveToolLifecycles.set(key, lifecycle)
-  }
-  return lifecycle
-}
-
-function clearLiveToolLifecycle(threadId: string, turnId: string): void {
-  liveToolLifecycles.delete(getLiveToolLifecycleKey(threadId, turnId))
-}
-
-function clearLiveToolLifecyclesForThread(threadId: string): void {
+function clearLiveThreadDisplayReducersForThread(threadId: string): void {
   const prefix = `${threadId}:`
-  for (const key of liveToolLifecycles.keys()) {
+  for (const key of liveThreadDisplayReducers.keys()) {
     if (key.startsWith(prefix)) {
-      liveToolLifecycles.delete(key)
+      liveThreadDisplayReducers.delete(key)
     }
   }
 }
 
-function getLiveToolLifecycleKey(threadId: string, turnId: string): string {
-  return `${threadId}:${turnId}`
+function getLiveThreadDisplayReducerKey(
+  inputEvent: ThreadDisplayRealtimeInputEvent,
+): string {
+  return `${inputEvent.threadId}:${inputEvent.turnId ?? '__thread__'}`
 }
 
-function createLiveToolLifecycleSource(
-  source: {
-    threadId: string
-    turnId: string
-    itemId?: string
-    startedAt?: unknown
-    createdAt?: unknown
-  },
-  contentIndex: number,
-): {
-  threadId: string
-  turnId: string
-  messageUuid?: string
-  contentIndex: number
-  createdAt?: string
-} {
-  const createdAt =
-    typeof source.startedAt === 'string'
-      ? source.startedAt
-      : typeof source.createdAt === 'string'
-        ? source.createdAt
-        : undefined
-  return {
-    threadId: source.threadId,
-    turnId: source.turnId,
-    ...(source.itemId ? { messageUuid: source.itemId } : {}),
-    contentIndex,
-    ...(createdAt ? { createdAt } : {}),
-  }
+function getCoreJsonBlocksFromUnknownContent(content: unknown): CoreJsonObject[] {
+  return Array.isArray(content) ? content.filter(isCoreJsonObject) : []
 }
 
-function coreItemToThreadMessage(
+function coreItemToThreadDisplayItem(
   item: CoreJsonObject & {
     itemId: string
     threadId: string
@@ -873,73 +1350,11 @@ function coreItemToThreadMessage(
     kind: string
     status: string
   },
-  content: CoreJsonObject[],
-): AppServerThreadMessage {
-  const displayContent = sanitizeThreadDisplayContent(content)
-  return {
-    id: item.itemId,
-    role: getThreadMessageRoleFromKind(item.kind),
-    text: extractDisplayText(displayContent ?? content),
-    status: item.status,
-    kind: item.kind,
-    createdAt: getStringField(item, ['startedAt', 'createdAt']),
-    ...(displayContent !== undefined ? { content: displayContent } : {}),
-  }
-}
-
-function coreCompletedItemToThreadMessage(
-  event: Extract<CoreTurnEvent, { type: 'item_completed' }>,
-  content: CoreJsonObject[],
-): AppServerThreadMessage {
-  const displayContent = sanitizeCoreJsonBlocks(content)
-  return {
-    id: event.itemId,
-    role: getThreadMessageRoleFromKind(event.kind),
-    text: extractDisplayText(displayContent ?? content),
-    status: event.status,
-    ...(event.kind ? { kind: event.kind } : {}),
-    createdAt: event.startedAt,
-    ...(displayContent !== undefined ? { content: displayContent } : {}),
-  }
-}
-
-function getThreadMessageRoleFromKind(
-  kind: string | undefined,
-): AppServerThreadMessage['role'] {
-  if (kind === 'tool_result' || kind === 'user_message') {
-    return 'user'
-  }
-  if (kind?.includes('system')) {
-    return 'system'
-  }
-  if (kind?.includes('error')) {
-    return 'error'
-  }
-  return 'assistant'
-}
-
-function getCoreJsonBlocksFromUnknownContent(content: unknown): CoreJsonObject[] {
-  return Array.isArray(content) ? content.filter(isCoreJsonObject) : []
-}
-
-function getItemCompletedMetadata(
-  event: Extract<CoreTurnEvent, { type: 'item_completed' }>,
-): Record<string, unknown> {
-  return {
-    coreEventType: event.type,
-    ...(event.completedAt ? { completedAt: event.completedAt } : {}),
-    ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
-  }
-}
-
-function coreItemToThreadDisplayItem(item: CoreJsonObject & {
-  itemId: string
-  threadId: string
-  turnId: string
-  kind: string
-  status: string
-}): ThreadDisplayItem {
-  const content = sanitizeThreadDisplayContent(item.content)
+  fact?: ThreadDisplayFact,
+): ThreadDisplayItem {
+  const content = sanitizeThreadDisplayContent(item.content, {
+    materializeGeneratedOutputImages: item.kind === 'assistant_message',
+  })
   if (isThinkingOnlyContent(item.content) && item.kind === 'assistant_message') {
     return createReasoningOnlyNoticeItem({
       id: item.itemId,
@@ -955,11 +1370,12 @@ function coreItemToThreadDisplayItem(item: CoreJsonObject & {
       },
       metadata: {
         coreEventType: 'item_started',
+        ...(fact ? createDisplayFactMetadataWithoutContent(fact) : {}),
       },
     })
   }
 
-  return withThreadDisplayProjection({
+  return createProjectedDisplayItem({
     id: item.itemId,
     type: getThreadDisplayItemTypeFromKind(item.kind),
     text: extractDisplayText(content ?? item.text ?? item.summary),
@@ -975,14 +1391,19 @@ function coreItemToThreadDisplayItem(item: CoreJsonObject & {
     ...(content !== undefined ? { content } : {}),
     metadata: {
       coreEventType: 'item_started',
+      ...(fact ? createDisplayFactMetadata(fact) : {}),
     },
   })
 }
 
 function completedCoreItemToThreadDisplayItem(
   event: Extract<CoreTurnEvent, { type: 'item_completed' }>,
+  fact?: ThreadDisplayFact,
 ): ThreadDisplayItem | null {
-  const content = sanitizeCoreJsonBlocks(event.content)
+  const contentBlocks = getCoreJsonBlocksFromUnknownContent(event.content)
+  const content = sanitizeCoreJsonBlocks(contentBlocks, {
+    materializeGeneratedOutputImages: event.kind === 'assistant_message',
+  })
   if (isThinkingOnlyContent(event.content) && event.kind === 'assistant_message') {
     return createReasoningOnlyNoticeItem({
       id: event.itemId,
@@ -1000,6 +1421,7 @@ function completedCoreItemToThreadDisplayItem(
         coreEventType: event.type,
         ...(event.completedAt ? { completedAt: event.completedAt } : {}),
         ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+        ...(fact ? createDisplayFactMetadataWithoutContent(fact) : {}),
       },
     })
   }
@@ -1011,7 +1433,7 @@ function completedCoreItemToThreadDisplayItem(
   if (!type) {
     return null
   }
-  return withThreadDisplayProjection({
+  return createProjectedDisplayItem({
     id: event.itemId,
     type,
     text: extractDisplayText(content),
@@ -1029,7 +1451,28 @@ function completedCoreItemToThreadDisplayItem(
       coreEventType: event.type,
       ...(event.completedAt ? { completedAt: event.completedAt } : {}),
       ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+      ...(fact ? createDisplayFactMetadata(fact) : {}),
     },
+  })
+}
+
+function createProjectedDisplayItem(
+  input: ProjectedDisplayItemInput,
+): ThreadDisplayItem {
+  return withThreadDisplayProjection({
+    ...(input.base ?? {}),
+    id: input.id,
+    type: input.type,
+    text: input.text,
+    ...(input.status ? { status: input.status } : {}),
+    ...(input.sourceKind ? { sourceKind: input.sourceKind } : {}),
+    ...(input.createdAt ? { createdAt: input.createdAt } : {}),
+    ...(input.timelineHidden !== undefined
+      ? { timelineHidden: input.timelineHidden }
+      : {}),
+    ...(input.identity ? { identity: input.identity } : {}),
+    ...(input.content !== undefined ? { content: input.content } : {}),
+    ...(input.metadata ? { metadata: input.metadata } : {}),
   })
 }
 
@@ -1043,20 +1486,33 @@ function getCompletedThreadDisplayItemType(
   return type === 'assistant_message' ? undefined : type
 }
 
-function sanitizeThreadDisplayContent(content: unknown): unknown {
+function sanitizeThreadDisplayContent(
+  content: unknown,
+  options: {
+    materializeGeneratedOutputImages?: boolean
+  } = {},
+): unknown {
   if (!Array.isArray(content)) {
     return content
   }
-  return sanitizeCoreJsonBlocks(content.filter(isCoreJsonObject))
+  return sanitizeCoreJsonBlocks(content.filter(isCoreJsonObject), options)
 }
 
 function sanitizeCoreJsonBlocks(
   content: readonly CoreJsonObject[],
+  options: {
+    materializeGeneratedOutputImages?: boolean
+  } = {},
 ): CoreJsonObject[] | undefined {
   const displayBlocks = content.filter(
     block => !isThinkingContentBlock(block),
   )
-  return displayBlocks.length > 0 ? displayBlocks : undefined
+  if (displayBlocks.length === 0) {
+    return undefined
+  }
+  return options.materializeGeneratedOutputImages
+    ? materializeGeneratedOutputImageBlocks(displayBlocks)
+    : displayBlocks
 }
 
 function isThinkingOnlyContent(content: unknown): boolean {
@@ -1091,7 +1547,7 @@ function createReasoningOnlyNoticeItem(input: {
   identity: ThreadDisplayItem['identity']
   metadata?: ThreadDisplayItem['metadata']
 }): ThreadDisplayItem {
-  return withThreadDisplayProjection({
+  return createProjectedDisplayItem({
     id: input.id,
     type: 'system_notice',
     text: '模型只返回了推理内容，未返回最终回复。',
@@ -1147,6 +1603,7 @@ function getCoreEventThreadId(event: CoreTurnEvent): string | undefined {
 
 function createContextCompactionStartedItem(
   event: Extract<CoreTurnEvent, { type: 'context_compaction_started' }>,
+  fact?: ThreadDisplaySystemFact,
 ): ThreadDisplayItem {
   const itemId = getContextCompactionStartedDisplayItemId(event)
   activeContextCompactionItemIds.set(event.threadId, itemId)
@@ -1160,7 +1617,7 @@ function createContextCompactionStartedItem(
     startedAt: event.startedAt,
   })
 
-  return withThreadDisplayProjection({
+  return createProjectedDisplayItem({
     id: itemId,
     type: 'system_notice',
     text,
@@ -1176,6 +1633,7 @@ function createContextCompactionStartedItem(
     metadata: compactJsonObject({
       coreEventType: event.type,
       compactSnapshot,
+      ...(fact ? createDisplayFactMetadata(fact) : {}),
     }),
   })
 }
@@ -1183,11 +1641,12 @@ function createContextCompactionStartedItem(
 function createContextCompactedItem(
   event: Extract<CoreTurnEvent, { type: 'context_compacted' }>,
   itemId: string,
+  fact?: ThreadDisplaySystemFact,
 ): ThreadDisplayItem {
   const compactSnapshot = createContextCompactSnapshot(event)
   const text = formatContextCompactedText(compactSnapshot)
 
-  return withThreadDisplayProjection({
+  return createProjectedDisplayItem({
     id: itemId,
     type: 'system_notice',
     text,
@@ -1203,7 +1662,34 @@ function createContextCompactedItem(
       coreEventType: event.type,
       compactSnapshot,
       compactResult: event.result,
+      ...(fact ? createDisplayFactMetadata(fact) : {}),
     }),
+  })
+}
+
+function createPermissionRequestedItem(
+  event: Extract<CoreTurnEvent, { type: 'permission_requested' }>,
+  fact?: ThreadDisplayControlFact,
+): ThreadDisplayItem {
+  return createProjectedDisplayItem({
+    id: fact?.itemId ?? event.request.permissionRequestId,
+    type: 'permission_request',
+    text:
+      fact?.text ??
+      `权限请求：${event.request.tool.displayName ?? event.request.tool.name}`,
+    status: 'pending',
+    createdAt: event.request.createdAt,
+    identity: {
+      threadId: event.request.threadId,
+      turnId: event.request.turnId,
+      itemId: fact?.itemId ?? event.request.permissionRequestId,
+      toolUseId: event.request.toolUseId,
+    },
+    content: event.request,
+    metadata: {
+      coreEventType: event.type,
+      ...(fact ? createDisplayFactMetadata(fact) : {}),
+    },
   })
 }
 

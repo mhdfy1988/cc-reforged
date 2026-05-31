@@ -1,6 +1,6 @@
 # CCR 协议统一化接入状态总账
 
-更新时间：2026-05-19
+更新时间：2026-05-28
 
 ## 1. 文档目标
 
@@ -21,6 +21,9 @@
 - [CCR Provider 真实 Probe 设计与入口](./provider-real-probe-design.md)
 - [CCR 多模态输入输出设计](./multimodal-input-output-design.md)
 - [CCR 模型输出归一化与展示标准](./model-output-normalization-and-display-standard.md)
+- [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md)
+- [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md)
+- [CCR 全事件统一 Ordered Display Reducer 设计方向](./thread-display-ordered-reducer-future-design.md)
 - [供应商接入文档](./provider-integrations/README.md)
 
 ## 2. 状态定义
@@ -33,6 +36,17 @@
 | 未开始 | 只有需求方向，没有稳定协议和实现 | 需要先开 goal，明确第一版边界 |
 
 ## 3. 协议面总览
+
+### 3.0 会话与展示协议阅读顺序
+
+排查历史恢复、当前上下文、工具卡、附件、错误卡或 Desktop 可见历史时，先按这个顺序读：
+
+1. [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md)：确认 `currentContextMessages`、`ThreadDisplaySnapshot.items`、`ThreadDisplayPatch.operations` 和 `messages` 兼容字段的边界。
+2. [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md)：确认历史 / 实时输入如何进入同一个 reducer，以及工具、文件、附件、错误 projector 的职责。
+3. [CCR 全事件统一 Ordered Display Reducer 设计方向](./thread-display-ordered-reducer-future-design.md)：确认后续 `orderKey` / `sourceIdentity` / ordered state machine 的演进方向。
+4. 本文的协议面总览：只用于判断某个协议面当前是已落地、部分落地、文档就绪还是未开始。
+
+不要从 `DisplayEvent`、`thread/messages/list.result.messages` 或 provider raw output 反推出 UI 历史状态；这些都不是当前展示事实源。
 
 | 协议面 | 当前状态 | 标准文档 | 代码落点 | 已覆盖 provider / model | 下一步缺口 |
 | --- | --- | --- | --- | --- | --- |
@@ -52,7 +66,10 @@
 | 生成图片输出归一化 | 已落地 | [模型输出归一化与展示标准](./model-output-normalization-and-display-standard.md) | `generatedImageOutputAdapter.ts` | OpenAI / MiniMax 共用 `normalizeGeneratedImageOutputs(...)` | 音频 / 文件 / 视频生成物还没有同等级 adapter |
 | 生成物落盘与恢复 | 已落地 | [STD-OUTPUT-04 goal](../goals/2026-05-18-std-output-04-generated-artifact-persistence.md) | `src/utils/generatedArtifacts.ts` | 图片落盘、`savedPath`、resume 清 payload 已覆盖 | 生成物安全扫描、生命周期清理、媒体库还未做 |
 | 普通会话流生成图片 | 已落地 | [STD-OUTPUT-09 goal](../goals/2026-05-18-std-output-09-session-generated-image-flow.md) | `src/core/coreImageGenerationTurnRunner.ts`、`turn/start options.imageGeneration` | OpenAI / Codex OAuth / MiniMax 都可通过统一 runtime 进入会话流；smoke 使用 mock/fixture 验证 | 真实联网 E2E 仍需单独 probe，不进默认 smoke |
-| DisplayEvent / Snapshot 展示协议 | 已落地 | [模型输出归一化与展示标准](./model-output-normalization-and-display-standard.md) | `apps/desktop/src/renderer/src/domain/displayEvents.ts`、`fileEvents.ts` | 文本、工具、附件、错误、生成图片已进入标准展示事件 | 结构化输出视图、音频/视频生成视图待补 |
+| 当前模型上下文物化 | 已落地 | [会话上下文与展示链路权威契约](./session-context-and-display-contract.md) | `src/utils/conversationMaterialization.ts` | `currentContextMessages` 已由 ordered transcript events 生成；孤立 `tool_result` 诊断丢弃；`buildConversationChain(...)` 退出当前上下文主链路 | fork / branch 语义、legacy/native helper 是否最终移除仍可后续单独治理 |
+| ThreadDisplay 展示 reducer | 已落地 | [ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md)、[Ordered Display Reducer 设计方向](./thread-display-ordered-reducer-future-design.md) | `src/app-server/threadDisplay.ts`、`threadDisplayInputEvent.ts`、`src/display/threadDisplay*Projector.ts` | 历史和实时统一进入 `ThreadDisplayReducerInputEvent`；工具、文件、附件、错误 projector 已拆分；旧 reducer 入口已移除 | 后续按 `orderKey` / `sourceIdentity` 补强输入事实，并演进到唯一 ordered display state |
+| Desktop 展示 snapshot / patch 协议 | 已落地 | [会话上下文与展示链路权威契约](./session-context-and-display-contract.md) | `ThreadDisplaySnapshot.items`、`ThreadDisplayPatch.operations`、Desktop `threadDisplaySnapshot` | `thread/resume` 和 `thread/messages/list` 使用 `displaySnapshot`；`messages` 仅作为兼容 / current-context 载荷；协议错误进入错误卡 | 新建 `thread/display/snapshot` 纯展示接口可作为命名清理项 |
+| DisplayEvent / Snapshot 展示协议 | 已落地 | [模型输出归一化与展示标准](./model-output-normalization-and-display-standard.md) | `apps/desktop/src/renderer/src/domain/displayEvents.ts`、`fileEvents.ts` | 文本、工具、附件、错误、生成图片已进入标准展示事件；当前事实源来自 App Server ThreadDisplay snapshot / patch | 结构化输出视图、音频/视频生成视图待补；Renderer 通用卡片骨架仍是视觉层重构 |
 | Structured Output | 文档就绪 / 部分入口 | [Provider 协议盘点](./provider-protocol-inventory-and-official-docs.md) | `CcrContentBlock type: structured` | 内容块类型存在，provider 兼容策略未系统完成 | 需要新 goal：schema profile、JSON mode、UI 视图、smoke |
 | 音频 / 文件 / 视频生成 | 未开始 | [STD-OUTPUT-03 goal](../goals/2026-05-18-std-output-03-generated-multimodal-output.md) | `CcrContentBlock` 已预留类型 | 暂无真实 provider 生成 API 接入 | 需要先开第二阶段 goal，确定 provider 和生命周期策略 |
 
@@ -69,7 +86,7 @@
 | `glm-coding` | OpenAI Chat compatible | 已落地第一版 | `glm-5.1` | 已接 | 已接 | 已接 OpenAI-style，含 history repair | 第一版目录为文本输入 | 未接 | [glm.md](./provider-integrations/glm.md) |
 | `minimax` | Anthropic Messages compatible + MiniMax image_generation | 已落地第一版 | `MiniMax-M2.7`、`MiniMax-M2.7-highspeed`、`image-01`、`image-01-live` | 已接 | 已接 | 已接 Anthropic-style | 文本模型目录为文本输入 | 已接 `image-01` / `image-01-live` 文本生图 | [minimax.md](./provider-integrations/minimax.md) |
 | `minimax-cn` | Anthropic Messages compatible + MiniMax image_generation | 已落地第一版 | 同 `minimax` | 已接 | 已接 | 已接 Anthropic-style | 文本模型目录为文本输入 | 已接国内版 `/v1/image_generation` 文本生图 | [minimax.md](./provider-integrations/minimax.md) |
-| `anthropic` | Anthropic Messages | 部分落地 | 当前主要走默认模型 / fallback 目录 | Provider 壳存在 | Provider 壳存在 | `AnthropicMessagesAdapter` 已实现，但官方 AnthropicProvider 仍是过渡 metadata 路线 | adapter 支持 user image block 映射，能力目录需补 | 未接 | 待补独立长期文档 |
+| `anthropic` | Anthropic Messages | 部分落地 | 当前主要走默认模型 / 显式兼容目录 | Provider 壳存在 | Provider 壳存在 | `AnthropicMessagesAdapter` 已实现，但官方 AnthropicProvider 仍是过渡 metadata 路线 | adapter 支持 user image block 映射，能力目录需补 | 未接 | 待补独立长期文档 |
 | OpenAI-compatible custom profile | OpenAI Chat compatible | 部分落地 | 由用户 profile / gateway 决定 | 公共 adapter 可复用 | 公共 adapter 可复用 | 已有 tool profile / history repair 默认规则 | 必须靠 profile capability override | 未作为独立 provider 接图片生成；如网关支持 Responses hosted `image_generation`，可复用公共适配器 | [openai-chat-compatible-notes.md](./provider-integrations/openai-chat-compatible-notes.md) |
 | Gemini | Gemini GenerateContent | 文档和 fixture 级 | 未登记正式 provider 模型目录 | 未接 runtime provider | 未接 | fixture 覆盖 `functionCall`，但 adapter 未完成 | 协议盘点有 file/image/audio 规则 | 未接 | 待补独立 provider 文档 |
 | OpenRouter / Vercel AI Gateway | Gateway / OpenAI-compatible variants | 文档盘点级 | 未登记 | 未接独立 provider | 未接 | 需要独立 profile / probe | 不能靠模型名猜能力 | 未接 | 待补 provider 文档 |

@@ -1,5 +1,7 @@
 # CCR App Server 协议详细设计
 
+> 当前会话上下文、ThreadDisplay 展示链路和 `messages` 兼容字段边界，以 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md) 和 [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md) 为准。本文保留 App Server JSON-RPC 协议基础设计和历史方法说明。
+
 ## 1. 文档目标
 
 本文档是 `CCR App Server` 第一版协议的实现依据，对应 todo：
@@ -7,6 +9,14 @@
 - [App Server Todo P1](../stages/app-server-todo.md)
 
 它把总体方案里的 `ccr app-server --listen stdio` 细化为可实现协议，供后续 `Desktop / VS Code / Local Web` 统一接入。
+
+2026-05-28 后，App Server 会话展示相关协议边界补充如下：
+
+- `displaySnapshot` / `thread/display/patch` 是 Desktop 展示权威。
+- `thread/resume.result.messages` 和 `thread/messages/list.result.messages` 是兼容载荷，不是 Desktop UI 历史权威。
+- `messagesSemantics` 必须随 `messages` 一起理解；`current_context_compat` 表示模型继续上下文兼容载荷。
+- projection 缺失或非法必须由 Renderer 显示协议错误卡，不允许 raw fallback。
+- `ThreadDisplayCounts` 只用于诊断和 telemetry，不能反向决定 UI 历史展示条数。
 
 第一版目标：
 

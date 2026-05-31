@@ -14,9 +14,13 @@ export class ToolDisplayLifecycleReducer {
     diagnostics = [];
     nextOrder = 0;
     accept(event) {
-        return event.kind === 'tool_use'
-            ? this.acceptToolUse(event.block, event.source)
-            : this.acceptToolResult(event.block, event.source);
+        if (event.kind === 'tool_use') {
+            return this.acceptToolUse(event.block, event.source);
+        }
+        if (event.kind === 'tool_progress') {
+            return this.acceptToolProgress(event.block, event.source);
+        }
+        return this.acceptToolResult(event.block, event.source);
     }
     acceptToolUse(block, source) {
         const toolUseId = normalizeToolUseIdFromBlock(block);
@@ -48,6 +52,32 @@ export class ToolDisplayLifecycleReducer {
         };
         this.itemsByToolUseId.set(toolUseId, item);
         return toPublicItem(item);
+    }
+    acceptToolProgress(block, source) {
+        const toolUseId = normalizeToolResultSourceIdFromBlock(block);
+        if (!toolUseId) {
+            return this.createDiagnosticItem({
+                source,
+                block,
+                code: 'missing_tool_progress_source_id',
+                message: '工具进度缺少 tool_use_id，无法绑定回工具调用。',
+            });
+        }
+        const existing = this.itemsByToolUseId.get(toolUseId);
+        if (!existing) {
+            return this.createDiagnosticItem({
+                source,
+                block,
+                code: 'orphan_tool_progress',
+                message: '工具进度引用的工具调用不存在，已作为孤立工具进度诊断。',
+            });
+        }
+        existing.progressBlock = block;
+        existing.lastSeen = source;
+        if (existing.status !== 'completed' && existing.status !== 'failed') {
+            existing.status = 'running';
+        }
+        return toPublicItem(existing);
     }
     acceptToolResult(block, source) {
         const toolUseId = normalizeToolResultSourceIdFromBlock(block);

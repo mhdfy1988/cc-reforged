@@ -1,128 +1,635 @@
 import { projectThreadDisplayItem } from '../display/threadDisplayProjection.js';
 import { assertThreadDisplayProjection } from '../display/threadDisplayProjectionSchema.js';
-import { createToolDisplayLifecycleReducer, normalizeToolUseIdFromBlock, normalizeToolResultSourceIdFromBlock, } from './toolDisplayLifecycle.js';
+import { createDisplayFactMetadata, isThreadDisplayControlFact, isThreadDisplayMessageLikeFact, isThreadDisplaySystemFact, isThreadDisplayToolLikeFact, resolveThreadDisplayFacts, } from './threadDisplayFacts.js';
+import { materializeGeneratedOutputImageBlocks } from './threadDisplayGeneratedOutputMaterializer.js';
+import { appServerThreadMessagesToDisplayReducerInputEvents, assertThreadDisplayHistoryInputEvent, assertThreadDisplayRealtimeInputEvent, coreTurnEventToDisplayReducerInputEvent, } from './threadDisplayInputEvent.js';
+import { createToolDisplayLifecycleReducer, normalizeToolUseIdFromBlock, } from './toolDisplayLifecycle.js';
 const activeContextCompactionItemIds = new Map();
-const liveToolLifecycles = new Map();
+const liveThreadDisplayReducers = new Map();
+function createEmptyThreadDisplayReducerState() {
+    return {
+        orderedItemIds: [],
+        itemsById: new Map(),
+        orderKeysByItemId: new Map(),
+        displayIdBySourceIdentity: new Map(),
+        toolLifecycleByToolUseId: new Map(),
+        diagnostics: [],
+        counts: {},
+    };
+}
 export function buildThreadDisplaySnapshot(input) {
-    const items = threadMessagesToDisplayItems(input.messages, {
+    const reducer = createThreadDisplayReducer({
         threadId: input.threadId,
         sessionId: input.sessionId,
     });
-    const projectedDisplayItems = items.length;
-    const visibleTimelineItems = countVisibleThreadDisplayItems(items);
-    const hiddenDisplayItems = Math.max(0, projectedDisplayItems - visibleTimelineItems);
-    const rawTranscriptEvents = input.rawTranscriptEvents ?? input.messages.length;
-    const filteredTranscriptEvents = Math.max(0, rawTranscriptEvents - projectedDisplayItems);
-    return {
+    const inputEvents = appServerThreadMessagesToDisplayReducerInputEvents(input.messages, {
         threadId: input.threadId,
-        ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+        sessionId: input.sessionId,
+    });
+    return reducer.acceptMany(inputEvents).toSnapshot({
         source: input.source,
-        generatedAt: new Date().toISOString(),
-        ...(input.canonicalLeafUuid
-            ? { canonicalLeafUuid: input.canonicalLeafUuid }
-            : {}),
-        items,
-        counts: {
-            rawTranscriptEvents,
-            coreContextMessages: input.coreContextMessages ?? input.messages.length,
+        rawTranscriptEvents: input.rawTranscriptEvents ?? input.messages.length,
+        coreContextMessages: input.coreContextMessages ?? input.messages.length,
+        canonicalLeafUuid: input.canonicalLeafUuid,
+        diagnostics: input.diagnostics,
+    });
+}
+export class ThreadDisplayReducer {
+    context;
+    toolLifecycle = createToolDisplayLifecycleReducer();
+    state = createEmptyThreadDisplayReducerState();
+    pendingPatchOperations = [];
+    constructor(context) {
+        this.context = context;
+    }
+    acceptMany(inputEvents) {
+        this.resetState();
+        this.toolLifecycle = createToolDisplayLifecycleReducer();
+        for (const rawInputEvent of inputEvents) {
+            const inputEvent = assertThreadDisplayHistoryInputEvent(rawInputEvent, 'ThreadDisplayReducer.acceptMany');
+            this.recordInputDiagnostics(inputEvent);
+            this.acceptHistoryInputEvent(inputEvent);
+        }
+        return this;
+    }
+    acceptOne(inputEvent) {
+        const checkedInputEvent = assertThreadDisplayRealtimeInputEvent(inputEvent, 'ThreadDisplayReducer.acceptOne');
+        this.recordInputDiagnostics(checkedInputEvent);
+        const operations = this.acceptRealtimeInputEvent(checkedInputEvent);
+        this.pendingPatchOperations.push(...operations);
+        return this;
+    }
+    toSnapshotItems() {
+        this.refreshStateCounts();
+        return this.state.orderedItemIds
+            .map(itemId => this.state.itemsById.get(itemId))
+            .filter((item) => Boolean(item));
+    }
+    toSnapshot(input) {
+        const items = this.toSnapshotItems();
+        const diagnostics = [...(input.diagnostics ?? []), ...this.getDiagnostics()];
+        const projectedDisplayItems = items.length;
+        const visibleTimelineItems = countVisibleThreadDisplayItems(items);
+        const hiddenDisplayItems = Math.max(0, projectedDisplayItems - visibleTimelineItems);
+        const rawTranscriptEvents = input.rawTranscriptEvents ?? projectedDisplayItems;
+        const filteredTranscriptEvents = Math.max(0, rawTranscriptEvents - projectedDisplayItems);
+        return {
+            threadId: this.context.threadId,
+            ...(this.context.sessionId ? { sessionId: this.context.sessionId } : {}),
+            source: input.source,
+            generatedAt: new Date().toISOString(),
+            ...(input.canonicalLeafUuid
+                ? { canonicalLeafUuid: input.canonicalLeafUuid }
+                : {}),
+            items,
+            counts: {
+                rawTranscriptEvents,
+                coreContextMessages: input.coreContextMessages ?? projectedDisplayItems,
+                projectedDisplayItems,
+                visibleTimelineItems,
+                hiddenDisplayItems,
+                filteredTranscriptEvents,
+                hiddenTimelineItems: hiddenDisplayItems + filteredTranscriptEvents,
+            },
+            ...(diagnostics.length ? { diagnostics } : {}),
+        };
+    }
+    consumePatchOperations() {
+        const operations = this.pendingPatchOperations;
+        this.pendingPatchOperations = [];
+        return operations;
+    }
+    getDiagnostics() {
+        return [...this.state.diagnostics];
+    }
+    recordInputDiagnostics(inputEvent) {
+        for (const diagnostic of inputEvent.diagnostics) {
+            this.state.diagnostics.push(threadDisplayInputDiagnosticToDisplayDiagnostic(diagnostic, inputEvent));
+        }
+    }
+    acceptHistoryInputEvent(inputEvent) {
+        for (const fact of resolveThreadDisplayFacts(inputEvent)) {
+            this.acceptDisplayFact(fact, inputEvent);
+        }
+    }
+    acceptDisplayFact(fact, inputEvent) {
+        if (isThreadDisplayToolLikeFact(fact)) {
+            return this.acceptToolLikeDisplayFact(fact, inputEvent);
+        }
+        if (isThreadDisplayMessageLikeFact(fact)) {
+            const item = createMessageLikeDisplayItem(fact);
+            this.appendStateItem(item, inputEvent);
+            return { op: 'append_item', item };
+        }
+        if (fact.factType === 'unsupported') {
+            const item = createInputDiagnosticDisplayItem(inputEvent, fact);
+            this.appendStateItem(item, inputEvent);
+            return { op: 'append_item', item };
+        }
+        return null;
+    }
+    acceptToolLikeDisplayFact(fact, inputEvent) {
+        const toolUseId = fact.toolUseId ?? normalizeToolUseIdFromBlock(fact.block);
+        const hadToolUseId = Boolean(toolUseId && this.toolLifecycle.hasToolUseId(toolUseId));
+        const existingToolItemId = toolUseId
+            ? this.state.toolLifecycleByToolUseId.get(toolUseId)
+            : undefined;
+        const parentToolItemId = fact.parentToolUseId
+            ? this.state.toolLifecycleByToolUseId.get(fact.parentToolUseId)
+            : undefined;
+        const existingItemId = parentToolItemId ?? (hadToolUseId ? existingToolItemId : undefined);
+        const existingItem = existingItemId
+            ? this.state.itemsById.get(existingItemId)
+            : undefined;
+        const state = this.toolLifecycle.accept({
+            kind: fact.lifecycleKind,
+            block: fact.block,
+            source: fact.source,
+        });
+        const item = createToolLifecycleDisplayItem(fact.message, state, fact.identity.sourceIndex, existingItem, createToolLikeDisplayFactMetadata(fact, existingItem));
+        if (existingItem) {
+            this.replaceStateItem(item, inputEvent);
+        }
+        else {
+            this.appendStateItem(item, inputEvent);
+        }
+        if (state.toolUseId) {
+            this.state.toolLifecycleByToolUseId.set(state.toolUseId, item.id);
+        }
+        if (state.diagnostic) {
+            return { op: 'append_item', item };
+        }
+        if (fact.lifecycleKind === 'tool_progress') {
+            return { op: 'update_item', itemId: item.id, item };
+        }
+        if (fact.lifecycleKind === 'tool_result') {
+            return {
+                op: 'complete_item',
+                itemId: item.id,
+                status: state.status,
+                item,
+            };
+        }
+        if (existingItem || hadToolUseId) {
+            return { op: 'update_item', itemId: item.id, item };
+        }
+        return { op: 'append_item', item };
+    }
+    resetState() {
+        this.state = createEmptyThreadDisplayReducerState();
+        this.pendingPatchOperations = [];
+    }
+    appendStateItem(item, inputEvent) {
+        this.upsertStateItem(item, inputEvent);
+    }
+    replaceStateItem(item, inputEvent) {
+        this.upsertStateItem(item, inputEvent);
+    }
+    upsertStateItem(item, inputEvent) {
+        const itemId = item.id;
+        const existed = this.state.itemsById.has(itemId);
+        this.state.itemsById.set(itemId, item);
+        if (!existed) {
+            this.insertOrderedItemId(itemId, inputEvent.orderKey);
+        }
+        this.state.orderKeysByItemId.set(itemId, inputEvent.orderKey);
+        this.bindSourceIdentityToItem(inputEvent.sourceIdentity, item);
+        this.refreshStateCounts();
+    }
+    insertOrderedItemId(itemId, orderKey) {
+        if (this.state.orderedItemIds.includes(itemId)) {
+            return;
+        }
+        const insertAt = this.state.orderedItemIds.findIndex(existingItemId => {
+            const existingOrderKey = this.state.orderKeysByItemId.get(existingItemId);
+            return existingOrderKey
+                ? compareThreadDisplayOrderKeys(orderKey, existingOrderKey) < 0
+                : false;
+        });
+        if (insertAt === -1) {
+            this.state.orderedItemIds.push(itemId);
+            return;
+        }
+        this.state.orderedItemIds.splice(insertAt, 0, itemId);
+    }
+    bindSourceIdentityToItem(sourceIdentity, item) {
+        const sourceToolUseId = sourceIdentity.kind === 'tool' ? sourceIdentity.toolUseId : undefined;
+        const itemToolUseId = item.identity?.toolUseId;
+        if (sourceIdentity.kind !== 'tool' ||
+            !sourceToolUseId ||
+            !itemToolUseId ||
+            sourceToolUseId === itemToolUseId) {
+            this.state.displayIdBySourceIdentity.set(getSourceIdentityKey(sourceIdentity), item.id);
+        }
+        if (itemToolUseId) {
+            this.state.toolLifecycleByToolUseId.set(itemToolUseId, item.id);
+        }
+    }
+    updateStateItem(itemId, patch) {
+        const existingItem = this.state.itemsById.get(itemId);
+        if (!existingItem) {
+            return false;
+        }
+        this.state.itemsById.set(itemId, {
+            ...existingItem,
+            ...patch,
+            identity: patch.identity ?? existingItem.identity,
+            metadata: {
+                ...(existingItem.metadata ?? {}),
+                ...(patch.metadata ?? {}),
+            },
+        });
+        this.refreshStateCounts();
+        return true;
+    }
+    removeStateItem(itemId) {
+        this.state.itemsById.delete(itemId);
+        this.state.orderKeysByItemId.delete(itemId);
+        this.state.orderedItemIds = this.state.orderedItemIds.filter(existingItemId => existingItemId !== itemId);
+        for (const [key, displayItemId] of [
+            ...this.state.displayIdBySourceIdentity.entries(),
+        ]) {
+            if (displayItemId === itemId) {
+                this.state.displayIdBySourceIdentity.delete(key);
+            }
+        }
+        for (const [toolUseId, displayItemId] of [
+            ...this.state.toolLifecycleByToolUseId.entries(),
+        ]) {
+            if (displayItemId === itemId) {
+                this.state.toolLifecycleByToolUseId.delete(toolUseId);
+            }
+        }
+        this.refreshStateCounts();
+    }
+    refreshStateCounts() {
+        const projectedDisplayItems = this.state.itemsById.size;
+        const visibleTimelineItems = countVisibleThreadDisplayItems(this.state.orderedItemIds
+            .map(itemId => this.state.itemsById.get(itemId))
+            .filter((item) => Boolean(item)));
+        this.state.counts = {
+            ...this.state.counts,
             projectedDisplayItems,
             visibleTimelineItems,
-            hiddenDisplayItems,
-            filteredTranscriptEvents,
-            hiddenTimelineItems: hiddenDisplayItems + filteredTranscriptEvents,
+            hiddenDisplayItems: Math.max(0, projectedDisplayItems - visibleTimelineItems),
+        };
+    }
+    appendStateItemPatch(item, inputEvent) {
+        this.appendStateItem(item, inputEvent);
+        return { op: 'append_item', item };
+    }
+    completeStateItemPatch(itemId, status, item, inputEvent) {
+        if (item) {
+            this.replaceStateItem(item, inputEvent);
+            return {
+                op: 'complete_item',
+                itemId,
+                ...(status ? { status } : {}),
+                item,
+            };
+        }
+        if (this.updateStateItem(itemId, { status })) {
+            return {
+                op: 'complete_item',
+                itemId,
+                ...(status ? { status } : {}),
+            };
+        }
+        return this.appendStateTargetDiagnosticPatch(inputEvent, itemId, 'complete_item');
+    }
+    updateStateItemPatch(itemId, item, inputEvent) {
+        if (!this.updateStateItem(itemId, item)) {
+            return this.appendStateTargetDiagnosticPatch(inputEvent, itemId, 'update_item');
+        }
+        return { op: 'update_item', itemId, item };
+    }
+    upsertStreamingDeltaPatch(itemId, item, inputEvent) {
+        if (!this.updateStateItem(itemId, item)) {
+            this.appendStateItem(createProjectedDisplayItem({
+                id: itemId,
+                type: item.type ?? 'assistant_message',
+                text: item.text ?? '',
+                ...(item.status ? { status: item.status } : {}),
+                identity: {
+                    threadId: inputEvent.threadId,
+                    ...(inputEvent.sessionId ? { sessionId: inputEvent.sessionId } : {}),
+                    ...(inputEvent.turnId ? { turnId: inputEvent.turnId } : {}),
+                    itemId,
+                },
+                content: typeof item.text === 'string'
+                    ? [{ type: 'text', text: item.text }]
+                    : undefined,
+                metadata: item.metadata,
+            }), inputEvent);
+        }
+        return { op: 'update_item', itemId, item };
+    }
+    appendStateTargetDiagnosticPatch(inputEvent, targetItemId, operation) {
+        const fact = resolveThreadDisplayFacts(inputEvent)[0];
+        const diagnostic = {
+            level: 'error',
+            code: 'thread_display_orphan_state_update',
+            message: `展示状态更新找不到目标项：${targetItemId}`,
+            details: {
+                operation,
+                targetItemId,
+                source: inputEvent.source,
+                inputKind: inputEvent.kind,
+                sourceIdentityKind: inputEvent.sourceIdentity.kind,
+                sourceId: inputEvent.sourceIdentity.sourceId,
+            },
+        };
+        this.state.diagnostics.push(diagnostic);
+        const item = createStateDiagnosticDisplayItem(inputEvent, diagnostic, fact);
+        this.appendStateItem(item, inputEvent);
+        return { op: 'append_item', item };
+    }
+    acceptRealtimeInputEvent(inputEvent) {
+        const event = inputEvent.raw.event;
+        const facts = resolveThreadDisplayFacts(inputEvent);
+        const firstFact = facts[0];
+        if (inputEvent.payload.type === 'unsupported') {
+            return facts
+                .map(fact => this.acceptDisplayFact(fact, inputEvent))
+                .filter((operation) => operation !== null);
+        }
+        switch (event.type) {
+            case 'item_started':
+                {
+                    const toolOperations = facts
+                        .filter(isThreadDisplayToolLikeFact)
+                        .filter(fact => fact.lifecycleKind === 'tool_use')
+                        .map(fact => this.acceptDisplayFact(fact, inputEvent))
+                        .filter((operation) => operation !== null);
+                    if (toolOperations.length > 0) {
+                        return toolOperations;
+                    }
+                    const item = coreItemToThreadDisplayItem(event.item, facts.find(isThreadDisplayMessageLikeFact));
+                    return item.projection ? [this.appendStateItemPatch(item, inputEvent)] : [];
+                }
+            case 'item_delta':
+                if (isThinkingContentBlock(event.delta)) {
+                    return [];
+                }
+                {
+                    const toolOperations = facts
+                        .filter(isThreadDisplayToolLikeFact)
+                        .map(fact => this.acceptDisplayFact(fact, inputEvent))
+                        .filter((operation) => operation !== null);
+                    if (toolOperations.length > 0) {
+                        return toolOperations;
+                    }
+                }
+                {
+                    const operation = this.upsertStreamingDeltaPatch(event.itemId, {
+                        type: getThreadDisplayItemTypeFromDelta(event.delta),
+                        status: 'streaming',
+                        text: getCoreDeltaDisplayText(event.delta),
+                        metadata: {
+                            coreEventType: event.type,
+                            deltaMode: 'append_text',
+                            delta: event.delta,
+                            ...(firstFact ? createDisplayFactMetadata(firstFact) : {}),
+                        },
+                    }, inputEvent);
+                    return operation ? [operation] : [];
+                }
+            case 'item_completed':
+                {
+                    const toolFacts = facts.filter(isThreadDisplayToolLikeFact);
+                    if (toolFacts.length > 0) {
+                        const toolOperations = toolFacts
+                            .filter(fact => {
+                            if (fact.lifecycleKind !== 'tool_use') {
+                                return true;
+                            }
+                            const toolUseId = fact.toolUseId ?? normalizeToolUseIdFromBlock(fact.block);
+                            return !toolUseId || !this.toolLifecycle.hasToolUseId(toolUseId);
+                        })
+                            .map(fact => this.acceptDisplayFact(fact, inputEvent))
+                            .filter((operation) => operation !== null);
+                        return toolOperations;
+                    }
+                    const item = completedCoreItemToThreadDisplayItem(event, facts.find(isThreadDisplayMessageLikeFact));
+                    return item?.projection
+                        ? [
+                            this.completeStateItemPatch(event.itemId, event.status, item, inputEvent),
+                        ].filter((operation) => operation !== null)
+                        : [];
+                }
+            case 'turn_failed':
+                return [
+                    this.appendStateItemPatch(createProjectedDisplayItem({
+                        id: `${event.turnId}:error`,
+                        type: 'error',
+                        text: extractDisplayText(event.error) || '当前 turn 失败。',
+                        status: 'failed',
+                        identity: {
+                            threadId: event.threadId,
+                            turnId: event.turnId,
+                            itemId: `${event.turnId}:error`,
+                        },
+                        content: event.error,
+                        metadata: {
+                            coreEventType: event.type,
+                            ...(event.metadata ?? {}),
+                            ...(firstFact ? createDisplayFactMetadata(firstFact) : {}),
+                        },
+                    }), inputEvent),
+                ];
+            case 'context_compaction_started':
+                return [
+                    this.appendStateItemPatch(createContextCompactionStartedItem(event, facts.find(isThreadDisplaySystemFact)), inputEvent),
+                ];
+            case 'context_compacted':
+                {
+                    const itemId = getContextCompactedDisplayItemId(event);
+                    const operation = this.completeStateItemPatch(itemId, 'completed', createContextCompactedItem(event, itemId, facts.find(isThreadDisplaySystemFact)), inputEvent);
+                    return operation ? [operation] : [];
+                }
+            case 'permission_requested':
+                {
+                    const controlFact = facts.find(isThreadDisplayControlFact);
+                    return [
+                        this.appendStateItemPatch(createPermissionRequestedItem(event, controlFact), inputEvent),
+                    ];
+                }
+            case 'permission_cancelled':
+                {
+                    const controlFact = facts.find(isThreadDisplayControlFact);
+                    const operation = this.updateStateItemPatch(controlFact?.itemId ?? event.permissionRequestId, {
+                        status: 'cancelled',
+                        metadata: {
+                            coreEventType: event.type,
+                            reason: event.reason,
+                            ...(controlFact ? createDisplayFactMetadata(controlFact) : {}),
+                        },
+                    }, inputEvent);
+                    return operation ? [operation] : [];
+                }
+            case 'thread_started':
+            case 'turn_started':
+            case 'turn_completed':
+            case 'turn_cancelled':
+                return [];
+        }
+    }
+}
+export function createThreadDisplayReducer(context) {
+    return new ThreadDisplayReducer(context);
+}
+function compareThreadDisplayOrderKeys(left, right) {
+    if (left.source !== right.source) {
+        return left.source === 'history' ? -1 : 1;
+    }
+    if (left.ordinal !== right.ordinal) {
+        return left.ordinal - right.ordinal;
+    }
+    const leftTimestamp = left.timestamp ?? '';
+    const rightTimestamp = right.timestamp ?? '';
+    if (leftTimestamp !== rightTimestamp) {
+        return leftTimestamp.localeCompare(rightTimestamp);
+    }
+    return (left.itemId ?? '').localeCompare(right.itemId ?? '');
+}
+function getSourceIdentityKey(sourceIdentity) {
+    return `${sourceIdentity.kind}:${sourceIdentity.sourceId}`;
+}
+function threadDisplayInputDiagnosticToDisplayDiagnostic(diagnostic, inputEvent) {
+    return {
+        level: 'error',
+        code: diagnostic.code,
+        message: diagnostic.message,
+        details: {
+            ...(diagnostic.details ?? {}),
+            source: inputEvent.source,
+            payloadType: inputEvent.payload.type,
+            sourceIdentityKind: inputEvent.sourceIdentity.kind,
+            sourceId: inputEvent.sourceIdentity.sourceId,
         },
-        ...(input.diagnostics?.length ? { diagnostics: input.diagnostics } : {}),
     };
 }
-function threadMessagesToDisplayItems(messages, context) {
-    const items = [];
-    const lifecycle = createToolDisplayLifecycleReducer();
-    const toolItemIndexes = new Map();
-    for (const [sourceIndex, message] of messages.entries()) {
-        const blocks = getMessageJsonBlocks(message);
-        if (!blocks.some(isToolLifecycleBlock)) {
-            items.push(threadMessageToDisplayItem(message, {
-                ...context,
-                sourceIndex,
-            }));
-            continue;
-        }
-        let pendingBlocks = [];
-        let pendingStartIndex;
-        const flushPendingBlocks = () => {
-            if (pendingBlocks.length === 0)
-                return;
-            items.push(threadMessageToDisplayItem({
-                ...message,
-                id: pendingStartIndex === undefined
-                    ? message.id
-                    : `${message.id}:content:${pendingStartIndex}`,
-                content: pendingBlocks,
-                text: extractDisplayText(pendingBlocks),
-            }, {
-                ...context,
-                sourceIndex,
-                contentIndex: pendingStartIndex,
-            }));
-            pendingBlocks = [];
-            pendingStartIndex = undefined;
+function createInputDiagnosticDisplayItem(inputEvent, fact) {
+    const diagnostic = inputEvent.diagnostics[0] ??
+        {
+            code: 'thread_display_input_diagnostic',
+            message: '展示输入协议诊断。',
         };
-        for (const [contentIndex, block] of blocks.entries()) {
-            const blockType = getContentBlockType(block);
-            if (blockType !== 'tool_use' && blockType !== 'tool_result') {
-                pendingStartIndex ??= contentIndex;
-                pendingBlocks.push(block);
-                continue;
-            }
-            flushPendingBlocks();
-            const source = {
-                threadId: context.threadId,
-                ...(context.sessionId ? { sessionId: context.sessionId } : {}),
-                messageUuid: message.id,
-                rawIndex: sourceIndex,
-                materializedIndex: sourceIndex,
-                contentIndex,
-                ...(message.createdAt ? { createdAt: message.createdAt } : {}),
-            };
-            if (blockType === 'tool_use') {
-                const state = lifecycle.accept({ kind: 'tool_use', block, source });
-                const item = createToolLifecycleDisplayItem(message, state, sourceIndex);
-                const itemIndex = items.length;
-                items.push(item);
-                if (state.toolUseId) {
-                    toolItemIndexes.set(state.toolUseId, itemIndex);
-                }
-                continue;
-            }
-            const state = lifecycle.accept({ kind: 'tool_result', block, source });
-            const sourceToolUseId = normalizeToolResultSourceIdFromBlock(block);
-            const existingItemIndex = sourceToolUseId
-                ? toolItemIndexes.get(sourceToolUseId)
-                : undefined;
-            if (existingItemIndex !== undefined) {
-                items[existingItemIndex] = createToolLifecycleDisplayItem(message, state, sourceIndex, items[existingItemIndex]);
-            }
-            else {
-                items.push(createToolLifecycleDisplayItem(message, state, sourceIndex));
-            }
-        }
-        flushPendingBlocks();
+    const displayDiagnostic = threadDisplayInputDiagnosticToDisplayDiagnostic(diagnostic, inputEvent);
+    const itemId = `diagnostic:${inputEvent.sourceIdentity.sourceId}`;
+    const text = `展示协议错误（protocol error）：${displayDiagnostic.message}`;
+    return createProjectedDisplayItem({
+        id: itemId,
+        type: 'error',
+        text,
+        status: 'diagnostic',
+        sourceKind: 'thread_display_input_diagnostic',
+        identity: {
+            threadId: inputEvent.threadId,
+            ...(inputEvent.sessionId ? { sessionId: inputEvent.sessionId } : {}),
+            ...('turnId' in inputEvent && inputEvent.turnId
+                ? { turnId: inputEvent.turnId }
+                : {}),
+            itemId,
+        },
+        content: [{ type: 'text', text }],
+        metadata: {
+            inputDiagnostic: displayDiagnostic,
+            orderKey: inputEvent.orderKey,
+            sourceIdentity: inputEvent.sourceIdentity,
+            ...(fact ? createDisplayFactMetadata(fact) : {}),
+        },
+    });
+}
+function createStateDiagnosticDisplayItem(inputEvent, diagnostic, fact) {
+    const itemId = `diagnostic:${inputEvent.sourceIdentity.sourceId}:state`;
+    const text = `展示状态诊断：${diagnostic.message}`;
+    return createProjectedDisplayItem({
+        id: itemId,
+        type: 'error',
+        text,
+        status: 'diagnostic',
+        sourceKind: 'thread_display_state_diagnostic',
+        identity: {
+            threadId: inputEvent.threadId,
+            ...(inputEvent.sessionId ? { sessionId: inputEvent.sessionId } : {}),
+            ...(inputEvent.turnId ? { turnId: inputEvent.turnId } : {}),
+            itemId,
+        },
+        content: [{ type: 'text', text }],
+        metadata: {
+            stateDiagnostic: diagnostic,
+            orderKey: inputEvent.orderKey,
+            sourceIdentity: inputEvent.sourceIdentity,
+            ...(fact ? createDisplayFactMetadata(fact) : {}),
+        },
+    });
+}
+function createToolLikeDisplayFactMetadata(fact, existingItem) {
+    const metadata = createDisplayFactMetadata(fact);
+    const existingDisplayFact = getMetadataObject(existingItem?.metadata, 'displayFact');
+    if (fact.lifecycleKind !== 'tool_use' &&
+        existingDisplayFact?.factType === 'file') {
+        metadata.displayFact = {
+            ...existingDisplayFact,
+            inputKind: fact.inputKind,
+            orderKey: fact.orderKey,
+            contentIndex: fact.contentIndex,
+            parentToolUseId: fact.parentToolUseId,
+        };
     }
-    return items;
+    if (fact.completedAt) {
+        metadata.completedAt = fact.completedAt;
+    }
+    if (fact.durationMs !== undefined) {
+        metadata.durationMs = fact.durationMs;
+    }
+    return metadata;
+}
+function createDisplayFactMetadataWithoutContent(fact) {
+    const metadata = createDisplayFactMetadata(fact);
+    delete metadata.primaryBlock;
+    delete metadata.attachmentBlocks;
+    return metadata;
+}
+function getMetadataObject(metadata, key) {
+    const value = metadata?.[key];
+    return value && typeof value === 'object' && !Array.isArray(value)
+        ? value
+        : undefined;
+}
+function createMessageLikeDisplayItem(fact) {
+    const fallbackText = fact.factType === 'error' || fact.factType === 'system'
+        ? fact.text
+        : extractDisplayText(fact.blocks);
+    const message = fact.message ??
+        {
+            id: fact.itemId,
+            role: fact.factType === 'error' ? 'error' : 'system',
+            text: fallbackText,
+            content: fact.blocks,
+        };
+    return threadMessageToDisplayItem(message, {
+        threadId: fact.threadId,
+        ...(fact.sessionId ? { sessionId: fact.sessionId } : {}),
+        sourceIndex: fact.identity.sourceIndex ?? 0,
+        ...(fact.contentIndex !== undefined ? { contentIndex: fact.contentIndex } : {}),
+        displayFact: fact,
+    });
 }
 function createToolLifecycleDisplayItem(message, state, fallbackSourceIndex, existingItem, extraMetadata) {
     const isDiagnostic = Boolean(state.diagnostic);
-    const primaryBlock = state.callBlock ?? state.resultBlock;
     const content = isDiagnostic
         ? [{ type: 'text', text: state.diagnostic?.message ?? '工具结果诊断。' }]
         : createToolLifecycleItemContent(state);
+    const primaryBlock = !isDiagnostic && isCoreJsonObject(content[0]) ? content[0] : undefined;
     const sourceIndex = state.firstSeen.rawIndex ?? fallbackSourceIndex;
     const contentIndex = state.firstSeen.contentIndex;
     const itemId = existingItem?.id ?? state.itemId;
     const startedAt = state.firstSeen.createdAt ?? existingItem?.createdAt ?? message.createdAt;
     const lifecycleMetadata = createToolLifecycleTimingMetadata(state, startedAt, extraMetadata);
-    return withThreadDisplayProjection({
-        ...(existingItem ?? {}),
+    return createProjectedDisplayItem({
+        base: existingItem,
         id: itemId,
         type: isDiagnostic
             ? 'error'
@@ -215,6 +722,7 @@ function createToolLifecycleItemContent(state) {
                 ...state.callBlock,
                 historyStatus: state.status,
                 status: state.status,
+                ...(state.progressBlock ? { progress: state.progressBlock } : {}),
                 ...(state.resultBlock
                     ? { result: createToolUseDisplayResult(state.resultBlock) }
                     : {}),
@@ -270,18 +778,13 @@ function getMessageJsonBlocks(message) {
     }
     return message.content.filter(isCoreJsonObject);
 }
-function isToolLifecycleBlock(block) {
-    const type = getContentBlockType(block);
-    return type === 'tool_use' || type === 'tool_result';
-}
-function getContentBlockType(block) {
-    return typeof block.type === 'string' ? block.type : '';
-}
 function countVisibleThreadDisplayItems(items) {
     return items.filter(item => item.timelineHidden !== true).length;
 }
 function threadMessageToDisplayItem(message, context) {
-    const content = sanitizeThreadDisplayContent(message.content);
+    const content = sanitizeThreadDisplayContent(message.content, {
+        materializeGeneratedOutputImages: message.role === 'assistant',
+    });
     if (isThinkingOnlyContent(message.content) &&
         message.role === 'assistant') {
         return createReasoningOnlyNoticeItem({
@@ -305,10 +808,13 @@ function threadMessageToDisplayItem(message, context) {
             metadata: {
                 role: message.role,
                 ...(message.sourceType ? { sourceType: message.sourceType } : {}),
+                ...(context.displayFact
+                    ? createDisplayFactMetadataWithoutContent(context.displayFact)
+                    : {}),
             },
         });
     }
-    return withThreadDisplayProjection({
+    return createProjectedDisplayItem({
         id: message.id,
         type: getThreadDisplayItemType({
             ...message,
@@ -334,6 +840,7 @@ function threadMessageToDisplayItem(message, context) {
         metadata: {
             role: message.role,
             ...(message.sourceType ? { sourceType: message.sourceType } : {}),
+            ...(context.displayFact ? createDisplayFactMetadata(context.displayFact) : {}),
         },
     });
 }
@@ -368,11 +875,22 @@ function getSpecificThreadDisplayItemTypeFromUnknownContent(content) {
     return type === 'assistant_message' ? undefined : type;
 }
 export function coreEventToThreadDisplayPatch(event) {
-    const threadId = getCoreEventThreadId(event);
+    const inputEvent = coreTurnEventToDisplayReducerInputEvent(event);
+    const threadId = inputEvent.threadId;
     if (!threadId) {
         return null;
     }
-    const operations = getCoreEventDisplayPatchOperations(event);
+    if (event.type === 'thread_started') {
+        clearLiveThreadDisplayReducersForThread(event.thread.threadId);
+        return null;
+    }
+    const reducer = getLiveThreadDisplayReducer(inputEvent);
+    const operations = reducer.acceptOne(inputEvent).consumePatchOperations();
+    if (event.type === 'turn_completed' ||
+        event.type === 'turn_failed' ||
+        event.type === 'turn_cancelled') {
+        clearLiveThreadDisplayReducer(threadId, event.turnId);
+    }
     if (operations.length === 0) {
         return null;
     }
@@ -382,325 +900,39 @@ export function coreEventToThreadDisplayPatch(event) {
         operations,
     };
 }
-function getCoreEventDisplayPatchOperations(event) {
-    switch (event.type) {
-        case 'item_started':
-            {
-                const toolOperations = getItemStartedToolLifecyclePatchOperations(event);
-                if (toolOperations) {
-                    return toolOperations;
-                }
-                const item = coreItemToThreadDisplayItem(event.item);
-                return item.projection
-                    ? [
-                        {
-                            op: 'append_item',
-                            item,
-                        },
-                    ]
-                    : [];
-            }
-        case 'item_delta':
-            if (isThinkingContentBlock(event.delta)) {
-                return [];
-            }
-            return [
-                {
-                    op: 'update_item',
-                    itemId: event.itemId,
-                    item: {
-                        type: getThreadDisplayItemTypeFromDelta(event.delta),
-                        status: 'streaming',
-                        text: getCoreDeltaDisplayText(event.delta),
-                        metadata: {
-                            coreEventType: event.type,
-                            deltaMode: 'append_text',
-                            delta: event.delta,
-                        },
-                    },
-                },
-            ];
-        case 'item_completed':
-            {
-                const toolOperations = getItemCompletedToolLifecyclePatchOperations(event);
-                if (toolOperations) {
-                    return toolOperations;
-                }
-                const item = completedCoreItemToThreadDisplayItem(event);
-                return item?.projection
-                    ? [
-                        {
-                            op: 'complete_item',
-                            itemId: event.itemId,
-                            status: event.status,
-                            item,
-                        },
-                    ]
-                    : [];
-            }
-        case 'turn_failed':
-            {
-                const operations = [
-                    {
-                        op: 'append_item',
-                        item: withThreadDisplayProjection({
-                            id: `${event.turnId}:error`,
-                            type: 'error',
-                            text: extractDisplayText(event.error) || '当前 turn 失败。',
-                            status: 'failed',
-                            identity: {
-                                threadId: event.threadId,
-                                turnId: event.turnId,
-                                itemId: `${event.turnId}:error`,
-                            },
-                            content: event.error,
-                            metadata: {
-                                coreEventType: event.type,
-                                ...(event.metadata ?? {}),
-                            },
-                        }),
-                    },
-                ];
-                clearLiveToolLifecycle(event.threadId, event.turnId);
-                return operations;
-            }
-        case 'context_compaction_started':
-            return [
-                {
-                    op: 'append_item',
-                    item: createContextCompactionStartedItem(event),
-                },
-            ];
-        case 'context_compacted':
-            {
-                const itemId = getContextCompactedDisplayItemId(event);
-                return [
-                    {
-                        op: 'complete_item',
-                        itemId,
-                        status: 'completed',
-                        item: createContextCompactedItem(event, itemId),
-                    },
-                ];
-            }
-        case 'permission_requested':
-            return [
-                {
-                    op: 'append_item',
-                    item: withThreadDisplayProjection({
-                        id: event.request.permissionRequestId,
-                        type: 'permission_request',
-                        text: `权限请求：${event.request.tool.displayName ?? event.request.tool.name}`,
-                        status: 'pending',
-                        createdAt: event.request.createdAt,
-                        identity: {
-                            threadId: event.request.threadId,
-                            turnId: event.request.turnId,
-                            itemId: event.request.permissionRequestId,
-                            toolUseId: event.request.toolUseId,
-                        },
-                        content: event.request,
-                        metadata: {
-                            coreEventType: event.type,
-                        },
-                    }),
-                },
-            ];
-        case 'permission_cancelled':
-            return [
-                {
-                    op: 'update_item',
-                    itemId: event.permissionRequestId,
-                    item: {
-                        status: 'cancelled',
-                        metadata: {
-                            coreEventType: event.type,
-                            reason: event.reason,
-                        },
-                    },
-                },
-            ];
-        case 'thread_started':
-            clearLiveToolLifecyclesForThread(event.thread.threadId);
-            return [];
-        case 'turn_started':
-        case 'turn_completed':
-            clearLiveToolLifecycle(event.threadId, event.turnId);
-            return [];
-        case 'turn_cancelled':
-            clearLiveToolLifecycle(event.threadId, event.turnId);
-            return [];
-    }
-}
-function getItemStartedToolLifecyclePatchOperations(event) {
-    const blocks = getCoreJsonBlocksFromUnknownContent(event.item.content);
-    if (!blocks.some(isToolLifecycleBlock)) {
-        return null;
-    }
-    const lifecycle = getLiveToolLifecycle(event.item.threadId, event.item.turnId);
-    const message = coreItemToThreadMessage(event.item, blocks);
-    const operations = [];
-    for (const [contentIndex, block] of blocks.entries()) {
-        if (getContentBlockType(block) !== 'tool_use') {
-            continue;
-        }
-        const toolUseId = normalizeToolUseIdFromBlock(block);
-        const existing = toolUseId ? lifecycle.hasToolUseId(toolUseId) : false;
-        const state = lifecycle.accept({
-            kind: 'tool_use',
-            block,
-            source: createLiveToolLifecycleSource(event.item, contentIndex),
+function getLiveThreadDisplayReducer(inputEvent) {
+    const key = getLiveThreadDisplayReducerKey(inputEvent);
+    let reducer = liveThreadDisplayReducers.get(key);
+    if (!reducer) {
+        reducer = createThreadDisplayReducer({
+            threadId: inputEvent.threadId,
+            ...(inputEvent.sessionId ? { sessionId: inputEvent.sessionId } : {}),
         });
-        const item = createToolLifecycleDisplayItem(message, state, undefined, undefined, {
-            coreEventType: event.type,
-        });
-        operations.push(existing
-            ? {
-                op: 'update_item',
-                itemId: item.id,
-                item,
-            }
-            : {
-                op: 'append_item',
-                item,
-            });
+        liveThreadDisplayReducers.set(key, reducer);
     }
-    return operations;
+    return reducer;
 }
-function getItemCompletedToolLifecyclePatchOperations(event) {
-    const blocks = getCoreJsonBlocksFromUnknownContent(event.content);
-    if (!blocks.some(isToolLifecycleBlock)) {
-        return null;
-    }
-    const lifecycle = getLiveToolLifecycle(event.threadId, event.turnId);
-    const message = coreCompletedItemToThreadMessage(event, blocks);
-    const operations = [];
-    for (const [contentIndex, block] of blocks.entries()) {
-        const blockType = getContentBlockType(block);
-        if (blockType === 'tool_use') {
-            const toolUseId = normalizeToolUseIdFromBlock(block);
-            if (toolUseId && lifecycle.hasToolUseId(toolUseId)) {
-                continue;
-            }
-            const state = lifecycle.accept({
-                kind: 'tool_use',
-                block,
-                source: createLiveToolLifecycleSource(event, contentIndex),
-            });
-            operations.push({
-                op: 'append_item',
-                item: createToolLifecycleDisplayItem(message, state, undefined, undefined, getItemCompletedMetadata(event)),
-            });
-            continue;
-        }
-        if (blockType !== 'tool_result') {
-            continue;
-        }
-        const state = lifecycle.accept({
-            kind: 'tool_result',
-            block,
-            source: createLiveToolLifecycleSource(event, contentIndex),
-        });
-        const item = createToolLifecycleDisplayItem(message, state, undefined, undefined, getItemCompletedMetadata(event));
-        operations.push(state.diagnostic
-            ? {
-                op: 'append_item',
-                item,
-            }
-            : {
-                op: 'complete_item',
-                itemId: item.id,
-                status: state.status,
-                item,
-            });
-    }
-    return operations;
+function clearLiveThreadDisplayReducer(threadId, turnId) {
+    liveThreadDisplayReducers.delete(`${threadId}:${turnId}`);
 }
-function getLiveToolLifecycle(threadId, turnId) {
-    const key = getLiveToolLifecycleKey(threadId, turnId);
-    let lifecycle = liveToolLifecycles.get(key);
-    if (!lifecycle) {
-        lifecycle = createToolDisplayLifecycleReducer();
-        liveToolLifecycles.set(key, lifecycle);
-    }
-    return lifecycle;
-}
-function clearLiveToolLifecycle(threadId, turnId) {
-    liveToolLifecycles.delete(getLiveToolLifecycleKey(threadId, turnId));
-}
-function clearLiveToolLifecyclesForThread(threadId) {
+function clearLiveThreadDisplayReducersForThread(threadId) {
     const prefix = `${threadId}:`;
-    for (const key of liveToolLifecycles.keys()) {
+    for (const key of liveThreadDisplayReducers.keys()) {
         if (key.startsWith(prefix)) {
-            liveToolLifecycles.delete(key);
+            liveThreadDisplayReducers.delete(key);
         }
     }
 }
-function getLiveToolLifecycleKey(threadId, turnId) {
-    return `${threadId}:${turnId}`;
-}
-function createLiveToolLifecycleSource(source, contentIndex) {
-    const createdAt = typeof source.startedAt === 'string'
-        ? source.startedAt
-        : typeof source.createdAt === 'string'
-            ? source.createdAt
-            : undefined;
-    return {
-        threadId: source.threadId,
-        turnId: source.turnId,
-        ...(source.itemId ? { messageUuid: source.itemId } : {}),
-        contentIndex,
-        ...(createdAt ? { createdAt } : {}),
-    };
-}
-function coreItemToThreadMessage(item, content) {
-    const displayContent = sanitizeThreadDisplayContent(content);
-    return {
-        id: item.itemId,
-        role: getThreadMessageRoleFromKind(item.kind),
-        text: extractDisplayText(displayContent ?? content),
-        status: item.status,
-        kind: item.kind,
-        createdAt: getStringField(item, ['startedAt', 'createdAt']),
-        ...(displayContent !== undefined ? { content: displayContent } : {}),
-    };
-}
-function coreCompletedItemToThreadMessage(event, content) {
-    const displayContent = sanitizeCoreJsonBlocks(content);
-    return {
-        id: event.itemId,
-        role: getThreadMessageRoleFromKind(event.kind),
-        text: extractDisplayText(displayContent ?? content),
-        status: event.status,
-        ...(event.kind ? { kind: event.kind } : {}),
-        createdAt: event.startedAt,
-        ...(displayContent !== undefined ? { content: displayContent } : {}),
-    };
-}
-function getThreadMessageRoleFromKind(kind) {
-    if (kind === 'tool_result' || kind === 'user_message') {
-        return 'user';
-    }
-    if (kind?.includes('system')) {
-        return 'system';
-    }
-    if (kind?.includes('error')) {
-        return 'error';
-    }
-    return 'assistant';
+function getLiveThreadDisplayReducerKey(inputEvent) {
+    return `${inputEvent.threadId}:${inputEvent.turnId ?? '__thread__'}`;
 }
 function getCoreJsonBlocksFromUnknownContent(content) {
     return Array.isArray(content) ? content.filter(isCoreJsonObject) : [];
 }
-function getItemCompletedMetadata(event) {
-    return {
-        coreEventType: event.type,
-        ...(event.completedAt ? { completedAt: event.completedAt } : {}),
-        ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
-    };
-}
-function coreItemToThreadDisplayItem(item) {
-    const content = sanitizeThreadDisplayContent(item.content);
+function coreItemToThreadDisplayItem(item, fact) {
+    const content = sanitizeThreadDisplayContent(item.content, {
+        materializeGeneratedOutputImages: item.kind === 'assistant_message',
+    });
     if (isThinkingOnlyContent(item.content) && item.kind === 'assistant_message') {
         return createReasoningOnlyNoticeItem({
             id: item.itemId,
@@ -716,10 +948,11 @@ function coreItemToThreadDisplayItem(item) {
             },
             metadata: {
                 coreEventType: 'item_started',
+                ...(fact ? createDisplayFactMetadataWithoutContent(fact) : {}),
             },
         });
     }
-    return withThreadDisplayProjection({
+    return createProjectedDisplayItem({
         id: item.itemId,
         type: getThreadDisplayItemTypeFromKind(item.kind),
         text: extractDisplayText(content ?? item.text ?? item.summary),
@@ -735,11 +968,15 @@ function coreItemToThreadDisplayItem(item) {
         ...(content !== undefined ? { content } : {}),
         metadata: {
             coreEventType: 'item_started',
+            ...(fact ? createDisplayFactMetadata(fact) : {}),
         },
     });
 }
-function completedCoreItemToThreadDisplayItem(event) {
-    const content = sanitizeCoreJsonBlocks(event.content);
+function completedCoreItemToThreadDisplayItem(event, fact) {
+    const contentBlocks = getCoreJsonBlocksFromUnknownContent(event.content);
+    const content = sanitizeCoreJsonBlocks(contentBlocks, {
+        materializeGeneratedOutputImages: event.kind === 'assistant_message',
+    });
     if (isThinkingOnlyContent(event.content) && event.kind === 'assistant_message') {
         return createReasoningOnlyNoticeItem({
             id: event.itemId,
@@ -757,6 +994,7 @@ function completedCoreItemToThreadDisplayItem(event) {
                 coreEventType: event.type,
                 ...(event.completedAt ? { completedAt: event.completedAt } : {}),
                 ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+                ...(fact ? createDisplayFactMetadataWithoutContent(fact) : {}),
             },
         });
     }
@@ -767,7 +1005,7 @@ function completedCoreItemToThreadDisplayItem(event) {
     if (!type) {
         return null;
     }
-    return withThreadDisplayProjection({
+    return createProjectedDisplayItem({
         id: event.itemId,
         type,
         text: extractDisplayText(content),
@@ -785,7 +1023,25 @@ function completedCoreItemToThreadDisplayItem(event) {
             coreEventType: event.type,
             ...(event.completedAt ? { completedAt: event.completedAt } : {}),
             ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+            ...(fact ? createDisplayFactMetadata(fact) : {}),
         },
+    });
+}
+function createProjectedDisplayItem(input) {
+    return withThreadDisplayProjection({
+        ...(input.base ?? {}),
+        id: input.id,
+        type: input.type,
+        text: input.text,
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.sourceKind ? { sourceKind: input.sourceKind } : {}),
+        ...(input.createdAt ? { createdAt: input.createdAt } : {}),
+        ...(input.timelineHidden !== undefined
+            ? { timelineHidden: input.timelineHidden }
+            : {}),
+        ...(input.identity ? { identity: input.identity } : {}),
+        ...(input.content !== undefined ? { content: input.content } : {}),
+        ...(input.metadata ? { metadata: input.metadata } : {}),
     });
 }
 function getCompletedThreadDisplayItemType(event) {
@@ -795,15 +1051,20 @@ function getCompletedThreadDisplayItemType(event) {
     const type = getThreadDisplayItemTypeFromContent(event.content);
     return type === 'assistant_message' ? undefined : type;
 }
-function sanitizeThreadDisplayContent(content) {
+function sanitizeThreadDisplayContent(content, options = {}) {
     if (!Array.isArray(content)) {
         return content;
     }
-    return sanitizeCoreJsonBlocks(content.filter(isCoreJsonObject));
+    return sanitizeCoreJsonBlocks(content.filter(isCoreJsonObject), options);
 }
-function sanitizeCoreJsonBlocks(content) {
+function sanitizeCoreJsonBlocks(content, options = {}) {
     const displayBlocks = content.filter(block => !isThinkingContentBlock(block));
-    return displayBlocks.length > 0 ? displayBlocks : undefined;
+    if (displayBlocks.length === 0) {
+        return undefined;
+    }
+    return options.materializeGeneratedOutputImages
+        ? materializeGeneratedOutputImageBlocks(displayBlocks)
+        : displayBlocks;
 }
 function isThinkingOnlyContent(content) {
     return (Array.isArray(content) &&
@@ -823,7 +1084,7 @@ function isThinkingContentBlock(block) {
         type === 'summary_text');
 }
 function createReasoningOnlyNoticeItem(input) {
-    return withThreadDisplayProjection({
+    return createProjectedDisplayItem({
         id: input.id,
         type: 'system_notice',
         text: '模型只返回了推理内容，未返回最终回复。',
@@ -870,7 +1131,7 @@ function getCoreEventThreadId(event) {
             return event.threadId;
     }
 }
-function createContextCompactionStartedItem(event) {
+function createContextCompactionStartedItem(event, fact) {
     const itemId = getContextCompactionStartedDisplayItemId(event);
     activeContextCompactionItemIds.set(event.threadId, itemId);
     const text = event.trigger === 'auto'
@@ -881,7 +1142,7 @@ function createContextCompactionStartedItem(event) {
         trigger: event.trigger,
         startedAt: event.startedAt,
     });
-    return withThreadDisplayProjection({
+    return createProjectedDisplayItem({
         id: itemId,
         type: 'system_notice',
         text,
@@ -897,13 +1158,14 @@ function createContextCompactionStartedItem(event) {
         metadata: compactJsonObject({
             coreEventType: event.type,
             compactSnapshot,
+            ...(fact ? createDisplayFactMetadata(fact) : {}),
         }),
     });
 }
-function createContextCompactedItem(event, itemId) {
+function createContextCompactedItem(event, itemId, fact) {
     const compactSnapshot = createContextCompactSnapshot(event);
     const text = formatContextCompactedText(compactSnapshot);
-    return withThreadDisplayProjection({
+    return createProjectedDisplayItem({
         id: itemId,
         type: 'system_notice',
         text,
@@ -919,7 +1181,29 @@ function createContextCompactedItem(event, itemId) {
             coreEventType: event.type,
             compactSnapshot,
             compactResult: event.result,
+            ...(fact ? createDisplayFactMetadata(fact) : {}),
         }),
+    });
+}
+function createPermissionRequestedItem(event, fact) {
+    return createProjectedDisplayItem({
+        id: fact?.itemId ?? event.request.permissionRequestId,
+        type: 'permission_request',
+        text: fact?.text ??
+            `权限请求：${event.request.tool.displayName ?? event.request.tool.name}`,
+        status: 'pending',
+        createdAt: event.request.createdAt,
+        identity: {
+            threadId: event.request.threadId,
+            turnId: event.request.turnId,
+            itemId: fact?.itemId ?? event.request.permissionRequestId,
+            toolUseId: event.request.toolUseId,
+        },
+        content: event.request,
+        metadata: {
+            coreEventType: event.type,
+            ...(fact ? createDisplayFactMetadata(fact) : {}),
+        },
     });
 }
 function getContextCompactionStartedDisplayItemId(event) {

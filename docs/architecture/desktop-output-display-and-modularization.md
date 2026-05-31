@@ -1,5 +1,7 @@
 # CCR Desktop 输出展示与前端模块化方案
 
+> 当前权威入口：本文保留 Desktop 输出展示和前端拆分的产品化设计背景；历史/实时展示协议的当前权威边界以 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md) 和 [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md) 为准。
+
 ## 1. 文档目标
 
 本文档用于约束 `CCR Desktop` 下一阶段的输出展示和前端代码组织方式。
@@ -11,6 +13,14 @@
 - TodoWrite、thinking、tool_result 等内容还没有稳定的“用户可见事件”规则，容易把 raw JSON、英文工具结果、空白思考卡片直接展示给用户。
 
 下一步目标是参考 Codex 的展示思路，把 CCR Desktop 从“事件原样展示”改成“用户可理解事件展示”。
+
+当前实现状态（2026-05-28）：
+
+- App Server 已输出 `ThreadDisplaySnapshot` / `ThreadDisplayPatch` 作为 Desktop 展示权威载荷。
+- 历史恢复走 `displaySnapshot.items`；实时通知走 `patch.operations`。
+- Desktop main 只保存和转发展示 snapshot / patch，不再把 `thread/messages/list.result.messages` 当成 UI 历史 replay。
+- Renderer 不应解析 transcript、provider raw output、`parentUuid` 或 compact 结构；缺失 projection 时展示协议错误卡。
+- 本文后续的 `notification -> desktop event -> display event -> component` 可理解为前端视觉层拆分方向；展示事实的归一化已经前移到 App Server ThreadDisplay reducer / projector。
 
 ## 2. 核心原则
 

@@ -1,6 +1,5 @@
 import type { SessionAction } from './sessionState.js'
 import {
-  canFallbackMissingThreadDisplayProjection,
   createDisplayEventFromThreadDisplayProjection,
   createErrorDisplayEvent,
   createThreadDisplayProjectionProtocolErrorEvent,
@@ -191,7 +190,16 @@ function createThreadDisplayItemUpdateActions(
   }
 
   if (metadata?.deltaMode !== 'append_text') {
-    return []
+    return isRenderableThreadDisplayItemUpdate(operation.item)
+      ? createThreadDisplayItemActions(
+          {
+            ...operation.item,
+            id: operation.item.id ?? operation.itemId,
+          },
+          'live',
+          patch,
+        )
+      : []
   }
 
   const text = typeof item.text === 'string' ? item.text : ''
@@ -230,6 +238,16 @@ function createThreadDisplayItemUpdateActions(
   ]
 }
 
+function isRenderableThreadDisplayItemUpdate(
+  item: Partial<ThreadDisplayItem>,
+): item is ThreadDisplayItem {
+  return Boolean(
+    (item.content !== undefined || item.projection !== undefined) &&
+      item.type &&
+      item.text !== undefined,
+  )
+}
+
 function createThreadDisplayItemActions(
   item: ThreadDisplayItem,
   source: 'history' | 'live',
@@ -245,10 +263,7 @@ function createThreadDisplayItemActions(
   }
 
   const projectionIssue = getThreadDisplayProjectionProtocolIssue(item)
-  if (
-    projectionIssue &&
-    !canFallbackMissingThreadDisplayProjection(item, projectionIssue)
-  ) {
+  if (projectionIssue) {
     return withThreadDisplayLifecycleActions(item, [
       {
         type: 'append-display-event',

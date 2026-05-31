@@ -22,6 +22,15 @@ YYYY-MM-DD-p<阶段号>-<简短主题>.md
 
 当前 Goal：
 
+- [2026-05-31 ThreadDisplay 残留入口与文档收口](./2026-05-31-thread-display-closeout.md)
+- [2026-05-31 ThreadDisplay 全事件 Ordered Display Reducer 深化](./2026-05-31-thread-display-full-ordered-reducer-next.md)
+  - [2-1 输入来源矩阵与 unsupported 边界](./2026-05-31-thread-display-full-ordered-reducer-01-input-source-matrix.md)（已完成）
+  - [2-2 permission / compact / control fact 化](./2026-05-31-thread-display-full-ordered-reducer-02-permission-compact-control-facts.md)（已完成）
+  - [2-3 attachment / generated output 多来源归一](./2026-05-31-thread-display-full-ordered-reducer-03-attachment-generated-output.md)（已完成）
+  - [2-4 tool progress 生命周期并入 reducer state](./2026-05-31-thread-display-full-ordered-reducer-04-tool-progress-lifecycle.md)（已完成）
+  - [2-5 黄金回归矩阵扩展与最终收口](./2026-05-31-thread-display-full-ordered-reducer-05-golden-closeout.md)（已完成）
+- [2026-05-30 Full Ordered Display Reducer 最终状态机设计](./2026-05-30-full-ordered-display-reducer-final-state-machine.md)
+- [2026-05-29 ThreadDisplay Ordered Display Reducer Goal Plan](./2026-05-29-thread-display-ordered-reducer-goal-plan.md)
 - [2026-05-24 STD-HISTORY-09-1 会话物化源码入口核对](./2026-05-24-std-history-09-1-source-entry-audit.md)
 - [2026-05-24 STD-HISTORY-09-2 MaterializedConversation 物化协议定型](./2026-05-24-std-history-09-2-materialized-conversation-contract.md)
 - [2026-05-24 STD-HISTORY-09-3 compact / snip / preservedSegment 语义统一](./2026-05-24-std-history-09-3-compact-snip-preserved-segment.md)

@@ -1,8 +1,12 @@
 # CCR Desktop 通用卡片渲染重构计划
 
+> 当前边界：本文讨论 Desktop Renderer 的通用卡片骨架和视觉组件复用，不改变 App Server 展示协议。展示事实仍以 `ThreadDisplaySnapshot.items` / `ThreadDisplayPatch.operations` 为准，协议边界见 [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md)。
+
 ## 背景
 
 Desktop 当前已经有统一展示协议，例如 `DisplayEvent`、`toolSnapshot`、`fileSnapshot`、`attachmentSnapshots`、`errorSnapshot` 和 `contentBlocks`。但渲染层仍然主要按卡片类型分别实现，例如工具卡、文件卡、错误卡、系统提示卡、权限卡、附件预览卡等各自处理标题、状态、按钮、展开区和元信息。
+
+这里的 `DisplayEvent` 是 Renderer 视觉模型，不是 App Server 历史 / 实时展示事实源。当前事实源是 `ThreadDisplaySnapshot.items` 和 `ThreadDisplayPatch.operations`；本计划只整理这些事实进入 React 组件后的通用外壳。
 
 这种方式适合快速补齐特殊能力，但长期会带来三个问题：
 
@@ -23,13 +27,19 @@ Desktop 当前已经有统一展示协议，例如 `DisplayEvent`、`toolSnapsho
 ## 分层方案
 
 ```text
-DisplayEvent / snapshots / contentBlocks
+ThreadDisplaySnapshot.items / ThreadDisplayPatch.operations
+  -> DisplayEvent / snapshots / contentBlocks
   -> CardViewModel 通用卡片视图模型
   -> GenericCardFrame 通用骨架
   -> SpecializedCardBody 特殊主体渲染器
 ```
 
-第一层：协议输入
+第一层：展示事实输入
+
+- `ThreadDisplaySnapshot.items`
+- `ThreadDisplayPatch.operations`
+
+第二层：Renderer 展示事件
 
 - `DisplayEvent.type`
 - `toolSnapshot`
@@ -39,7 +49,7 @@ DisplayEvent / snapshots / contentBlocks
 - `compactSnapshot`
 - `contentBlocks`
 
-第二层：卡片视图模型
+第三层：卡片视图模型
 
 建议新增类似 `resolveCardViewModel(event)` 的集中入口，输出面向 UI 的稳定结构：
 
@@ -60,7 +70,7 @@ type CardViewModel = {
 }
 ```
 
-第三层：通用骨架
+第四层：通用骨架
 
 `GenericCardFrame` 只负责稳定布局：
 
@@ -74,7 +84,7 @@ type CardViewModel = {
 - 详情区
 - 错误 / 警告 / 运行中色调
 
-第四层：特殊主体渲染器
+第五层：特殊主体渲染器
 
 不同 `body.type` 分发到专用组件：
 
@@ -86,7 +96,7 @@ type CardViewModel = {
 - `errorDiagnostics`
 - `todoList`
 - `planApproval`
-- `rawJsonFallback`
+- `rawJsonDiagnostic`
 
 ## 可通用的能力
 
@@ -102,7 +112,7 @@ type CardViewModel = {
 | 元信息行 | provider、model、mime、路径、cwd、token、大小 |
 | 展开详情 | raw input、raw result、stdout/stderr、诊断信息 |
 | 路径动作 | 文件、附件、生成物都复用路径动作 |
-| 兜底展示 | 未知事件、未知工具、协议缺口统一 fallback |
+| 显式诊断展示 | 未知事件、未知工具、协议缺口统一展示为诊断 / 错误卡 |
 
 ## 保留专用的能力
 
@@ -120,14 +130,14 @@ type CardViewModel = {
 
 ## 状态与生命周期原则
 
-通用卡片骨架必须承认“同一个 ID 的多条事件是生命周期演进”：
+通用卡片骨架必须承认“同一个展示项 ID 的多条 patch 是同一张卡的视觉演进”：
 
-- 初始事件创建占位卡，例如 `queued`、`running`、`waiting_permission`。
-- 后续同 ID 事件更新原卡，而不是新增重复卡。
+- 初始 patch 创建占位卡，例如 `queued`、`running`、`waiting_permission`。
+- 后续同 `itemId` patch 更新原卡，而不是新增重复卡。
 - 结束事件补齐 `result`、`output`、`error`、`durationMs`、`completedAt`。
 - 特殊类型只解释最终 payload，例如图片生图把 `result` 解释成图片文件。
 
-这条原则适用于工具调用、Responses `image_generation_call`、权限请求、文件操作和后续媒体生成能力。
+这条原则适用于工具调用、Responses `image_generation_call`、权限请求、文件操作和后续媒体生成能力。工具 lifecycle 的跨事件归并在 App Server reducer 内完成，Renderer 只处理 reducer 输出后的同 ID 视觉更新。
 
 ## 第一版落点
 
@@ -144,7 +154,7 @@ type CardViewModel = {
 - 不为了通用而牺牲特殊卡片的信息密度。
 - 不把业务解析逻辑放进 React 组件深处；解析集中在 domain/view-model 层。
 - 不用外层 `message.type` 单独决定渲染；必须结合 inner content block、snapshot 和 identity。
-- 不让 unknown 类型空白；未知事件必须进入 fallback 卡。
+- 不让 unknown 类型空白；未知事件必须进入显式诊断 / 错误卡。
 - 不改变 Core、App Server 协议，只重排 Desktop 渲染模型。
 
 ## 验收清单
@@ -153,4 +163,4 @@ type CardViewModel = {
 - 同一状态在不同卡片中颜色、文案、位置一致。
 - 图片、权限、错误、Todo、计划等特殊主体仍保留专用展示。
 - 新增一种普通工具卡不需要复制完整卡片外壳。
-- 回归覆盖至少包含：运行中工具、失败工具、生成图片、文件路径动作、错误诊断、未知事件 fallback。
+- 回归覆盖至少包含：运行中工具、失败工具、生成图片、文件路径动作、错误诊断、未知事件诊断卡。

@@ -947,14 +947,18 @@ function upsertCompletedItemMessage(
     )
   }
 
-  const toolLifecycleIndex = findMatchingToolLifecycleEventIndex(
+  if (isThreadDisplayProtocolContext(context)) {
+    return [...events, nextEvent]
+  }
+
+  const toolLifecycleIndex = findLegacyToolLifecycleEventIndex(
     events,
     nextEvent,
   )
   if (toolLifecycleIndex !== -1) {
     return events.map((event, eventIndex) =>
       eventIndex === toolLifecycleIndex
-        ? mergeToolLifecycleDisplayEvent(event, nextEvent, statusText)
+        ? mergeLegacyToolLifecycleDisplayEvent(event, nextEvent, statusText)
         : event,
     )
   }
@@ -965,10 +969,6 @@ function upsertCompletedItemMessage(
 
   if (shouldDropOrphanProgress(nextEvent)) {
     return events
-  }
-
-  if (isThreadDisplayProtocolContext(context)) {
-    return [...events, nextEvent]
   }
 
   if (isOrphanToolResult(nextEvent)) {
@@ -1004,6 +1004,8 @@ function mergeCompletedDisplayEvent(
     referenceSnapshot:
       nextEvent.referenceSnapshot ?? currentEvent.referenceSnapshot,
     compactSnapshot: nextEvent.compactSnapshot ?? currentEvent.compactSnapshot,
+    contentBlocks: nextEvent.contentBlocks ?? currentEvent.contentBlocks,
+    errorSnapshot: nextEvent.errorSnapshot ?? currentEvent.errorSnapshot,
     status: statusText,
     text:
       nextEvent.type === 'assistant_message' &&
@@ -1044,7 +1046,9 @@ function stripThinkingTruncationNotice(text: string): string {
     : text
 }
 
-function findMatchingToolLifecycleEventIndex(
+// 兼容旧实时事件：ThreadDisplay snapshot / patch 主协议会在进入这里前
+// 直接按 itemId 展示，不允许 Renderer 再按 raw toolUseId 绑定结果。
+function findLegacyToolLifecycleEventIndex(
   events: DisplayEvent[],
   nextEvent: DisplayEvent,
 ): number {
@@ -1070,7 +1074,7 @@ function findMatchingToolLifecycleEventIndex(
   return -1
 }
 
-function mergeToolLifecycleDisplayEvent(
+function mergeLegacyToolLifecycleDisplayEvent(
   currentEvent: DisplayEvent,
   nextEvent: DisplayEvent,
   statusText: string,

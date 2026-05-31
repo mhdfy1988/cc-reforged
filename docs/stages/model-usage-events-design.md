@@ -8,10 +8,11 @@
 
 ## 核心结论
 
-1. 数据接入点已经存在。
-2. 需要的字段可以拿全。
-3. 当前链路已经清楚，下一步可以按事件 schema 实现。
-4. 默认持久化位置使用全局用户级目录。
+1. 第一版模型调用使用事件流已经实现。
+2. 事件写入模块、用户级持久化路径、统计聚合和 Desktop 使用统计页面已经落地。
+3. Core / App Server 主链路已经在 turn completed 后写入 usage event。
+4. CLI / 原 Claude Code cost-tracker 链路已经写入 usage event，但 streaming requestId 仍需要补传，避免 CLI 事件缺少单次请求追踪字段。
+5. 当前剩余工作不是重新实现 usage events，而是补齐 requestId 精确性和集成 smoke。
 
 ## 持久化位置
 
@@ -129,7 +130,9 @@ src/cost-tracker.ts:addToTotalSessionCost(...)
 
 缺口：
 
-- `requestId` 当前不在 `addToTotalSessionCost(...)` 入参里。
+- `addToTotalSessionCost(...)` 当前已支持 metadata 参数。
+- cost-tracker 默认写 `source: 'cli'`，advisor 子调用会写 `source: 'advisor'`。
+- 原 Claude Code streaming 链路已经持有 `streamRequestId`，但调用 `addToTotalSessionCost(...)` 时尚未把该值传入 metadata，因此 CLI usage event 的 `requestId` 仍可能为空。
 
 推荐改法：
 
@@ -148,7 +151,11 @@ addToTotalSessionCost(cost, usage, model, {
 - `sessionId`
 - `timestamp`
 
-不要在 `claude.ts` 直接写 usage event。`claude.ts` 只把 request / response 事实传给落账入口。
+当前口径：
+
+- 不要在 `claude.ts` 直接写 usage event。`claude.ts` 只把 request / response 事实传给落账入口。
+- `source` 不需要每次显式传入；默认 `cli` 已覆盖主路径，只有 advisor / 其它非默认来源需要覆盖。
+- 待补项只保留为：把 `streamRequestId` / fallback requestId 传给 `addToTotalSessionCost(...)` 的 metadata。
 
 ### Desktop / App Server Core 链路
 
@@ -172,6 +179,11 @@ src/core/sessionCore.ts
 - `latencyMs`
 
 推荐在 turn completed 后写一次事件，而不是在 stream 中途写多次。
+
+当前状态：
+
+- 已实现。Core turn completed 后会读取 `turn.metadata.usage`、`turn.metadata.contextBudget`、provider/profile/model/requestId 等事实并写入 usage event。
+- 后续只需要补一条集成 smoke，固定 turn completed 会真实生成 `source: 'core'` 的 usage event。
 
 ### usage 收集来源
 
@@ -204,6 +216,11 @@ src/services/usage/modelUsageEvents.ts
 - 写入 `~/.ccr/usage-events/YYYY-MM.jsonl`。
 - 处理写入失败诊断。
 - 提供 stats 聚合读取入口。
+
+当前状态：
+
+- 已实现 `src/services/usage/modelUsageEvents.ts`。
+- 已实现 `src/services/usage/modelUsageStats.ts`，统计聚合按 usage event 读取，不重新解释 transcript。
 
 不负责：
 
@@ -246,6 +263,11 @@ src/services/usage/modelUsageEvents.ts
 ```
 
 聊天页只负责对话、工具过程和结果展示。聊天主时间线不常驻展示 token / cost，也不在每一轮结束后额外插入“本轮消耗”提示消息。普通消息卡、工具卡、模型回复卡都不承载单次调用成本详情。
+
+当前状态：
+
+- Desktop 独立“使用统计”页面已落地，读取 usage event 聚合结果。
+- 使用统计不放在模型 / Provider 配置页，也不插入聊天主时间线。
 
 ## eventId 与去重
 
@@ -293,12 +315,12 @@ src/components/Stats.tsx
 
 ## 当前交付 TODO
 
-- [ ] 新增 `src/services/usage/modelUsageEvents.ts`。
-- [ ] 定义 `ModelUsageEvent` 和写入 helper。
-- [ ] 实现用户级路径 `~/.ccr/usage-events/YYYY-MM.jsonl`。
-- [ ] `addToTotalSessionCost(...)` 增加可选 metadata 参数。
-- [ ] CLI / 原链路传入 `requestId/source`。
-- [ ] Core turn completed 后写入 usage event。
-- [ ] 增加 smoke，覆盖 CLI/Core 两类事件 shape。
-- [ ] 更新 stats 设计，明确新统计只读 usage events。
-- [ ] 后续单独设计 Desktop “使用统计”菜单和页面，不放入模型 / Provider 配置页。
+- [x] 新增 `src/services/usage/modelUsageEvents.ts`。
+- [x] 定义 `ModelUsageEvent` 和写入 helper。
+- [x] 实现用户级路径 `~/.ccr/usage-events/YYYY-MM.jsonl`。
+- [x] `addToTotalSessionCost(...)` 增加可选 metadata 参数。
+- [x] Core turn completed 后写入 usage event。
+- [x] 更新 stats 设计，明确新统计只读 usage events。
+- [x] 单独落地 Desktop “使用统计”菜单和页面，不放入模型 / Provider 配置页。
+- [ ] CLI / 原 Claude Code 链路补传 `requestId` 到 `addToTotalSessionCost(...)` metadata；`source` 默认 `cli` 已足够，只有非默认来源需要覆盖。
+- [ ] 扩展 `smoke:model-usage-events` 为集成 smoke，覆盖 cost-tracker 写入 `source: 'cli'` + requestId，以及 Core turn completed 写入 `source: 'core'` + threadId / turnId / requestId / contextBudget。

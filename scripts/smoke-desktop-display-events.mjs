@@ -1765,7 +1765,18 @@ async function assertToolErrorClassifications() {
           params: { source: 'history' },
         },
       )
-      assert.notEqual(legacyMissingProjectionThinkingEvent?.type, 'error')
+      assert.equal(legacyMissingProjectionThinkingEvent?.type, 'error')
+      assert.equal(
+        legacyMissingProjectionThinkingEvent?.id,
+        'fixture-legacy-thinking-missing-projection:projection-protocol-error',
+      )
+      assert.equal(
+        legacyMissingProjectionThinkingEvent?.text.includes(
+          'ThreadDisplayItem.projection',
+        ),
+        true,
+        'missing thinking projection should render a protocol error instead of using raw fallback',
+      )
 
       const persistedArtifact = await persistGeneratedArtifactFromBase64({
         ccrHome: generatedArtifactsHome,
@@ -1934,8 +1945,8 @@ async function assertToolErrorClassifications() {
       assert.equal(assistantGeneratedPathAttachment?.savedPath, assistantGeneratedOutputPath)
       assert.equal(assistantGeneratedPathAttachment?.path, assistantGeneratedOutputPath)
 
-      const assistantGeneratedPathFallbackEvent = createDisplayEventFromCompletedItem(
-        'fixture-assistant-generated-image-path-text-fallback',
+      const assistantGeneratedPathUnmaterializedEvent = createDisplayEventFromCompletedItem(
+        'fixture-assistant-generated-image-path-text-unmaterialized',
         'assistant_message',
         [
           {
@@ -1945,14 +1956,10 @@ async function assertToolErrorClassifications() {
         ],
         'completed',
       )
+      assert.equal(assistantGeneratedPathUnmaterializedEvent?.text.startsWith('已生成图片'), true)
       assert.equal(
-        assistantGeneratedPathFallbackEvent?.text.includes(assistantGeneratedOutputPath),
-        false,
-      )
-      assert.equal(assistantGeneratedPathFallbackEvent?.text, '已生成图片')
-      assert.equal(
-        assistantGeneratedPathFallbackEvent?.attachmentSnapshots?.[0]?.source,
-        'ModelOutput',
+        assistantGeneratedPathUnmaterializedEvent?.attachmentSnapshots,
+        undefined,
       )
 
       const codexOauthToolReplayContent = enrichToolResultReplayContentWithGeneratedOutputs(

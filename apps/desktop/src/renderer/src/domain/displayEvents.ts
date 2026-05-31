@@ -157,8 +157,7 @@ export function createDisplayEventFromCompletedItem(
   const projectionIssue = getThreadDisplayProjectionProtocolIssue(context?.item)
   if (
     isThreadDisplayContext(context) &&
-    projectionIssue &&
-    !canFallbackMissingThreadDisplayProjection(context?.item, projectionIssue)
+    projectionIssue
   ) {
     return createThreadDisplayProjectionProtocolErrorEvent(
       itemId,
@@ -381,17 +380,6 @@ export function getThreadDisplayProjectionProtocolIssue(
 
   const result = validateThreadDisplayProjection(object.projection)
   return 'issue' in result ? result.issue : null
-}
-
-export function canFallbackMissingThreadDisplayProjection(
-  item: unknown,
-  issue = getThreadDisplayProjectionProtocolIssue(item),
-): boolean {
-  if (issue !== '缺少 ThreadDisplayItem.projection') {
-    return false
-  }
-  const object = getObjectRecord(item)
-  return object?.content !== undefined
 }
 
 export function createThreadDisplayProjectionProtocolErrorEvent(

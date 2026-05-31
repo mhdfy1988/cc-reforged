@@ -1,5 +1,7 @@
 # CCR Desktop 与 App Server 事件字段契约
 
+> 当前 Desktop 主展示链路以 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md) 和 [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md) 为准。本文保留 Desktop 消费 App Server 事件字段的历史契约和字段治理原则。
+
 ## 1. 文档目标
 
 本文档约束 Desktop 如何消费 App Server 通知，避免前端为了展示效果去猜业务字段。
@@ -14,6 +16,14 @@ Core 产生运行事件
 ```
 
 Desktop 允许做展示归一化，但不允许重新判断权限、不允许执行工具、不允许拼 provider 请求，也不允许发明第二套 thread / turn / item 状态机。
+
+当前主展示边界：
+
+- Desktop main 保存并广播 `threadDisplaySnapshot`。
+- `thread/resume` 和 `thread/messages/list` 返回的 `messages` 不进入 Desktop 主聊天 replay。
+- Renderer 只消费 `ThreadDisplaySnapshot` / `ThreadDisplayPatch`。
+- `DisplayEvent` 是 Renderer 视图层归一化结果，不是 transcript 恢复或模型上下文来源。
+- 缺失或非法 projection 显示协议错误卡，不回退到 raw 字段猜展示。
 
 ## 2. 当前已补字段
 

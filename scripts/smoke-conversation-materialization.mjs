@@ -35,6 +35,9 @@ try {
   await testCompactWithParallelToolSiblingResults(
     materializeConversationFromLoadedTranscript,
   )
+  await testOrphanToolResultDroppedFromCurrentContext(
+    materializeConversationFromLoadedTranscript,
+  )
   await testMaterializationFailureKeepsDiagnosticError(
     materializeConversationFromTranscript,
     loadMessagesFromJsonlPath,
@@ -557,6 +560,55 @@ function testCompactWithParallelToolSiblingResults(materialize) {
   assertDiagnostic(result, 'compact_boundary_pruned_without_preserved_segment')
 }
 
+function testOrphanToolResultDroppedFromCurrentContext(materialize) {
+  const sessionId = randomUUID()
+  const root = userEntry(sessionId, null, 'orphan result root')
+  const toolUse = assistantToolUseEntry(
+    sessionId,
+    root.uuid,
+    'matched-tool-use',
+  )
+  const matchedResult = toolResultEntry(
+    sessionId,
+    toolUse.uuid,
+    'matched-tool-use',
+    toolUse.uuid,
+  )
+  const orphanResult = toolResultEntry(
+    sessionId,
+    matchedResult.uuid,
+    'missing-tool-use',
+    randomUUID(),
+  )
+  const finalAssistant = assistantEntry(
+    sessionId,
+    orphanResult.uuid,
+    'orphan result final assistant',
+  )
+
+  const result = materialize(
+    loadedTranscript([
+      root,
+      toolUse,
+      matchedResult,
+      orphanResult,
+      finalAssistant,
+    ]),
+  )
+
+  assert.equal(result.status, 'ok')
+  assertContentBlock(result.currentContextMessages, 'tool_result', {
+    tool_use_id: 'matched-tool-use',
+  })
+  assertNoContentBlock(result.currentContextMessages, 'tool_result', {
+    tool_use_id: 'missing-tool-use',
+  })
+  assertContentBlock(result.displayReplayEvents, 'tool_result', {
+    tool_use_id: 'missing-tool-use',
+  })
+  assertDiagnostic(result, 'orphan_tool_result_dropped_from_current_context')
+}
+
 async function testMaterializationFailureKeepsDiagnosticError(
   materialize,
   loadMessages,
@@ -914,6 +966,21 @@ function assertContentBlock(messages, type, expectedFields) {
   assert(
     found,
     `expected content block ${type} ${JSON.stringify(expectedFields)}`,
+  )
+}
+
+function assertNoContentBlock(messages, type, expectedFields) {
+  const found = messages.some(message =>
+    getContentBlocks(message).some(block => {
+      if (block.type !== type) return false
+      return Object.entries(expectedFields).every(
+        ([key, value]) => block[key] === value,
+      )
+    }),
+  )
+  assert(
+    !found,
+    `expected content block ${type} ${JSON.stringify(expectedFields)} to be absent`,
   )
 }
 

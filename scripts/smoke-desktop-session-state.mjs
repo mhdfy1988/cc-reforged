@@ -23,9 +23,19 @@ await writeFile(
     } from '../../apps/desktop/src/renderer/src/app/notificationRouter.ts'
     import { sessionReducer } from '../../apps/desktop/src/renderer/src/app/sessionState.ts'
     import { renderMessageBlocks } from '../../apps/desktop/src/renderer/src/domain/contentBlocks.tsx'
-    import { createDisplayEventFromCompletedItem } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
-    import { mergeThreadDisplaySnapshot } from '../../apps/desktop/src/main/threadDisplaySnapshotMerge.ts'
-    import { coreEventToThreadDisplayPatch } from '../../src/app-server/threadDisplay.ts'
+    import {
+      createDisplayEventFromCompletedItem,
+      createUserDisplayEvent,
+    } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
+    import {
+      buildThreadDisplaySnapshot,
+      coreEventToThreadDisplayPatch,
+      createThreadDisplayReducer,
+    } from '../../src/app-server/threadDisplay.ts'
+    import {
+      coreTurnEventToDisplayReducerInputEvent,
+      createUnsupportedDisplayReducerInputEvent,
+    } from '../../src/app-server/threadDisplayInputEvent.ts'
 
     const identity = {
       itemId: 'tool-running',
@@ -168,81 +178,78 @@ await writeFile(
       }
     }
 
-    const currentSnapshot = {
-      threadId: 'thread-1',
-      source: 'thread',
-      generatedAt: '2026-05-23T00:00:00.000Z',
-      items: [
-        {
-          id: 'history-user-a',
-          type: 'user_message',
-          text: '用户 A',
-          status: 'completed',
-        },
-        {
-          id: 'history-assistant-b',
-          type: 'assistant_message',
-          text: '助手 B',
-          status: 'completed',
-        },
-      ],
-      counts: {
-        rawTranscriptEvents: 2,
-        coreContextMessages: 2,
-        projectedDisplayItems: 2,
-        visibleTimelineItems: 2,
-        hiddenDisplayItems: 0,
-        filteredTranscriptEvents: 0,
-        hiddenTimelineItems: 0,
-      },
+    function createEmptySessionState(activeTurnId = 'turn-1') {
+      return {
+        displayEvents: [],
+        permissions: [],
+        activeTurnId,
+        turnMetadata: null,
+      }
     }
-    const shorterSnapshot = {
-      ...currentSnapshot,
-      source: 'thread',
-      generatedAt: '2026-05-23T00:00:01.000Z',
-      items: [
-        {
-          id: 'history-assistant-b',
-          type: 'assistant_message',
-          text: '助手 B updated',
-          status: 'completed',
-        },
-      ],
-      counts: {
-        rawTranscriptEvents: 1,
-        coreContextMessages: 1,
-        projectedDisplayItems: 1,
-        visibleTimelineItems: 1,
-        hiddenDisplayItems: 0,
-        filteredTranscriptEvents: 0,
-        hiddenTimelineItems: 0,
-      },
+
+    function applySessionActions(actions, initialState = createEmptySessionState()) {
+      return actions.reduce(sessionReducer, initialState)
     }
-    const preservedSnapshot = mergeThreadDisplaySnapshot(
-      currentSnapshot,
-      shorterSnapshot,
-      'thread-1',
-    )
-    assert.deepEqual(
-      preservedSnapshot?.items.map(item => item.id),
-      ['history-user-a', 'history-assistant-b'],
-      'short display snapshot should not discard existing display items',
-    )
-    assert.equal(
-      preservedSnapshot?.items.find(item => item.id === 'history-assistant-b')?.text,
-      '助手 B updated',
-      'newer snapshot fields should still update matching preserved items',
-    )
-    assert.equal(preservedSnapshot?.counts.visibleTimelineItems, 2)
-    assert.equal(preservedSnapshot?.counts.projectedDisplayItems, 2)
-    assert.equal(preservedSnapshot?.counts.hiddenDisplayItems, 0)
-    assert.equal(preservedSnapshot?.counts.filteredTranscriptEvents, 0)
-    assert.equal(preservedSnapshot?.counts.hiddenTimelineItems, 0)
-    assert.equal(
-      mergeThreadDisplaySnapshot(currentSnapshot, null, 'thread-2'),
-      null,
-      'snapshot merge guard must not leak a previous thread into a fresh empty thread',
-    )
+
+    function normalizeDisplayEventsForGolden(events) {
+      return events.map(event => ({
+        id: event.id,
+        type: event.type,
+        text: event.text,
+        status: event.status,
+        sourceKind: event.sourceKind,
+        timelineHidden: event.timelineHidden === true,
+        toolKind: event.toolSnapshot?.kind,
+        toolName: event.toolSnapshot?.name,
+        toolStatus: event.toolSnapshot?.status,
+        toolResult: event.toolSnapshot?.result,
+        toolUseId: event.toolSnapshot?.identity?.toolUseId,
+        toolProgressPercent:
+          event.contentBlocks?.[0]?.raw?.progress?.data?.percent ??
+          event.contentBlocks?.[0]?.progress?.data?.percent,
+        fileOperation: event.fileToolSnapshot?.operation,
+        filePath: event.fileToolSnapshot?.path,
+        todoCount: event.todoSnapshot?.items?.length,
+        compactStatus: event.compactSnapshot?.status,
+        compactTrigger: event.compactSnapshot?.trigger,
+        errorCategory: event.errorSnapshot?.category,
+        errorMessage: event.errorSnapshot?.message,
+        attachmentSources: event.attachmentSnapshots?.map(attachment => attachment.source),
+        attachmentPreviewKinds: event.attachmentSnapshots?.map(attachment => attachment.previewKind),
+        attachmentSavedPaths: event.attachmentSnapshots?.map(attachment => attachment.savedPath ?? attachment.path),
+      }))
+    }
+
+    function routeThreadDisplayPatchActions(patch, at) {
+      if (!patch) {
+        return []
+      }
+      const routed = routeDesktopEvent(
+        {
+          type: 'notification',
+          at,
+          payload: {
+            method: 'thread/display/patch',
+            params: patch,
+          },
+        },
+        new Map(),
+      )
+      return routed.sessionActions
+    }
+
+    function createReducerPatch(threadId, inputEvent, operations, index) {
+      if (operations.length === 0) {
+        return null
+      }
+      return {
+        threadId,
+        ...(inputEvent.sessionId ? { sessionId: inputEvent.sessionId } : {}),
+        generatedAt: '2026-05-30T00:30:' + String(index).padStart(2, '0') + '.000Z',
+        operations,
+      }
+    }
+
     assert.equal(
       coreEventToThreadDisplayPatch({
         type: 'item_started',
@@ -434,6 +441,29 @@ await writeFile(
       desktopMainSource.includes('threadMessages'),
       false,
       'Desktop status must not keep the old threadMessages replay bridge',
+    )
+    assert.ok(
+      desktopMainSource.includes('const result = await client.client.listThreadMessages({ threadId })'),
+      'Desktop refresh should call thread/messages/list only as a snapshot refresh compatibility endpoint',
+    )
+    assert.ok(
+      desktopMainSource.includes('result.displaySnapshot ?? null'),
+      'Desktop refresh must consume displaySnapshot from thread/messages/list',
+    )
+    assert.equal(
+      desktopMainSource.includes('mergeThreadDisplaySnapshot'),
+      false,
+      'Desktop main must not merge ThreadDisplay snapshots as a second display reducer',
+    )
+    assert.equal(
+      desktopMainSource.includes('threadDisplaySnapshotMerge'),
+      false,
+      'Desktop main must not import the old snapshot merge helper',
+    )
+    assert.equal(
+      desktopMainSource.includes('result.messages'),
+      false,
+      'Desktop refresh must not replay thread/messages/list messages as UI history',
     )
     assert.ok(
       desktopMainSource.includes('clearThreadDisplayState()'),
@@ -1346,6 +1376,601 @@ await writeFile(
       'history display snapshot should rebuild file tool cards through the same display reducer contract',
     )
 
+    const goldenThreadId = 'thread-desktop-golden'
+    const goldenSessionId = 'session-desktop-golden'
+    const goldenTurnId = 'turn-desktop-golden'
+    const goldenToolUseId = 'toolu-desktop-golden-read'
+    const goldenHistorySnapshot = buildThreadDisplaySnapshot({
+      threadId: goldenThreadId,
+      sessionId: goldenSessionId,
+      source: 'history',
+      messages: [
+        {
+          id: 'golden-assistant-text',
+          role: 'assistant',
+          kind: 'assistant_message',
+          text: '我会读取 package.json。',
+          status: 'completed',
+          createdAt: '2026-05-30T00:00:00.000Z',
+          content: [{ type: 'text', text: '我会读取 package.json。' }],
+        },
+        {
+          id: 'golden-tool-lifecycle',
+          role: 'assistant',
+          text: '',
+          status: 'completed',
+          createdAt: '2026-05-30T00:00:01.000Z',
+          content: [
+            {
+              type: 'tool_use',
+              id: goldenToolUseId,
+              name: 'Read',
+              input: { file_path: 'package.json' },
+            },
+            {
+              type: 'tool_result',
+              tool_use_id: goldenToolUseId,
+              content: '{"name":"claude-code-reforged"}',
+            },
+          ],
+        },
+      ],
+    })
+    const goldenHistoryState = applySessionActions(
+      createThreadDisplaySnapshotActions(goldenHistorySnapshot),
+      createEmptySessionState(null),
+    )
+    const goldenRealtimeEvents = [
+      {
+        type: 'item_completed',
+        threadId: goldenThreadId,
+        sessionId: goldenSessionId,
+        turnId: goldenTurnId,
+        itemId: 'golden-assistant-text',
+        kind: 'assistant_message',
+        status: 'completed',
+        content: [{ type: 'text', text: '我会读取 package.json。' }],
+        completedAt: '2026-05-30T00:00:00.000Z',
+      },
+      {
+        type: 'item_started',
+        item: {
+          itemId: 'golden-tool-lifecycle',
+          threadId: goldenThreadId,
+          sessionId: goldenSessionId,
+          turnId: goldenTurnId,
+          kind: 'assistant_message',
+          status: 'running',
+          startedAt: '2026-05-30T00:00:01.000Z',
+          content: [
+            {
+              type: 'tool_use',
+              id: goldenToolUseId,
+              name: 'Read',
+              input: { file_path: 'package.json' },
+            },
+          ],
+        },
+      },
+      {
+        type: 'item_completed',
+        threadId: goldenThreadId,
+        sessionId: goldenSessionId,
+        turnId: goldenTurnId,
+        itemId: 'golden-tool-lifecycle',
+        kind: 'assistant_message',
+        status: 'completed',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: goldenToolUseId,
+            content: '{"name":"claude-code-reforged"}',
+          },
+        ],
+        completedAt: '2026-05-30T00:00:02.000Z',
+      },
+    ]
+    const goldenRealtimeActions = goldenRealtimeEvents.flatMap((event, eventIndex) => {
+      const patch = coreEventToThreadDisplayPatch(event)
+      assert(patch, 'golden realtime event should produce a ThreadDisplay patch')
+      const routed = routeDesktopEvent(
+        {
+          type: 'notification',
+          at: 'fixture-desktop-golden-' + eventIndex,
+          payload: {
+            method: 'thread/display/patch',
+            params: patch,
+          },
+        },
+        new Map(),
+      )
+      return routed.sessionActions
+    })
+    const goldenRealtimeState = applySessionActions(
+      goldenRealtimeActions,
+      createEmptySessionState(goldenTurnId),
+    )
+    assert.deepEqual(
+      normalizeDisplayEventsForGolden(goldenRealtimeState.displayEvents),
+      normalizeDisplayEventsForGolden(goldenHistoryState.displayEvents),
+      'Desktop history snapshot consumption and realtime patch consumption should converge to the same display events',
+    )
+
+    const fullGoldenThreadId = 'thread-desktop-full-golden'
+    const fullGoldenSessionId = 'session-desktop-full-golden'
+    const fullGoldenTurnId = 'turn-desktop-full-golden'
+    const fullGoldenGeneratedPath =
+      'C:\\\\Users\\\\luoji\\\\.ccr\\\\generated_outputs\\\\full-golden\\\\out_full_golden.png'
+    const fullGoldenUserAttachment = {
+      type: 'image',
+      attachmentId: 'full-golden-user-image',
+      displayName: 'image.png',
+      mimeType: 'image/png',
+      path: 'C:\\\\Users\\\\luoji\\\\AppData\\\\Roaming\\\\CCR\\\\attachments\\\\clipboard\\\\full-golden-user.png',
+      sizeBytes: 12345,
+    }
+    const fullGoldenUserSnapshot = buildThreadDisplaySnapshot({
+      threadId: fullGoldenThreadId,
+      sessionId: fullGoldenSessionId,
+      source: 'history',
+      messages: [
+        {
+          id: 'full-golden-user-image',
+          role: 'user',
+          kind: 'user_message',
+          text: '[图片]',
+          status: 'completed',
+          createdAt: '2026-05-30T00:20:00.000Z',
+          content: [{ type: 'text', text: '[图片]' }, fullGoldenUserAttachment],
+        },
+      ],
+    })
+    const fullGoldenCoreEvents = [
+      {
+        type: 'item_delta',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-stream',
+        delta: { type: 'text', text: '正在整理结果...' },
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'item_completed',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-stream',
+        kind: 'assistant_message',
+        status: 'completed',
+        content: [{ type: 'text', text: '整理完成。' }],
+        completedAt: '2026-05-30T00:20:01.000Z',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'item_completed',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-thinking-only',
+        kind: 'assistant_message',
+        status: 'completed',
+        content: [{ type: 'thinking', thinking: 'hidden chain of thought' }],
+        completedAt: '2026-05-30T00:20:02.000Z',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'context_compaction_started',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        startedAt: '2026-05-30T00:20:03.000Z',
+        trigger: 'auto',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'context_compacted',
+        threadId: fullGoldenThreadId,
+        compactedAt: '2026-05-30T00:20:04.000Z',
+        result: {
+          trigger: 'auto',
+          preCompactTokenCount: 120000,
+          truePostCompactTokenCount: 42000,
+          summaryMessageCount: 12,
+          attachmentCount: 2,
+        },
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'item_started',
+        item: {
+          itemId: 'full-golden-todo',
+          threadId: fullGoldenThreadId,
+          sessionId: fullGoldenSessionId,
+          turnId: fullGoldenTurnId,
+          kind: 'assistant_message',
+          status: 'running',
+          startedAt: '2026-05-30T00:20:05.000Z',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu-full-golden-todo',
+              name: 'TodoWrite',
+              input: {
+                todos: [
+                  { content: '补齐黄金回归', status: 'completed' },
+                  { content: '运行 smoke', status: 'in_progress' },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      {
+        type: 'item_completed',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-generated-image',
+        kind: 'assistant_message',
+        status: 'completed',
+        content: [
+          { type: 'text', text: '已生成图片：\\n' + fullGoldenGeneratedPath },
+          {
+            type: 'image',
+            attachmentId: 'full-golden-generated-image',
+            displayName: 'out_full_golden.png',
+            mimeType: 'image/png',
+            origin: 'model_output',
+            lifecycle: 'persisted',
+            safety: 'needs_review',
+            savedPath: fullGoldenGeneratedPath,
+          },
+        ],
+        completedAt: '2026-05-30T00:20:06.000Z',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'item_started',
+        item: {
+          itemId: 'full-golden-tool-a',
+          threadId: fullGoldenThreadId,
+          sessionId: fullGoldenSessionId,
+          turnId: fullGoldenTurnId,
+          kind: 'assistant_message',
+          status: 'running',
+          startedAt: '2026-05-30T00:20:07.000Z',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu-full-golden-a',
+              name: 'Read',
+              input: { file_path: 'package.json' },
+            },
+          ],
+        },
+      },
+      {
+        type: 'item_started',
+        item: {
+          itemId: 'full-golden-tool-b',
+          threadId: fullGoldenThreadId,
+          sessionId: fullGoldenSessionId,
+          turnId: fullGoldenTurnId,
+          kind: 'assistant_message',
+          status: 'running',
+          startedAt: '2026-05-30T00:20:08.000Z',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu-full-golden-b',
+              name: 'Write',
+              input: { file_path: 'README.md', content: 'hello' },
+            },
+          ],
+        },
+      },
+      {
+        type: 'item_delta',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-tool-a',
+        delta: {
+          type: 'progress',
+          tool_use_id: 'toolu-full-golden-a',
+          data: { message: '读取中', percent: 25 },
+          timestamp: '2026-05-30T00:20:08.250Z',
+        },
+        timestamp: '2026-05-30T00:20:08.250Z',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'item_delta',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-tool-a',
+        delta: {
+          type: 'progress',
+          tool_use_id: 'toolu-full-golden-a',
+          data: { message: '读取中', percent: 80 },
+          timestamp: '2026-05-30T00:20:08.750Z',
+        },
+        timestamp: '2026-05-30T00:20:08.750Z',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'item_completed',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-tool-b',
+        kind: 'tool_result',
+        status: 'completed',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu-full-golden-b',
+            content: 'write ok',
+          },
+        ],
+        completedAt: '2026-05-30T00:20:09.000Z',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'item_completed',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-tool-a',
+        kind: 'tool_result',
+        status: 'completed',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu-full-golden-a',
+            content: '{"name":"claude-code-reforged"}',
+          },
+        ],
+        completedAt: '2026-05-30T00:20:10.000Z',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'item_started',
+        item: {
+          itemId: 'full-golden-tool-failed',
+          threadId: fullGoldenThreadId,
+          sessionId: fullGoldenSessionId,
+          turnId: fullGoldenTurnId,
+          kind: 'assistant_message',
+          status: 'running',
+          startedAt: '2026-05-30T00:20:10.250Z',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu-full-golden-failed',
+              name: 'Bash',
+              input: { command: 'exit 1' },
+            },
+          ],
+        },
+      },
+      {
+        type: 'item_completed',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-tool-failed',
+        kind: 'tool_result',
+        status: 'failed',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu-full-golden-failed',
+            is_error: true,
+            content: 'command failed',
+          },
+        ],
+        completedAt: '2026-05-30T00:20:10.500Z',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'item_started',
+        item: {
+          itemId: 'full-golden-tool-interrupted',
+          threadId: fullGoldenThreadId,
+          sessionId: fullGoldenSessionId,
+          turnId: fullGoldenTurnId,
+          kind: 'assistant_message',
+          status: 'running',
+          startedAt: '2026-05-30T00:20:10.650Z',
+          content: [
+            {
+              type: 'tool_use',
+              id: 'toolu-full-golden-interrupted',
+              name: 'Bash',
+              input: { command: 'Start-Sleep -Seconds 30' },
+            },
+          ],
+        },
+      },
+      {
+        type: 'item_completed',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-tool-interrupted',
+        kind: 'tool_result',
+        status: 'cancelled',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu-full-golden-interrupted',
+            status: 'cancelled',
+            content: 'cancelled by user',
+          },
+        ],
+        completedAt: '2026-05-30T00:20:10.900Z',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'item_completed',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        itemId: 'full-golden-orphan-tool-result',
+        kind: 'tool_result',
+        status: 'completed',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu-full-golden-missing',
+            content: 'orphan result',
+          },
+        ],
+        completedAt: '2026-05-30T00:20:11.000Z',
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+      {
+        type: 'turn_failed',
+        threadId: fullGoldenThreadId,
+        turnId: fullGoldenTurnId,
+        error: {
+          type: 'error',
+          message: 'provider failure',
+          category: 'unknown_error',
+          source: 'app_server',
+        },
+        metadata: { sessionId: fullGoldenSessionId },
+      },
+    ]
+    const fullGoldenInputEvents = [
+      ...fullGoldenCoreEvents.map((event, index) =>
+        coreTurnEventToDisplayReducerInputEvent(event, { sourceIndex: index + 1 }),
+      ),
+      createUnsupportedDisplayReducerInputEvent({
+        source: 'realtime',
+        threadId: fullGoldenThreadId,
+        sessionId: fullGoldenSessionId,
+        rawType: 'full_golden_unknown_event',
+        reason: 'full golden unsupported event',
+        ordinal: fullGoldenCoreEvents.length + 1,
+        raw: {
+          type: 'full_golden_unknown_event',
+          threadId: fullGoldenThreadId,
+          turnId: fullGoldenTurnId,
+        },
+      }),
+    ]
+    const fullGoldenSnapshotReducer = createThreadDisplayReducer({
+      threadId: fullGoldenThreadId,
+      sessionId: fullGoldenSessionId,
+    })
+    for (const inputEvent of fullGoldenInputEvents) {
+      fullGoldenSnapshotReducer.acceptOne(inputEvent)
+      fullGoldenSnapshotReducer.consumePatchOperations()
+    }
+    const fullGoldenLiveSnapshot = fullGoldenSnapshotReducer.toSnapshot({
+      source: 'live',
+      rawTranscriptEvents: fullGoldenInputEvents.length,
+      coreContextMessages: fullGoldenInputEvents.length,
+    })
+    const fullGoldenSnapshot = {
+      ...fullGoldenLiveSnapshot,
+      items: [...fullGoldenUserSnapshot.items, ...fullGoldenLiveSnapshot.items],
+      counts: {
+        ...fullGoldenLiveSnapshot.counts,
+        rawTranscriptEvents: fullGoldenLiveSnapshot.counts.rawTranscriptEvents + 1,
+        coreContextMessages: fullGoldenLiveSnapshot.counts.coreContextMessages + 1,
+        projectedDisplayItems: fullGoldenLiveSnapshot.counts.projectedDisplayItems + 1,
+        visibleTimelineItems: fullGoldenLiveSnapshot.counts.visibleTimelineItems + 1,
+      },
+    }
+    const fullGoldenSnapshotState = applySessionActions(
+      createThreadDisplaySnapshotActions(fullGoldenSnapshot),
+      createEmptySessionState(null),
+    )
+    const fullGoldenPatchReducer = createThreadDisplayReducer({
+      threadId: fullGoldenThreadId,
+      sessionId: fullGoldenSessionId,
+    })
+    const fullGoldenPatchActions = fullGoldenInputEvents.flatMap((inputEvent, index) => {
+      const operations = fullGoldenPatchReducer
+        .acceptOne(inputEvent)
+        .consumePatchOperations()
+      return routeThreadDisplayPatchActions(
+        createReducerPatch(fullGoldenThreadId, inputEvent, operations, index),
+        'fixture-desktop-full-golden-' + index,
+      )
+    })
+    const fullGoldenRealtimeState = applySessionActions(
+      fullGoldenPatchActions,
+      sessionReducer(createEmptySessionState(fullGoldenTurnId), {
+        type: 'append-display-event',
+        event: {
+          ...createUserDisplayEvent(
+            'full-golden-user-image',
+            '[图片]',
+            [fullGoldenUserAttachment],
+          ),
+          status: 'completed',
+          sourceKind: 'user_message',
+        },
+      }),
+    )
+    assert.deepEqual(
+      normalizeDisplayEventsForGolden(fullGoldenRealtimeState.displayEvents),
+      normalizeDisplayEventsForGolden(fullGoldenSnapshotState.displayEvents),
+      'Desktop full golden fixture should converge across snapshot consumption and realtime patch consumption',
+    )
+    const fullGoldenNormalized = normalizeDisplayEventsForGolden(
+      fullGoldenSnapshotState.displayEvents,
+    )
+    for (const expectedType of [
+      'user_message',
+      'assistant_message',
+      'system_notice',
+      'todo_list',
+      'tool_call',
+      'error',
+    ]) {
+      assert.ok(
+        fullGoldenNormalized.some(event => event.type === expectedType),
+        'full golden fixture should cover ' + expectedType,
+      )
+    }
+    assert.ok(
+      fullGoldenNormalized.some(event => event.fileOperation === 'read'),
+      'full golden fixture should cover read file operation',
+    )
+    assert.ok(
+      fullGoldenNormalized.some(event => event.fileOperation === 'write'),
+      'full golden fixture should cover write file operation',
+    )
+    assert.ok(
+      fullGoldenNormalized.some(event => event.toolProgressPercent === 80),
+      'full golden fixture should cover tool progress updates',
+    )
+    assert.ok(
+      fullGoldenNormalized.some(event => event.toolStatus === 'failed'),
+      'full golden fixture should cover failed tool lifecycle',
+    )
+    assert.ok(
+      fullGoldenNormalized.some(event => event.toolStatus === 'interrupted'),
+      'full golden fixture should cover interrupted tool lifecycle',
+    )
+    assert.ok(
+      fullGoldenNormalized.some(event => event.compactStatus === 'completed'),
+      'full golden fixture should cover compact completion',
+    )
+    assert.ok(
+      fullGoldenNormalized.some(event =>
+        event.attachmentSources?.includes('UserUpload'),
+      ),
+      'full golden fixture should cover user image attachment',
+    )
+    assert.ok(
+      fullGoldenNormalized.some(event =>
+        event.attachmentSources?.includes('ModelOutput'),
+      ),
+      'full golden fixture should cover generated model image attachment',
+    )
+    assert.ok(
+      fullGoldenNormalized.some(event =>
+        event.errorMessage?.includes('full golden unsupported event'),
+      ),
+      'full golden fixture should cover unsupported input diagnostic',
+    )
+
     const protocolErrorActions = createThreadDisplaySnapshotActions({
       threadId: 'thread-1',
       source: 'history',
@@ -1383,12 +2008,24 @@ await writeFile(
             itemId: 'history-invalid-projection',
           },
         },
+        {
+          id: 'history-thinking-missing-projection',
+          type: 'thinking_summary',
+          text: 'thinking fallback must be rejected',
+          status: 'completed',
+          content: [{ type: 'thinking', thinking: 'raw thinking must not render' }],
+          identity: {
+            threadId: 'thread-1',
+            turnId: 'turn-1',
+            itemId: 'history-thinking-missing-projection',
+          },
+        },
       ],
       counts: {
-        rawTranscriptEvents: 2,
-        coreContextMessages: 2,
-        projectedDisplayItems: 2,
-        visibleTimelineItems: 2,
+        rawTranscriptEvents: 3,
+        coreContextMessages: 3,
+        projectedDisplayItems: 3,
+        visibleTimelineItems: 3,
         hiddenDisplayItems: 0,
         filteredTranscriptEvents: 0,
         hiddenTimelineItems: 0,
@@ -1404,13 +2041,41 @@ await writeFile(
       protocolErrorState.displayEvents.filter(
         event => event.type === 'error' && event.id.endsWith(':projection-protocol-error'),
       ).length,
-      2,
+      3,
       'missing or invalid ThreadDisplayItem projection should render protocol error cards',
     )
     assert.equal(
       protocolErrorState.displayEvents.some(event => event.fileToolSnapshot?.path === 'SHOULD_NOT_BE_USED.md'),
       false,
       'missing projection must not fall back to raw content parsing',
+    )
+    assert.equal(
+      protocolErrorState.displayEvents.some(event => event.type === 'thinking_summary'),
+      false,
+      'missing thinking projection must not use a special raw fallback',
+    )
+
+    const displayEventsSource = readFileSync(
+      new URL('../../apps/desktop/src/renderer/src/domain/displayEvents.ts', import.meta.url),
+      'utf8',
+    )
+    const sessionStateSource = readFileSync(
+      new URL('../../apps/desktop/src/renderer/src/app/sessionState.ts', import.meta.url),
+      'utf8',
+    )
+    assert.equal(
+      displayEventsSource.includes('canFallbackMissingThreadDisplayProjection'),
+      false,
+      'Desktop displayEvents must not keep a missing-projection fallback helper',
+    )
+    assert.equal(
+      sessionStateSource.includes('findMatchingToolLifecycleEventIndex'),
+      false,
+      'Renderer old tool lifecycle merge helper must be explicitly named legacy',
+    )
+    assert.ok(
+      sessionStateSource.includes('findLegacyToolLifecycleEventIndex'),
+      'Renderer compatibility-only tool lifecycle merge helper should be explicit',
     )
 
     const rendererOwnedMergeState = sessionReducer(

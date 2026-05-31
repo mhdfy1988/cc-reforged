@@ -101,6 +101,7 @@
     "smoke:desktop-auto-update-feed": "node ./scripts/smoke-desktop-auto-update-feed.mjs",
     "smoke:desktop-branding": "node ./scripts/smoke-desktop-branding.mjs",
     "smoke:desktop-display-events": "node ./scripts/smoke-desktop-display-events.mjs",
+    "smoke:thread-display-input-event": "node ./scripts/smoke-thread-display-input-event.mjs",
     "smoke:desktop-image-generation-intent": "node ./scripts/smoke-desktop-image-generation-intent.mjs",
     "smoke:desktop-session-state": "node ./scripts/smoke-desktop-session-state.mjs",
     "smoke:desktop-github-actions-release": "node ./scripts/smoke-desktop-github-actions-release.mjs",

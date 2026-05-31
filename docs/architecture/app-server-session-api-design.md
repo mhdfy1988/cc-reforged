@@ -1,5 +1,7 @@
 # CCR App Server 会话 API 设计
 
+> 当前权威入口：本文是早期 `Thread / Turn / Item` 协议设计文档，仍可用于理解 App Server 对外对象模型；会话上下文、历史恢复和 Desktop 展示的当前边界以 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md) 和 [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md) 为准。
+
 ## 1. 文档目标
 
 本文档对应 [CCR App Server 实施 Todo](../stages/app-server-todo.md) 的 P6。
@@ -39,6 +41,21 @@ flowchart TD
 - `QueryEngine / query.ts / StructuredIO` 是内部实现，后续可以替换或分阶段接入。
 - `App Server` 只是协议入口，不应成为第二套 session / LLM / permission / tool runtime。
 - 第一版先做单会话、单 active turn，避免一上来处理多并发、恢复、权限等待和中断竞态。
+
+---
+
+## 1.1 当前实现状态
+
+截至 2026-05-28，本文的 `Thread / Turn / Item` 仍是 App Server 对外协议的基础语义，但几个早期假设已经进入实现后的新边界：
+
+- Thread 运行态已不只是内存最小原型；每个 App Server thread 会关联独立 `sessionId` / transcript，用于显式 resume。
+- 当前模型上下文由 `MaterializedConversation.currentContextMessages` 生成，不再把 `thread/messages/list.result.messages` 当成 UI 历史。
+- `thread/resume.result.displaySnapshot` 和 `thread/messages/list.result.displaySnapshot` 是 Desktop 历史展示入口。
+- `ThreadDisplaySnapshot.items` 是历史展示权威；`ThreadDisplayPatch.operations` 是实时展示权威。
+- `messages` 字段保留为兼容 / current-context 载荷，调用方必须读取 `messagesSemantics`，不能把它 replay 成完整 UI 历史。
+- 展示项由 ThreadDisplay reducer 和 projector 生成，App Server router 不应另起一套展示拼装逻辑。
+
+因此，本文后续出现的“第一版”“P7”“内存态”等描述应理解为阶段背景；判断当前实现时先看上述两个权威文档和源码入口。
 
 ---
 

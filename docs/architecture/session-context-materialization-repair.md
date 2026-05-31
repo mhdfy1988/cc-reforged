@@ -1,5 +1,7 @@
 # CCR 当前上下文物化修复方案
 
+> 当前权威入口已迁移到 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md)。本文保留 compact、snip、sidechain 和物化修复的阶段性设计记录。
+
 本文记录 2026-05-24 对 CCR 会话压缩、历史恢复、实时展示和 App Server replay 不一致问题的修复方向。它是后续实现的依据，不替代已有的两份基础文档：
 
 > 2026-05-24 复审修正：本文里所有“裁掉 / 裁剪 compact boundary 前旧消息”的表述，默认只指 **Core 当前模型上下文（currentContextMessages）**，不指 UI 可见历史。UI 历史不应该因为 compact boundary 被截断；它应从 transcript / rollout 展示投影恢复，并把 compact 表达为卡片或分隔标记。

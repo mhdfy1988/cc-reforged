@@ -1,5 +1,7 @@
 # CCR 历史恢复与实时展示统一协议
 
+> 当前权威入口已迁移到 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md) 和 [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md)。本文保留 2026-05-23 到 2026-05-25 的设计背景、源码证据和阶段性结论。
+
 本文固定 2026-05-23 对 Codex、OpenClaw 和 CCR 会话恢复链路讨论后的结论。后续改 App Server、Desktop replay、实时流式展示、历史恢复、计数提示时，先按本文判断边界。
 
 详细源码证据见 [Codex / OpenClaw 实时与历史恢复源码证据索引](../references/codex-openclaw-live-history-source-evidence.md)。压缩后当前上下文恢复的一致性问题，见 [CCR 当前上下文物化修复方案](./session-context-materialization-repair.md)。
@@ -297,7 +299,7 @@ App Server 应成为统一展示投影层：
 - `src/display/threadDisplayProjection.ts`：shared display projector，输出 `projection.event` 以及工具、文件、附件、错误、TodoWrite、隐藏规则需要的 rich snapshot。
 - `src/app-server/handlers/sessionHandlers.ts`：`thread/resume`、`thread/messages/list` 返回 `displaySnapshot`。
 - `src/app-server/router.ts`：实时展示事件只发 `thread/display/patch`，生命周期状态只保留 `thread/started`、`turn/started`、`turn/completed`、`turn/cancelled`。
-- `apps/desktop/src/main/threadDisplaySnapshotMerge.ts`：保护刷新时 snapshot 不被短结果覆盖。
+- `apps/desktop/src/main/index.ts`：Desktop main 直接保存 App Server 返回的最新 `ThreadDisplaySnapshot` / `ThreadDisplayPatch`；不再保留前台 snapshot merge 防退化层。
 - `src/display/threadDisplayProjectionSchema.ts`：对 `ThreadDisplayItem.projection` 做运行时校验。
 - `apps/desktop/src/renderer/src/app/notificationRouter.ts` 和 `apps/desktop/src/renderer/src/domain/displayEvents.ts`：消费合法 `projection` 转成既有 `SessionAction` / display event；缺失或非法 projection 生成协议错误卡。
 - `scripts/smoke-core-session-parent-chain.mjs`：验证 Core 恢复后继续写入时，`parentUuid` 接回 canonical leaf，并保持同一 transcript 文件内可追溯。

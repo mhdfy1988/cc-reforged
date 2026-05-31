@@ -1,5 +1,7 @@
 # CCR App Server 原生上下文链路恢复设计
 
+> 当前权威入口：会话上下文和 Desktop 展示链路的最新边界以 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md) 为准。本文保留 App Server 接回原生 `Message[]`、`sessionStorage` 和 resume 的背景设计，用于理解为什么要恢复原生上下文；不要把本文里的模型上下文裁剪规则套用到 UI 可见历史。
+>
 > 2026-05-24 复审修正：本文中的 `compact boundary 裁剪` 只指模型上下文 / 原生 `Message[]`，不是 UI 可见历史。历史 UI 应通过展示投影回放 transcript / rollout，不能因为上下文压缩而截断用户可见时间线。
 
 ## 目标
@@ -28,6 +30,13 @@
 这会导致模型“每轮像新会话”，刚刚确认的目标、用户纠偏、工具结果和文件状态都可能丢失。
 
 ## 第一阶段实现
+
+当前实现状态（2026-05-28）：
+
+- 下一轮模型上下文由 `MaterializedConversation.currentContextMessages` 承担，入口见 `src/utils/conversationMaterialization.ts`。
+- `thread/resume` 和 `thread/messages/list` 可以附带 `messages` 兼容字段，但 Desktop 历史展示权威是 `displaySnapshot.items`。
+- UI 历史展示不再从原生 `Message[]` 或 `currentContextMessages` replay，而是走 `ThreadDisplayReducerInputEvent -> ThreadDisplayReducer -> ThreadDisplaySnapshot / ThreadDisplayPatch`。
+- `buildConversationChain(...)` 只保留为 `sessionStorage.ts` 里的 legacy/native 读侧 helper，不作为当前上下文主链路，也不作为 silent fallback。
 
 当前采用“薄接回原生消息历史”的方式：
 

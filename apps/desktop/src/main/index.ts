@@ -13,7 +13,6 @@ import {
   readModelUsageStats,
   type ModelUsageStatsInput,
 } from '../../../../src/services/usage/modelUsageStats.js'
-import { mergeThreadDisplaySnapshot } from './threadDisplaySnapshotMerge.js'
 import { DesktopUpdateService } from './updateService.js'
 import type { DesktopUpdateState, DesktopUpdateStatus } from './updateState.js'
 import { extractImageGenerationPrompt } from './imageGenerationIntent.js'
@@ -1127,11 +1126,7 @@ async function refreshThreadDisplaySnapshot(): Promise<void> {
     return
   }
   const result = await client.client.listThreadMessages({ threadId })
-  status.threadDisplaySnapshot = mergeThreadDisplaySnapshot(
-    status.threadDisplaySnapshot,
-    result.displaySnapshot ?? null,
-    threadId,
-  )
+  status.threadDisplaySnapshot = result.displaySnapshot ?? null
 }
 
 async function getAppServerClient() {

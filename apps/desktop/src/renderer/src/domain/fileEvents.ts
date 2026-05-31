@@ -167,11 +167,6 @@ export function extractAttachmentSnapshotsFromContentBlocks(input: {
   identity?: DisplayEventIdentity
 }): AttachmentSnapshot[] {
   const attachmentBlocks = collectAttachmentBlocks(input.blocks)
-  if (input.source === 'ModelOutput') {
-    attachmentBlocks.push(
-      ...collectGeneratedOutputImagePathBlocks(input.blocks, attachmentBlocks),
-    )
-  }
   return attachmentBlocks.map((block, index) =>
     createAttachmentSnapshotFromBlock({
       block,
@@ -365,87 +360,10 @@ function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
   return collected
 }
 
-function collectGeneratedOutputImagePathBlocks(
-  blocks: readonly JsonObject[],
-  existingBlocks: readonly JsonObject[],
-): JsonObject[] {
-  const existingPaths = new Set(
-    existingBlocks
-      .map(block => getAttachmentPath(block, getGeneratedArtifactSnapshotFromBlock(block)))
-      .filter((path): path is string => Boolean(path))
-      .map(normalizePathKey),
-  )
-  const generatedBlocks: JsonObject[] = []
-  for (const block of blocks) {
-    const type = getString(block, ['type'])
-    if (type !== 'text') {
-      continue
-    }
-    const text = getString(block, ['text'])
-    if (!text) {
-      continue
-    }
-    for (const path of extractGeneratedOutputImagePaths(text)) {
-      const key = normalizePathKey(path)
-      if (existingPaths.has(key)) {
-        continue
-      }
-      existingPaths.add(key)
-      generatedBlocks.push(createGeneratedOutputImageBlockFromPath(path))
-    }
-  }
-  return generatedBlocks
-}
-
 function extractGeneratedOutputImagePaths(text: string): string[] {
   return Array.from(text.matchAll(GENERATED_OUTPUT_IMAGE_PATH_PATTERN), match =>
     match[0].trim(),
   )
-}
-
-function createGeneratedOutputImageBlockFromPath(path: string): JsonObject {
-  const displayName = getPathBasename(path)
-  const outputId = displayName.replace(/\.[^.]+$/, '')
-  const mimeType = getImageMimeTypeFromPath(path)
-  return {
-    type: 'image',
-    attachmentId: outputId,
-    displayName,
-    mimeType,
-    origin: 'model_output',
-    lifecycle: 'persisted',
-    safety: 'needs_review',
-    outputId,
-    savedPath: path,
-    generatedArtifact: {
-      id: outputId,
-      type: 'image',
-      status: 'saved',
-      savedPath: path,
-      mimeType,
-      outputId,
-      lifecycle: 'persisted',
-      safety: 'needs_review',
-    },
-    source: {
-      kind: 'file',
-      path,
-    },
-  }
-}
-
-function getImageMimeTypeFromPath(path: string): string {
-  const lower = path.toLowerCase()
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
-    return 'image/jpeg'
-  }
-  if (lower.endsWith('.webp')) {
-    return 'image/webp'
-  }
-  if (lower.endsWith('.gif')) {
-    return 'image/gif'
-  }
-  return 'image/png'
 }
 
 function normalizePathKey(path: string): string {

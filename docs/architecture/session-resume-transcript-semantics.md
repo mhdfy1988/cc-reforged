@@ -1,5 +1,7 @@
 # CCR 历史恢复与 transcript 语义
 
+> 当前恢复与展示总入口见 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md)。本文保留 transcript、`parentUuid`、sidechain、branch/fork 的术语背景。
+
 本文用于固定 CCR 后续开发中关于历史会话恢复、`parentUuid`、`sidechain`、`branch/fork` 和 Desktop 展示恢复的术语口径。它来自 2026-05-23 对 CCR 与 Claude Code / OpenAI Codex 源码的核对，目标是避免把普通历史恢复误讲成分叉、短链或子任务恢复。
 
 历史恢复和实时展示进入 Renderer 前的统一协议，见 [CCR 历史恢复与实时展示统一协议](./realtime-history-display-contract.md)。压缩后恢复当前上下文的具体修复方案，见 [CCR 当前上下文物化修复方案](./session-context-materialization-repair.md)。本文负责 transcript 主线语义；展示协议文档负责 App Server / Renderer 展示协议语义；物化修复文档负责 compact / snip / sidechain 如何重放成 Core 当前上下文。

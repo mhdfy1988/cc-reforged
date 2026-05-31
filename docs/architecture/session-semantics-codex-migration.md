@@ -1,5 +1,7 @@
 # CCR 会话语义向 Codex 模型迁移方案
 
+> 当前已落地的恢复、上下文和展示链路边界见 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md)。本文保留向 Codex-like ordered 语义迁移的背景、对照和长期路线。
+
 本文专门记录 CCR 会话语义逐步向 Codex 靠拢的问题。它不替代现有历史恢复、实时展示和并行工具文档，而是作为后续重构时的语义边界文档。
 
 ## 背景

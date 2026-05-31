@@ -7,6 +7,8 @@
 ### 改动
 
 - Desktop 历史恢复和实时展示主路径统一为 `ThreadDisplaySnapshot` / `ThreadDisplayPatch`，Renderer 不再消费旧 `threadMessages` replay 展示状态。
+- App Server 展示投影继续收敛：历史普通消息、实时 started item、实时 completed item、工具生命周期展示项和系统类特殊项复用公共 `ThreadDisplayItem` factory，为后续统一 display reducer 铺路。
+- App Server 历史 snapshot 和实时 patch 入口开始委托同一个 display reducer；附件 / 错误 projection 拆出独立 projector，降低主投影器继续膨胀的风险。
 - Core 当前模型上下文与 UI 可见历史改为同源双投影：compact 后继续对话使用压缩后的 `currentContextMessages`，历史 UI 仍从 transcript 展示投影恢复压缩前后可见记录。
 - 历史恢复新增 Codex-like ordered 语义适配层：transcript 会先生成 `classifiedTranscriptEvents`，再解析 `currentContextTailUuid`；`canonicalLeafUuid` 仅保留为兼容字段，不再表示 parent graph leaf。
 - 会话物化边界收口：`conversationMaterialization.ts` 自己读取 transcript JSONL 生成 ordered/rawIndex/坏行诊断；`sessionStorage.ts` 和 `buildConversationChain(...)` 仅保留为原生读侧 helper，不再承载 UI replay 或 current tail 产品语义。
@@ -17,7 +19,29 @@
 - Desktop 新增独立“使用统计”页面，读取 usage event 按时间范围展示 token 使用量和调用次数报表，支持按 provider、profile、model、project 聚合，并提供调用报表和单次调用事实详情。
 - 普通历史恢复提示不再显示易混淆的“已回放 N 条”数量；raw transcript、Core context、visible timeline 等数量仅用于调试和诊断。
 - Desktop 主路径不再支持旧 replay 展示协议、旧实时展示通知或缺失 projection 的 raw fallback；缺失 / 非法 projection 会展示协议错误卡。
+- App Server 工具展示投影拆出 `threadDisplayToolProjector`，工具 snapshot、分类、状态、耗时、错误归因和主时间线隐藏策略从主投影器中独立出来，继续收敛 UI display reducer 边界。
+- App Server 文件展示投影拆出 `threadDisplayFileProjector`，文件 snapshot、搜索引用、路径安全、文本范围、diff 和文件动作从主投影器中独立出来。
+- App Server 新增 `ThreadDisplayReducerInputEvent` 统一输入事件层，历史 `AppServerThreadMessage` 和实时 `CoreTurnEvent` 会先标准化成统一展示输入事件，再交给现有 snapshot / patch 输出分支，为后续单一 display reducer 状态机铺路。
+- ThreadDisplay 输入事件契约补齐 `orderKey`、`sourceIdentity` 和 `payload`；历史和实时展示事件进入 reducer 前都会先生成顺序、身份和载荷事实，未知输入进入显式 diagnostic，不使用旧路径静默兜底。
+- App Server `ThreadDisplayReducer` 统一状态机继续收口：历史 snapshot 和实时 patch 都通过 `ThreadDisplayReducerInputEvent` 进入同一个 reducer 类型，reducer 实例直接维护 snapshot items、pending patch operations、工具 lifecycle 和工具绑定状态，并通过 smoke 固定旧历史 / 实时 reducer 入口不得回归。
+- App Server `ThreadDisplayReducer` 内部状态深化为单一 ordered display state：`orderedItemIds` 负责展示顺序，`itemsById` 负责展示事实，`displayIdBySourceIdentity` / `toolLifecycleByToolUseId` 负责身份归并；历史 snapshot 和实时 patch 都从同一份 state 派生。
+- ThreadDisplay projector 纯化继续推进：tool / attachment / Desktop 展示侧不再扫描 raw content 猜测工具块或模型输出附件，统一使用 reducer 已确认的 `contentIndex` / `primaryBlock` / 唯一匹配块；assistant 生成图片路径改为在 App Server 进入投影前物化成图片块。
+- ThreadDisplay 旧展示分支继续清理：Desktop 缺 projection 的 `thinking_summary` 不再走 raw fallback；Renderer 旧工具生命周期合并入口显式命名为 legacy，并由 smoke 固定 ThreadDisplay 主路径不按 raw `toolUseId` 合并结果。
 - MCP Playwright 浏览器工具现在会在 CCR 出站层阻止 `file://` 导航，并提示先启动本地 HTTP 服务后再访问 localhost，避免外部 MCP 长时间卡住。
+- 会话恢复的当前模型上下文主路径改为从 ordered transcript events 直接生成 `currentContextMessages`，不再在 `conversationMaterialization.ts` 中调用 `buildConversationChain(...)` 作为隐式兜底；无法匹配来源 `tool_use` 的孤立 `tool_result` 会从当前模型上下文移除并保留诊断。
+- ThreadDisplay 协议边界收口：Desktop 主展示权威明确为 `ThreadDisplaySnapshot.items` / `ThreadDisplayPatch.operations`，`messages` 只作为 current-context / legacy 兼容载荷；Desktop main 不再合并 snapshot，counts 仅用于诊断和 telemetry。
+- ThreadDisplay 输入协议硬化完成 FODR-01：`ThreadDisplayReducerInputEvent.diagnostics` 成为硬字段，adapter 输出和 reducer 入口增加运行时协议校验，unsupported 输入进入 reducer diagnostics / protocol error card，并由 smoke 固定 fail-fast 行为。
+- ThreadDisplay 展示事实层完成 FODR-02：新增 `ThreadDisplayFact` 中间层，历史 / 实时 reducer 路径先解析 message、tool lifecycle、file、attachment、error、system、control、unsupported fact，再生成 state item 或 patch；projector 优先消费 `metadata.displayFact` 限定投影范围。
+- ThreadDisplay 单状态机输出统一完成 FODR-03：实时路径先执行 reducer state transition，再导出 patch operation；历史 snapshot 改为 `reducer.toSnapshot(...)` 输出 view；重复 completed tool_use 不再生成 patch，并行工具和乱序 result 继续收敛到同一工具卡。
+- ThreadDisplay Desktop 纯消费完成 FODR-04：Desktop main 刷新时直接保存 App Server `displaySnapshot`，不再使用 snapshot merge 防退化补旧项；`smoke:desktop-session-state` 新增历史 snapshot 和实时 patch 最终 `DisplayEvent` 等价的黄金回归。
+- ThreadDisplay 黄金回归补强：`smoke:desktop-session-state` 的全量 fixture 覆盖用户图片、assistant 文本、thinking-only、compact、TodoWrite、模型生成图片、并行/乱序工具结果、orphan result、turn error 和 unsupported diagnostic。
+- ThreadDisplay 全事件 Ordered Display Reducer 深化阶段收口：permission / compact / control、附件 / 生成物、tool progress / failed / interrupted、unsupported 和 projection error 已进入统一 fact / reducer / golden 覆盖矩阵。
+- 更新会话上下文、App Server 会话 API、Desktop 展示、工具卡、通用卡片、协议状态总账和版本路线图文档，统一标注当前权威入口，避免旧 P7 / 旧 Desktop replay 口径继续误导后续实现。
+- 继续收敛 P1 展示文档口径：模型输出标准、工具卡契约和通用卡片计划明确区分 App Server 展示事实源与 Desktop 视觉模型，未知结构改为显式诊断展示，不再使用静默 fallback 表述。
+- 继续收敛 P2 导航文档：协议状态总账新增会话 / 展示协议阅读顺序，版本路线图明确 ThreadDisplay 收敛属于 `0.5.x` 稳定化范围，架构索引补充上下文 / 展示链路排查入口。
+- 新增全事件统一 Ordered Display Reducer 未来设计文档，明确 `orderKey`、`sourceIdentity`、`payload` 的职责边界，以及从当前 ThreadDisplay reducer 演进到唯一 ordered display state 的分阶段路径。
+- 新增 ThreadDisplay Ordered Display Reducer goal plan 文档，按 ODR-01 到 ODR-04 拆分输入契约、单一 ordered state、projector 纯化和旧分支清理，作为后续只设计不实现的落地路线。
+- 新增 Full Ordered Display Reducer 最终状态机 goal plan，把后续深化拆成 FODR-01 输入协议硬化、FODR-02 DisplayFact 中间事实层、FODR-03 单状态机输出统一和 FODR-04 Desktop 纯消费与黄金回归，并同步更新 ThreadDisplay 设计入口。
 
 ### BUG 修复
 
@@ -34,6 +58,11 @@
 - 修复 `todo_reminder` 等内部附件在 Desktop 主聊天流中被显示成普通“附件”消息的问题。
 - 修复 reasoning / thinking-only 消息把隐藏推理内容送入 Desktop patch，可能导致界面卡顿或出现混淆占位的问题；现在仅显示受控系统提示。
 - 修复 Desktop 工具进度事件在 `thread/display` 协议路径下绕过工具生命周期合并，残留为“工具进度 · 正在执行”卡的问题。
+- 修复 Desktop 较短 `ThreadDisplaySnapshot` 曾由前台合并补旧项、导致前台承担第二套展示归并职责的问题；现在 Desktop 直接消费最新 snapshot，展示项缺失由 App Server reducer / 协议诊断和黄金回归暴露。
+- 修复 `thread/display` 协议路径仍可能按 raw `toolUseId` 在 Renderer 侧合并工具结果的问题；协议项现在只按 itemId 更新，工具生命周期绑定交由 App Server snapshot / patch 完成。
+- 修复实时 `unsupported` 展示输入已进入 fact 层但未被 reducer 显式消费，可能导致 patch operations 为空值并中断黄金回归的问题；现在会投影为协议错误展示项。
+- 修复 Desktop 实时 `thread/display/patch` 的 `update_item` 和 `complete_item` 合并漏掉工具 progress 内容块或错误快照，导致实时展示与历史 snapshot 最终状态不一致的问题。
+- 补齐普通图片 / 附件 projection 回归覆盖，固定验证用户上传图片和模型输出图片在历史 snapshot、实时 patch 中都以附件展示，避免再次退化成 `[图片]` 占位或本地路径正文。
 - 补齐会话恢复 smoke 覆盖：普通恢复、compact 后恢复、compact 前 UI 历史可见、并行工具、tool_result 乱序、多 legacy leaf 诊断、物化失败 diagnostic、App Server snapshot 和 Desktop display events。
 - 新增上下文预算 smoke，固定验证 DeepSeek 1M 和 Codex OAuth 200K 预算口径。
 

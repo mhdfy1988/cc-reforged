@@ -25,10 +25,17 @@
 
 `0.5.x` 继续围绕“多模态、多模型、工具调用”做稳定化，并把 MCP 动态工具治理和基础管理面提前收进工具治理收尾。
 
+当前实现状态（2026-05-29）：
+
+- 会话上下文和展示链路已经完成一次集中收敛：当前模型上下文走 `currentContextMessages`，Desktop 历史 / 实时展示走 `ThreadDisplaySnapshot` / `ThreadDisplayPatch`。
+- `thread/messages/list.result.messages` 保留为兼容载荷，不作为 UI 历史权威。
+- 相关设计入口见 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md) 和 [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md)。
+- 这次收敛属于 `0.5.x` 稳定化范围，不改变 `0.6.0` Skill / Plugin 主线；后续如果继续做“全事件统一 ordered display reducer”，应按 [CCR 全事件统一 Ordered Display Reducer 设计方向](./thread-display-ordered-reducer-future-design.md) 作为单独架构 goal 进入 `0.5.x` 后续清理，而不是混入 provider 接入或 Desktop 视觉重构。
+
 重点方向：
 
 - 已接 provider 成熟化：Codex OAuth、OpenAI、DeepSeek、MiniMax、Kimi、GLM 的真实 probe、错误分类和能力目录继续补齐。
-- 图片和附件展示：生成图片、远程 URL 下载、本地持久化、历史恢复、预览失败兜底继续收敛。
+- 图片和附件展示：生成图片、远程 URL 下载、本地持久化、历史恢复、预览失败诊断继续收敛。
 - 工具调用治理：平台可用工具、权限卡、计划卡、工具进度、控制型工具和模型可见工具池继续修正。
 - MCP 管理面：收敛 MCP 工具注册、可用性、ToolSearch 候选、Desktop 来源展示、安装计划、启用/禁用、检测和 installer-owned 卸载，不重写 MCP client。
 - 会话与运行态：历史会话、运行中状态、上下文压缩、长诊断和请求卡死场景继续补观测。

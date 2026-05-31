@@ -833,6 +833,11 @@ export type ThreadDisplayItem = {
   projection?: ThreadDisplayProjection
 }
 
+/**
+ * 展示计数只用于诊断和 telemetry。Desktop 可见历史的权威来源是
+ * ThreadDisplaySnapshot.items 或 ThreadDisplayPatch.operations，不能用这些
+ * counts 反向推导、裁剪或补齐 UI 历史。
+ */
 export type ThreadDisplayCounts = {
   /** 磁盘 transcript / rollout 中被选为当前主线的原始事件数。 */
   rawTranscriptEvents: number
@@ -863,6 +868,7 @@ export type ThreadDisplaySnapshot = {
   source: 'history' | 'thread' | 'live'
   generatedAt: string
   canonicalLeafUuid?: string
+  /** Desktop 主聊天历史展示的权威 item 列表。 */
   items: ThreadDisplayItem[]
   counts: ThreadDisplayCounts
   diagnostics?: ThreadDisplayDiagnostic[]
@@ -898,6 +904,7 @@ export type ThreadDisplayPatch = {
   threadId: string
   sessionId?: string
   generatedAt: string
+  /** Desktop 实时展示更新的权威操作序列。 */
   operations: ThreadDisplayPatchOperation[]
   counts?: ThreadDisplayCounts
 }
@@ -911,6 +918,7 @@ export type ThreadResumeResult = {
   /**
    * Compatibility payload for older clients. Desktop history display must use
    * displaySnapshot instead of treating this as the full visible timeline.
+   * Callers must inspect messagesSemantics before using this field.
    */
   messages: AppServerThreadMessage[]
   messagesSemantics: ThreadMessagesSemantics
@@ -920,7 +928,9 @@ export type ThreadResumeResult = {
 export type ThreadMessagesListResult = {
   /**
    * Compatibility/current-context payload. Desktop visible history must use
-   * displaySnapshot and must not replay this field as UI history.
+   * displaySnapshot and must not replay this field as UI history. The
+   * current_context_compat semantic means these messages are for continuing
+   * the model context, not for rebuilding the visible timeline.
    */
   messages: AppServerThreadMessage[]
   messagesSemantics: Extract<ThreadMessagesSemantics, 'current_context_compat'>

@@ -1,5 +1,7 @@
 # CCR 模型输出归一化与展示标准
 
+> 当前展示协议入口：模型 / provider 输出先归一化为 CCR 内容块；进入会话历史展示时，由 App Server 的 ThreadDisplay reducer / projector 生成 `ThreadDisplaySnapshot.items` 或 `ThreadDisplayPatch.operations`，Desktop Renderer 再转换为 UI 展示事件。会话上下文和展示边界以 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md) 为准。
+
 ## 1. 文档目标
 
 本文定义 CCR 面向 Desktop 聊天区的展示标准，以及不同模型 / provider 输出进入展示层前的归一化规则。
@@ -10,8 +12,9 @@
 
 ```text
 不同模型输出不会相同
--> CCR 必须先归一化成自己的内容块和展示事件
--> UI 只消费 DisplayEvent 和各类 Snapshot
+-> CCR 必须先归一化成自己的内容块
+-> App Server 投影成 ThreadDisplaySnapshot / ThreadDisplayPatch
+-> UI 只消费 Desktop 展示事件和各类 Snapshot
 ```
 
 本文不要求 OpenAI、Anthropic、Gemini、DeepSeek 或 OpenAI Compatible 网关返回同一种原始结构。相反，CCR 需要把它们映射到统一的内部结构，避免 UI、历史恢复和工具卡片各自猜字段。
@@ -23,7 +26,8 @@
 ```text
 Provider 原始消息
 -> CCR 标准内容块
--> App Server / Desktop 展示事件
+-> App Server ThreadDisplay projection
+-> Desktop 展示事件
 -> UI 组件
 ```
 
@@ -31,10 +35,11 @@ Provider 原始消息
 | --- | --- | --- |
 | Provider 原始消息 | 接收各家 SDK / 网关返回结构 | 不直接进入 UI |
 | CCR 标准内容块 | 表达文本、图片、文件、音频、工具、思考、未知 JSON | 不判断 UI 样式，不拼组件 |
-| 展示事件 | 把内容块归一化为 `DisplayEvent` / Snapshot | 不重新判断 provider 能力，不执行工具 |
+| App Server 展示投影 | 把内容块和工具生命周期归一化为 `ThreadDisplaySnapshot` / `ThreadDisplayPatch` | 不重新判断 provider 能力，不执行工具，不静默 fallback 到 raw 内容 |
+| Desktop 展示事件 | 把 snapshot / patch 转成 Renderer 可渲染事件 | 不 replay `messages` 兼容字段，不解析 transcript |
 | UI 组件 | 渲染消息、工具卡、附件条、文件卡、错误卡 | 不解析 provider 原始协议 |
 
-这条链路里，provider adapter 负责“协议映射”，Desktop domain 负责“展示归一化”。两者不能混在一起。
+这条链路里，provider adapter 负责“协议映射”，App Server ThreadDisplay projector 负责“展示事实投影”，Desktop domain 负责“视觉事件和组件适配”。三者不能混在一起。
 
 ## 3. CCR 标准内容块
 
@@ -142,7 +147,7 @@ type ProgressBlock = { type: 'progress'; data?: unknown }
 未知内容：
 
 ```ts
-type JsonFallbackBlock = {
+type JsonDiagnosticBlock = {
   type: 'json'
   value: unknown
 }
@@ -152,15 +157,17 @@ type JsonFallbackBlock = {
 
 ## 4. 当前展示事件标准
 
-Desktop 当前展示层标准是：
+当前展示事实源是 App Server 的 `ThreadDisplaySnapshot` / `ThreadDisplayPatch`：
 
 ```text
-AppServerThreadMessage / ChatMessage
+ThreadDisplaySnapshot.items / ThreadDisplayPatch.operations
 -> DisplayEvent
 -> MessageFrame / ToolCard / FileCard / TodoOverlay / PermissionCard
 ```
 
-当前 `DisplayEvent.type`：
+也就是说，`DisplayEvent` 是 Desktop Renderer 的视觉适配模型，不是历史恢复或实时 patch 的权威事实源。历史恢复和实时增量不得从 `messages` 兼容字段、provider raw output 或 transcript raw item 直接生成 UI。
+
+当前 Renderer 可用的 `DisplayEvent.type`：
 
 | 类型 | 语义 | 主要数据 |
 | --- | --- | --- |
@@ -168,7 +175,7 @@ AppServerThreadMessage / ChatMessage
 | `assistant_message` | 助手正文 | `text` |
 | `thinking_summary` | 思考摘要或进展 | `text` |
 | `tool_call` | 工具调用及合并结果 | `toolSnapshot`、附件快照 |
-| `tool_result` | 孤立工具结果兜底 | `toolSnapshot` |
+| `tool_result` | 显式协议缺口或诊断用孤立工具结果 | `toolSnapshot` |
 | `permission_request` | 权限请求 | permission snapshot |
 | `todo_list` | TodoWrite 状态 | `todoSnapshot` |
 | `file_change` | 文件变更 | `fileSnapshot` |
@@ -189,6 +196,13 @@ Snapshot 分工：
 
 实现位置：
 
+- `src/app-server/threadDisplay.ts`
+- `src/app-server/threadDisplayInputEvent.ts`
+- `src/display/threadDisplayProjection.ts`
+- `src/display/threadDisplayToolProjector.ts`
+- `src/display/threadDisplayFileProjector.ts`
+- `src/display/threadDisplayAttachmentProjector.ts`
+- `src/display/threadDisplayErrorProjector.ts`
 - `apps/desktop/src/renderer/src/domain/displayEvents.ts`
 - `apps/desktop/src/renderer/src/domain/contentBlocks.tsx`
 - `apps/desktop/src/renderer/src/domain/toolEvents.ts`
@@ -214,6 +228,12 @@ Snapshot 分工：
 5. 助手消息中包含 `tool_use` / `tool_result` / `progress` 时，进入工具卡归一化。
 6. 未知结构保留到详情，不让它阻断整条历史消息。
 7. 历史恢复不读取大文件正文，不自动把本地文件重新塞进模型上下文。
+
+当前执行边界：
+
+- 上述恢复规则由 App Server ThreadDisplay reducer / projector 执行。
+- Desktop 只消费 `displaySnapshot.items`，不从 `thread/messages/list.result.messages` 自行恢复历史。
+- 无法投影的结构必须生成协议错误或诊断展示项，不能静默回退到 raw JSON 主时间线。
 
 本规则的目标不是让历史恢复“像实时流一样完整”，而是保证用户真实发言、助手正文、工具卡、附件条都能稳定可读。
 
@@ -242,7 +262,7 @@ Provider adapter 的任务是把 CCR 内容块映射到目标协议，或把目�
 - 发送前必须先走模型能力校验。
 - Adapter 不负责决定“这个模型是否支持图片”，只负责转换已通过校验的内容块。
 - OpenAI Compatible 不能只按模型名判断能力，必须允许 Profile 覆盖。
-- 返回内容如果无法识别，先进入 `json` 兜底，不直接污染 UI 主消息。
+- 返回内容如果无法识别，先进入 `json` 诊断块，不直接污染 UI 主消息。
 
 ## 7. 多模态输出口径
 
@@ -279,7 +299,7 @@ Provider adapter 的任务是把 CCR 内容块映射到目标协议，或把目�
 | `tool-image-output` | 工具返回图片展示在工具卡内 |
 | `model-generated-image` | 模型生成图片展示为附件卡，缩略图和预览可用 |
 | `remote-generated-image-url` | 远程图片 URL 先下载持久化，再展示本地生成物 |
-| `unknown-json-fallback` | 未知结构不打断时间线 |
+| `unknown-json-diagnostic` | 未知结构不打断时间线，并进入显式诊断展示 |
 | `text-only-model-with-image` | 不支持图片模型发送前阻止 |
 
 验证命令按改动范围选择：
@@ -315,7 +335,7 @@ npm.cmd run desktop:build
 
 1. 继续补 OpenAI / Anthropic / Gemini / DeepSeek / OpenAI Compatible 样例 fixture。
 2. 把历史恢复样例纳入更稳定的 smoke。
-3. 继续把图片生成输出的 URL 下载、落盘、恢复和预览失败兜底固化。
+3. 继续把图片生成输出的 URL 下载、落盘、恢复和预览失败诊断固化。
 4. 再做结构化输出和音频 / 文件生成型媒体输出。
 
 这样做的收益是：后续新增 provider 或模型能力时，只需要补一层 adapter 和样例，不需要改 UI 主链路。

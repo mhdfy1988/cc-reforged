@@ -4,7 +4,6 @@ import { readFile } from 'fs/promises'
 import type { Entry, SerializedMessage, TranscriptMessage } from '../types/logs.js'
 import { isCompactBoundaryMessage } from './messages.js'
 import {
-  buildConversationChain,
   isTranscriptMessage,
   loadTranscriptFile,
   removeExtraFields,
@@ -317,17 +316,13 @@ export function materializeConversationFromLoadedTranscript(
     }
   }
 
-  // Tail resolution already happened above from ordered materialized events.
-  // buildConversationChain is only a temporary chain rebuild / parallel-tool
-  // recovery helper here, not the source of current-tail product semantics.
-  const chain = appendCurrentContextFollowers(
-    buildConversationChain(messages, currentContextTail.entry),
+  const currentContextChain = buildCurrentContextFromOrderedEvents(
     orderedMessages,
     messages,
     currentContextTail.event,
     diagnostics,
   )
-  const currentContextMessages = removeExtraFields(chain)
+  const currentContextMessages = removeExtraFields(currentContextChain)
 
   return {
     status: 'ok',
@@ -357,39 +352,72 @@ function createDisplayReplayEvents(
   )
 }
 
-function appendCurrentContextFollowers(
-  chain: TranscriptMessage[],
+function buildCurrentContextFromOrderedEvents(
   orderedMessages: OrderedTranscriptMessage[],
   messages: Map<UUID, TranscriptMessage>,
   currentContextTailEvent: MaterializedTranscriptEvent,
   diagnostics: ConversationMaterializationDiagnostic[],
 ): TranscriptMessage[] {
-  const existingUuids = new Set(
-    chain
-      .map(message => getMessageUuid(message))
-      .filter((uuid): uuid is UUID => Boolean(uuid)),
-  )
+  const currentContext: TranscriptMessage[] = []
+  const includedUuids = new Set<UUID>()
+  const toolState = createCurrentContextToolState()
   const followers: TranscriptMessage[] = []
 
-  for (
-    let index = currentContextTailEvent.materializedIndex + 1;
-    index < orderedMessages.length;
-    index += 1
-  ) {
-    const ordered = orderedMessages[index]
+  for (const [index, ordered] of orderedMessages.entries()) {
     if (!ordered) continue
     const uuid = getMessageUuid(ordered.message)
-    if (!uuid || existingUuids.has(uuid)) continue
+    if (!uuid || includedUuids.has(uuid)) continue
     const materialized = messages.get(uuid)
-    if (!materialized || !isCurrentContextFollowerMessage(materialized)) {
+    if (!materialized || materialized.isSidechain === true) {
       continue
     }
-    followers.push(materialized)
-    existingUuids.add(uuid)
+
+    if (index <= currentContextTailEvent.materializedIndex) {
+      if (isNewMainContextRoot(materialized) && currentContext.length > 0) {
+        currentContext.length = 0
+        includedUuids.clear()
+        resetCurrentContextToolState(toolState)
+      }
+      const currentContextMessage = prepareCurrentContextMessage(
+        materialized,
+        toolState,
+        diagnostics,
+      )
+      if (!currentContextMessage) {
+        continue
+      }
+      currentContext.push(currentContextMessage)
+      includedUuids.add(uuid)
+      continue
+    }
+
+    if (!isCurrentContextFollowerMessage(materialized)) {
+      continue
+    }
+    const follower = prepareCurrentContextMessage(
+      materialized,
+      toolState,
+      diagnostics,
+    )
+    if (!follower) {
+      continue
+    }
+    followers.push(follower)
+    includedUuids.add(uuid)
   }
 
   if (followers.length === 0) {
-    return chain
+    diagnostics.push({
+      level: 'info',
+      code: 'current_context_ordered_reducer_built',
+      message: '已由 ordered transcript events 生成当前模型上下文。',
+      details: {
+        tailUuid: currentContextTailEvent.uuid,
+        messageCount: currentContext.length,
+        followerCount: 0,
+      },
+    })
+    return currentContext
   }
 
   diagnostics.push({
@@ -405,7 +433,125 @@ function appendCurrentContextFollowers(
     },
   })
 
-  return [...chain, ...followers]
+  const result = [...currentContext, ...followers]
+  diagnostics.push({
+    level: 'info',
+    code: 'current_context_ordered_reducer_built',
+    message: '已由 ordered transcript events 生成当前模型上下文。',
+    details: {
+      tailUuid: currentContextTailEvent.uuid,
+      messageCount: result.length,
+      followerCount: followers.length,
+    },
+  })
+  return result
+}
+
+function isNewMainContextRoot(message: TranscriptMessage): boolean {
+  return isConversationMessage(message) && !message.parentUuid
+}
+
+type CurrentContextToolState = {
+  seenToolUseIds: Set<string>
+  toolUseIdsByAssistantUuid: Map<UUID, string[]>
+}
+
+function createCurrentContextToolState(): CurrentContextToolState {
+  return {
+    seenToolUseIds: new Set(),
+    toolUseIdsByAssistantUuid: new Map(),
+  }
+}
+
+function resetCurrentContextToolState(state: CurrentContextToolState): void {
+  state.seenToolUseIds.clear()
+  state.toolUseIdsByAssistantUuid.clear()
+}
+
+function prepareCurrentContextMessage(
+  message: TranscriptMessage,
+  state: CurrentContextToolState,
+  diagnostics: ConversationMaterializationDiagnostic[],
+): TranscriptMessage | undefined {
+  if (message.type === 'assistant') {
+    recordAssistantToolUses(message, state)
+    return message
+  }
+
+  if (message.type !== 'user') {
+    return message
+  }
+
+  return filterOrphanToolResultsFromUserMessage(message, state, diagnostics)
+}
+
+function recordAssistantToolUses(
+  message: TranscriptMessage,
+  state: CurrentContextToolState,
+): void {
+  const ids = getContentBlocks(message)
+    .filter(block => getContentBlockType(block) === 'tool_use')
+    .map(normalizeToolUseIdFromBlock)
+    .filter((id): id is string => Boolean(id))
+
+  if (ids.length === 0) return
+
+  for (const id of ids) state.seenToolUseIds.add(id)
+
+  const uuid = getMessageUuid(message)
+  if (uuid) {
+    state.toolUseIdsByAssistantUuid.set(uuid, ids)
+  }
+}
+
+function filterOrphanToolResultsFromUserMessage(
+  message: TranscriptMessage,
+  state: CurrentContextToolState,
+  diagnostics: ConversationMaterializationDiagnostic[],
+): TranscriptMessage | undefined {
+  const content = getMessageContent(message)
+  if (!Array.isArray(content)) return message
+
+  let removedCount = 0
+  const filteredContent = content.filter(block => {
+    if (!isRecord(block) || getContentBlockType(block) !== 'tool_result') {
+      return true
+    }
+    const toolUseId = normalizeToolResultSourceIdFromBlock(block)
+    if (toolUseId && state.seenToolUseIds.has(toolUseId)) {
+      return true
+    }
+    removedCount += 1
+    diagnostics.push({
+      level: 'warning',
+      code: 'orphan_tool_result_dropped_from_current_context',
+      message:
+        '发现无法匹配来源 tool_use 的 tool_result，已从当前模型上下文移除。',
+      details: {
+        messageUuid: getMessageUuid(message),
+        toolUseId,
+        sourceToolAssistantUUID: getUuidFromUnknown(
+          (message as { sourceToolAssistantUUID?: unknown })
+            .sourceToolAssistantUUID,
+        ),
+      },
+    })
+    return false
+  })
+
+  if (removedCount === 0) return message
+  if (filteredContent.length === 0) return undefined
+
+  const payload = (message as { message?: unknown }).message
+  if (!isRecord(payload)) return undefined
+
+  return {
+    ...message,
+    message: {
+      ...payload,
+      content: filteredContent,
+    },
+  }
 }
 
 function isCurrentContextFollowerMessage(message: TranscriptMessage): boolean {

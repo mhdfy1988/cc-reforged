@@ -18,6 +18,16 @@
 
 ## App Server 与协议
 
+当前会话上下文 / 展示链路排查优先顺序：
+
+1. 先读 [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md)，确认模型上下文和 UI 历史不是同一条链路。
+2. 再读 [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md)，确认历史 snapshot 和实时 patch 的 reducer / projector 边界。
+3. 如果问题涉及全事件统一状态机或后续重构，再读 [CCR 全事件统一 Ordered Display Reducer 设计方向](./thread-display-ordered-reducer-future-design.md) 和 [Full Ordered Display Reducer Final State Machine](../goals/2026-05-30-full-ordered-display-reducer-final-state-machine.md)。
+4. 最后按问题类型读 App Server 协议、会话 API、原生上下文恢复或 Desktop 事件字段文档。
+
+- [CCR 会话上下文与展示链路权威契约](./session-context-and-display-contract.md)
+- [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md)
+- [CCR 全事件统一 Ordered Display Reducer 设计方向](./thread-display-ordered-reducer-future-design.md)
 - [CCR App Server 协议详细设计](./app-server-protocol-design.md)
 - [CCR App Server 会话 API 设计](./app-server-session-api-design.md)
 - [CCR App Server Client SDK 设计](./app-server-client-sdk-design.md)

@@ -1,6 +1,8 @@
 # CCR Desktop 工具事件卡片契约
 
-本文档定义 Desktop 侧如何把模型工具调用展示成可理解、可回归的一张工具卡。P20 第一版目标不是重写 Core 工具运行时，而是把 App Server 已经吐出的 `tool_use`、`tool_result`、`progress`、`permission/requested` 等事件归一化成稳定展示模型。
+> 当前实现边界：工具生命周期合并已经收敛到 App Server ThreadDisplay reducer / `threadDisplayToolProjector`。本文仍作为 Desktop 工具卡视觉和交互契约；涉及 `toolUseId`、`parentToolUseId`、`progress`、`tool_result` 合并顺序时，以 [CCR ThreadDisplay Reducer 契约](./thread-display-reducer-contract.md) 为准。
+
+本文档定义 Desktop 侧如何把模型工具调用展示成可理解、可回归的一张工具卡。当前目标不是重写 Core 工具运行时，而是保证 App Server 已经归一化出的工具展示项在 Desktop 中有稳定视觉、状态和交互。
 
 ## 目标
 
@@ -22,19 +24,26 @@
 
 如果工具事件缺少 `toolUseId`，Desktop 只能把它作为协议缺口展示或记录，不能退回到“按工具名/标题字符串硬匹配”。
 
-### 工具生命周期合并顺序
+### 工具生命周期合并边界
 
-Desktop 收到 `tool_use`、`tool_result`、`progress` 这类展示事件时，必须先按稳定身份完成生命周期合并，再决定是否作为普通协议事件追加。
+当前权威实现位于 App Server ThreadDisplay reducer。Desktop 只消费 reducer 输出的展示项和 patch，不再自行从 raw `tool_use` / `tool_result` 推断生命周期。
 
-推荐顺序：
+Reducer 必须遵守的合并顺序：
 
-1. 先按相同 `itemId` 更新已有展示项。
-2. 再按 `parentToolUseId ?? toolUseId` 查找原工具卡，把 `tool_result` / `progress` 合并回同一张主工具卡。
-3. 对找不到父工具卡的控制型工具结果直接丢弃。
-4. 对找不到父工具卡的 `progress` 直接丢弃，避免残留“工具进度 · 正在执行”卡。
-5. 最后才把 `thread/display` 协议里的普通 `live` / `history` 事件作为独立消息追加。
+1. 先用 `toolUseId` / `tool_use_id` / `toolCallId` / `sourceToolAssistantUUID` 识别同一次工具调用。
+2. `tool_use` 创建或更新主工具卡。
+3. `tool_result` 回填同一张主工具卡，成功 / 失败 / 拒绝 / 超时都更新原卡状态。
+4. `progress` 只允许更新已存在的工具卡；找不到父工具卡时不得残留为独立“工具进度 · 正在执行”卡。
+5. 控制型工具结果，例如 TodoWrite 或内部 reminder，不进入普通工具主时间线。
 
-注意：`isThreadDisplayProtocolContext` 只能说明事件来自标准展示协议，不能说明该事件应该独立展示。它不得早于工具生命周期合并逻辑，否则 `progress` 这类独立内容块会绕过 `parentToolUseId` 合并，残留成假执行中卡片。
+Desktop Renderer 必须遵守的消费顺序：
+
+1. 标准 `thread/display` 协议项按 `itemId` 更新已有展示项。
+2. 不按 raw `toolUseId` 在 Renderer 侧重新合并工具生命周期。
+3. 不把缺失父工具的 `progress` 或控制型结果展示成独立卡。
+4. 协议缺口显示诊断或错误卡，不走静默 legacy fallback。
+
+注意：`isThreadDisplayProtocolContext` 只能说明事件来自标准展示协议，不能说明该事件应该独立展示。独立展示与否由 reducer 输出的 projection 决定。
 
 ## 状态机
 
@@ -99,7 +108,7 @@ P20 第一版只解决展示和错误解释，不直接重写 Core 工具池。�
 - Windows 下不要默认把目录探测引向 `ls`、`bash`、`zsh`。
 - 优先暴露 PowerShell / CMD / Node 原生文件能力 / 高层文件工具。
 - 逐步把 `Bash(command)` 抽象成 `ShellExecute(shell, command, cwd)` 或更高层文件工具。
-- 工具卡长期应展示 `shell`、`provider`、命令方言和 fallback 原因。
+- 工具卡长期应展示 `shell`、`provider`、命令方言和显式兼容路径原因。
 
 ## 验证清单
 

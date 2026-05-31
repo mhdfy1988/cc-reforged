@@ -17,3 +17,4 @@ tmp-repl-errors.txt
 # 本地运行状态与临时调试目录
 .tmp/
 .claude/
+.ccr/
