@@ -74,8 +74,8 @@ npm.cmd pack --dry-run
 ### 4.2 打 tag 并推送
 
 ```powershell
-git tag v0.5.1
-git push origin v0.5.1
+git tag v<version>
+git push origin v<version>
 ```
 
 ### 4.3 自动触发发布工作流
@@ -83,7 +83,7 @@ git push origin v0.5.1
 推送版本 tag 后会自动触发 `NPM Release`，不需要再手点 Run：
 
 1. Workflow：`NPM Release`
-2. 触发来源：`push tag`（例如 `v0.5.1`）
+2. 触发来源：`push tag`（例如 `v0.5.2`）
 3. 自动执行发布
 
 ### 4.4 手动兜底触发（可选）
@@ -91,19 +91,19 @@ git push origin v0.5.1
 如果自动流程需要重试，也可以手动运行 `workflow_dispatch`：
 
 1. Workflow：`NPM Release`
-2. 输入 `tag`：`v0.5.1`
+2. 输入 `tag`：`v<version>`
 3. 点击 Run workflow
 
 ## 5. 发布后验证
 
 ```powershell
 npm.cmd view cc-reforged version dist-tags --json
-npm.cmd view cc-reforged@0.5.1 bin --json
-npm.cmd pack cc-reforged@0.5.1
-$dst = Join-Path $env:TEMP "ccr-pack-0.5.1"
+npm.cmd view cc-reforged@<version> bin --json
+npm.cmd pack cc-reforged@<version>
+$dst = Join-Path $env:TEMP "ccr-pack-<version>"
 if (Test-Path $dst) { Remove-Item -LiteralPath $dst -Recurse -Force }
 New-Item -ItemType Directory -Path $dst | Out-Null
-tar -xf cc-reforged-0.5.1.tgz -C $dst
+tar -xf cc-reforged-<version>.tgz -C $dst
 node (Join-Path $dst "package\\cli.js") --version
 ```
 
@@ -171,6 +171,7 @@ ERROR: Direct publishing is not allowed.
 
 | 日期 | 版本 | 触发方式 | 结果 |
 | --- | --- | --- | --- |
+| 2026-05-31 | `0.5.2` | push tag `v0.5.2` | 通过 npm Trusted Publishing / OIDC 发布；GitHub Actions run：`26716738566`；npm `latest=0.5.2` |
 | 2026-05-22 | `0.5.1` | `workflow_dispatch`，输入 `tag=v0.5.1` | 首次通过 npm Trusted Publishing / OIDC 发布；GitHub Actions run：`26270002796`；npm `latest=0.5.1` |
 
 ## 9. 官方参考

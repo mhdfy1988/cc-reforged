@@ -84,6 +84,15 @@ npm.cmd run release:desktop:public
 
 正式发布流水线见 [CCR Desktop GitHub Actions 发布流水线](./desktop-github-actions-release-workflow.md)。
 
+GitHub Actions `Desktop Release` workflow 的 core smoke gate 必须同时设置：
+
+```text
+CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE=1
+ANTHROPIC_API_KEY=ci-smoke-placeholder
+```
+
+这里的 `ANTHROPIC_API_KEY` 只是 CI smoke 认证占位，不是真实 Anthropic key；缺少它时，`smoke:app-server-context` 可能在无凭据 runner 中触发默认 Anthropic 认证判断并失败。
+
 ## 4. 关键输入输出
 
 输入：

@@ -93,7 +93,7 @@ require_signed = false
 ```text
 checkout tag
 -> npm.cmd install
--> CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE=1 npm.cmd run ci:smoke
+-> CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE=1 ANTHROPIC_API_KEY=ci-smoke-placeholder npm.cmd run ci:smoke
 -> npm.cmd run desktop:dist
 -> npm.cmd run smoke:desktop-release-artifacts
 -> npm.cmd run smoke:desktop-signing-readiness
@@ -180,6 +180,7 @@ CI 正式上传
 - workflow 只负责发布 Desktop 安装器，不负责 npm publish。
 - workflow 中的 smoke 必须是可重复的隔离测试，不允许依赖本机 `~/.ccr`、真实登录态或用户目录里的 OAuth 凭据；如果要验证未登录分支，必须显式指定临时 `CCR_CONFIG_DIR`、临时 `CCR_LLM_CONFIG_PATH`、临时 `CCR_CODEX_OAUTH_CREDENTIAL_FILE`。
 - Desktop 发布 workflow 会显式设置 `CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE=1`，跳过需要启动 `cli.js -p` 的未登录 headless prompt 子进程。原因是 GitHub Actions 无用户态、无真实 OAuth 凭据，这条检查容易变成环境相关超时；本地 `ci:smoke` 仍保留完整未登录 JSON auth gate 验证。
+- Desktop 发布 workflow 还必须设置 `ANTHROPIC_API_KEY=ci-smoke-placeholder`。这是无网络 smoke 的认证占位，不是真实 Anthropic key；它用于避免工具枚举、模型能力读取或上下文 smoke 在无凭据 CI 中触发默认 Anthropic 认证链路并提前失败。
 - runtime smoke 不再用 `getTools()` 枚举全量工具。全量枚举会触发 WebSearch 等认证相关工具的 `isEnabled()` 逻辑，导致无凭据 CI 误走 Anthropic 认证链路；发布门禁只直接导入并验证核心本地工具。
 - 在 `CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE=1` 下，runtime smoke 不校验 `FileReadTool.mapToolResultToToolResultBlockParam()`。该转换路径会读取主模型能力开关，在无凭据 CI 中会触发默认 Anthropic 认证判断；发布门禁只验证工具调用 roundtrip。
 

@@ -4,7 +4,7 @@
 
 这份 Runbook 用来把 Desktop 从“能打包”推进到“可以被人工验收、公开发布和后续回归”的状态。
 
-当前已生成 `0.5.1` 本地正式安装包；上一公开版本是 `0.5.0`。真正执行安装器前，仍需要明确告知会影响当前机器的开始菜单、安装目录和 Desktop `userData`。
+当前公开版本是 `0.5.2`，已通过 GitHub Actions `Desktop Release` workflow 发布 unsigned Windows x64 安装器。真正执行安装器前，仍需要明确告知会影响当前机器的开始菜单、安装目录和 Desktop `userData`。
 
 ## 2. 当前产物
 
@@ -105,9 +105,60 @@ npm.cmd run release:desktop:public
 npm.cmd run smoke:desktop-auto-update-feed
 ```
 
-## 3.3 `0.5.1` 本地正式包记录
+## 3.3 `0.5.2` 公开发布记录
 
-`0.5.1` 已完成本地正式打包，但尚未创建 Git tag，也尚未公开发布 GitHub Release。
+`0.5.2` 已公开发布：
+
+```text
+https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.5.2
+```
+
+发布时间：2026-05-31
+
+发布路径：
+
+```text
+GitHub Actions Desktop Release
+tag = v0.5.2
+draft = false
+signed = false
+require_signed = false
+```
+
+发布验证：
+
+- `NPM Release` 成功，npm `latest=0.5.2`。
+- Desktop Release workflow 成功。
+- `smoke:desktop-auto-update-feed` 远端自动更新 feed 验证成功。
+- 发布 workflow 需要同时设置 `CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE=1` 和 `ANTHROPIC_API_KEY=ci-smoke-placeholder`，后者只是无网络 smoke 的认证占位。
+
+发布资产：
+
+- `CCR-0.5.2-win-x64.exe`
+- `CCR-0.5.2-win-x64.exe.blockmap`
+- `latest.yml`
+
+SHA256：
+
+| 文件 | SHA256 |
+| --- | --- |
+| `CCR-0.5.2-win-x64.exe` | `b487ec3b92a6bfa37c8142500f2b1417564da94ea0b61d04fab5817b9026c4b3` |
+| `CCR-0.5.2-win-x64.exe.blockmap` | `1f738e76171789cf4b76341f4b5310de0890580ed86d1603a37209c4ecd385d1` |
+| `latest.yml` | `5763bcd36336b36e43de3780b2d5f0cdfa803fb0af61809a6f5d586a72b3680f` |
+
+签名状态：
+
+- 默认构建为 unsigned。
+- `smoke:desktop-signing-readiness` 通过。
+- 短期允许 Windows 显示未知发布者提示。
+
+## 3.4 `0.5.1` 公开发布记录
+
+`0.5.1` 已公开发布：
+
+```text
+https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.5.1
+```
 
 生成时间：2026-05-22
 
@@ -143,13 +194,7 @@ SHA256：
 - `smoke:desktop-signing-readiness` 通过。
 - 安装器 Authenticode 状态为 `NotSigned`，短期允许。
 
-公开发布前还需要：
-
-- 创建并推送 `v0.5.1` tag。
-- 确认工作区发布范围，避免把无关改动带入 release。
-- 根据需要运行 `npm.cmd run release:desktop:draft` 或 GitHub Actions Desktop Release。
-
-## 3.4 `0.5.0` 发布记录
+## 3.5 `0.5.0` 发布记录
 
 `0.5.0` 已公开发布：
 
@@ -184,16 +229,16 @@ npm.cmd run smoke:desktop-auto-update-feed
 GitHub -> Actions -> Desktop Release -> Run workflow
 ```
 
-第一版推荐输入：
+当前推荐输入：
 
 ```text
-tag = v0.5.1
-draft = true
+tag = v0.5.2
+draft = false
 signed = false
 require_signed = false
 ```
 
-该 workflow 会复用本地发布脚本创建 draft release 并上传安装器、`.blockmap` 和 `latest.yml`。
+该 workflow 会复用本地发布脚本创建或恢复 release，上传安装器、`.blockmap` 和 `latest.yml`，公开发布后验证远端自动更新 feed。
 
 ## 4. 人工安装验收
 
