@@ -6,26 +6,25 @@
 
 ## 2. 当前发布版本
 
-当前公开版本：`0.5.0`。
+当前公开版本：`0.5.2`。
 
-发布时间：2026-05-20。
+发布时间：2026-05-31。
 
-发布入口：<https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.5.0>
+发布入口：<https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.5.2>
 
-`0.5.0` 的核心范围：
+`0.5.2` 的核心范围：
 
-- 多供应商配置、Profile、凭据和模型切换第一版。
-- 多模态输入内容块、图片 / 文件草稿、发送前能力校验和历史恢复。
-- Provider-neutral 图片生成链路，覆盖 OpenAI / Codex OAuth / MiniMax / GLM 等生成输出归一化。
-- `GenerateImage` 模型可见工具，当前供应商不支持生图时返回友好提示。
-- Desktop 输出展示、图片缩略图 / 预览、错误诊断、历史会话和工具卡片体验修复。
-- Desktop Windows 安装包、发布资产校验、GitHub Release 公开发布和 unsigned 发布说明。
+- ThreadDisplay 历史恢复和实时展示统一到 `ThreadDisplaySnapshot` / `ThreadDisplayPatch` 与 Ordered Display Reducer。
+- compact 后当前模型上下文和 UI 可见历史改为同源双投影，减少恢复旧上下文和历史裁剪问题。
+- 并行工具、乱序结果、工具进度 / 失败 / 中断、用户图片和模型输出图片进入展示黄金回归覆盖。
+- 新增模型调用使用事件流和 Desktop 使用统计页面，支持按 provider、profile、model、project 聚合。
+- Desktop Windows 安装包、GitHub Release 公开发布、npm Trusted Publishing 和远端自动更新 feed 验证完成。
 
 ## 3. `0.5.x` 版本线
 
 `0.5.x` 继续围绕“多模态、多模型、工具调用”做稳定化，并把 MCP 动态工具治理和基础管理面提前收进工具治理收尾。
 
-当前实现状态（2026-05-29）：
+当前实现状态（2026-05-31）：
 
 - 会话上下文和展示链路已经完成一次集中收敛：当前模型上下文走 `currentContextMessages`，Desktop 历史 / 实时展示走 `ThreadDisplaySnapshot` / `ThreadDisplayPatch`。
 - `thread/messages/list.result.messages` 保留为兼容载荷，不作为 UI 历史权威。
