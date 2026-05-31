@@ -6,7 +6,7 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.5.1-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.5.2-orange?style=flat-square)
 
 CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留终端优先的工作方式，同时把配置、LLM 运行时、App Server 和 Desktop 客户端逐步收敛到 CCR 自己的边界内。
 
@@ -47,7 +47,7 @@ Provider Adapters
 | 项目 | 当前值 |
 | --- | --- |
 | npm 包名 | `cc-reforged` |
-| 当前版本 | `0.5.1` |
+| 当前版本 | `0.5.2` |
 | CLI 命令 | `ccr` |
 | 桌面应用 | `CCR` |
 | 运行时要求 | Node.js `>=24.0.0` |
@@ -79,24 +79,24 @@ CCR 当前更像一个本地 Agent 工作台，而不是单纯的 CLI 包：
 | MCP 浏览器工具 | Desktop MCP 页 / `ccr mcp add-playwright` | 适合安装 Playwright MCP，让模型在需要时调用真实浏览器工具 |
 | Provider 接入开发 | `docs/architecture/provider-integrations/` | 适合继续补新模型、新协议、新能力矩阵 |
 
-## 0.5.1 重点
+## 0.5.2 重点
 
-- 工具治理：新增只读工具注册目录、可用性判断和 `ToolSearch` 搜索策略，让模型只看到当前真实可用的 deferred 工具。
-- MCP 管理：Desktop MCP 页支持 Playwright MCP 的安装、启停、检测、卸载和安装记录展示，默认写入用户全局 `~/.ccr`。
-- 文件搜索：打包前准备内置 `ripgrep`，开发态缺少内置二进制时会回退系统 `rg`，再回退 Node 原生文件搜索。
-- Desktop 导航：新增 Skill / Plugin 占位入口，为 `0.6.0` 外部能力包治理预留位置。
-- 发布链路：Windows 安装包继续保持 `CCR-<version>-win-x64.exe` 命名，并保留 `.blockmap`、`latest.yml` 和校验 smoke。
+- ThreadDisplay：历史恢复和实时展示统一到 `ThreadDisplaySnapshot` / `ThreadDisplayPatch` 与 Ordered Display Reducer，Desktop 不再靠旧 replay 或 raw fallback 展示主聊天流。
+- 会话恢复：compact 后当前模型上下文和 UI 可见历史改为同源双投影，减少恢复到旧上下文、工具结果错位和历史裁剪问题。
+- 使用统计：新增模型调用使用事件流和 Desktop 使用统计页面，可按 provider、profile、model、project 聚合 token、调用次数和单次调用事实。
+- 多模态展示：用户图片、模型生成图片、附件、工具结果和生成物进入统一内容块 / 附件展示路径，避免退化成本地路径正文或 `[图片]` 占位。
+- 发布链路：`v0.5.2` 已公开发布 npm 包和 Windows Desktop 安装器，GitHub Actions Desktop Release 会构建 `CCR-0.5.2-win-x64.exe`、`.blockmap` 和 `latest.yml` 并验证自动更新 feed。
 
-`0.5.1` 更具体的变化可以按几条线看：
+`0.5.2` 更具体的变化可以按几条线看：
 
 | 方向 | 已完成 |
 | --- | --- |
-| 工具注册目录 | `CcrToolRegistry`、中文名、分类、来源、direct/deferred/internal 展示建议 |
-| 工具可用性 | App Server 工具池集中输出不可用原因，`ToolSearch` 只返回 available + deferred 候选 |
-| MCP | 用户全局安装、安装清单、锁文件、缓存目录、启停、检测、卸载和工具卡展示 |
-| 文件搜索 | `prepare:ripgrep`、内置 `rg`、系统 `rg`、Node 原生 fallback 和 smoke 验收 |
-| Desktop 导航 | MCP、Skill、Plugin 入口并列，Skill / Plugin 先占位不抢 `0.5.x` 主线 |
-| 发布 | `CCR-0.5.1-win-x64.exe`、`.blockmap`、`latest.yml` 和发布资产校验 |
+| 展示协议 | App Server 单一 ordered display state、DisplayFact 中间层、历史 snapshot 和实时 patch 同源输出 |
+| Desktop 消费 | Renderer 直接消费 App Server projection，缺失 / 非法 projection 展示协议错误卡，不静默回退 raw content |
+| 会话上下文 | compact 后 `currentContextMessages` 从 ordered transcript events 生成，UI 历史仍保留压缩前后可见记录 |
+| 工具与附件 | 并行工具、乱序 result、工具进度 / 失败 / 中断、用户图片和模型输出图片进入黄金回归覆盖 |
+| 使用统计 | `~/.ccr/usage-events/YYYY-MM.jsonl` 使用事件和 Desktop 使用统计页面 |
+| 发布 | `CCR-0.5.2-win-x64.exe`、`.blockmap`、`latest.yml` 和远端 auto-update feed 校验 |
 
 ## 安装
 
@@ -481,13 +481,13 @@ npm.cmd run smoke:desktop-release-artifacts
 - GitHub Release 发布流程：[docs/architecture/desktop-github-release-workflow.md](docs/architecture/desktop-github-release-workflow.md)
 - npm 发布流程：[docs/release/npm-publish-workflow.md](docs/release/npm-publish-workflow.md)
 
-`0.5.1` 本地正式包命名为：
+`0.5.2` 公开发布资产命名为：
 
-- `CCR-0.5.1-win-x64.exe`
-- `CCR-0.5.1-win-x64.exe.blockmap`
+- `CCR-0.5.2-win-x64.exe`
+- `CCR-0.5.2-win-x64.exe.blockmap`
 - `latest.yml`
 
-正式公开发布以 GitHub Release 和 tag 为准；上一公开版本 `0.5.0` 的 SHA256 记录保留在 Desktop 发布验收 Runbook 中。
+正式公开发布以 GitHub Release 和 tag 为准；`0.5.2` 与历史版本 SHA256 记录保留在 Desktop 发布验收 Runbook 中。
 
 当前安装包允许 unsigned 发布，release note 会保留 SHA256 校验值。未来如果购买代码签名证书，可以开启 `CCR_REQUIRE_SIGNED=1` 做强制签名门禁。
 

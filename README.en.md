@@ -6,7 +6,7 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.5.1-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.5.2-orange?style=flat-square)
 
 CCR is a recovery and evolution build of a terminal coding agent. It keeps the original terminal-first workflow, adds a CCR-owned configuration/runtime boundary, and is growing a Desktop client around a stable App Server protocol.
 
@@ -25,7 +25,7 @@ The current main line focuses on:
 ## Current Status
 
 - Package: `cc-reforged`
-- Version: `0.5.1`
+- Version: `0.5.2`
 - CLI command: `ccr`
 - Desktop app: `CCR`
 - Runtime requirement: Node.js `>=24.0.0`
