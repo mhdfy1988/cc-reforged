@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+## 0.5.2 - 2026-05-31
+
 ### 改动
 
 - Desktop 历史恢复和实时展示主路径统一为 `ThreadDisplaySnapshot` / `ThreadDisplayPatch`，Renderer 不再消费旧 `threadMessages` replay 展示状态。
