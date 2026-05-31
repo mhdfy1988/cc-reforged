@@ -24,4 +24,7 @@ jobs:
         run: npm.cmd install
 
       - name: Smoke
+        env:
+          CCR_SMOKE_SKIP_HEADLESS_AUTH_GATE: '1'
+          ANTHROPIC_API_KEY: 'ci-smoke-placeholder'
         run: npm.cmd run ci:smoke
