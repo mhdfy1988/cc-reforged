@@ -615,6 +615,40 @@ try {
       ),
       false,
     );
+
+    const systemSyntheticTranscript = writeSystemSyntheticTranscript();
+    const systemSyntheticThread = await managed.client.resumeThread({
+      sessionId: systemSyntheticTranscript.sessionId,
+      transcriptPath: systemSyntheticTranscript.transcriptPath,
+      projectPath: repoRoot,
+    });
+    assert.ok(
+      systemSyntheticThread.messages.some(
+        message =>
+          message.role === 'user' &&
+          message.text.includes('permission answer committed'),
+      ),
+    );
+    assert.equal(
+      systemSyntheticThread.messages.some(message =>
+        message.text.includes('No response requested.'),
+      ),
+      false,
+    );
+    assert.deepEqual(
+      systemSyntheticThread.displaySnapshot.items.map(item => ({
+        type: item.type,
+        text: item.text,
+        hasProjection: Boolean(item.projection),
+      })),
+      [
+        {
+          type: 'user_message',
+          text: 'permission answer committed',
+          hasProjection: true,
+        },
+      ],
+    );
     assertNoSecretKeys(resumedThread);
 
     assert.deepEqual(
@@ -877,6 +911,50 @@ function writeInterruptedPromptTranscript() {
           },
         ],
       },
+    },
+  ];
+  writeFileSync(
+    transcriptPath,
+    `${entries.map(entry => JSON.stringify(entry)).join('\n')}\n`,
+    'utf8',
+  );
+  return { sessionId, transcriptPath };
+}
+
+function writeSystemSyntheticTranscript() {
+  const sessionId = randomUUID();
+  const userUuid = randomUUID();
+  const timestamp = new Date().toISOString();
+  const transcriptPath = join(tempDir, `${sessionId}.jsonl`);
+  const entries = [
+    {
+      type: 'user',
+      uuid: userUuid,
+      parentUuid: null,
+      isSidechain: false,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      message: {
+        role: 'user',
+        content: 'permission answer committed',
+      },
+    },
+    {
+      type: 'system',
+      uuid: randomUUID(),
+      parentUuid: userUuid,
+      isSidechain: false,
+      timestamp,
+      sessionId,
+      cwd: repoRoot,
+      version: 'smoke',
+      userType: 'external',
+      entrypoint: 'app-server',
+      content: 'No response requested.',
     },
   ];
   writeFileSync(

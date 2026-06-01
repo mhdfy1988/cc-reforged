@@ -23,7 +23,10 @@ import {
   type CcrMcpInstallManifest,
   type CcrMcpInstallManifestInput,
 } from './installManifest.js'
-import { createPlaywrightNpxMcpServerConfig } from './playwrightPreset.js'
+import {
+  getCcrMcpInstallPreset,
+  searchCcrMcpInstallPresets,
+} from './installPresets.js'
 import {
   McpServerConfigSchema,
   type McpServerConfig,
@@ -159,27 +162,7 @@ export function searchCcrMcpInstallCandidates(input: {
     trusted: boolean
   }>
 } {
-  const query = input.query?.trim().toLowerCase() ?? ''
-  const candidates = [createPlaywrightCandidate()]
-    .filter(candidate =>
-      query
-        ? [
-            candidate.manifest.name,
-            candidate.displayName,
-            candidate.description,
-          ].some(value => value.toLowerCase().includes(query))
-        : true,
-    )
-    .map(candidate => ({
-      ...candidate,
-      manifest: summarizeCcrMcpInstallManifest(candidate.manifest),
-      manifestInput: candidate.manifest,
-    }))
-
-  return {
-    query,
-    candidates,
-  }
+  return searchCcrMcpInstallPresets(input)
 }
 
 export function createCcrMcpInstallPlan(
@@ -418,49 +401,6 @@ export async function uninstallCcrMcpInstalledServer(input: {
   }
 }
 
-function createPlaywrightCandidate(): {
-  manifest: CcrMcpInstallManifest
-  displayName: string
-  description: string
-  trusted: boolean
-} {
-  const manifest = createCcrMcpInstallManifest({
-    name: 'playwright',
-    displayName: 'Playwright MCP',
-    description: '浏览器自动化 MCP，适合网页操作、截图和本地页面验证。',
-    version: 'latest',
-    source: {
-      kind: 'stdio-npm-package',
-      packageName: '@playwright/mcp',
-      packageManager: 'npx',
-    },
-    transport: 'stdio',
-    serverConfig: createPlaywrightNpxMcpServerConfig({
-      version: 'latest',
-    }),
-    permissions: [
-      {
-        kind: 'network',
-        required: true,
-        description: 'May access websites requested by the user.',
-      },
-      {
-        kind: 'process',
-        required: true,
-        description: 'Starts a local MCP stdio process.',
-      },
-    ],
-    dataBoundary: 'remote-service',
-    homepage: 'https://www.npmjs.com/package/@playwright/mcp',
-  })
-  return {
-    manifest,
-    displayName: 'Playwright MCP',
-    description: '浏览器自动化、截图和网页交互。',
-    trusted: true,
-  }
-}
-
 function resolveServerConfig(manifest: CcrMcpInstallManifest): McpServerConfig {
   if (manifest.serverConfig) {
     return McpServerConfigSchema().parse(manifest.serverConfig)
@@ -509,10 +449,13 @@ function resolveServerConfig(manifest: CcrMcpInstallManifest): McpServerConfig {
       }
 
     case 'builtin-preset':
-      if (manifest.source.presetId === 'playwright') {
-        return createPlaywrightNpxMcpServerConfig({
-          version: manifest.version,
-        })
+      {
+        const preset = getCcrMcpInstallPreset(manifest.source.presetId)
+        if (preset) {
+          return McpServerConfigSchema().parse(
+            preset.createServerConfig(manifest),
+          )
+        }
       }
       break
   }

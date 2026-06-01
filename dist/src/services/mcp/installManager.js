@@ -7,7 +7,7 @@ import { getPlatform } from '../../utils/platform.js';
 import { addMcpConfig, getMcpConfigByName, removeMcpConfig, updateMcpConfig, } from './config.js';
 import { collectCcrMcpConfigInventory, getCcrMcpInstallPaths, summarizeCcrMcpConfigInventory, } from './configInventory.js';
 import { CcrMcpInstallManifestSchema, createCcrMcpInstallManifest, getCcrMcpInstallTransport, summarizeCcrMcpInstallManifest, } from './installManifest.js';
-import { createPlaywrightNpxMcpServerConfig } from './playwrightPreset.js';
+import { getCcrMcpInstallPreset, searchCcrMcpInstallPresets, } from './installPresets.js';
 import { McpServerConfigSchema, } from './types.js';
 export const CcrMcpWritableScopeSchema = z.enum(['user', 'project', 'local']);
 export const CcrMcpInstallPlanInputSchema = z.object({
@@ -18,24 +18,7 @@ export const CcrMcpInstallPlanInputSchema = z.object({
 });
 const MCP_PACKAGE_OWNER_MARKER = '.ccr-mcp-install.json';
 export function searchCcrMcpInstallCandidates(input = {}) {
-    const query = input.query?.trim().toLowerCase() ?? '';
-    const candidates = [createPlaywrightCandidate()]
-        .filter(candidate => query
-        ? [
-            candidate.manifest.name,
-            candidate.displayName,
-            candidate.description,
-        ].some(value => value.toLowerCase().includes(query))
-        : true)
-        .map(candidate => ({
-        ...candidate,
-        manifest: summarizeCcrMcpInstallManifest(candidate.manifest),
-        manifestInput: candidate.manifest,
-    }));
-    return {
-        query,
-        candidates,
-    };
+    return searchCcrMcpInstallPresets(input);
 }
 export function createCcrMcpInstallPlan(input) {
     const parsed = CcrMcpInstallPlanInputSchema.parse(input);
@@ -238,43 +221,6 @@ export async function uninstallCcrMcpInstalledServer(input) {
         inventory: summarizeCcrMcpConfigInventory(collectCcrMcpConfigInventory()),
     };
 }
-function createPlaywrightCandidate() {
-    const manifest = createCcrMcpInstallManifest({
-        name: 'playwright',
-        displayName: 'Playwright MCP',
-        description: '浏览器自动化 MCP，适合网页操作、截图和本地页面验证。',
-        version: 'latest',
-        source: {
-            kind: 'stdio-npm-package',
-            packageName: '@playwright/mcp',
-            packageManager: 'npx',
-        },
-        transport: 'stdio',
-        serverConfig: createPlaywrightNpxMcpServerConfig({
-            version: 'latest',
-        }),
-        permissions: [
-            {
-                kind: 'network',
-                required: true,
-                description: 'May access websites requested by the user.',
-            },
-            {
-                kind: 'process',
-                required: true,
-                description: 'Starts a local MCP stdio process.',
-            },
-        ],
-        dataBoundary: 'remote-service',
-        homepage: 'https://www.npmjs.com/package/@playwright/mcp',
-    });
-    return {
-        manifest,
-        displayName: 'Playwright MCP',
-        description: '浏览器自动化、截图和网页交互。',
-        trusted: true,
-    };
-}
 function resolveServerConfig(manifest) {
     if (manifest.serverConfig) {
         return McpServerConfigSchema().parse(manifest.serverConfig);
@@ -319,10 +265,11 @@ function resolveServerConfig(manifest) {
                 args: manifest.entry.args,
             };
         case 'builtin-preset':
-            if (manifest.source.presetId === 'playwright') {
-                return createPlaywrightNpxMcpServerConfig({
-                    version: manifest.version,
-                });
+            {
+                const preset = getCcrMcpInstallPreset(manifest.source.presetId);
+                if (preset) {
+                    return McpServerConfigSchema().parse(preset.createServerConfig(manifest));
+                }
             }
             break;
     }

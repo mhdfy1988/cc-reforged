@@ -478,20 +478,32 @@ function isSyntheticHistoryMessage(message: Message): boolean {
 }
 
 function getSyntheticHistoryMessageText(message: Message): string | undefined {
+  if (message.type === 'system') {
+    return getSingleSyntheticText(message.content)
+  }
   if (message.type !== 'assistant' && message.type !== 'user') {
     return undefined
   }
-  const content = message.message?.content
-  return typeof content === 'string'
-    ? content
-    : Array.isArray(content) &&
-        content.length === 1 &&
-        content[0] &&
-        typeof content[0] === 'object' &&
-        'text' in content[0] &&
-        typeof content[0].text === 'string'
-      ? content[0].text
-      : undefined
+  return getSingleSyntheticText(message.message?.content)
+}
+
+function getSingleSyntheticText(content: unknown): string | undefined {
+  if (typeof content === 'string') {
+    return content
+  }
+  if (!Array.isArray(content) || content.length !== 1) {
+    return undefined
+  }
+  const [block] = content
+  if (typeof block === 'string') {
+    return block
+  }
+  return block &&
+    typeof block === 'object' &&
+    'text' in block &&
+    typeof block.text === 'string'
+    ? block.text
+    : undefined
 }
 
 const SYNTHETIC_HISTORY_MESSAGES = new Set([

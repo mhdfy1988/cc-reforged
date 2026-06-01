@@ -4,6 +4,16 @@
 
 ## Unreleased
 
+### 改动
+
+- MCP 安装推荐清单抽出为共享 `installPresets`，安装搜索、计划和应用流程复用同一套 preset 定义，减少后续新增 MCP 来源时在 client / installer 内重复维护。
+- Desktop 展示协议错误卡补齐诊断字段，缺失 projection 时会展示来源、item 类型、状态、内容形态、身份字段和原始引用等信息，便于定位真实坏协议来源。
+
+### BUG 修复
+
+- 修复实时工具结果在 ThreadDisplay reducer 中可能没有进入工具生命周期归并，导致工具调用和工具结果分开展示的问题。
+- 修复 AskUserQuestion / 权限回答后刷新 snapshot 时，system 形态的内部合成控制消息 `No response requested.` 可能被转成缺少 projection 的裸 `system_notice` 协议错误卡的问题。
+
 ## 0.5.2 - 2026-05-31
 
 ### 改动

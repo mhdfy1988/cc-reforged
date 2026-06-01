@@ -907,6 +907,7 @@ export type ThreadDisplayPatch = {
   /** Desktop 实时展示更新的权威操作序列。 */
   operations: ThreadDisplayPatchOperation[]
   counts?: ThreadDisplayCounts
+  diagnostics?: ThreadDisplayDiagnostic[]
 }
 
 export type ThreadStartResult = {

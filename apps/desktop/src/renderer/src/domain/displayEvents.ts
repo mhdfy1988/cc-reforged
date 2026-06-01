@@ -391,15 +391,99 @@ export function createThreadDisplayProjectionProtocolErrorEvent(
 ): DisplayEvent {
   const itemObject = getObjectRecord(item)
   const itemType = getProjectedString(itemObject?.type) ?? 'unknown'
-  const event = createErrorDisplayEvent(
-    `${itemId}:projection-protocol-error`,
-    `展示协议错误：${issue}。itemId=${itemId}，itemType=${itemType}。`,
-  )
+  const safeDetails = createProjectionProtocolSafeDetails({
+    itemId,
+    item,
+    issue,
+    context,
+  })
+  const eventId = `${itemId}:projection-protocol-error`
+  const event: DisplayEvent = {
+    id: eventId,
+    type: 'error',
+    text: `展示协议错误：${issue}。itemId=${itemId}，itemType=${itemType}。`,
+    errorSnapshot: createCcrErrorSnapshot({
+      message: `展示协议错误：${issue}。itemId=${itemId}，itemType=${itemType}。`,
+      source: 'desktop',
+      category: 'protocol_error',
+      severity: 'error',
+      retryable: 'unknown',
+      turnId: getProjectedString(getObjectRecord(itemObject?.identity)?.turnId),
+      toolUseId: getProjectedString(
+        getObjectRecord(itemObject?.identity)?.toolUseId,
+      ),
+      safeDetails,
+      rawRef: `thread_display_item:${itemId}`,
+    }),
+  }
   return {
     ...event,
     status: 'failed',
     sourceKind: 'thread_display_projection',
     identity: createDisplayEventIdentity(context ?? { itemId }),
+  }
+}
+
+function createProjectionProtocolSafeDetails(input: {
+  itemId: string
+  item: unknown
+  issue: string
+  context?: DisplayEventContractContext
+}): Record<string, unknown> {
+  const item = getObjectRecord(input.item)
+  const identity = getObjectRecord(item?.identity)
+  const metadata = getObjectRecord(item?.metadata)
+  const params = input.context?.params
+  return {
+    issue: input.issue,
+    replaySource: params?.source,
+    displayItemType: params?.displayItemType ?? item?.type,
+    itemId: input.itemId,
+    sourceKind: getProjectedString(item?.sourceKind),
+    status: getProjectedString(item?.status),
+    createdAt: getProjectedString(item?.createdAt),
+    hasContent: item ? 'content' in item : false,
+    hasProjection: item ? 'projection' in item : false,
+    textPreview: getProjectedString(item?.text)?.slice(0, 240),
+    identity: {
+      threadId: getProjectedString(identity?.threadId) ?? params?.threadId,
+      sessionId: getProjectedString(identity?.sessionId) ?? params?.sessionId,
+      turnId: getProjectedString(identity?.turnId) ?? params?.turnId,
+      itemId: getProjectedString(identity?.itemId) ?? params?.itemId,
+      toolUseId: getProjectedString(identity?.toolUseId) ?? params?.toolUseId,
+      parentToolUseId:
+        getProjectedString(identity?.parentToolUseId) ??
+        params?.parentToolUseId,
+      rawIndex: typeof identity?.rawIndex === 'number' ? identity.rawIndex : undefined,
+      materializedIndex:
+        typeof identity?.materializedIndex === 'number'
+          ? identity.materializedIndex
+          : undefined,
+      contentIndex:
+        typeof identity?.contentIndex === 'number'
+          ? identity.contentIndex
+          : undefined,
+    },
+    metadata: {
+      coreEventType: getProjectedString(metadata?.coreEventType),
+      displayReason: getProjectedString(metadata?.displayReason),
+      keys: metadata ? Object.keys(metadata) : [],
+    },
+    contentShape: summarizeProjectionContentShape(item?.content),
+  }
+}
+
+function summarizeProjectionContentShape(content: unknown): Record<string, unknown> {
+  if (Array.isArray(content)) {
+    const first = getObjectRecord(content[0])
+    return {
+      kind: 'array',
+      length: content.length,
+      firstType: getProjectedString(first?.type),
+    }
+  }
+  return {
+    kind: content === undefined ? 'undefined' : typeof content,
   }
 }
 

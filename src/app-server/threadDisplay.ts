@@ -173,7 +173,14 @@ export class ThreadDisplayReducer {
     diagnostics?: ThreadDisplayDiagnostic[]
   }): ThreadDisplaySnapshot {
     const items = this.toSnapshotItems()
-    const diagnostics = [...(input.diagnostics ?? []), ...this.getDiagnostics()]
+    const diagnostics = [
+      ...(input.diagnostics ?? []),
+      ...this.getDiagnostics(),
+      ...createProjectionProtocolDiagnostics(items, {
+        source: input.source,
+        owner: 'snapshot',
+      }),
+    ]
     const projectedDisplayItems = items.length
     const visibleTimelineItems = countVisibleThreadDisplayItems(items)
     const hiddenDisplayItems = Math.max(
@@ -573,7 +580,6 @@ export class ThreadDisplayReducer {
         {
           const toolOperations = facts
             .filter(isThreadDisplayToolLikeFact)
-            .filter(fact => fact.lifecycleKind === 'tool_use')
             .map(fact => this.acceptDisplayFact(fact, inputEvent))
             .filter(
               (operation): operation is ThreadDisplayPatchOperation =>
@@ -1301,6 +1307,94 @@ export function coreEventToThreadDisplayPatch(
     threadId,
     generatedAt: new Date().toISOString(),
     operations,
+    ...createPatchDiagnostics(operations),
+  }
+}
+
+function createPatchDiagnostics(
+  operations: readonly ThreadDisplayPatchOperation[],
+): { diagnostics?: ThreadDisplayDiagnostic[] } {
+  const items = operations.flatMap(operation => {
+    if (operation.op === 'append_item' || operation.op === 'replace_active_stream') {
+      return operation.item ? [operation.item] : []
+    }
+    if (operation.op === 'complete_item') {
+      return operation.item ? [operation.item] : []
+    }
+    if (operation.op === 'update_item') {
+      return operation.item.id && operation.item.type && operation.item.text !== undefined
+        ? [operation.item as ThreadDisplayItem]
+        : []
+    }
+    return []
+  })
+  const diagnostics = createProjectionProtocolDiagnostics(items, {
+    source: 'live',
+    owner: 'patch',
+  })
+  return diagnostics.length ? { diagnostics } : {}
+}
+
+function createProjectionProtocolDiagnostics(
+  items: readonly ThreadDisplayItem[],
+  context: {
+    source: ThreadDisplaySnapshot['source'] | 'live'
+    owner: 'snapshot' | 'patch'
+  },
+): ThreadDisplayDiagnostic[] {
+  return items
+    .filter(item => !item.projection)
+    .map(item => ({
+      level: 'error',
+      code: 'thread_display_item_missing_projection',
+      message: `ThreadDisplay ${context.owner} item is missing projection.`,
+      details: summarizeProjectionProtocolItem(item, context),
+    }))
+}
+
+function summarizeProjectionProtocolItem(
+  item: ThreadDisplayItem,
+  context: {
+    source: ThreadDisplaySnapshot['source'] | 'live'
+    owner: 'snapshot' | 'patch'
+  },
+): Record<string, unknown> {
+  const metadata = item.metadata ?? {}
+  return compactJsonObject({
+    owner: context.owner,
+    source: context.source,
+    itemId: item.id,
+    itemType: item.type,
+    sourceKind: item.sourceKind,
+    status: item.status,
+    createdAt: item.createdAt,
+    hasContent: item.content !== undefined,
+    hasProjection: Boolean(item.projection),
+    textPreview: item.text.slice(0, 240),
+    identity: item.identity,
+    coreEventType:
+      typeof metadata.coreEventType === 'string'
+        ? metadata.coreEventType
+        : undefined,
+    displayReason:
+      typeof metadata.displayReason === 'string'
+        ? metadata.displayReason
+        : undefined,
+    metadataKeys: Object.keys(metadata),
+    contentShape: summarizeContentShape(item.content),
+  })
+}
+
+function summarizeContentShape(content: unknown): Record<string, unknown> {
+  if (Array.isArray(content)) {
+    return {
+      kind: 'array',
+      length: content.length,
+      firstType: isCoreJsonObject(content[0]) ? content[0].type : undefined,
+    }
+  }
+  return {
+    kind: content === undefined ? 'undefined' : typeof content,
   }
 }
 
