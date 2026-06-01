@@ -86,6 +86,12 @@ export class StdioAppServerClient {
     applyMcpInstall(params, options) {
         return this.rpc.request('mcp/install/apply', params, options);
     }
+    planMcpAdopt(params, options) {
+        return this.rpc.request('mcp/install/adopt/plan', params, options);
+    }
+    applyMcpAdopt(params, options) {
+        return this.rpc.request('mcp/install/adopt/apply', params, options);
+    }
     listMcpInstalls(params = {}, options) {
         return this.rpc.request('mcp/install/list', params, options);
     }

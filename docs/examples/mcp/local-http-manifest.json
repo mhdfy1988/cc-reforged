@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "name": "local-http-example",
+  "displayName": "Local HTTP MCP example",
+  "description": "Example manifest for an MCP server already running on localhost.",
+  "source": {
+    "kind": "remote-url",
+    "url": "http://127.0.0.1:3001/mcp",
+    "headersRequired": false
+  },
+  "transport": "http",
+  "permissions": [
+    {
+      "kind": "network",
+      "required": true,
+      "description": "Connects to the local HTTP MCP endpoint."
+    }
+  ],
+  "dataBoundary": "local-only"
+}

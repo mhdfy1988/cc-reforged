@@ -1468,8 +1468,7 @@ h1 {
 }
 
 .mcp-server-list,
-.mcp-candidate-list,
-.mcp-installed-list {
+.mcp-candidate-list {
   display: grid;
   align-content: start;
   gap: 8px;
@@ -1480,8 +1479,7 @@ h1 {
 }
 
 .mcp-server-item,
-.mcp-candidate-item,
-.mcp-installed-item {
+.mcp-candidate-item {
   display: grid;
   gap: 10px;
   width: 100%;
@@ -1498,8 +1496,7 @@ h1 {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.mcp-candidate-item,
-.mcp-installed-item {
+.mcp-candidate-item {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
 }
@@ -1526,16 +1523,14 @@ h1 {
 }
 
 .mcp-server-item span,
-.mcp-candidate-item span,
-.mcp-installed-item span {
+.mcp-candidate-item span {
   display: grid;
   gap: 4px;
   min-width: 0;
 }
 
 .mcp-server-item strong,
-.mcp-candidate-item strong,
-.mcp-installed-item strong {
+.mcp-candidate-item strong {
   overflow: hidden;
   color: #3d2b1b;
   font-size: 13px;
@@ -1545,8 +1540,7 @@ h1 {
 }
 
 .mcp-server-item em,
-.mcp-candidate-item em,
-.mcp-installed-item em {
+.mcp-candidate-item em {
   overflow: hidden;
   color: var(--muted);
   font-size: 11px;
@@ -1585,47 +1579,6 @@ h1 {
 .mcp-tags small.danger {
   color: #8b2f2f;
   background: rgba(255, 230, 227, 0.92);
-}
-
-.mcp-candidate-meta,
-.mcp-candidate-permissions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-width: 0;
-}
-
-.mcp-candidate-meta small,
-.mcp-candidate-permissions small {
-  max-width: 100%;
-  overflow: hidden;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1;
-  padding: 5px 7px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mcp-candidate-meta small.neutral {
-  color: #6b5134;
-  background: rgba(232, 220, 202, 0.72);
-}
-
-.mcp-candidate-meta small.success {
-  color: #08745c;
-  background: rgba(218, 248, 238, 0.88);
-}
-
-.mcp-candidate-meta small.warning {
-  color: #9a5c00;
-  background: rgba(255, 237, 202, 0.92);
-}
-
-.mcp-candidate-permissions small {
-  color: #67513e;
-  background: rgba(255, 248, 234, 0.9);
 }
 
 .mcp-detail {
@@ -1690,30 +1643,70 @@ h1 {
   gap: 8px;
 }
 
-.mcp-install-scope label {
+.mcp-install-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.mcp-create-panel {
   display: grid;
-  gap: 6px;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(216, 190, 162, 0.58);
+  border-radius: 8px;
+  background: rgba(255, 248, 234, 0.54);
+  padding: 10px;
+}
+
+.mcp-create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.mcp-create-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
   color: var(--muted);
   font-size: 11px;
   font-weight: 900;
 }
 
-.mcp-install-scope select {
-  height: 34px;
+.mcp-create-grid input,
+.mcp-create-grid select,
+.mcp-create-grid textarea {
   min-width: 0;
   border: 1px solid rgba(216, 190, 162, 0.72);
   border-radius: 8px;
+  outline: none;
   background: #fffdf8;
   color: var(--text);
   font-size: 12px;
   font-weight: 800;
+}
+
+.mcp-create-grid input,
+.mcp-create-grid select {
+  height: 34px;
   padding: 0 10px;
 }
 
-.mcp-installed-actions {
+.mcp-create-grid textarea {
+  min-height: 64px;
+  resize: vertical;
+  padding: 8px 10px;
+}
+
+.mcp-create-wide {
+  grid-column: 1 / -1;
+}
+
+.mcp-create-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
   justify-content: flex-end;
 }
 
@@ -4039,8 +4032,7 @@ h1 {
   }
 
   .mcp-server-list,
-  .mcp-candidate-list,
-  .mcp-installed-list {
+  .mcp-candidate-list {
     overflow: visible;
   }
 

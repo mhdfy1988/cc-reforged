@@ -8,10 +8,14 @@
 | --- | --- |
 | [playwright.json](./playwright.json) | Playwright MCP 默认 headed 模式，适合本地可视化验证 |
 | [playwright-headless.json](./playwright-headless.json) | Playwright MCP headless 模式，适合 CI 或无界面环境 |
+| [local-stdio-manifest.json](./local-stdio-manifest.json) | 本地开发的 stdio MCP 安装清单示例，用于 Desktop 导入 manifest |
+| [local-http-manifest.json](./local-http-manifest.json) | 本地 HTTP MCP 安装清单示例，用于 Desktop 导入 manifest |
 
 ## 使用方式
 
 日常用户优先使用 Desktop 的 `MCP` 页面安装和检测；本目录示例主要用于源码调试、临时 smoke 或手动配置。
+
+`*-manifest.json` 文件是 CCR 安装清单示例，不是直接启用的 `.mcp.json` 配置。它们需要通过 Desktop 的 `导入 MCP` 或安装计划接口确认后，才会写入真实 MCP 配置和 CCR 安装记录。
 
 临时主会话：
 

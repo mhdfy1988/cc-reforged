@@ -37,8 +37,8 @@ function ensureWritableMcpScope(scope) {
 function formatInstallSummary(value) {
     return JSON.stringify(value, null, 2);
 }
-function getInstallCandidateByName(name) {
-    const result = searchCcrMcpInstallCandidates({
+async function getInstallCandidateByName(name) {
+    const result = await searchCcrMcpInstallCandidates({
         query: name
     });
     return result.candidates.find(candidate => candidate.manifest.name === name) ?? result.candidates[0] ?? null;
@@ -292,7 +292,7 @@ export async function mcpGetHandler(name) {
     await gracefulShutdown(0);
 }
 export async function mcpInstallSearchHandler(query = '') {
-    const result = searchCcrMcpInstallCandidates({
+    const result = await searchCcrMcpInstallCandidates({
         query
     });
     if (result.candidates.length === 0) {
@@ -312,7 +312,7 @@ export async function mcpInstallSearchHandler(query = '') {
     return cliOk(lines.join('\n'));
 }
 export async function mcpInstallHandler(preset, options) {
-    const candidate = getInstallCandidateByName(preset);
+    const candidate = await getInstallCandidateByName(preset);
     if (!candidate) {
         return cliError(`No MCP install candidate found for "${preset}".`);
     }

@@ -31,6 +31,8 @@ import {
   handleMcpAdd,
   handleMcpDisable,
   handleMcpEnable,
+  handleMcpInstallAdoptApply,
+  handleMcpInstallAdoptPlan,
   handleMcpInstallApply,
   handleMcpInstallList,
   handleMcpInstallPlan,
@@ -251,7 +253,7 @@ export async function handleJsonRpcMessage(
       case 'mcp/install/search':
         return successResponse(
           request.id,
-          handleMcpInstallSearch(context, request.params),
+          await handleMcpInstallSearch(context, request.params),
         )
       case 'mcp/install/plan':
         return successResponse(
@@ -262,6 +264,16 @@ export async function handleJsonRpcMessage(
         return successResponse(
           request.id,
           await handleMcpInstallApply(context, request.params),
+        )
+      case 'mcp/install/adopt/plan':
+        return successResponse(
+          request.id,
+          await handleMcpInstallAdoptPlan(context, request.params),
+        )
+      case 'mcp/install/adopt/apply':
+        return successResponse(
+          request.id,
+          await handleMcpInstallAdoptApply(context, request.params),
         )
       case 'mcp/install/list':
         return successResponse(

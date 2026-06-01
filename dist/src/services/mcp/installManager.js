@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import { z } from 'zod/v4';
 import { jsonStringify } from '../../utils/slowOperations.js';
@@ -17,8 +17,49 @@ export const CcrMcpInstallPlanInputSchema = z.object({
     force: z.boolean().default(false),
 });
 const MCP_PACKAGE_OWNER_MARKER = '.ccr-mcp-install.json';
-export function searchCcrMcpInstallCandidates(input = {}) {
-    return searchCcrMcpInstallPresets(input);
+export async function searchCcrMcpInstallCandidates(input = {}) {
+    const query = input.query?.trim().toLowerCase() ?? '';
+    const presetCandidates = searchCcrMcpInstallPresets(input).candidates.map(candidate => createInstallCandidate({
+        sourceType: 'builtin-preset',
+        sourceLabel: '内置 preset',
+        originPath: null,
+        manifest: candidate.manifestInput,
+        displayName: candidate.displayName,
+        description: candidate.description,
+        trusted: candidate.trusted,
+    }));
+    const localManifestResult = await loadLocalManifestCandidates();
+    const registryCandidates = [];
+    const candidates = await applyInstallCandidateState([...presetCandidates, ...localManifestResult.candidates, ...registryCandidates]
+        .filter(candidate => query
+        ? getInstallCandidateSearchText(candidate).some(value => value.toLowerCase().includes(query))
+        : true)
+        .sort(compareInstallCandidates));
+    return {
+        query,
+        candidates,
+        errors: localManifestResult.errors,
+        sources: [
+            {
+                sourceType: 'builtin-preset',
+                sourceLabel: '内置 preset',
+                originPath: null,
+                enabled: true,
+            },
+            {
+                sourceType: 'local-manifest',
+                sourceLabel: '本地 manifest 目录',
+                originPath: getLocalManifestDir(),
+                enabled: true,
+            },
+            {
+                sourceType: 'remote-registry',
+                sourceLabel: '远端 registry',
+                originPath: null,
+                enabled: false,
+            },
+        ],
+    };
 }
 export function createCcrMcpInstallPlan(input) {
     const parsed = CcrMcpInstallPlanInputSchema.parse(input);
@@ -176,6 +217,94 @@ export async function listCcrMcpInstalledServers() {
         installed,
         statusSummary: summarizeInstalledConfigStatuses(installed),
         installPaths: getCcrMcpInstallPaths(),
+    };
+}
+export async function createCcrMcpAdoptPlan(input) {
+    const name = input.name.trim();
+    if (!name) {
+        throw new Error('MCP adopt requires a server name.');
+    }
+    const config = getMcpConfigByName(name);
+    if (!config) {
+        throw new Error(`MCP server "${name}" was not found.`);
+    }
+    const scope = parseAdoptableScope(config.scope);
+    const serverConfig = stripScopedMcpConfig(config);
+    const manifest = createManifestFromConfig({
+        name,
+        scope,
+        configPath: getConfigWritePath(scope),
+        serverConfig,
+    });
+    const index = await readInstalledIndex();
+    const existingInstalled = Boolean(index.installed[name]);
+    const paths = getCcrMcpInstallPaths();
+    const planSeed = {
+        schemaVersion: 1,
+        name,
+        scope,
+        manifest,
+        serverConfig,
+        existingInstalled,
+    };
+    const token = hashJson(planSeed);
+    return {
+        schemaVersion: 1,
+        planId: `mcp-adopt:${name}:${scope}:${token.slice(0, 12)}`,
+        name,
+        scope,
+        adoptable: !existingInstalled,
+        existingInstalled,
+        manifest: summarizeCcrMcpInstallManifest(manifest),
+        manifestInput: manifest,
+        serverConfigPreview: summarizeServerConfigForPlan(serverConfig),
+        writes: [
+            {
+                kind: 'installed-manifest',
+                path: paths.installedManifestPath,
+                mode: 'record',
+            },
+            {
+                kind: 'lockfile',
+                path: paths.lockFilePath,
+                mode: 'record',
+            },
+        ],
+        risks: ['records_existing_config_as_installer_owned'],
+        requiresConfirmation: true,
+        confirmation: {
+            token: existingInstalled ? '' : token,
+            message: existingInstalled
+                ? `MCP server "${name}" is already managed by CCR installer.`
+                : 'MCP adopt records the current configuration as CCR managed without changing the existing MCP config.',
+        },
+    };
+}
+export async function applyCcrMcpAdoptPlan(input) {
+    if (!input.confirmed) {
+        throw new Error('MCP adopt requires explicit user confirmation.');
+    }
+    const plan = await createCcrMcpAdoptPlan({ name: input.name });
+    if (!plan.adoptable) {
+        throw new Error(`MCP server "${input.name}" is already managed by CCR installer.`);
+    }
+    if (input.confirmationToken !== plan.confirmation.token) {
+        throw new Error('MCP adopt confirmation token does not match the plan.');
+    }
+    const serverConfig = getMcpConfigByName(plan.name);
+    if (!serverConfig) {
+        throw new Error(`MCP server "${plan.name}" was not found.`);
+    }
+    const record = await recordInstalledMcp({
+        plan,
+        manifest: plan.manifestInput,
+        serverConfig: stripScopedMcpConfig(serverConfig),
+    });
+    return {
+        adopted: true,
+        plan,
+        record: summarizeInstalledRecord(record),
+        inventory: summarizeCcrMcpConfigInventory(collectCcrMcpConfigInventory()),
     };
 }
 export async function uninstallCcrMcpInstalledServer(input) {
@@ -496,6 +625,95 @@ function stripScopedMcpConfig(config) {
     const { scope: _scope, pluginSource: _pluginSource, ...rest } = config;
     return rest;
 }
+function parseAdoptableScope(scope) {
+    const parsed = CcrMcpWritableScopeSchema.safeParse(scope);
+    if (!parsed.success) {
+        throw new Error(`MCP server scope is not adoptable: ${String(scope)}`);
+    }
+    return parsed.data;
+}
+function createManifestFromConfig(params) {
+    const { name, scope, configPath, serverConfig } = params;
+    if ('url' in serverConfig) {
+        const transport = getCcrMcpInstallTransport(serverConfig);
+        return createCcrMcpInstallManifest({
+            name,
+            displayName: name,
+            description: '由现有 MCP 配置接管生成。',
+            source: {
+                kind: 'remote-url',
+                url: serverConfig.url,
+                headersRequired: Boolean('headers' in serverConfig && serverConfig.headers),
+            },
+            transport,
+            serverConfig,
+            permissions: [
+                {
+                    kind: 'network',
+                    required: true,
+                    description: '连接现有 MCP URL。',
+                },
+            ],
+            dataBoundary: isLocalMcpUrl(serverConfig.url)
+                ? 'local-only'
+                : 'remote-service',
+        });
+    }
+    if ('command' in serverConfig) {
+        return createCcrMcpInstallManifest({
+            name,
+            displayName: name,
+            description: '由现有 stdio MCP 配置接管生成。',
+            source: {
+                kind: 'manual-config',
+                scope,
+                configPath,
+            },
+            transport: 'stdio',
+            serverConfig,
+            entry: {
+                command: serverConfig.command,
+                args: serverConfig.args ?? [],
+            },
+            envSchema: Object.keys(serverConfig.env ?? {}).map(key => ({
+                name: key,
+                required: true,
+                secret: /(?:TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL)/i.test(key),
+            })),
+            permissions: [
+                {
+                    kind: 'process',
+                    required: true,
+                    description: '启动现有 MCP stdio 进程。',
+                },
+            ],
+            dataBoundary: 'unknown',
+        });
+    }
+    return createCcrMcpInstallManifest({
+        name,
+        displayName: name,
+        description: '由现有 MCP 配置接管生成。',
+        source: {
+            kind: 'manual-config',
+            scope,
+            configPath,
+        },
+        transport: getCcrMcpInstallTransport(serverConfig),
+        serverConfig,
+        permissions: [],
+        dataBoundary: 'unknown',
+    });
+}
+function isLocalMcpUrl(url) {
+    try {
+        const parsed = new URL(url);
+        return ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+    }
+    catch {
+        return false;
+    }
+}
 function isMissingMcpConfigError(error) {
     return (error instanceof Error &&
         error.message.startsWith('No ') &&
@@ -544,6 +762,151 @@ async function readLockIndex() {
 }
 async function writeLockIndex(index) {
     await writeJsonFile(getCcrMcpInstallPaths().lockFilePath, index);
+}
+function getLocalManifestDir() {
+    return join(dirname(getCcrMcpInstallPaths().installedManifestPath), 'manifests');
+}
+function createInstallCandidate(input) {
+    const manifest = summarizeCcrMcpInstallManifest(input.manifest);
+    return {
+        candidateId: `${input.sourceType}:${input.originPath ?? input.manifest.name}`,
+        sourceType: input.sourceType,
+        sourceLabel: input.sourceLabel,
+        originPath: input.originPath,
+        state: 'available',
+        stateMessage: '可安装',
+        duplicateGroupCount: 1,
+        manifest,
+        manifestInput: input.manifest,
+        displayName: input.displayName ?? input.manifest.displayName ?? input.manifest.name,
+        description: input.description ?? input.manifest.description ?? '',
+        trusted: input.trusted,
+    };
+}
+async function loadLocalManifestCandidates() {
+    const manifestDir = getLocalManifestDir();
+    let entries;
+    try {
+        entries = await readdir(manifestDir);
+    }
+    catch (error) {
+        if (isNotFoundError(error)) {
+            return { candidates: [], errors: [] };
+        }
+        return {
+            candidates: [],
+            errors: [
+                {
+                    sourceType: 'local-manifest',
+                    originPath: manifestDir,
+                    message: error instanceof Error ? error.message : String(error),
+                },
+            ],
+        };
+    }
+    const candidates = [];
+    const errors = [];
+    for (const entry of entries.filter(name => name.toLowerCase().endsWith('.json'))) {
+        const originPath = join(manifestDir, entry);
+        try {
+            const raw = await readFile(originPath, 'utf8');
+            const manifest = createCcrMcpInstallManifest(JSON.parse(raw));
+            candidates.push(createInstallCandidate({
+                sourceType: 'local-manifest',
+                sourceLabel: '本地 manifest',
+                originPath,
+                manifest,
+                trusted: false,
+            }));
+        }
+        catch (error) {
+            errors.push({
+                sourceType: 'local-manifest',
+                originPath,
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+    return { candidates, errors };
+}
+async function applyInstallCandidateState(candidates) {
+    const installedIndex = await readInstalledIndex();
+    const counts = new Map();
+    for (const candidate of candidates) {
+        counts.set(candidate.manifest.name, (counts.get(candidate.manifest.name) ?? 0) + 1);
+    }
+    return candidates.map(candidate => {
+        const duplicateGroupCount = counts.get(candidate.manifest.name) ?? 1;
+        if (installedIndex.installed[candidate.manifest.name]) {
+            return {
+                ...candidate,
+                duplicateGroupCount,
+                state: 'installed',
+                stateMessage: '已由 CCR 安装',
+            };
+        }
+        const configured = getMcpConfigByName(candidate.manifest.name);
+        if (configured) {
+            return {
+                ...candidate,
+                duplicateGroupCount,
+                state: 'configured',
+                stateMessage: `已配置于 ${String(configured.scope ?? 'unknown')}`,
+            };
+        }
+        if (duplicateGroupCount > 1) {
+            return {
+                ...candidate,
+                duplicateGroupCount,
+                state: 'duplicate-name',
+                stateMessage: `存在 ${duplicateGroupCount} 个同名候选，请确认来源`,
+            };
+        }
+        return {
+            ...candidate,
+            duplicateGroupCount,
+            state: 'available',
+            stateMessage: '可安装',
+        };
+    });
+}
+function compareInstallCandidates(left, right) {
+    const stateWeight = {
+        available: 0,
+        'duplicate-name': 1,
+        configured: 2,
+        installed: 3,
+        invalid: 4,
+    };
+    const sourceWeight = {
+        'builtin-preset': 0,
+        'local-manifest': 1,
+        'remote-registry': 2,
+    };
+    return (stateWeight[left.state] - stateWeight[right.state] ||
+        sourceWeight[left.sourceType] - sourceWeight[right.sourceType] ||
+        left.displayName.localeCompare(right.displayName));
+}
+function getInstallCandidateSearchText(candidate) {
+    return [
+        candidate.manifest.name,
+        candidate.displayName,
+        candidate.description,
+        candidate.sourceType,
+        candidate.sourceLabel,
+        candidate.originPath ?? '',
+        candidate.manifestInput.source.kind === 'stdio-npm-package'
+            ? candidate.manifestInput.source.packageName
+            : '',
+        candidate.manifestInput.source.kind === 'remote-url'
+            ? candidate.manifestInput.source.url
+            : '',
+    ].filter(Boolean);
+}
+function isNotFoundError(error) {
+    return (error instanceof Error &&
+        'code' in error &&
+        error.code === 'ENOENT');
 }
 async function readJsonFile(filePath, fallback) {
     try {

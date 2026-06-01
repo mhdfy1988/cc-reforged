@@ -49,8 +49,8 @@ function formatInstallSummary(value: Record<string, unknown>): string {
   return JSON.stringify(value, null, 2);
 }
 
-function getInstallCandidateByName(name: string) {
-  const result = searchCcrMcpInstallCandidates({
+async function getInstallCandidateByName(name: string) {
+  const result = await searchCcrMcpInstallCandidates({
     query: name
   });
   return result.candidates.find(candidate => candidate.manifest.name === name) ?? result.candidates[0] ?? null;
@@ -318,7 +318,7 @@ export async function mcpGetHandler(name: string): Promise<void> {
 }
 
 export async function mcpInstallSearchHandler(query = ''): Promise<void> {
-  const result = searchCcrMcpInstallCandidates({
+  const result = await searchCcrMcpInstallCandidates({
     query
   });
   if (result.candidates.length === 0) {
@@ -344,7 +344,7 @@ export async function mcpInstallHandler(preset: string, options: {
   force?: boolean;
   yes?: boolean;
 }): Promise<void> {
-  const candidate = getInstallCandidateByName(preset);
+  const candidate = await getInstallCandidateByName(preset);
   if (!candidate) {
     return cliError(`No MCP install candidate found for "${preset}".`);
   }

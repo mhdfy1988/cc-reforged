@@ -2,6 +2,8 @@ import {
   McpAddParamsSchema,
   McpDisableParamsSchema,
   McpEnableParamsSchema,
+  McpInstallAdoptApplyParamsSchema,
+  McpInstallAdoptPlanParamsSchema,
   McpInstallApplyParamsSchema,
   McpInstallListParamsSchema,
   McpInstallPlanParamsSchema,
@@ -44,6 +46,15 @@ type McpInstallPlanParams = {
 }
 
 type McpInstallApplyParams = McpInstallPlanParams & {
+  confirmed: boolean
+  confirmationToken: string
+}
+
+type McpInstallAdoptPlanParams = {
+  name: string
+}
+
+type McpInstallAdoptApplyParams = McpInstallAdoptPlanParams & {
   confirmed: boolean
   confirmationToken: string
 }
@@ -139,10 +150,10 @@ export async function handleMcpTest(
   return context.core.mcp.testServer(parsedParams)
 }
 
-export function handleMcpInstallSearch(
+export async function handleMcpInstallSearch(
   context: AppServerContext,
   params: unknown,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const parsedParams = McpInstallSearchParamsSchema.parse(
     params ?? {},
   ) as McpInstallSearchParams
@@ -167,6 +178,26 @@ export async function handleMcpInstallApply(
     params,
   ) as McpInstallApplyParams
   return context.core.mcp.applyInstall(parsedParams)
+}
+
+export async function handleMcpInstallAdoptPlan(
+  context: AppServerContext,
+  params: unknown,
+): Promise<Record<string, unknown>> {
+  const parsedParams = McpInstallAdoptPlanParamsSchema.parse(
+    params,
+  ) as McpInstallAdoptPlanParams
+  return context.core.mcp.planAdopt(parsedParams)
+}
+
+export async function handleMcpInstallAdoptApply(
+  context: AppServerContext,
+  params: unknown,
+): Promise<Record<string, unknown>> {
+  const parsedParams = McpInstallAdoptApplyParamsSchema.parse(
+    params,
+  ) as McpInstallAdoptApplyParams
+  return context.core.mcp.applyAdopt(parsedParams)
 }
 
 export async function handleMcpInstallList(

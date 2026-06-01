@@ -246,6 +246,15 @@ export const McpInstallApplyParamsSchema = McpInstallPlanParamsSchema.extend({
     confirmed: z.boolean(),
     confirmationToken: z.string().min(1),
 }).strict();
+export const McpInstallAdoptPlanParamsSchema = z
+    .object({
+    name: z.string().min(1),
+})
+    .strict();
+export const McpInstallAdoptApplyParamsSchema = McpInstallAdoptPlanParamsSchema.extend({
+    confirmed: z.boolean(),
+    confirmationToken: z.string().min(1),
+}).strict();
 export const McpInstallListParamsSchema = z.object({}).strict().default({});
 export const McpInstallUninstallParamsSchema = z
     .object({

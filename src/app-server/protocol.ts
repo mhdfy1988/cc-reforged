@@ -295,6 +295,18 @@ export const McpInstallApplyParamsSchema = McpInstallPlanParamsSchema.extend({
   confirmationToken: z.string().min(1),
 }).strict()
 
+export const McpInstallAdoptPlanParamsSchema = z
+  .object({
+    name: z.string().min(1),
+  })
+  .strict()
+
+export const McpInstallAdoptApplyParamsSchema =
+  McpInstallAdoptPlanParamsSchema.extend({
+    confirmed: z.boolean(),
+    confirmationToken: z.string().min(1),
+  }).strict()
+
 export const McpInstallListParamsSchema = z.object({}).strict().default({})
 
 export const McpInstallUninstallParamsSchema = z
@@ -590,6 +602,12 @@ export type McpInstallSearchParams = z.infer<
 >
 export type McpInstallPlanParams = z.infer<typeof McpInstallPlanParamsSchema>
 export type McpInstallApplyParams = z.infer<typeof McpInstallApplyParamsSchema>
+export type McpInstallAdoptPlanParams = z.infer<
+  typeof McpInstallAdoptPlanParamsSchema
+>
+export type McpInstallAdoptApplyParams = z.infer<
+  typeof McpInstallAdoptApplyParamsSchema
+>
 export type McpInstallListParams = z.infer<typeof McpInstallListParamsSchema>
 export type McpInstallUninstallParams = z.infer<
   typeof McpInstallUninstallParamsSchema
@@ -746,6 +764,8 @@ export type McpTestResult = Record<string, unknown>
 export type McpInstallSearchResult = Record<string, unknown>
 export type McpInstallPlanResult = Record<string, unknown>
 export type McpInstallApplyResult = Record<string, unknown>
+export type McpInstallAdoptPlanResult = Record<string, unknown>
+export type McpInstallAdoptApplyResult = Record<string, unknown>
 export type McpInstallListResult = Record<string, unknown>
 export type McpInstallUninstallResult = Record<string, unknown>
 export type McpInstallRepairResult = Record<string, unknown>

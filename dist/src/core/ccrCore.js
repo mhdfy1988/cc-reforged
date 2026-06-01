@@ -1,6 +1,6 @@
 import { getCoreAuthStatus, loginCoreAuth } from './authCore.js';
 import { getCoreConfigSnapshot } from './configCore.js';
-import { addCoreMcpServer, applyCoreMcpInstall, inspectCoreMcpServer, listCoreMcpServers, listCoreMcpInstalls, planCoreMcpInstall, repairCoreMcpInstalledServer, removeCoreMcpServer, restartCoreMcpServer, searchCoreMcpInstallCandidates, setCoreMcpServerEnabled, testCoreMcpServer, uninstallCoreMcpInstalledServer, updateCoreMcpServer, } from './mcpCore.js';
+import { addCoreMcpServer, applyCoreMcpAdopt, applyCoreMcpInstall, inspectCoreMcpServer, listCoreMcpServers, listCoreMcpInstalls, planCoreMcpAdopt, planCoreMcpInstall, repairCoreMcpInstalledServer, removeCoreMcpServer, restartCoreMcpServer, searchCoreMcpInstallCandidates, setCoreMcpServerEnabled, testCoreMcpServer, uninstallCoreMcpInstalledServer, updateCoreMcpServer, } from './mcpCore.js';
 import { copyCoreModelProfile, deleteCoreModelProfile, getCoreModelAvailability, listCoreModelProfiles, listCoreModels, saveCoreModelProfile, setCoreModel, setCoreModelProfile, testCoreModelConnection, updateCoreModelCredential, } from './modelCore.js';
 import { CorePermissionService } from './permissionCore.js';
 import { CoreSessionService } from './sessionCore.js';
@@ -44,6 +44,8 @@ export function createCcrCore(options = {}) {
             searchInstallCandidates: searchCoreMcpInstallCandidates,
             setServerEnabled: setCoreMcpServerEnabled,
             testServer: testCoreMcpServer,
+            planAdopt: planCoreMcpAdopt,
+            applyAdopt: applyCoreMcpAdopt,
             planInstall: planCoreMcpInstall,
             applyInstall: applyCoreMcpInstall,
             listInstalls: listCoreMcpInstalls,

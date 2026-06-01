@@ -294,14 +294,14 @@ MCP 已提前进入 `0.5.x` 工具治理线。CCR 当前已经有用户级 MCP �
 日常使用优先走 Desktop：
 
 1. 打开 CCR Desktop，进入左侧 `MCP` 页面。
-2. 在安装区搜索 `playwright`。
+2. 在安装区搜索 `playwright`、`context7` 或 `sentry`。
 3. 点击 `安装`。
 4. 在确认弹窗里检查写入位置、启动方式、风险提示和数据边界。
 5. 点击 `确认安装`。
 6. 安装后点击 `检测`，确认工具能被发现。
 7. 会话里需要浏览器时，明确说“用浏览器打开/查询/操作”。成功时会看到 `MCP playwright / browser_*` 工具卡。
 
-如果已经安装，候选会显示“已安装”，不要重复安装；直接在 MCP 页面里使用 `检测`、`重启`、`禁用/启用` 或 `卸载`。
+如果已经安装，候选会显示“已安装”，不要重复安装；直接在 MCP 页面里使用 `检测`、`重启`、`禁用/启用`。由 CCR 安装器管理的 server 会在详情页提供 `卸载`，配置漂移或缺失时提供 `修复`。
 
 ### CLI 安装
 
@@ -337,9 +337,11 @@ ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
 | `~/.ccr/mcp/packages/` | CCR installer-owned 包缓存和 owner marker |
 | `~/.ccr/logs/mcp/` | MCP 安装、连接和诊断日志 |
 
-`npx` 快速模式不会把 `@playwright/mcp` 复制进 CCR 安装目录；首次启动时会由 npm/npx 获取并缓存。`managed` 模式会把指定版本安装到 `~/.ccr/mcp/servers/playwright/` 并把配置指向本地入口。
+`npx` 快速模式不会把 `@playwright/mcp` 复制进 CCR 安装目录；首次启动时会由 npm/npx 获取并缓存。`installed.json` 和 `lock.json` 记录的是 CCR installer-owned 的配置与卸载边界，不代表所有手工配置。
 
 模型可以建议需要某类 MCP 能力，但不能绕过用户确认自行下载安装、写配置、启动陌生 stdio server 或卸载删除文件。
+
+自写 MCP 推荐先通过手工配置进入 Server 列表；后续会补 `导入 manifest`、`创建本地 MCP` 和 `接管已有配置`，让本地 stdio、本地 HTTP、npm 包和远端 HTTP 都走同一套安装计划确认流程。
 
 更完整的 MCP 文档见 [MCP 文档入口](docs/mcp/README.md)。
 

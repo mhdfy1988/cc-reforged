@@ -4,7 +4,7 @@ import { coreEventToJsonRpcNotification, coreEventToThreadDisplayPatchNotificati
 import { AppServerError, errorResponse } from './errors.js';
 import { handleCompactRun, handleCompactStatus, handleContextAnalyze, handleContextStatus, handleMemorySessionStatus, } from './handlers/contextHandlers.js';
 import { handleAuthLogin, handleAuthStatus, handleConfigGet, handleModelAvailability, handleModelProfileCopy, handleModelProfileDelete, handleModelCredentialUpdate, handleModelList, handleModelProfileList, handleModelProfileSave, handleModelProfileSetCurrent, handleModelSet, handleModelTest, } from './handlers/llmHandlers.js';
-import { handleMcpAdd, handleMcpDisable, handleMcpEnable, handleMcpInstallApply, handleMcpInstallList, handleMcpInstallPlan, handleMcpInstallRepair, handleMcpInstallSearch, handleMcpInstallUninstall, handleMcpInspect, handleMcpList, handleMcpRemove, handleMcpRestart, handleMcpTest, handleMcpUpdate, } from './handlers/mcpHandlers.js';
+import { handleMcpAdd, handleMcpDisable, handleMcpEnable, handleMcpInstallAdoptApply, handleMcpInstallAdoptPlan, handleMcpInstallApply, handleMcpInstallList, handleMcpInstallPlan, handleMcpInstallRepair, handleMcpInstallSearch, handleMcpInstallUninstall, handleMcpInspect, handleMcpList, handleMcpRemove, handleMcpRestart, handleMcpTest, handleMcpUpdate, } from './handlers/mcpHandlers.js';
 import { handlePermissionPendingList, handlePermissionRespond, handlePermissionSettingsGet, handlePermissionSettingsUpdate, } from './handlers/permissionHandlers.js';
 import { handleSessionHistoryList, handleSessionHistoryRename, handleThreadList, handleThreadMessagesList, handleThreadResume, handleThreadStart, handleTurnInterrupt, handleTurnStart, } from './handlers/sessionHandlers.js';
 import { handleWorkspaceOpen } from './handlers/workspaceHandlers.js';
@@ -95,11 +95,15 @@ export async function handleJsonRpcMessage(context, rawMessage) {
             case 'mcp/test':
                 return successResponse(request.id, await handleMcpTest(context, request.params));
             case 'mcp/install/search':
-                return successResponse(request.id, handleMcpInstallSearch(context, request.params));
+                return successResponse(request.id, await handleMcpInstallSearch(context, request.params));
             case 'mcp/install/plan':
                 return successResponse(request.id, handleMcpInstallPlan(context, request.params));
             case 'mcp/install/apply':
                 return successResponse(request.id, await handleMcpInstallApply(context, request.params));
+            case 'mcp/install/adopt/plan':
+                return successResponse(request.id, await handleMcpInstallAdoptPlan(context, request.params));
+            case 'mcp/install/adopt/apply':
+                return successResponse(request.id, await handleMcpInstallAdoptApply(context, request.params));
             case 'mcp/install/list':
                 return successResponse(request.id, await handleMcpInstallList(context, request.params));
             case 'mcp/install/uninstall':

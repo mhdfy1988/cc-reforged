@@ -49,6 +49,7 @@ import type {
   LlmModelProfileMutationResult,
   LlmModelProfileSaveInput,
   LogSnapshot,
+  McpAdoptPlanState,
   McpInstallCandidate,
   McpInstallListState,
   McpInstallPlanState,
@@ -895,6 +896,64 @@ function App({ initialStatus = null }: AppProps) {
     }
   }
 
+  async function importMcpInstallManifest(): Promise<void> {
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        const imported = await window.ccr.chooseMcpInstallManifest()
+        if (imported.canceled) {
+          return
+        }
+        const manifestInput = imported.manifest
+        if (!manifestInput) {
+          setMcpPageError('导入的 MCP manifest 缺少有效内容。')
+          return
+        }
+        const plan = (await window.ccr.planMcpInstall({
+          scope: 'user',
+          manifest: manifestInput,
+        })) as McpInstallPlanState
+        setMcpInstallPlan({
+          plan,
+          manifestInput,
+          manifestPath: imported.path,
+        })
+        const name = plan.name ?? imported.summary?.name ?? '未命名 MCP'
+        setMcpPageMessage(
+          plan.installable === false
+            ? (plan.existing?.message ?? '该 MCP 已存在，无需重复安装。')
+            : `已导入 ${name}，请确认安装计划。`,
+        )
+      })
+    } catch (error) {
+      setMcpInstallPlan(null)
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function planMcpInstallFromManifest(
+    manifestInput: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        const plan = (await window.ccr.planMcpInstall({
+          scope: 'user',
+          manifest: manifestInput,
+        })) as McpInstallPlanState
+        setMcpInstallPlan({ plan, manifestInput })
+        setMcpPageMessage(
+          plan.installable === false
+            ? (plan.existing?.message ?? '该 MCP 已存在，无需重复安装。')
+            : `已生成 ${plan.name ?? '未命名 MCP'} 的安装计划，请确认。`,
+        )
+      })
+    } catch (error) {
+      setMcpInstallPlan(null)
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   async function applyMcpInstallPlan(
     planView: McpInstallPlanViewState,
   ): Promise<void> {
@@ -975,6 +1034,72 @@ function App({ initialStatus = null }: AppProps) {
       const result = (await window.ccr.testMcp({ name })) as McpTestState
       setMcpTestByName(current => ({ ...current, [name]: result }))
       setMcpPageMessage(`已检测 MCP：${name}`)
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function adoptMcpServer(name: string): Promise<void> {
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        const plan = (await window.ccr.planMcpAdopt({
+          name,
+        })) as McpAdoptPlanState
+        if (plan.adoptable === false) {
+          setMcpPageError(
+            plan.existingInstalled
+              ? '该 MCP 已经有 CCR 安装记录，无需接管。'
+              : '该 MCP 当前不能接管。',
+          )
+          return
+        }
+        const token = plan.confirmation?.token
+        if (!token) {
+          setMcpPageError('接管确认缺少 token。')
+          return
+        }
+        showConfirmDialog({
+          title: '接管 MCP',
+          message: `将现有手工配置接管为 CCR 安装记录：${plan.name ?? name}？`,
+          detail: formatMcpAdoptPlanDetail(plan),
+          confirmLabel: '接管',
+          tone: 'warning',
+          onConfirm: () => {
+            void performMcpAdopt(plan, token)
+          },
+        })
+        setMcpPageMessage('请确认 MCP 接管计划。')
+      })
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function performMcpAdopt(
+    plan: McpAdoptPlanState,
+    confirmationToken: string,
+  ): Promise<void> {
+    const name = plan.name
+    if (!name) {
+      setMcpPageError('接管计划缺少名称。')
+      return
+    }
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        await window.ccr.applyMcpAdopt({
+          name,
+          confirmed: true,
+          confirmationToken,
+        })
+        const [, installs] = await Promise.all([
+          window.ccr.refreshMcp(),
+          window.ccr.listMcpInstalls(),
+        ])
+        setMcpInstalls(installs as McpInstallListState)
+        setMcpPageMessage(`已接管 MCP：${name}`)
+      })
     } catch (error) {
       setMcpPageError(error instanceof Error ? error.message : String(error))
     }
@@ -1436,7 +1561,12 @@ function App({ initialStatus = null }: AppProps) {
                 onPlanInstall={(candidate, scope) =>
                   void planMcpInstallFromCandidate(candidate, scope)
                 }
-                onRefresh={() => void refreshMcpManagement()}
+                  onImportManifest={() => void importMcpInstallManifest()}
+                  onCreateManifest={manifest =>
+                    void planMcpInstallFromManifest(manifest)
+                  }
+                  onAdopt={name => void adoptMcpServer(name)}
+                  onRefresh={() => void refreshMcpManagement()}
                 onRepair={record => void repairMcpServer(record)}
                 onRestart={name => void restartMcpServer(name)}
                 onSearchInstalls={query =>
@@ -1550,6 +1680,20 @@ function getMcpCandidateManifestInput(
 
 function normalizeMcpScope(value: unknown): McpWritableScope {
   return value === 'project' || value === 'local' ? value : 'user'
+}
+
+function formatMcpAdoptPlanDetail(plan: McpAdoptPlanState): string {
+  const writes = (plan.writes ?? [])
+    .map(write => `${write.kind ?? 'record'}: ${write.path ?? 'unknown'}`)
+    .join('\n')
+  const risks = (plan.risks ?? []).map(risk => `风险: ${risk}`).join('\n')
+  const lines = [
+    `范围：${normalizeMcpScope(plan.scope)}`,
+    plan.manifest?.kind ? `来源类型：${plan.manifest.kind}` : null,
+    writes || null,
+    risks || null,
+  ].filter((line): line is string => Boolean(line))
+  return lines.join('\n')
 }
 
 function isCompactCommand(text: string): boolean {

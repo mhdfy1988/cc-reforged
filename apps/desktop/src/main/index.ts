@@ -13,6 +13,10 @@ import {
   readModelUsageStats,
   type ModelUsageStatsInput,
 } from '../../../../src/services/usage/modelUsageStats.js'
+import {
+  CcrMcpInstallManifestSchema,
+  summarizeCcrMcpInstallManifest,
+} from '../../../../src/services/mcp/installManifest.js'
 import { DesktopUpdateService } from './updateService.js'
 import type { DesktopUpdateState, DesktopUpdateStatus } from './updateState.js'
 import { extractImageGenerationPrompt } from './imageGenerationIntent.js'
@@ -29,6 +33,10 @@ import type {
   McpDisableResult,
   McpEnableParams,
   McpEnableResult,
+  McpInstallAdoptApplyParams,
+  McpInstallAdoptApplyResult,
+  McpInstallAdoptPlanParams,
+  McpInstallAdoptPlanResult,
   McpInstallApplyParams,
   McpInstallApplyResult,
   McpInstallListResult,
@@ -108,6 +116,13 @@ type DesktopConfirmRequestPayload = {
 type DesktopConfirmResponsePayload = {
   id?: string
   confirmed?: boolean
+}
+
+type ImportedMcpManifestResult = {
+  canceled: boolean
+  path?: string
+  manifest?: Record<string, unknown>
+  summary?: ReturnType<typeof summarizeCcrMcpInstallManifest>
 }
 
 type DesktopRuntime = {
@@ -1490,6 +1505,46 @@ async function planMcpInstall(
   return client.planMcpInstall(params)
 }
 
+async function planMcpAdopt(
+  params: McpInstallAdoptPlanParams,
+): Promise<McpInstallAdoptPlanResult> {
+  const client = await getAppServerClient()
+  return client.planMcpAdopt(params)
+}
+
+async function chooseMcpInstallManifest(): Promise<ImportedMcpManifestResult> {
+  const result = await dialog.showOpenDialog({
+    title: '导入 MCP manifest',
+    buttonLabel: '导入',
+    properties: ['openFile'],
+    filters: [
+      { name: 'MCP manifest', extensions: ['json'] },
+      { name: 'JSON', extensions: ['json'] },
+    ],
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true }
+  }
+
+  const filePath = result.filePaths[0]!
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(await readFile(filePath, 'utf8')) as unknown
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`无法读取 MCP manifest：${message}`)
+  }
+
+  const manifest = CcrMcpInstallManifestSchema().parse(parsed)
+  return {
+    canceled: false,
+    path: filePath,
+    manifest: manifest as Record<string, unknown>,
+    summary: summarizeCcrMcpInstallManifest(manifest),
+  }
+}
+
 async function applyMcpInstall(
   params: McpInstallApplyParams,
 ): Promise<McpInstallApplyResult> {
@@ -1498,6 +1553,21 @@ async function applyMcpInstall(
   await refreshMcpSnapshot()
   broadcast('state', {
     message: 'mcp install applied',
+    name: params.name,
+    result,
+    mcp: status.mcp,
+  })
+  return result
+}
+
+async function applyMcpAdopt(
+  params: McpInstallAdoptApplyParams,
+): Promise<McpInstallAdoptApplyResult> {
+  const client = await getAppServerClient()
+  const result = await client.applyMcpAdopt(params)
+  await refreshMcpSnapshot()
+  broadcast('state', {
+    message: 'mcp adopted',
     name: params.name,
     result,
     mcp: status.mcp,
@@ -2978,10 +3048,28 @@ ipcMain.handle(
   },
 )
 
+ipcMain.handle('ccr:mcp-install-choose-manifest', async () => {
+  return chooseMcpInstallManifest()
+})
+
 ipcMain.handle(
   'ccr:mcp-install-apply',
   async (_event, params: McpInstallApplyParams) => {
     return applyMcpInstall(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:mcp-install-adopt-plan',
+  async (_event, params: McpInstallAdoptPlanParams) => {
+    return planMcpAdopt(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:mcp-install-adopt-apply',
+  async (_event, params: McpInstallAdoptApplyParams) => {
+    return applyMcpAdopt(params)
   },
 )
 

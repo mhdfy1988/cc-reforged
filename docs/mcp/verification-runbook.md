@@ -244,7 +244,9 @@ Args: -y @playwright/mcp@latest
 Remove-Item Env:\CCR_CONFIG_DIR
 ```
 
-### 5.1 CCR 用户级 `.ccr` 管理式安装 smoke
+### 5.1 历史：CCR 用户级 `.ccr` 管理式安装 smoke
+
+当前 Desktop 安装默认采用用户全局配置 + installer-owned 安装记录，不把第三方 npm 包复制进 `~/.ccr/mcp/servers/`。本节保留为历史 CLI managed 模式验证记录；如果相关 CLI 模式继续维护，运行前先确认当前命令仍支持 `--mode managed`。
 
 管理式安装会下载 `@playwright/mcp` 到 CCR 用户目录，并把 `~/.ccr/mcp.json` 指向本地入口。验证时仍然使用临时 `CCR_CONFIG_DIR`，避免污染真实用户目录：
 
@@ -328,6 +330,10 @@ MCP installer、preset registry、Desktop MCP 页面或 App Server MCP API 改�
 npm.cmd run typecheck
 npm.cmd run typecheck:desktop
 npm.cmd run build
+npm.cmd run smoke:mcp-adopt
+npm.cmd run smoke:mcp-install-candidates
+npm.cmd run smoke:mcp-manifest-builder
+npm.cmd run smoke:mcp-manifest-import
 npm.cmd run smoke:mcp-install-presets
 npm.cmd run smoke:mcp-cli-install
 npm.cmd run smoke:mcp-discovery-adapters

@@ -1,5 +1,7 @@
 # Playwright MCP 接入设计文档
 
+> 当前状态说明：本文是 Playwright MCP 第一轮接入的专项历史设计。MCP 安装候选、manifest 导入、手工配置接管和当前 Desktop 管理口径，以 [`README.md`](./README.md)、[`integration-standard.md`](./integration-standard.md) 和 [`install-manifest-and-import-design.md`](./install-manifest-and-import-design.md) 为准。文中关于 `~/.ccr/mcp/servers/playwright/` 的 managed 本地安装目录属于早期方案记录，不代表当前 Desktop 安装默认行为。
+
 本文档记录 CCR 接入 Playwright MCP 的设计方案。目标不是重写一个浏览器自动化系统，而是先把官方 Playwright MCP 作为普通 MCP 服务接入 CCR 现有通用 MCP 链路；后续如果需要更深的浏览器能力，再在独立浏览器插件层扩展。
 
 ## 1. 背景和目标

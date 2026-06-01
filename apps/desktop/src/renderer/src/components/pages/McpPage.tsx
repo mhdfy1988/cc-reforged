@@ -1,4 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  buildCcrMcpInstallManifestInput,
+  type CcrMcpManifestTemplate,
+} from '../../../../../../../src/services/mcp/installManifestBuilder.js'
 import type {
   McpInstallCandidate,
   McpInstallListState,
@@ -20,6 +24,36 @@ export type McpServerView = McpServerSummary & {
 
 const DEFAULT_MCP_INSTALL_SCOPE: McpWritableScope = 'user'
 
+type McpCreateDraft = {
+  template: CcrMcpManifestTemplate
+  name: string
+  displayName: string
+  description: string
+  command: string
+  argsText: string
+  directory: string
+  url: string
+  packageName: string
+  version: string
+  envText: string
+  headersText: string
+}
+
+const DEFAULT_MCP_CREATE_DRAFT: McpCreateDraft = {
+  template: 'local-stdio',
+  name: '',
+  displayName: '',
+  description: '',
+  command: 'node',
+  argsText: '',
+  directory: '',
+  url: 'http://127.0.0.1:3001/mcp',
+  packageName: '',
+  version: 'latest',
+  envText: '',
+  headersText: '',
+}
+
 export function McpPage(props: {
   busy: boolean
   error: string | null
@@ -31,8 +65,11 @@ export function McpPage(props: {
   testByName: Record<string, McpTestState>
   onApplyInstall: (planView: McpInstallPlanViewState) => void
   onCancelInstall: () => void
+  onAdopt: (name: string) => void
   onDisable: (name: string) => void
   onEnable: (name: string) => void
+  onImportManifest: () => void
+  onCreateManifest: (manifest: Record<string, unknown>) => void
   onPlanInstall: (candidate: McpInstallCandidate, scope: McpWritableScope) => void
   onRefresh: () => void
   onRepair: (record: McpInstallRecord) => void
@@ -43,9 +80,11 @@ export function McpPage(props: {
 }) {
   const [selectedName, setSelectedName] = useState('')
   const [installQuery, setInstallQuery] = useState('')
-  const [installScope, setInstallScope] = useState<McpWritableScope>(
-    DEFAULT_MCP_INSTALL_SCOPE,
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createDraft, setCreateDraft] = useState<McpCreateDraft>(
+    DEFAULT_MCP_CREATE_DRAFT,
   )
+  const [createError, setCreateError] = useState<string | null>(null)
   const mcp = normalizeMcpState(props.mcp)
   const servers = useMemo(
     () => mergeMcpServers(mcp, props.installs),
@@ -151,8 +190,11 @@ export function McpPage(props: {
               test={selectedTest ?? null}
               onDisable={props.onDisable}
               onEnable={props.onEnable}
+              onAdopt={props.onAdopt}
+              onRepair={props.onRepair}
               onRestart={props.onRestart}
               onTest={props.onTest}
+              onUninstall={props.onUninstall}
             />
           ) : (
             <div className="models-empty">选择一个 MCP server 查看详情。</div>
@@ -167,6 +209,49 @@ export function McpPage(props: {
                 <span>{candidates.length} 个候选</span>
               </div>
             </div>
+            <div className="mcp-install-actions">
+              <button
+                className="ghost-action"
+                disabled={props.busy}
+                type="button"
+                onClick={props.onImportManifest}
+              >
+                导入 MCP
+              </button>
+              <button
+                className="ghost-action"
+                disabled={props.busy}
+                type="button"
+                onClick={() => {
+                  setCreateOpen(open => !open)
+                  setCreateError(null)
+                }}
+              >
+                创建本地 MCP
+              </button>
+            </div>
+            {createOpen ? (
+              <McpCreateManifestPanel
+                busy={props.busy}
+                draft={createDraft}
+                error={createError}
+                onChange={patch => {
+                  setCreateDraft(current => ({ ...current, ...patch }))
+                  setCreateError(null)
+                }}
+                onCreate={() => {
+                  try {
+                    const manifest = buildCcrMcpInstallManifestInput(createDraft)
+                    setCreateError(null)
+                    props.onCreateManifest(manifest as Record<string, unknown>)
+                  } catch (error) {
+                    setCreateError(
+                      error instanceof Error ? error.message : String(error),
+                    )
+                  }
+                }}
+              />
+            ) : null}
             <div className="mcp-install-search">
               <input
                 disabled={props.busy}
@@ -188,22 +273,6 @@ export function McpPage(props: {
                 搜索
               </button>
             </div>
-            <div className="mcp-install-scope">
-              <label>
-                安装范围
-                <select
-                  disabled={props.busy}
-                  value={installScope}
-                  onChange={event =>
-                    setInstallScope(event.target.value as McpWritableScope)
-                  }
-                >
-                  <option value="user">用户全局</option>
-                  <option value="project">项目共享</option>
-                  <option value="local">本地项目</option>
-                </select>
-              </label>
-            </div>
             <div className="mcp-candidate-list">
               {candidates.length > 0 ? (
                 candidates.map(candidate => {
@@ -212,8 +281,6 @@ export function McpPage(props: {
                     servers,
                     props.installs,
                   )
-                  const metadata = getCandidateMetadata(candidate, installState)
-                  const permissionLabels = getCandidatePermissionLabels(candidate)
                   return (
                     <div
                       className={
@@ -230,27 +297,12 @@ export function McpPage(props: {
                               candidate.manifest?.name ??
                               '未命名 MCP'}
                           </strong>
-                          <em>
-                            {installState.blocked
-                              ? installState.message
-                              : (candidate.description ??
-                                formatManifest(candidate.manifest))}
-                          </em>
+                            <em>
+                              {installState.blocked
+                                ? installState.message
+                                : formatCandidateSummary(candidate)}
+                            </em>
                         </span>
-                        <div className="mcp-candidate-meta">
-                          {metadata.map(item => (
-                            <small className={item.tone} key={item.label}>
-                              {item.label}
-                            </small>
-                          ))}
-                        </div>
-                        {permissionLabels.length > 0 ? (
-                          <div className="mcp-candidate-permissions">
-                            {permissionLabels.map(label => (
-                              <small key={label}>{label}</small>
-                            ))}
-                          </div>
-                        ) : null}
                       </div>
                       <button
                         className="ghost-action"
@@ -262,7 +314,10 @@ export function McpPage(props: {
                         title={installState.message || undefined}
                         type="button"
                         onClick={() =>
-                          props.onPlanInstall(candidate, installScope)
+                          props.onPlanInstall(
+                            candidate,
+                            DEFAULT_MCP_INSTALL_SCOPE,
+                          )
                         }
                       >
                         {installState.label}
@@ -276,53 +331,6 @@ export function McpPage(props: {
             </div>
           </section>
 
-          <section className="mcp-install-section">
-            <div className="models-section-head">
-              <div>
-                <h3>已安装</h3>
-                <span>{installedCount} 个 CCR 记录</span>
-              </div>
-            </div>
-            <div className="mcp-installed-list">
-              {installedCount > 0 ? (
-                props.installs?.installed?.map(record => (
-                  <div className="mcp-installed-item" key={record.name ?? record.lockKey}>
-                    <span>
-                      <strong>{record.name ?? '未命名'}</strong>
-                      <em>{formatInstalledRecord(record)}</em>
-                    </span>
-                    <small className={getInstallRecordStatusTone(record)}>
-                      {formatInstallRecordStatus(record)}
-                    </small>
-                    {record.name ? (
-                      <div className="mcp-installed-actions">
-                        {record.configStatus?.needsRepair ? (
-                          <button
-                            className="ghost-action"
-                            disabled={props.busy}
-                            type="button"
-                            onClick={() => props.onRepair(record)}
-                          >
-                            修复
-                          </button>
-                        ) : null}
-                        <button
-                          className="ghost-action danger"
-                          disabled={props.busy}
-                          type="button"
-                          onClick={() => props.onUninstall(record.name!)}
-                        >
-                          卸载
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))
-              ) : (
-                <div className="models-empty">暂无 CCR 安装记录。</div>
-              )}
-            </div>
-          </section>
         </aside>
       </div>
 
@@ -344,12 +352,16 @@ function McpServerDetail(props: {
   test: McpTestState | null
   onDisable: (name: string) => void
   onEnable: (name: string) => void
+  onAdopt: (name: string) => void
+  onRepair: (record: McpInstallRecord) => void
   onRestart: (name: string) => void
   onTest: (name: string) => void
+  onUninstall: (name: string) => void
 }) {
   const server = props.server
   const enabled = server.enabled !== false
   const tools = props.test?.tools ?? server.tools ?? []
+  const canAdopt = isMcpServerAdoptable(server)
 
   return (
     <>
@@ -385,6 +397,36 @@ function McpServerDetail(props: {
           >
             重启
           </button>
+          {canAdopt ? (
+            <button
+              className="ghost-action"
+              disabled={props.busy}
+              type="button"
+              onClick={() => props.onAdopt(server.name)}
+            >
+              接管
+            </button>
+          ) : null}
+          {server.installed?.configStatus?.needsRepair ? (
+            <button
+              className="ghost-action"
+              disabled={props.busy}
+              type="button"
+              onClick={() => props.onRepair(server.installed!)}
+            >
+              修复
+            </button>
+          ) : null}
+          {server.installed?.name ? (
+            <button
+              className="ghost-action danger"
+              disabled={props.busy}
+              type="button"
+              onClick={() => props.onUninstall(server.installed!.name!)}
+            >
+              卸载
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -451,6 +493,184 @@ function McpServerDetail(props: {
   )
 }
 
+function McpCreateManifestPanel(props: {
+  busy: boolean
+  draft: McpCreateDraft
+  error: string | null
+  onChange: (patch: Partial<McpCreateDraft>) => void
+  onCreate: () => void
+}) {
+  const draft = props.draft
+  const isHttp =
+    draft.template === 'local-http' || draft.template === 'remote-http'
+  const isStdio = draft.template === 'local-stdio'
+  const isPackage = draft.template === 'stdio-npm-package'
+
+  return (
+    <div className="mcp-create-panel">
+      <div className="mcp-create-grid">
+        <label>
+          类型
+          <select
+            disabled={props.busy}
+            value={draft.template}
+            onChange={event =>
+              props.onChange({
+                template: event.target.value as CcrMcpManifestTemplate,
+              })
+            }
+          >
+            <option value="local-stdio">本地 stdio</option>
+            <option value="local-http">本地 HTTP</option>
+            <option value="stdio-npm-package">npm 包</option>
+            <option value="remote-http">远端 HTTP</option>
+          </select>
+        </label>
+        <label>
+          名称
+          <input
+            disabled={props.busy}
+            placeholder="my-mcp"
+            value={draft.name}
+            onChange={event => props.onChange({ name: event.target.value })}
+          />
+        </label>
+        <label>
+          显示名
+          <input
+            disabled={props.busy}
+            placeholder="我的 MCP"
+            value={draft.displayName}
+            onChange={event =>
+              props.onChange({ displayName: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          说明
+          <input
+            disabled={props.busy}
+            placeholder="用于..."
+            value={draft.description}
+            onChange={event =>
+              props.onChange({ description: event.target.value })
+            }
+          />
+        </label>
+        {isStdio ? (
+          <>
+            <label>
+              启动命令
+              <input
+                disabled={props.busy}
+                placeholder="node"
+                value={draft.command}
+                onChange={event =>
+                  props.onChange({ command: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              本地目录
+              <input
+                disabled={props.busy}
+                placeholder="./my-mcp-server"
+                value={draft.directory}
+                onChange={event =>
+                  props.onChange({ directory: event.target.value })
+                }
+              />
+            </label>
+          </>
+        ) : null}
+        {isPackage ? (
+          <>
+            <label>
+              npm 包名
+              <input
+                disabled={props.busy}
+                placeholder="@scope/package"
+                value={draft.packageName}
+                onChange={event =>
+                  props.onChange({ packageName: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              版本
+              <input
+                disabled={props.busy}
+                placeholder="latest"
+                value={draft.version}
+                onChange={event => props.onChange({ version: event.target.value })}
+              />
+            </label>
+          </>
+        ) : null}
+        {isHttp ? (
+          <label className="mcp-create-wide">
+            URL
+            <input
+              disabled={props.busy}
+              placeholder="http://127.0.0.1:3001/mcp"
+              value={draft.url}
+              onChange={event => props.onChange({ url: event.target.value })}
+            />
+          </label>
+        ) : null}
+        {(isStdio || isPackage) ? (
+          <label className="mcp-create-wide">
+            参数
+            <textarea
+              disabled={props.busy}
+              placeholder="每行一个参数"
+              value={draft.argsText}
+              onChange={event =>
+                props.onChange({ argsText: event.target.value })
+              }
+            />
+          </label>
+        ) : null}
+        {isStdio ? (
+          <label className="mcp-create-wide">
+            环境变量
+            <textarea
+              disabled={props.busy}
+              placeholder="KEY=value，每行一个"
+              value={draft.envText}
+              onChange={event => props.onChange({ envText: event.target.value })}
+            />
+          </label>
+        ) : null}
+        {isHttp ? (
+          <label className="mcp-create-wide">
+            Headers
+            <textarea
+              disabled={props.busy}
+              placeholder="Authorization=Bearer ..."
+              value={draft.headersText}
+              onChange={event =>
+                props.onChange({ headersText: event.target.value })
+              }
+            />
+          </label>
+        ) : null}
+      </div>
+      {props.error ? <div className="models-alert">{props.error}</div> : null}
+      <div className="mcp-create-actions">
+        <button
+          className="primary-action"
+          disabled={props.busy}
+          type="button"
+          onClick={props.onCreate}
+        >
+          生成安装计划
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function McpInstallConfirmDialog(props: {
   busy: boolean
   planView: McpInstallPlanViewState
@@ -508,6 +728,12 @@ function McpInstallConfirmDialog(props: {
                 : `安装到${scopeLabel}，确认后可在 MCP 页面管理`}
             </span>
           </div>
+          {props.planView.manifestPath ? (
+            <div className="mcp-install-dialog-note">
+              <strong>导入来源</strong>
+              <span>{props.planView.manifestPath}</span>
+            </div>
+          ) : null}
           <div className="mcp-install-dialog-summary">
             <strong>确认后会做这些事</strong>
             <ul>
@@ -749,6 +975,12 @@ export function getServerStatusLabel(server: McpServerView): string {
   return '已配置'
 }
 
+export function isMcpServerAdoptable(server: McpServerView): boolean {
+  const scope = server.scope ?? server.inventory?.scope
+  const writableScope = scope === 'user' || scope === 'project' || scope === 'local'
+  return Boolean(server.name && !server.installed && writableScope)
+}
+
 export function getServerTone(server: McpServerView): string {
   if (server.enabled === false || server.inventory?.suppressed) {
     return 'warning'
@@ -784,6 +1016,28 @@ export function formatManifest(manifest: McpInstallCandidate['manifest']): strin
     .join(' · ')
 }
 
+export function formatCandidateSummary(candidate: McpInstallCandidate): string {
+  return [
+    candidate.sourceLabel ?? formatCandidateSourceType(candidate.sourceType),
+    candidate.description ?? formatManifest(candidate.manifest),
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function formatCandidateSourceType(sourceType: unknown): string {
+  switch (sourceType) {
+    case 'builtin-preset':
+      return '内置 preset'
+    case 'local-manifest':
+      return '本地 manifest'
+    case 'remote-registry':
+      return '远端 registry'
+    default:
+      return '未知来源'
+  }
+}
+
 export function sortMcpInstallCandidates(
   candidates: McpInstallCandidate[],
   servers: McpServerView[],
@@ -795,107 +1049,41 @@ export function sortMcpInstallCandidates(
     if (aState.blocked !== bState.blocked) {
       return aState.blocked ? 1 : -1
     }
+    const stateCompare =
+      getCandidateStateWeight(a.state) - getCandidateStateWeight(b.state)
+    if (stateCompare !== 0) {
+      return stateCompare
+    }
     return getCandidateDisplayName(a).localeCompare(getCandidateDisplayName(b))
   })
+}
+
+function getCandidateStateWeight(state: unknown): number {
+  switch (state) {
+    case 'available':
+      return 0
+    case 'duplicate-name':
+      return 1
+    case 'configured':
+      return 2
+    case 'installed':
+      return 3
+    default:
+      return 4
+  }
 }
 
 function getCandidateDisplayName(candidate: McpInstallCandidate): string {
   return candidate.displayName ?? candidate.manifest?.name ?? '未命名 MCP'
 }
 
-function getCandidateMetadata(
-  candidate: McpInstallCandidate,
-  installState: ReturnType<typeof getCandidateInstallState>,
-): Array<{ label: string; tone: string }> {
-  const manifest = candidate.manifest
-  return [
-    {
-      label: installState.blocked ? installState.label : '可安装',
-      tone: installState.blocked ? 'warning' : 'success',
-    },
-    {
-      label: formatMcpInstallKindLabel(manifest?.kind),
-      tone: 'neutral',
-    },
-    {
-      label: formatMcpTransportLabel(manifest?.transport),
-      tone: 'neutral',
-    },
-    {
-      label: getCandidateSourceLabel(candidate),
-      tone: 'neutral',
-    },
-    {
-      label: formatMcpDataBoundaryLabel(manifest?.dataBoundary),
-      tone: manifest?.dataBoundary === 'remote-service' ? 'warning' : 'neutral',
-    },
-    candidate.trusted === true
-      ? {
-          label: '可信来源',
-          tone: 'success',
-        }
-      : null,
-  ].filter((item): item is { label: string; tone: string } => Boolean(item))
-}
-
-function getCandidatePermissionLabels(candidate: McpInstallCandidate): string[] {
-  return (candidate.manifest?.permissionKinds ?? []).map(formatMcpPermissionLabel)
-}
-
-function formatMcpPermissionLabel(kind: string): string {
-  switch (kind) {
-    case 'network':
-      return '网络'
-    case 'process':
-      return '本地进程'
-    case 'filesystem':
-      return '文件'
-    case 'oauth':
-      return 'OAuth'
-    case 'secret':
-      return '密钥'
-    case 'environment':
-      return '环境变量'
-    default:
-      return kind
-  }
-}
-
-function getCandidateSourceLabel(candidate: McpInstallCandidate): string {
-  const source = getCandidateManifestSource(candidate)
-  if (!source) {
-    return '未知来源'
-  }
-  if (source.kind === 'stdio-npm-package') {
-    return typeof source.packageName === 'string' ? source.packageName : 'npm 包'
-  }
-  if (source.kind === 'remote-url') {
-    return typeof source.url === 'string' ? source.url : '远端服务'
-  }
-  if (source.kind === 'builtin-preset') {
-    return typeof source.presetId === 'string' ? source.presetId : '内置预设'
-  }
-  if (source.kind === 'plugin-provided') {
-    return typeof source.pluginSource === 'string'
-      ? source.pluginSource
-      : '插件提供'
-  }
-  return typeof source.kind === 'string' ? source.kind : '未知来源'
-}
-
-function getCandidateManifestSource(
-  candidate: McpInstallCandidate,
-): Record<string, unknown> | null {
-  const source = candidate.manifestInput?.source
-  return isRecord(source) ? source : null
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 export function getCandidateKey(candidate: McpInstallCandidate): string {
+  if (candidate.candidateId) {
+    return candidate.candidateId
+  }
   return [
+    candidate.sourceType,
+    candidate.originPath,
     candidate.manifest?.name,
     candidate.manifest?.kind,
     candidate.manifest?.version,
@@ -922,6 +1110,26 @@ export function getCandidateInstallState(
       label: '安装',
       message: '',
       name: null,
+    }
+  }
+
+  if (candidate.state === 'invalid') {
+    return {
+      blocked: true,
+      label: '不可用',
+      message: candidate.stateMessage ?? '候选无效。',
+      name,
+    }
+  }
+
+  if (candidate.state === 'duplicate-name') {
+    return {
+      blocked: true,
+      label: '冲突',
+      message:
+        candidate.stateMessage ??
+        `存在 ${candidate.duplicateGroupCount ?? 2} 个同名候选，请确认来源。`,
+      name,
     }
   }
 
@@ -963,17 +1171,6 @@ function getCandidateInstallName(candidate: McpInstallCandidate): string | null 
     : null
 }
 
-export function formatInstalledRecord(record: McpInstallRecord): string {
-  return [
-    formatMcpScopeLabel(record.scope),
-    record.manifest?.kind,
-    record.manifest?.transport,
-    record.updatedAt,
-  ]
-    .filter(Boolean)
-    .join(' · ')
-}
-
 function formatInstallRecordStatus(
   record: McpInstallRecord | undefined,
 ): string {
@@ -986,17 +1183,5 @@ function formatInstallRecordStatus(
       return '配置缺失'
     default:
       return record ? '状态未知' : '未由 CCR 安装'
-  }
-}
-
-function getInstallRecordStatusTone(record: McpInstallRecord): string {
-  switch (record.configStatus?.state) {
-    case 'configured':
-      return 'success'
-    case 'drifted':
-    case 'missing-config':
-      return 'warning'
-    default:
-      return 'neutral'
   }
 }

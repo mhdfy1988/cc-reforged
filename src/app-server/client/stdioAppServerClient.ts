@@ -18,6 +18,10 @@ import type {
   McpDisableResult,
   McpEnableParams,
   McpEnableResult,
+  McpInstallAdoptApplyParams,
+  McpInstallAdoptApplyResult,
+  McpInstallAdoptPlanParams,
+  McpInstallAdoptPlanResult,
   McpInstallApplyParams,
   McpInstallApplyResult,
   McpInstallListParams,
@@ -292,6 +296,20 @@ export class StdioAppServerClient {
     options?: RequestOptions,
   ): Promise<McpInstallApplyResult> {
     return this.rpc.request('mcp/install/apply', params, options)
+  }
+
+  planMcpAdopt(
+    params: McpInstallAdoptPlanParams,
+    options?: RequestOptions,
+  ): Promise<McpInstallAdoptPlanResult> {
+    return this.rpc.request('mcp/install/adopt/plan', params, options)
+  }
+
+  applyMcpAdopt(
+    params: McpInstallAdoptApplyParams,
+    options?: RequestOptions,
+  ): Promise<McpInstallAdoptApplyResult> {
+    return this.rpc.request('mcp/install/adopt/apply', params, options)
   }
 
   listMcpInstalls(

@@ -31,13 +31,12 @@ CCR 的 MCP 分层固定为：
 | CCR 受控安装清单 | `~/.ccr/mcp/installed.json` |
 | CCR 受控安装锁文件 | `~/.ccr/mcp/lock.json` |
 | CCR installer-owned 包缓存 | `~/.ccr/mcp/packages/<package>/<version>/` |
-| CLI managed 本地 MCP 安装 | `~/.ccr/mcp/servers/<name>/` |
 | 用户 skill 安装 | `~/.ccr/skills/` |
 | 用户 plugin 安装 | `~/.ccr/plugins/` |
 
 后续如果新增预设，优先放到 `src/services/mcp/providers/<name>/install.ts` 和 `src/services/mcp/presets/<name>.ts`，再接入 `src/services/mcp/presets/registry.ts`；不要把预设写进 `client.ts` 的连接主干。
 
-注意：第三方 MCP 通过 `npx.cmd -y <package>` 启动时，npm 包仍由 npm/npx 自己管理；CCR 只保存配置引用。只有 CCR 自己下载、展开、管理生命周期的 MCP server，才进入 `~/.ccr/mcp/servers/`。
+注意：第三方 MCP 通过 `npx.cmd -y <package>` 启动时，npm 包仍由 npm/npx 自己管理；CCR 保存配置引用、安装记录和锁文件。只有未来明确由 CCR 下载、展开并管理生命周期的 MCP server，才应设计单独的本地 server 目录。
 
 当前实现口径：
 
@@ -54,12 +53,26 @@ CCR 的 MCP 分层固定为：
 
 所有模式都必须走同一套 `mcpServers` schema 和 MCP runtime；不要因为是内置 preset、remote URL 或 `.ccr` 管理式安装就绕过通用 MCP 连接层。
 
+## 2.1 安装候选、手工配置和安装记录
+
+MCP 管理面固定区分三类对象：
+
+| 对象 | 来源 | 前台位置 | 可执行动作 |
+| --- | --- | --- | --- |
+| 已配置 MCP | 配置文件、旧 settings、插件、企业配置等 | Server 列表和详情页 | 查看、检测、启用、禁用、重启 |
+| 可安装 MCP | 当前是内置 preset registry，后续扩展到 manifest 导入和远端 registry | 安装候选列表 | 生成安装计划、确认安装 |
+| CCR 受控安装记录 | `installed.json` / `lock.json` | 详情页状态和 installer-owned 操作 | 配置状态校验、修复、卸载 |
+
+手工写入的 MCP 配置不会自动进入安装记录，也不应自动获得 installer-owned 卸载能力。后续如果要管理手工配置，必须走“接管已有配置”的显式确认流程。
+
+安装清单（install manifest）是 CCR 自己定义的安装描述，不是 MCP 官方协议。manifest 的设计和导入流程详见 [`install-manifest-and-import-design.md`](./install-manifest-and-import-design.md)。
+
 ## 3. 接入流程
 
 每个新 MCP 至少按下面步骤推进：
 
 1. 资料对照：先看官方文档、官方示例、成熟仓库实现，确认启动命令和能力边界。
-2. 选择接入形态：stdio npm package 使用 provider install helper；remote HTTP/SSE 使用 remote-url manifest，不在 preset 里硬编码用户密钥。
+2. 选择接入形态：stdio npm package 使用 provider install helper；本地 stdio 使用 local-directory manifest；本地 HTTP / 远端 HTTP/SSE 使用 remote-url manifest，不在 preset 里硬编码用户密钥。
 3. 示例配置：必要时新增 `docs/examples/mcp/<name>.json`，Windows 下优先使用 `.cmd` 入口。
 4. 设计文档：新增或补充 `docs/mcp/<name>-integration-design.md`。
 5. 受控安装入口：常用 MCP 优先新增 `presets/<name>.ts`，manifest 必须写清 `source.kind`、`transport`、`permissions`、`dataBoundary`、`homepage` 和 server config preview。

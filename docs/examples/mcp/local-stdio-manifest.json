@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "name": "local-stdio-example",
+  "displayName": "Local stdio MCP example",
+  "description": "Example manifest for a locally developed stdio MCP server.",
+  "source": {
+    "kind": "local-directory",
+    "path": "./my-mcp-server"
+  },
+  "transport": "stdio",
+  "entry": {
+    "command": "node",
+    "args": ["./my-mcp-server/dist/index.js"]
+  },
+  "permissions": [
+    {
+      "kind": "process",
+      "required": true,
+      "description": "Starts the local MCP server process."
+    }
+  ],
+  "dataBoundary": "local-only"
+}

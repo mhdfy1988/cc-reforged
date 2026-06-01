@@ -168,6 +168,31 @@ type McpInstallApplyInput = McpInstallPlanInput & {
   confirmationToken: string
 }
 
+type McpInstallAdoptPlanInput = {
+  name: string
+}
+
+type McpInstallAdoptApplyInput = McpInstallAdoptPlanInput & {
+  confirmed: boolean
+  confirmationToken: string
+}
+
+type ImportedMcpManifestResult = {
+  canceled: boolean
+  path?: string
+  manifest?: Record<string, unknown>
+  summary?: {
+    schemaVersion?: 1
+    name?: string
+    kind?: string
+    version?: string
+    transport?: string
+    permissionKinds?: string[]
+    envNames?: string[]
+    dataBoundary?: string
+  }
+}
+
 type McpInstallUninstallInput = {
   name: string
   confirmed: boolean
@@ -346,8 +371,14 @@ const api = {
     ipcRenderer.invoke('ccr:mcp-install-search', input ?? {}),
   planMcpInstall: (input: McpInstallPlanInput) =>
     ipcRenderer.invoke('ccr:mcp-install-plan', input),
+  chooseMcpInstallManifest: (): Promise<ImportedMcpManifestResult> =>
+    ipcRenderer.invoke('ccr:mcp-install-choose-manifest'),
   applyMcpInstall: (input: McpInstallApplyInput) =>
     ipcRenderer.invoke('ccr:mcp-install-apply', input),
+  planMcpAdopt: (input: McpInstallAdoptPlanInput) =>
+    ipcRenderer.invoke('ccr:mcp-install-adopt-plan', input),
+  applyMcpAdopt: (input: McpInstallAdoptApplyInput) =>
+    ipcRenderer.invoke('ccr:mcp-install-adopt-apply', input),
   listMcpInstalls: () => ipcRenderer.invoke('ccr:mcp-install-list'),
   uninstallMcp: (input: McpInstallUninstallInput) =>
     ipcRenderer.invoke('ccr:mcp-install-uninstall', input),

@@ -108,6 +108,13 @@ export type McpInstallManifestSummary = {
 }
 
 export type McpInstallCandidate = {
+  candidateId?: string
+  sourceType?: 'builtin-preset' | 'local-manifest' | 'remote-registry' | string
+  sourceLabel?: string
+  originPath?: string | null
+  state?: 'available' | 'configured' | 'installed' | 'duplicate-name' | 'invalid' | string
+  stateMessage?: string
+  duplicateGroupCount?: number
   displayName?: string
   description?: string
   trusted?: boolean
@@ -118,6 +125,17 @@ export type McpInstallCandidate = {
 export type McpInstallSearchState = {
   query?: string
   candidates?: McpInstallCandidate[]
+  errors?: Array<{
+    sourceType?: string
+    originPath?: string | null
+    message?: string
+  }>
+  sources?: Array<{
+    sourceType?: string
+    sourceLabel?: string
+    originPath?: string | null
+    enabled?: boolean
+  }>
 }
 
 export type McpInstallRecord = {
@@ -205,6 +223,30 @@ export type McpInstallPlanState = {
 export type McpInstallPlanViewState = {
   plan: McpInstallPlanState
   manifestInput: Record<string, unknown>
+  manifestPath?: string
+}
+
+export type McpAdoptPlanState = {
+  schemaVersion?: 1
+  planId?: string
+  name?: string
+  scope?: McpWritableScope | string
+  adoptable?: boolean
+  existingInstalled?: boolean
+  manifest?: McpInstallManifestSummary
+  manifestInput?: Record<string, unknown>
+  serverConfigPreview?: Record<string, unknown>
+  writes?: Array<{
+    kind?: string
+    path?: string
+    mode?: string
+  }>
+  risks?: string[]
+  requiresConfirmation?: boolean
+  confirmation?: {
+    token?: string
+    message?: string
+  }
 }
 
 export type McpTestState = {

@@ -14,7 +14,6 @@
 | `~/.ccr/mcp/installed.json` | CCR 受控安装记录 | 是，用户本机状态 |
 | `~/.ccr/mcp/lock.json` | CCR 受控安装锁定记录 | 是，用户本机状态 |
 | `~/.ccr/mcp/packages/` | CCR installer-owned MCP 包缓存与 owner marker | 是，用户本机状态 |
-| `~/.ccr/mcp/servers/` | CLI managed 模式安装的本地 MCP server 入口，例如 Playwright managed | 是，用户本机状态 |
 | `~/.ccr/logs/mcp/` | MCP 安装、连接和诊断日志落点 | 是，用户本机状态 |
 | `~/.ccr/skills/` | CCR 管理的用户 skill 安装目录 | 是，用户本机状态 |
 | `~/.ccr/plugins/` | CCR 管理的用户 plugin 安装目录 | 是，用户本机状态 |
@@ -22,6 +21,7 @@
 ## 当前文档
 
 - [通用 MCP 接入规范](./integration-standard.md)：后续接入任何 MCP 前先看这里。
+- [MCP 安装清单与导入设计](./install-manifest-and-import-design.md)：安装候选、manifest、导入本地 MCP、手工配置接管的当前设计。
 - [MCP 模块化路线图](./modularization-roadmap.md)：当前权威路线，包含已完成 C 系列和后续 D 系列 goal。
 - [MCP 模块化 Goal C-1 设计](./modularization-goal-c1.md)：历史滚动记录，保留 C 系列背景和执行结果。
 - [MCP 验证与排查手册](./verification-runbook.md)：按命令验证配置、连接、工具发现和只读 smoke。
@@ -36,7 +36,7 @@
 - 高风险 MCP 必须先有风险边界和 smoke，不允许只靠“能连上”就进入默认配置。
 - 专有、缺失、不可公开验证的 MCP 不做假恢复；要么显式禁用，要么换成公开生态方案。
 - 示例配置不等于启用配置，仓库根目录不默认放 `.mcp.json`，避免开发者启动 CCR 时被迫拉起外部服务。
-- CCR 自己管理的 MCP、skill、plugin 默认安装到 `~/.ccr`；通过 npm/npx 引用的第三方 MCP 只是外部执行源，不算 CCR 安装目录。
+- CCR 自己管理的 MCP、skill、plugin 默认落到 `~/.ccr`；通过 npm/npx 引用的第三方 MCP 只是外部执行源，不算 CCR 复制到本地的安装目录。
 
 ## 当前权威状态
 
@@ -55,15 +55,20 @@
 已完成：
 
 - 用户级 MCP 配置默认落到 `~/.ccr/mcp.json`。
-- Desktop 已有一级 MCP 页面，可查看 server、启用/禁用、重启、检测、搜索安装候选、选择安装 scope、确认安装、查看安装记录、修复漂移/缺失配置和卸载 CCR installer-owned MCP。
-- Desktop 安装可选择用户全局、项目共享或本地项目 scope。
+- Desktop 已有一级 MCP 页面，可查看 server、启用/禁用、重启、检测、搜索安装候选、确认安装、展示配置状态，并在详情页修复漂移/缺失配置或卸载 CCR installer-owned MCP。
+- Desktop 安装当前默认写入用户全局 scope；项目共享 / 本地项目 scope 暂不在界面展示。
 - 当前内置安装候选提供 Playwright、Context7 和 Sentry remote MCP。
 - 安装计划必须经用户确认后才写配置、记录安装清单和锁文件；模型不能绕过宿主确认自行下载或改配置。
 - `ccr mcp add-playwright` 会把官方 Playwright MCP 写入用户级配置。
 - `ccr mcp add-playwright --mode npx` 保持快速模式，Windows 使用 `npx.cmd -y @playwright/mcp@<version>`。
-- `ccr mcp add-playwright --mode managed` 会把 Playwright MCP 安装到 `~/.ccr/mcp/servers/playwright/`，并把 `~/.ccr/mcp.json` 指向本地入口。
 - `ccr mcp list/get` 和 TUI 默认 MCP 启动链路都会读取 `~/.ccr/mcp.json`。
 - 旧 settings 中的 user MCP 只作为迁移期只读兼容来源，新写入不再进入旧配置文件。
+
+后续设计：
+
+- `导入 MCP`：前台选择 manifest 文件，校验后进入安装计划确认流程。
+- `创建本地 MCP`：用轻量向导生成 manifest，覆盖本地 stdio、本地 HTTP、npm 包和远端 HTTP。
+- `接管已有配置`：把手工配置显式转成 CCR 受控安装记录，之后才允许 installer-owned 修复和卸载。
 
 ## 使用入口
 
@@ -79,6 +84,7 @@
 6. 会话里需要对应能力时，明确说“用浏览器打开/查询/操作”“查某个库文档”或“查 Sentry issue”。成功调用时，聊天流会出现对应 MCP 工具卡。
 
 如果候选已显示“已安装”，不要重复安装；直接在左侧 server 列表里点 `检测`、`重启` 或 `禁用/启用`。
+如果该 server 来自 CCR 安装记录，详情页顶部会提供 `卸载`，配置漂移或缺失时会提供 `修复`。
 
 ### CLI 快速安装
 
@@ -96,7 +102,7 @@ ccr mcp add-playwright --version 0.0.71
 ccr mcp add-playwright --mode managed
 ```
 
-`npx` 快速模式不会把 `@playwright/mcp` 复制进 `~/.ccr/mcp/servers/`；它会在启动时由 npm/npx 获取并缓存。`managed` 模式会把指定版本安装到 `~/.ccr/mcp/servers/playwright/`，适合需要固定入口和弱网环境的场景。
+`npx` 快速模式不会把 `@playwright/mcp` 复制进 CCR 安装目录；它会在启动时由 npm/npx 获取并缓存。受控安装记录只说明这条配置由 CCR 安装器写入和管理，不表示第三方包已经被 CCR 复制到本地。
 
 ### 手动配置
 
@@ -121,7 +127,7 @@ ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
 }
 ```
 
-手写配置不会自动进入 `installed.json`，因此 Desktop 的“已安装”记录里不会把它当成 CCR installer-owned 项；但 server 列表仍会展示和管理配置状态。
+手写配置不会自动进入 `installed.json`，因此不会被当成 CCR installer-owned 项；但 Server 列表仍会展示它，并允许检测、启用、禁用和重启。后续如需支持安全卸载，应先走“接管已有配置”的显式确认流程。
 
 ## 安装与运行边界
 
@@ -134,7 +140,7 @@ ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
 
 后续再继续做：
 
+- manifest 导入、本地 MCP 创建向导和手工配置接管，详见 [MCP 安装清单与导入设计](./install-manifest-and-import-design.md)。
 - MCP 连接失败诊断和 availability 原因继续细化。
 - 浏览器工具风险分类和权限提示继续细化。
-- CLI 侧补更完整的 `install/uninstall/repair/status` 管理命令。
 - Skill / Plugin 复用 MCP installer-owned、registry、availability 和 Desktop 管理页模式。

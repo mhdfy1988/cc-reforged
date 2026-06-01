@@ -2,10 +2,12 @@ import { getCoreAuthStatus, loginCoreAuth } from './authCore.js'
 import { getCoreConfigSnapshot } from './configCore.js'
 import {
   addCoreMcpServer,
+  applyCoreMcpAdopt,
   applyCoreMcpInstall,
   inspectCoreMcpServer,
   listCoreMcpServers,
   listCoreMcpInstalls,
+  planCoreMcpAdopt,
   planCoreMcpInstall,
   repairCoreMcpInstalledServer,
   removeCoreMcpServer,
@@ -77,6 +79,8 @@ export function createCcrCore(options: {
       searchInstallCandidates: searchCoreMcpInstallCandidates,
       setServerEnabled: setCoreMcpServerEnabled,
       testServer: testCoreMcpServer,
+      planAdopt: planCoreMcpAdopt,
+      applyAdopt: applyCoreMcpAdopt,
       planInstall: planCoreMcpInstall,
       applyInstall: applyCoreMcpInstall,
       listInstalls: listCoreMcpInstalls,

@@ -19,7 +19,9 @@ import {
 } from '../services/mcp/installManifest.js'
 import { getCcrMcpInstallPreset } from '../services/mcp/installPresets.js'
 import {
+  applyCcrMcpAdoptPlan,
   applyCcrMcpInstallPlan,
+  createCcrMcpAdoptPlan,
   createCcrMcpInstallPlan,
   listCcrMcpInstalledServers,
   searchCcrMcpInstallCandidates,
@@ -203,7 +205,7 @@ export function restartCoreMcpServer(input: {
 
 export function searchCoreMcpInstallCandidates(input: {
   query?: string
-} = {}): Record<string, unknown> {
+} = {}): Promise<Record<string, unknown>> {
   return searchCcrMcpInstallCandidates(input)
 }
 
@@ -237,6 +239,20 @@ export async function applyCoreMcpInstall(input: {
     confirmed: input.confirmed,
     confirmationToken: input.confirmationToken,
   })
+}
+
+export function planCoreMcpAdopt(input: {
+  name: string
+}): Promise<Record<string, unknown>> {
+  return createCcrMcpAdoptPlan(input)
+}
+
+export function applyCoreMcpAdopt(input: {
+  name: string
+  confirmed: boolean
+  confirmationToken: string
+}): Promise<Record<string, unknown>> {
+  return applyCcrMcpAdoptPlan(input)
 }
 
 export function listCoreMcpInstalls(): Promise<Record<string, unknown>> {
