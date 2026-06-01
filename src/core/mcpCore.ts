@@ -17,6 +17,7 @@ import {
   inferCcrMcpInstallKindFromConfig,
   type CcrMcpInstallManifestInput,
 } from '../services/mcp/installManifest.js'
+import { getCcrMcpInstallPreset } from '../services/mcp/installPresets.js'
 import {
   applyCcrMcpInstallPlan,
   createCcrMcpInstallPlan,
@@ -247,6 +248,40 @@ export function uninstallCoreMcpInstalledServer(input: {
   confirmed: boolean
 }): Promise<Record<string, unknown>> {
   return uninstallCcrMcpInstalledServer(input)
+}
+
+export async function repairCoreMcpInstalledServer(input: {
+  name: string
+  scope?: CcrMcpWritableScope
+  confirmed: boolean
+}): Promise<Record<string, unknown>> {
+  if (!input.confirmed) {
+    throw new CoreError(
+      'invalid_params',
+      'MCP repair requires explicit user confirmation.',
+    )
+  }
+  const preset = getCcrMcpInstallPreset(input.name)
+  if (!preset) {
+    throw new CoreError(
+      'invalid_params',
+      `MCP repair currently supports built-in presets only. No preset found for "${input.name}".`,
+    )
+  }
+  const plan = createCcrMcpInstallPlan({
+    name: input.name,
+    scope: input.scope ?? 'user',
+    manifest: preset.manifest,
+    force: true,
+  })
+  return applyCcrMcpInstallPlan({
+    name: input.name,
+    scope: input.scope ?? 'user',
+    manifest: preset.manifest,
+    force: true,
+    confirmed: true,
+    confirmationToken: plan.confirmation.token,
+  })
 }
 
 function summarizeMcpServer(

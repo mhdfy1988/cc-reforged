@@ -127,6 +127,19 @@ export type McpInstallRecord = {
   updatedAt?: string
   manifest?: McpInstallManifestSummary
   serverConfig?: Record<string, unknown>
+  configStatus?: {
+    state?: 'configured' | 'drifted' | 'missing-config' | string
+    needsRepair?: boolean
+    configured?: boolean
+    drifted?: boolean
+    expectedConfigHash?: string | null
+    currentConfigHash?: string | null
+    configScope?: string | null
+    scopeMatches?: boolean
+    expectedConfigPreview?: Record<string, unknown>
+    currentConfigPreview?: Record<string, unknown>
+    message?: string
+  }
   configPath?: string | null
   packageDir?: string | null
   packageOwnerMarkerPath?: string | null
@@ -135,6 +148,7 @@ export type McpInstallRecord = {
 
 export type McpInstallListState = {
   installed?: McpInstallRecord[]
+  statusSummary?: Record<string, number>
   installPaths?: NonNullable<McpConfigInventorySummary['installPaths']>
 }
 

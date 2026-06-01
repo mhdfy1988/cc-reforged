@@ -3899,6 +3899,46 @@ async function run(): Promise<CommanderCommand> {
     } = await import('./cli/handlers/mcp.js');
     await mcpGetHandler(name);
   });
+  mcp.command('search [query]').description('Search installable MCP presets').action(async (query?: string) => {
+    const {
+      mcpInstallSearchHandler
+    } = await import('./cli/handlers/mcp.js');
+    await mcpInstallSearchHandler(query ?? '');
+  });
+  mcp.command('install <preset>').description('Prepare or apply an MCP preset install plan').option('-s, --scope <scope>', 'Configuration scope (local, user, or project)', 'user').option('-n, --name <name>', 'Installed MCP server name override').option('--force', 'Replace an existing server with the same name').option('-y, --yes', 'Apply without printing a dry-run plan').action(async (preset: string, options: {
+    scope?: string;
+    name?: string;
+    force?: boolean;
+    yes?: boolean;
+  }) => {
+    const {
+      mcpInstallHandler
+    } = await import('./cli/handlers/mcp.js');
+    await mcpInstallHandler(preset, options);
+  });
+  mcp.command('status').description('List MCP servers installed through the CCR installer').action(async () => {
+    const {
+      mcpInstallStatusHandler
+    } = await import('./cli/handlers/mcp.js');
+    await mcpInstallStatusHandler();
+  });
+  mcp.command('uninstall <name>').description('Uninstall an MCP server owned by the CCR installer').option('-y, --yes', 'Confirm uninstall').action(async (name: string, options: {
+    yes?: boolean;
+  }) => {
+    const {
+      mcpInstallUninstallHandler
+    } = await import('./cli/handlers/mcp.js');
+    await mcpInstallUninstallHandler(name, options);
+  });
+  mcp.command('repair <name>').description('Recreate config for a built-in MCP install preset').option('-s, --scope <scope>', 'Configuration scope (local, user, or project)', 'user').option('-y, --yes', 'Apply without printing a dry-run plan').action(async (name: string, options: {
+    scope?: string;
+    yes?: boolean;
+  }) => {
+    const {
+      mcpInstallRepairHandler
+    } = await import('./cli/handlers/mcp.js');
+    await mcpInstallRepairHandler(name, options);
+  });
   mcp.command('add-json <name> <json>').description('Add an MCP server (stdio or SSE) with a JSON string').option('-s, --scope <scope>', 'Configuration scope (local, user, or project)', 'local').option('--client-secret', 'Prompt for OAuth client secret (or set MCP_CLIENT_SECRET env var)').action(async (name: string, json: string, options: {
     scope?: string;
     clientSecret?: true;

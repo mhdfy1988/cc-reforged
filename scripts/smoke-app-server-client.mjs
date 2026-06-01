@@ -343,6 +343,25 @@ try {
     );
     assertNoSecretKeys(installSearch);
 
+    const allInstallCandidates = await managed.client.searchMcpInstalls({
+      query: '',
+    });
+    assert.ok(
+      allInstallCandidates.candidates.some(
+        candidate => candidate.manifest.name === 'playwright',
+      ),
+    );
+    assert.ok(
+      allInstallCandidates.candidates.some(
+        candidate => candidate.manifest.name === 'context7',
+      ),
+    );
+    const sentryInstallCandidate = allInstallCandidates.candidates.find(
+      candidate => candidate.manifest.name === 'sentry',
+    );
+    assert.ok(sentryInstallCandidate);
+    assertNoSecretKeys(allInstallCandidates);
+
     const installManifest = createSmokeInstallManifest();
     const installPlan = await managed.client.planMcpInstall({
       scope: 'user',
@@ -380,6 +399,9 @@ try {
     );
     assert.ok(installRecord);
     assert.equal(installRecord.packageOwnerMarkerPath, appliedInstall.record.packageOwnerMarkerPath);
+    assert.equal(installRecord.configStatus.state, 'configured');
+    assert.equal(installRecord.configStatus.needsRepair, false);
+    assert.equal(installList.statusSummary.configured >= 1, true);
     assertNoSecretKeys(installList);
 
     const duplicateInstallPlan = await managed.client.planMcpInstall({
@@ -392,11 +414,27 @@ try {
     assert.equal(duplicateInstallPlan.existing.scope, 'user');
     assertNoSecretKeys(duplicateInstallPlan);
 
+    const removedInstalledConfig = await managed.client.removeMcp({
+      name: 'sdk_install_smoke_mcp',
+      scope: 'user',
+    });
+    assert.equal(removedInstalledConfig.removed, true);
+
+    const missingConfigInstallList = await managed.client.listMcpInstalls();
+    const missingConfigInstallRecord = missingConfigInstallList.installed.find(
+      install => install.name === 'sdk_install_smoke_mcp',
+    );
+    assert.equal(missingConfigInstallRecord.configStatus.state, 'missing-config');
+    assert.equal(missingConfigInstallRecord.configStatus.needsRepair, true);
+    assert.equal(missingConfigInstallList.statusSummary['missing-config'] >= 1, true);
+    assertNoSecretKeys(missingConfigInstallList);
+
     const uninstalledMcp = await managed.client.uninstallMcp({
       name: 'sdk_install_smoke_mcp',
       confirmed: true,
     });
     assert.equal(uninstalledMcp.uninstalled, true);
+    assert.equal(uninstalledMcp.configRemoved, false);
     assert.equal(uninstalledMcp.packageRemoved, true);
     assert.equal(uninstalledMcp.packageRemovalReason, 'owner_marker_verified');
     assert.equal(existsSync(installedPackageDir), false);
@@ -411,6 +449,34 @@ try {
     );
     assertInstallerStateDoesNotContain('sdk_install_smoke_mcp');
     assertNoSecretKeys(postUninstallList);
+
+    const sentryPlan = await managed.client.planMcpInstall({
+      scope: 'user',
+      manifest: sentryInstallCandidate.manifestInput,
+    });
+    const sentryApplied = await managed.client.applyMcpInstall({
+      scope: 'user',
+      manifest: sentryInstallCandidate.manifestInput,
+      confirmed: true,
+      confirmationToken: sentryPlan.confirmation.token,
+    });
+    assert.equal(sentryApplied.installed, true);
+    await managed.client.removeMcp({ name: 'sentry', scope: 'user' });
+    const sentryMissingList = await managed.client.listMcpInstalls();
+    assert.equal(
+      sentryMissingList.installed.find(install => install.name === 'sentry')
+        .configStatus.state,
+      'missing-config',
+    );
+    const sentryRepair = await managed.client.repairMcp({
+      name: 'sentry',
+      scope: 'user',
+      confirmed: true,
+    });
+    assert.equal(sentryRepair.installed, true);
+    assert.equal(sentryRepair.record.configStatus.state, 'configured');
+    await managed.client.uninstallMcp({ name: 'sentry', confirmed: true });
+    assertNoSecretKeys(sentryRepair);
 
     const workspace = await managed.client.openWorkspace({
       path: repoRoot,
@@ -693,6 +759,7 @@ try {
             'mcp/install/apply',
             'mcp/install/list',
             'mcp/install/uninstall',
+            'mcp/install/repair',
             'mcp/install/security_contract',
             'mcp/install/uninstall_residual_cleanup',
             'workspace/open',

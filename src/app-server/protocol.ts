@@ -304,6 +304,14 @@ export const McpInstallUninstallParamsSchema = z
   })
   .strict()
 
+export const McpInstallRepairParamsSchema = z
+  .object({
+    name: z.string().min(1),
+    scope: McpWritableScopeSchema.default('user'),
+    confirmed: z.boolean(),
+  })
+  .strict()
+
 export const WorkspaceOpenParamsSchema = z
   .object({
     path: z.string().min(1),
@@ -586,6 +594,9 @@ export type McpInstallListParams = z.infer<typeof McpInstallListParamsSchema>
 export type McpInstallUninstallParams = z.infer<
   typeof McpInstallUninstallParamsSchema
 >
+export type McpInstallRepairParams = z.infer<
+  typeof McpInstallRepairParamsSchema
+>
 export type WorkspaceOpenParams = z.infer<typeof WorkspaceOpenParamsSchema>
 export type ThreadStartParams = z.infer<typeof ThreadStartParamsSchema>
 export type ThreadMessagesListParams = z.infer<
@@ -737,6 +748,7 @@ export type McpInstallPlanResult = Record<string, unknown>
 export type McpInstallApplyResult = Record<string, unknown>
 export type McpInstallListResult = Record<string, unknown>
 export type McpInstallUninstallResult = Record<string, unknown>
+export type McpInstallRepairResult = Record<string, unknown>
 
 export type WorkspaceOpenResult = {
   workspace: {

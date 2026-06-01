@@ -22,6 +22,8 @@
 ## 当前文档
 
 - [通用 MCP 接入规范](./integration-standard.md)：后续接入任何 MCP 前先看这里。
+- [MCP 模块化路线图](./modularization-roadmap.md)：当前权威路线，包含已完成 C 系列和后续 D 系列 goal。
+- [MCP 模块化 Goal C-1 设计](./modularization-goal-c1.md)：历史滚动记录，保留 C 系列背景和执行结果。
 - [MCP 验证与排查手册](./verification-runbook.md)：按命令验证配置、连接、工具发现和只读 smoke。
 - [Playwright MCP 接入设计](./playwright-integration-design.md)：浏览器 MCP 的第一条正式接入路线。
 - [MCP 示例配置](../examples/mcp/README.md)：当前可直接复制的 JSON 配置。
@@ -36,6 +38,16 @@
 - 示例配置不等于启用配置，仓库根目录不默认放 `.mcp.json`，避免开发者启动 CCR 时被迫拉起外部服务。
 - CCR 自己管理的 MCP、skill、plugin 默认安装到 `~/.ccr`；通过 npm/npx 引用的第三方 MCP 只是外部执行源，不算 CCR 安装目录。
 
+## 当前权威状态
+
+当前 MCP 模块化与安装管理以 [MCP 模块化路线图](./modularization-roadmap.md) 为权威入口；`modularization-goal-c1.md` 只保留 C 系列历史滚动记录，不再作为继续实现的唯一入口。
+
+内置安装候选当前包括：
+
+- Playwright MCP：stdio npm package，适合浏览器自动化、截图和本地页面验证。
+- Context7 MCP：stdio npm package，适合按库名检索最新 API 文档和代码示例。
+- Sentry MCP：hosted remote HTTP MCP，入口 `https://mcp.sentry.dev/mcp`，首次连接由远端 OAuth 授权。
+
 ## 当前路线
 
 第一阶段已经从“示例验证”推进到“用户级默认入口 + Desktop 管理面”。当前版本线调整为：MCP 动态工具治理和基础管理面提前进入 `0.5.x` 收尾；Skill / Plugin 扩展包治理留到 `0.6.0`。
@@ -43,9 +55,9 @@
 已完成：
 
 - 用户级 MCP 配置默认落到 `~/.ccr/mcp.json`。
-- Desktop 已有一级 MCP 页面，可查看 server、启用/禁用、重启、检测、搜索安装候选、确认安装、查看安装记录和卸载 CCR installer-owned MCP。
-- Desktop 安装当前默认走用户全局 scope，适合日常使用；项目级和本地级仍作为配置作用域保留给 CLI / 后续高级入口。
-- 当前内置安装候选先提供 Playwright MCP。
+- Desktop 已有一级 MCP 页面，可查看 server、启用/禁用、重启、检测、搜索安装候选、选择安装 scope、确认安装、查看安装记录、修复漂移/缺失配置和卸载 CCR installer-owned MCP。
+- Desktop 安装可选择用户全局、项目共享或本地项目 scope。
+- 当前内置安装候选提供 Playwright、Context7 和 Sentry remote MCP。
 - 安装计划必须经用户确认后才写配置、记录安装清单和锁文件；模型不能绕过宿主确认自行下载或改配置。
 - `ccr mcp add-playwright` 会把官方 Playwright MCP 写入用户级配置。
 - `ccr mcp add-playwright --mode npx` 保持快速模式，Windows 使用 `npx.cmd -y @playwright/mcp@<version>`。
@@ -60,11 +72,11 @@
 日常用户优先走 Desktop：
 
 1. 打开 CCR Desktop，进入左侧 `MCP` 页面。
-2. 在安装区搜索 `playwright`。
+2. 在安装区搜索 `playwright`、`context7` 或 `sentry`。
 3. 点击 `安装`，查看确认弹窗里的写入位置、启动方式、数据边界和风险提示。
 4. 点击 `确认安装` 后，CCR 会写入 `~/.ccr/mcp.json`，并记录 `~/.ccr/mcp/installed.json` 和 `~/.ccr/mcp/lock.json`。
 5. 安装后在 MCP 页面点击 `检测`，确认能发现工具。
-6. 会话里需要真实浏览器时，明确说“用浏览器打开/查询/操作”。成功调用时，聊天流会出现 `MCP playwright / browser_*` 工具卡。
+6. 会话里需要对应能力时，明确说“用浏览器打开/查询/操作”“查某个库文档”或“查 Sentry issue”。成功调用时，聊天流会出现对应 MCP 工具卡。
 
 如果候选已显示“已安装”，不要重复安装；直接在左侧 server 列表里点 `检测`、`重启` 或 `禁用/启用`。
 

@@ -1,0 +1,1 @@
+{"version":3,"file":"install.js","sourceRoot":"","sources":["../../../../../../src/services/mcp/providers/sentry/install.ts"],"names":[],"mappings":"AAEA,MAAM,CAAC,MAAM,sBAAsB,GAAG,QAAQ,CAAA;AAC9C,MAAM,CAAC,MAAM,qBAAqB,GAAG,4BAA4B,CAAA;AAEjE,MAAM,UAAU,iCAAiC;IAC/C,OAAO;QACL,IAAI,EAAE,MAAM;QACZ,GAAG,EAAE,qBAAqB;KAC3B,CAAA;AACH,CAAC"}

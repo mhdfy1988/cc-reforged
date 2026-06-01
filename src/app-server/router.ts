@@ -34,6 +34,7 @@ import {
   handleMcpInstallApply,
   handleMcpInstallList,
   handleMcpInstallPlan,
+  handleMcpInstallRepair,
   handleMcpInstallSearch,
   handleMcpInstallUninstall,
   handleMcpInspect,
@@ -271,6 +272,11 @@ export async function handleJsonRpcMessage(
         return successResponse(
           request.id,
           await handleMcpInstallUninstall(context, request.params),
+        )
+      case 'mcp/install/repair':
+        return successResponse(
+          request.id,
+          await handleMcpInstallRepair(context, request.params),
         )
       case 'workspace/open':
         return successResponse(

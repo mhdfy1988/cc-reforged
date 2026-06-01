@@ -171,8 +171,10 @@ export async function applyCcrMcpInstallPlan(input) {
 }
 export async function listCcrMcpInstalledServers() {
     const index = await readInstalledIndex();
+    const installed = Object.values(index.installed).map(summarizeInstalledRecord);
     return {
-        installed: Object.values(index.installed).map(summarizeInstalledRecord),
+        installed,
+        statusSummary: summarizeInstalledConfigStatuses(installed),
         installPaths: getCcrMcpInstallPaths(),
     };
 }
@@ -559,6 +561,7 @@ async function writeJsonFile(filePath, value) {
     await rename(tmp, filePath);
 }
 function summarizeInstalledRecord(record) {
+    const configStatus = summarizeInstalledConfigStatus(record);
     return {
         name: record.name,
         scope: record.scope,
@@ -571,7 +574,61 @@ function summarizeInstalledRecord(record) {
         packageOwnerMarkerPath: record.packageOwnerMarkerPath ??
             (record.packageDir ? getPackageOwnerMarkerPath(record.packageDir) : null),
         lockKey: record.lockKey,
+        configStatus,
     };
+}
+function summarizeInstalledConfigStatus(record) {
+    const expectedConfig = record.serverConfig;
+    const expectedConfigHash = hashMcpServerConfig(expectedConfig);
+    const currentConfig = getMcpConfigByName(record.name);
+    if (!currentConfig) {
+        return {
+            state: 'missing-config',
+            needsRepair: true,
+            configured: false,
+            drifted: false,
+            expectedConfigHash,
+            currentConfigHash: null,
+            configScope: null,
+            scopeMatches: false,
+            message: 'CCR installer record exists, but the MCP server config is missing.',
+        };
+    }
+    const currentConfigHash = hashMcpServerConfig(currentConfig);
+    const currentScope = 'scope' in currentConfig ? String(currentConfig.scope) : null;
+    const scopeMatches = currentScope === record.scope;
+    const contentMatches = currentConfigHash === expectedConfigHash;
+    const state = contentMatches && scopeMatches ? 'configured' : 'drifted';
+    return {
+        state,
+        needsRepair: state !== 'configured',
+        configured: state === 'configured',
+        drifted: state === 'drifted',
+        expectedConfigHash,
+        currentConfigHash,
+        configScope: currentScope,
+        scopeMatches,
+        expectedConfigPreview: summarizeServerConfigForPlan(expectedConfig),
+        currentConfigPreview: summarizeServerConfigForPlan(currentConfig),
+        message: state === 'configured'
+            ? 'Current MCP config matches the CCR install record.'
+            : 'Current MCP config differs from the CCR install record.',
+    };
+}
+function summarizeInstalledConfigStatuses(installed) {
+    const summary = {
+        configured: 0,
+        drifted: 0,
+        'missing-config': 0,
+    };
+    for (const record of installed) {
+        const status = record.configStatus;
+        if (status && typeof status === 'object' && 'state' in status) {
+            const state = String(status.state);
+            summary[state] = (summary[state] ?? 0) + 1;
+        }
+    }
+    return summary;
 }
 function summarizeServerConfigForPlan(config) {
     if ('url' in config) {
@@ -655,6 +712,9 @@ function hashJson(value) {
     return createHash('sha256')
         .update(jsonStringify(value))
         .digest('hex');
+}
+function hashMcpServerConfig(config) {
+    return hashJson(stripScopedMcpConfig(config));
 }
 function sanitizePathPart(value) {
     return value.replace(/[^a-zA-Z0-9._-]+/g, '_');

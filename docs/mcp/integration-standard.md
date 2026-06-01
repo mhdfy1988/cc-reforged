@@ -35,7 +35,7 @@ CCR 的 MCP 分层固定为：
 | 用户 skill 安装 | `~/.ccr/skills/` |
 | 用户 plugin 安装 | `~/.ccr/plugins/` |
 
-后续如果新增预设命令，建议放到 `src/services/mcp/presets/` 或 `src/commands/mcp/` 下，不要把预设写进 `client.ts` 的连接主干。
+后续如果新增预设，优先放到 `src/services/mcp/providers/<name>/install.ts` 和 `src/services/mcp/presets/<name>.ts`，再接入 `src/services/mcp/presets/registry.ts`；不要把预设写进 `client.ts` 的连接主干。
 
 注意：第三方 MCP 通过 `npx.cmd -y <package>` 启动时，npm 包仍由 npm/npx 自己管理；CCR 只保存配置引用。只有 CCR 自己下载、展开、管理生命周期的 MCP server，才进入 `~/.ccr/mcp/servers/`。
 
@@ -46,29 +46,32 @@ CCR 的 MCP 分层固定为：
 - `ccr mcp add-playwright` 默认写入 `~/.ccr/mcp.json`。
 - `ccr mcp list/get`、TUI MCP 启动链路和 `getClaudeCodeMcpConfigs()` 都会读取 `~/.ccr/mcp.json`。
 
-Playwright MCP 的安装来源采用双模式：
+当前内置 preset 结构：
 
-- `npx` 快速模式：Windows 配置里直接写 `npx.cmd -y @playwright/mcp@<version>`，包下载和缓存由 npm/npx 管理。
-- `.ccr` 管理式安装模式：CCR 把指定版本安装到 `~/.ccr/mcp/servers/playwright/`，配置里指向本地入口。
-- Desktop 受控安装模式：先写安装计划、用户确认、配置、安装清单、锁文件和 owner marker；stdio npm 包实际获取仍由 npm/npx 在启动时完成。
+- `presets/playwright.ts` + `providers/playwright/install.ts`：stdio npm package。
+- `presets/context7.ts` + `providers/context7/install.ts`：stdio npm package。
+- `presets/sentry.ts` + `providers/sentry/install.ts`：remote HTTP URL。
 
-两种模式都必须走同一套 `mcpServers` schema 和 MCP runtime；不要因为 `.ccr` 管理式安装就绕过通用 MCP 连接层。
+所有模式都必须走同一套 `mcpServers` schema 和 MCP runtime；不要因为是内置 preset、remote URL 或 `.ccr` 管理式安装就绕过通用 MCP 连接层。
 
 ## 3. 接入流程
 
 每个新 MCP 至少按下面步骤推进：
 
 1. 资料对照：先看官方文档、官方示例、成熟仓库实现，确认启动命令和能力边界。
-2. 示例配置：新增 `docs/examples/mcp/<name>.json`，Windows 下优先使用 `.cmd` 入口。
-3. 设计文档：新增或补充 `docs/mcp/<name>-integration-design.md`。
-4. 用户级入口：如果这是常用 MCP，优先提供 `ccr mcp add-<name>` 或等价预设命令，默认写入 `~/.ccr/mcp.json`。
-5. 静态校验：确认 JSON 可解析，字段符合 CCR schema。
-6. 连接 smoke：通过 MCP SDK 或 `ccr mcp list/get` 确认 server connected。
-7. 工具发现：确认关键工具出现在 tool list。
-8. 只读 smoke：优先做不修改外部状态的调用。
-9. 交互 smoke：只在公开 demo 或用户确认环境里做点击、输入、上传等动作。
-10. 回归验证：至少跑 `typecheck`、`build`、相关 smoke。
-11. 文档回写：把实际命令、坑点、失败原因和最终验证结果写回文档。
+2. 选择接入形态：stdio npm package 使用 provider install helper；remote HTTP/SSE 使用 remote-url manifest，不在 preset 里硬编码用户密钥。
+3. 示例配置：必要时新增 `docs/examples/mcp/<name>.json`，Windows 下优先使用 `.cmd` 入口。
+4. 设计文档：新增或补充 `docs/mcp/<name>-integration-design.md`。
+5. 受控安装入口：常用 MCP 优先新增 `presets/<name>.ts`，manifest 必须写清 `source.kind`、`transport`、`permissions`、`dataBoundary`、`homepage` 和 server config preview。
+6. Registry 接入：在 `presets/registry.ts` 注册 preset，并补 `smoke:mcp-install-presets` 搜索覆盖。
+7. CLI/Desktop 验证：补或扩展 `smoke:mcp-cli-install`、`smoke:app-server-client`，用临时 `CCR_CONFIG_DIR` 覆盖 dry-run、`--yes` install、status、repair、uninstall。
+8. 静态校验：确认 JSON 可解析，字段符合 CCR schema。
+9. 连接 smoke：通过 MCP SDK 或 `ccr mcp list/get` 确认 server connected；remote OAuth 服务允许停在明确的 needs-auth 状态。
+10. 工具发现：确认关键工具出现在 tool list。
+11. 只读 smoke：优先做不修改外部状态的调用。
+12. 交互 smoke：只在公开 demo 或用户确认环境里做点击、输入、上传等动作。
+13. 回归验证：至少跑 `typecheck`、`build`、相关 smoke。
+14. 文档回写：把实际命令、坑点、失败原因和最终验证结果写回文档。
 
 ## 4. 命名规则
 

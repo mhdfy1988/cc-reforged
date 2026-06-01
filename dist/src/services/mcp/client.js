@@ -1,49 +1,41 @@
 import { feature } from 'bun:bundle';
 import { createRequire } from 'node:module';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { SSEClientTransport, } from '@modelcontextprotocol/sdk/client/sse.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { StreamableHTTPClientTransport, } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { createFetchWithInit, } from '@modelcontextprotocol/sdk/shared/transport.js';
-import { CallToolResultSchema, ElicitRequestSchema, ErrorCode, ListPromptsResultSchema, ListResourcesResultSchema, ListRootsRequestSchema, ListToolsResultSchema, McpError, } from '@modelcontextprotocol/sdk/types.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { CallToolResultSchema, ElicitRequestSchema, ErrorCode, ListRootsRequestSchema, McpError, } from '@modelcontextprotocol/sdk/types.js';
 import mapValues from 'lodash-es/mapValues.js';
 import memoize from 'lodash-es/memoize.js';
-import zipObject from 'lodash-es/zipObject.js';
 import pMap from 'p-map';
-import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js';
-import { getOauthConfig } from '../../constants/oauth.js';
+import { getOriginalCwd } from '../../bootstrap/state.js';
 import { PRODUCT_URL } from '../../constants/product.js';
-import { toolMatchesName, } from '../../Tool.js';
-import { ListMcpResourcesTool } from '../../tools/ListMcpResourcesTool/ListMcpResourcesTool.js';
+import {} from '../../Tool.js';
 import { MCPTool } from '../../tools/MCPTool/MCPTool.js';
 import { createMcpAuthTool } from '../../tools/McpAuthTool/McpAuthTool.js';
-import { ReadMcpResourceTool } from '../../tools/ReadMcpResourceTool/ReadMcpResourceTool.js';
 import { createAbortController } from '../../utils/abortController.js';
 import { count } from '../../utils/array.js';
-import { checkAndRefreshOAuthTokenIfNeeded, getClaudeAIOAuthTokens, handleOAuth401Error, } from '../../utils/auth.js';
 import { registerCleanup } from '../../utils/cleanupRegistry.js';
 import { detectCodeIndexingFromMcpServerName } from '../../utils/codeIndexing.js';
 import { logForDebugging } from '../../utils/debug.js';
-import { isEnvDefinedFalsy, isEnvTruthy } from '../../utils/envUtils.js';
+import { isEnvDefinedFalsy } from '../../utils/envUtils.js';
 import { errorMessage, TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, } from '../../utils/errors.js';
 import { getMCPUserAgent } from '../../utils/http.js';
 import { maybeNotifyIDEConnected } from '../../utils/ide.js';
 import { maybeResizeAndDownsampleImageBuffer } from '../../utils/imageResizer.js';
 import { logMCPDebug, logMCPError } from '../../utils/log.js';
-import { getBinaryBlobSavedMessage, getFormatDescription, getLargeOutputInstructions, persistBinaryContent, } from '../../utils/mcpOutputStorage.js';
-import { getContentSizeEstimate, mcpContentNeedsTruncation, truncateMcpContentIfNeeded, } from '../../utils/mcpValidation.js';
+import {} from '../../utils/mcpValidation.js';
 import { WebSocketTransport } from '../../utils/mcpWebSocketTransport.js';
 import { memoizeWithLRU } from '../../utils/memoize.js';
 import { getWebSocketTLSOptions } from '../../utils/mtls.js';
-import { getProxyFetchOptions, getWebSocketProxyAgent, getWebSocketProxyUrl, } from '../../utils/proxy.js';
-import { recursivelySanitizeUnicode } from '../../utils/sanitization.js';
+import { getWebSocketProxyAgent, getWebSocketProxyUrl, } from '../../utils/proxy.js';
 import { getSessionIngressAuthToken } from '../../utils/sessionIngressAuth.js';
-import { subprocessEnv } from '../../utils/subprocessEnv.js';
-import { isPersistError, persistToolResult, } from '../../utils/toolResultStorage.js';
 import { logEvent, } from '../analytics/index.js';
+import { getMcpToolPromptText, getMcpToolSearchHint, MAX_MCP_DESCRIPTION_LENGTH, shouldSkipMcpToolPrefix, } from './discoveryAdapters.js';
+import { appendResourceToolsIfNeeded, fetchCommandsForClient as fetchCommandsForConnectedClient, fetchResourcesForClient as fetchResourcesForConnectedClient, getDefaultMcpResourceTools, listMcpToolDefinitionsForClient, } from './discoveryService.js';
 import { runElicitationHooks, runElicitationResultHooks, } from './elicitationHandler.js';
 import { buildMcpToolName } from './mcpStringUtils.js';
-import { normalizeNameForMCP } from './normalization.js';
+import { processMCPResult, transformResultContent, } from './resultProcessing.js';
+import { createMcpToolTimeoutError, formatMcpToolDuration, getMcpToolResultErrorDetails, getMcpToolTimeoutMs, isMcpConnectionClosedOnHttp, } from './toolRuntime.js';
 import { getLoggingSafeMcpBaseUrl } from './utils.js';
 const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -62,11 +54,14 @@ import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
 import { classifyMcpToolForCollapse } from '../../tools/MCPTool/classifyForCollapse.js';
 import { clearKeychainCache } from '../../utils/secureStorage/macOsKeychainHelpers.js';
 import { sleep } from '../../utils/sleep.js';
-import { ClaudeAuthProvider, hasMcpDiscoveryButNoToken, wrapFetchWithStepUpDetection, } from './auth.js';
+import { hasMcpDiscoveryButNoToken, } from './auth.js';
 import { markClaudeAiMcpConnected } from './claudeai.js';
 import { getAllMcpConfigs, isMcpServerDisabled } from './config.js';
 import { getMcpServerHeaders } from './headersHelper.js';
-import { SdkControlClientTransport } from './SdkControlTransport.js';
+import { buildClaudeAiProxyTransportOptions, buildHttpClientTransportOptions, buildSseClientTransportOptions, buildSseIdeClientTransportOptions, } from './remoteTransportOptions.js';
+import { createMcpFileUrlBlockedError, getBlockedFileUrlForMcpTool, } from './toolSafety.js';
+import { createNodeWebSocketTransport, createSdkControlClientTransport, createStdioClientTransport, } from './transportFactory.js';
+import { extractUrlElicitationsFromErrorData, findBlockedFileUrlElicitation, getUrlElicitationNonAcceptContent, } from './urlElicitation.js';
 /**
  * Custom error class to indicate that an MCP tool call failed due to
  * authentication issues (e.g., expired OAuth token returning 401).
@@ -119,45 +114,6 @@ export function isMcpSessionExpiredError(error) {
     // Check for the JSON-RPC error code to distinguish from generic web server 404s.
     return (error.message.includes('"code":-32001') ||
         error.message.includes('"code": -32001'));
-}
-/**
- * Default timeout for MCP tool calls (effectively infinite - ~27.8 hours).
- */
-const DEFAULT_MCP_TOOL_TIMEOUT_MS = 100_000_000;
-/**
- * Cap on MCP tool descriptions and server instructions sent to the model.
- * OpenAPI-generated MCP servers have been observed dumping 15-60KB of endpoint
- * docs into tool.description; this caps the p95 tail without losing the intent.
- */
-const MAX_MCP_DESCRIPTION_LENGTH = 2048;
-/**
- * Gets the timeout for MCP tool calls in milliseconds.
- * Uses MCP_TOOL_TIMEOUT environment variable if set, otherwise defaults to ~27.8 hours.
- */
-function getMcpToolTimeoutMs() {
-    return (parseInt(process.env.MCP_TOOL_TIMEOUT || '', 10) ||
-        DEFAULT_MCP_TOOL_TIMEOUT_MS);
-}
-function isFileUrl(value) {
-    if (typeof value !== 'string') {
-        return false;
-    }
-    try {
-        return new URL(value).protocol === 'file:';
-    }
-    catch {
-        return false;
-    }
-}
-function getBlockedFileUrlForMcpTool(tool, args) {
-    const normalizedTool = tool.toLowerCase();
-    if (!normalizedTool.includes('browser_navigate')) {
-        return undefined;
-    }
-    return isFileUrl(args.url) ? args.url : undefined;
-}
-function createMcpFileUrlBlockedError(tool, url) {
-    return new TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(`MCP tool "${tool}" cannot open file:// URLs. Start a local HTTP server for this file and navigate to a localhost URL instead. Blocked URL: ${url}`, 'MCP file URL blocked before tool call');
 }
 import { isClaudeInChromeMCPServer } from '../../utils/claudeInChrome/common.js';
 // Lazy: toolRendering.tsx pulls React/ink; only needed when Claude-in-Chrome MCP server is connected
@@ -260,162 +216,8 @@ function handleRemoteAuthFailure(name, serverRef, transportType) {
     setMcpAuthCacheEntry(name);
     return { name, type: 'needs-auth', config: serverRef };
 }
-/**
- * Fetch wrapper for claude.ai proxy connections. Attaches the OAuth bearer
- * token and retries once on 401 via handleOAuth401Error (force-refresh).
- *
- * The Anthropic API path has this retry (withRetry.ts, grove.ts) to handle
- * memoize-cache staleness and clock drift. Without the same here, a single
- * stale token mass-401s every claude.ai connector and sticks them all in the
- * 15-min needs-auth cache.
- */
-export function createClaudeAiProxyFetch(innerFetch) {
-    return async (url, init) => {
-        const doRequest = async () => {
-            await checkAndRefreshOAuthTokenIfNeeded();
-            const currentTokens = getClaudeAIOAuthTokens();
-            if (!currentTokens) {
-                throw new Error('No claude.ai OAuth token available');
-            }
-            // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-            const headers = new Headers(init?.headers);
-            headers.set('Authorization', `Bearer ${currentTokens.accessToken}`);
-            const response = await innerFetch(url, { ...init, headers });
-            // Return the exact token that was sent. Reading getClaudeAIOAuthTokens()
-            // again after the request is wrong under concurrent 401s: another
-            // connector's handleOAuth401Error clears the memoize cache, so we'd read
-            // the NEW token from keychain, pass it to handleOAuth401Error, which
-            // finds same-as-keychain → returns false → skips retry. Same pattern as
-            // bridgeApi.ts withOAuthRetry (token passed as fn param).
-            return { response, sentToken: currentTokens.accessToken };
-        };
-        const { response, sentToken } = await doRequest();
-        if (response.status !== 401) {
-            return response;
-        }
-        // handleOAuth401Error returns true only if the token actually changed
-        // (keychain had a newer one, or force-refresh succeeded). Gate retry on
-        // that — otherwise we double round-trip time for every connector whose
-        // downstream service genuinely needs auth (the common case: 30+ servers
-        // with "MCP server requires authentication but no OAuth token configured").
-        const tokenChanged = await handleOAuth401Error(sentToken).catch(() => false);
-        logEvent('tengu_mcp_claudeai_proxy_401', {
-            tokenChanged: tokenChanged,
-        });
-        if (!tokenChanged) {
-            // ELOCKED contention: another connector may have won the lockfile and refreshed — check if token changed underneath us
-            const now = getClaudeAIOAuthTokens()?.accessToken;
-            if (!now || now === sentToken) {
-                return response;
-            }
-        }
-        try {
-            return (await doRequest()).response;
-        }
-        catch {
-            // Retry itself failed (network error). Return the original 401 so the
-            // outer handler can classify it.
-            return response;
-        }
-    };
-}
-/**
- * Create a ws.WebSocket client with the MCP protocol.
- * Bun's ws shim types lack the 3-arg constructor (url, protocols, options)
- * that the real ws package supports, so we cast the constructor here.
- */
-async function createNodeWsClient(url, options) {
-    const wsModule = await import('ws');
-    const WS = wsModule.default;
-    return new WS(url, ['mcp'], options);
-}
-const IMAGE_MIME_TYPES = new Set([
-    'image/jpeg',
-    'image/png',
-    'image/gif',
-    'image/webp',
-]);
 function getConnectionTimeoutMs() {
     return parseInt(process.env.MCP_TIMEOUT || '', 10) || 30000;
-}
-/**
- * Default timeout for individual MCP requests (auth, tool calls, etc.)
- */
-const MCP_REQUEST_TIMEOUT_MS = 60000;
-/**
- * MCP Streamable HTTP spec requires clients to advertise acceptance of both
- * JSON and SSE on every POST. Servers that enforce this strictly reject
- * requests without it (HTTP 406).
- * https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#sending-messages-to-the-server
- */
-const MCP_STREAMABLE_HTTP_ACCEPT = 'application/json, text/event-stream';
-/**
- * Wraps a fetch function to apply a fresh timeout signal to each request.
- * This avoids the bug where a single AbortSignal.timeout() created at connection
- * time becomes stale after 60 seconds, causing all subsequent requests to fail
- * immediately with "The operation timed out." Uses a 60-second timeout.
- *
- * Also ensures the Accept header required by the MCP Streamable HTTP spec is
- * present on POSTs. The MCP SDK sets this inside StreamableHTTPClientTransport.send(),
- * but it is attached to a Headers instance that passes through an object spread here,
- * and some runtimes/agents have been observed dropping it before it reaches the wire.
- * See https://github.com/anthropics/claude-agent-sdk-typescript/issues/202.
- * Normalizing here (the last wrapper before fetch()) guarantees it is sent.
- *
- * GET requests are excluded from the timeout since, for MCP transports, they are
- * long-lived SSE streams meant to stay open indefinitely. (Auth-related GETs use
- * a separate fetch wrapper with its own timeout in auth.ts.)
- *
- * @param baseFetch - The fetch function to wrap
- */
-export function wrapFetchWithTimeout(baseFetch) {
-    return async (url, init) => {
-        const method = (init?.method ?? 'GET').toUpperCase();
-        // Skip timeout for GET requests - in MCP transports, these are long-lived SSE streams.
-        // (OAuth discovery GETs in auth.ts use a separate createAuthFetch() with its own timeout.)
-        if (method === 'GET') {
-            return baseFetch(url, init);
-        }
-        // Normalize headers and guarantee the Streamable-HTTP Accept value. new Headers()
-        // accepts HeadersInit | undefined and copies from plain objects, tuple arrays,
-        // and existing Headers instances — so whatever shape the SDK handed us, the
-        // Accept value survives the spread below as an own property of a concrete object.
-        // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-        const headers = new Headers(init?.headers);
-        if (!headers.has('accept')) {
-            headers.set('accept', MCP_STREAMABLE_HTTP_ACCEPT);
-        }
-        // Use setTimeout instead of AbortSignal.timeout() so we can clearTimeout on
-        // completion. AbortSignal.timeout's internal timer is only released when the
-        // signal is GC'd, which in Bun is lazy — ~2.4KB of native memory per request
-        // lingers for the full 60s even when the request completes in milliseconds.
-        const controller = new AbortController();
-        const timer = setTimeout(c => c.abort(new DOMException('The operation timed out.', 'TimeoutError')), MCP_REQUEST_TIMEOUT_MS, controller);
-        timer.unref?.();
-        const parentSignal = init?.signal;
-        const abort = () => controller.abort(parentSignal?.reason);
-        parentSignal?.addEventListener('abort', abort);
-        if (parentSignal?.aborted) {
-            controller.abort(parentSignal.reason);
-        }
-        const cleanup = () => {
-            clearTimeout(timer);
-            parentSignal?.removeEventListener('abort', abort);
-        };
-        try {
-            const response = await baseFetch(url, {
-                ...init,
-                headers,
-                signal: controller.signal,
-            });
-            cleanup();
-            return response;
-        }
-        catch (error) {
-            cleanup();
-            throw error;
-        }
-    };
 }
 export function getMcpServerConnectionBatchSize() {
     return parseInt(process.env.MCP_SERVER_CONNECTION_BATCH_SIZE || '', 10) || 3;
@@ -458,52 +260,10 @@ export const connectToServer = memoize(async (name, serverRef, serverStats) => {
         const sessionIngressToken = getSessionIngressAuthToken();
         const serverType = serverRef.type ?? 'stdio';
         if (serverRef.type === 'sse') {
-            // Create an auth provider for this server
-            const authProvider = new ClaudeAuthProvider(name, serverRef);
-            // Get combined headers (static + dynamic)
-            const combinedHeaders = await getMcpServerHeaders(name, serverRef);
-            // Use the auth provider with SSEClientTransport
-            const transportOptions = {
-                authProvider,
-                // Use fresh timeout per request to avoid stale AbortSignal bug.
-                // Step-up detection wraps innermost so the 403 is seen before the
-                // SDK's handler calls auth() → tokens().
-                fetch: wrapFetchWithTimeout(wrapFetchWithStepUpDetection(createFetchWithInit(), authProvider)),
-                requestInit: {
-                    headers: {
-                        'User-Agent': getMCPUserAgent(),
-                        ...combinedHeaders,
-                    },
-                },
-            };
-            // IMPORTANT: Always set eventSourceInit with a fetch that does NOT use the
-            // timeout wrapper. The EventSource connection is long-lived (stays open indefinitely
-            // to receive server-sent events), so applying a 60-second timeout would kill it.
-            // The timeout is only meant for individual API requests (POST, auth refresh), not
-            // the persistent SSE stream.
-            transportOptions.eventSourceInit = {
-                fetch: async (url, init) => {
-                    // Get auth headers from the auth provider
-                    const authHeaders = {};
-                    const tokens = await authProvider.tokens();
-                    if (tokens) {
-                        authHeaders.Authorization = `Bearer ${tokens.access_token}`;
-                    }
-                    const proxyOptions = getProxyFetchOptions();
-                    // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-                    return fetch(url, {
-                        ...init,
-                        ...proxyOptions,
-                        headers: {
-                            'User-Agent': getMCPUserAgent(),
-                            ...authHeaders,
-                            ...init?.headers,
-                            ...combinedHeaders,
-                            Accept: 'text/event-stream',
-                        },
-                    });
-                },
-            };
+            const transportOptions = await buildSseClientTransportOptions({
+                name,
+                serverRef,
+            });
             transport = new SSEClientTransport(new URL(serverRef.url), transportOptions);
             logMCPDebug(name, `SSE transport initialized, awaiting connection`);
         }
@@ -511,27 +271,8 @@ export const connectToServer = memoize(async (name, serverRef, serverStats) => {
             logMCPDebug(name, `Setting up SSE-IDE transport to ${serverRef.url}`);
             // IDE servers don't need authentication
             // TODO: Use the auth token provided in the lockfile
-            const proxyOptions = getProxyFetchOptions();
-            const transportOptions = proxyOptions.dispatcher
-                ? {
-                    eventSourceInit: {
-                        fetch: async (url, init) => {
-                            // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-                            return fetch(url, {
-                                ...init,
-                                ...proxyOptions,
-                                headers: {
-                                    'User-Agent': getMCPUserAgent(),
-                                    ...init?.headers,
-                                },
-                            });
-                        },
-                    },
-                }
-                : {};
-            transport = new SSEClientTransport(new URL(serverRef.url), Object.keys(transportOptions).length > 0
-                ? transportOptions
-                : undefined);
+            const transportOptions = buildSseIdeClientTransportOptions();
+            transport = new SSEClientTransport(new URL(serverRef.url), transportOptions);
         }
         else if (serverRef.type === 'ws-ide') {
             const tlsOptions = getWebSocketTLSOptions();
@@ -541,25 +282,23 @@ export const connectToServer = memoize(async (name, serverRef, serverStats) => {
                     'X-Claude-Code-Ide-Authorization': serverRef.authToken,
                 }),
             };
-            let wsClient;
             if (typeof Bun !== 'undefined') {
                 // Bun's WebSocket supports headers/proxy/tls options but the DOM typings don't
                 // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-                wsClient = new globalThis.WebSocket(serverRef.url, {
+                transport = new WebSocketTransport(new globalThis.WebSocket(serverRef.url, {
                     protocols: ['mcp'],
                     headers: wsHeaders,
                     proxy: getWebSocketProxyUrl(serverRef.url),
                     tls: tlsOptions || undefined,
-                });
+                }));
             }
             else {
-                wsClient = await createNodeWsClient(serverRef.url, {
+                transport = await createNodeWebSocketTransport(serverRef.url, {
                     headers: wsHeaders,
                     agent: getWebSocketProxyAgent(serverRef.url),
                     ...(tlsOptions || {}),
                 });
             }
-            transport = new WebSocketTransport(wsClient);
         }
         else if (serverRef.type === 'ws') {
             logMCPDebug(name, `Initializing WebSocket transport to ${serverRef.url}`);
@@ -579,25 +318,23 @@ export const connectToServer = memoize(async (name, serverRef, serverStats) => {
                 headers: wsHeadersForLogging,
                 hasSessionAuth: !!sessionIngressToken,
             })}`);
-            let wsClient;
             if (typeof Bun !== 'undefined') {
                 // Bun's WebSocket supports headers/proxy/tls options but the DOM typings don't
                 // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-                wsClient = new globalThis.WebSocket(serverRef.url, {
+                transport = new WebSocketTransport(new globalThis.WebSocket(serverRef.url, {
                     protocols: ['mcp'],
                     headers: wsHeaders,
                     proxy: getWebSocketProxyUrl(serverRef.url),
                     tls: tlsOptions || undefined,
-                });
+                }));
             }
             else {
-                wsClient = await createNodeWsClient(serverRef.url, {
+                transport = await createNodeWebSocketTransport(serverRef.url, {
                     headers: wsHeaders,
                     agent: getWebSocketProxyAgent(serverRef.url),
                     ...(tlsOptions || {}),
                 });
             }
-            transport = new WebSocketTransport(wsClient);
         }
         else if (serverRef.type === 'http') {
             logMCPDebug(name, `Initializing HTTP transport to ${serverRef.url}`);
@@ -609,46 +346,17 @@ export const connectToServer = memoize(async (name, serverRef, serverStats) => {
                 HTTPS_PROXY: process.env.HTTPS_PROXY || 'not set',
                 NO_PROXY: process.env.NO_PROXY || 'not set',
             })}`);
-            // Create an auth provider for this server
-            const authProvider = new ClaudeAuthProvider(name, serverRef);
-            // Get combined headers (static + dynamic)
-            const combinedHeaders = await getMcpServerHeaders(name, serverRef);
-            // Check if this server has stored OAuth tokens. If so, the SDK's
-            // authProvider will set Authorization — don't override with the
-            // session ingress token (SDK merges requestInit AFTER authProvider).
-            // CCR proxy URLs (ccr_shttp_mcp) have no stored OAuth, so they still
-            // get the ingress token. See PR #24454 discussion.
-            const hasOAuthTokens = !!(await authProvider.tokens());
-            // Use the auth provider with StreamableHTTPClientTransport
-            const proxyOptions = getProxyFetchOptions();
-            logMCPDebug(name, `Proxy options: ${proxyOptions.dispatcher ? 'custom dispatcher' : 'default'}`);
-            const transportOptions = {
-                authProvider,
-                // Use fresh timeout per request to avoid stale AbortSignal bug.
-                // Step-up detection wraps innermost so the 403 is seen before the
-                // SDK's handler calls auth() → tokens().
-                fetch: wrapFetchWithTimeout(wrapFetchWithStepUpDetection(createFetchWithInit(), authProvider)),
-                requestInit: {
-                    ...proxyOptions,
-                    headers: {
-                        'User-Agent': getMCPUserAgent(),
-                        ...(sessionIngressToken &&
-                            !hasOAuthTokens && {
-                            Authorization: `Bearer ${sessionIngressToken}`,
-                        }),
-                        ...combinedHeaders,
-                    },
-                },
-            };
-            // Redact sensitive headers before logging
-            const headersForLogging = transportOptions.requestInit?.headers
-                ? mapValues(transportOptions.requestInit.headers, (value, key) => key.toLowerCase() === 'authorization' ? '[REDACTED]' : value)
-                : undefined;
+            const { options: transportOptions, summary } = await buildHttpClientTransportOptions({
+                name,
+                serverRef,
+                sessionIngressToken,
+            });
+            logMCPDebug(name, `Proxy options: ${summary.proxy}`);
             logMCPDebug(name, `HTTP transport options: ${jsonStringify({
                 url: serverRef.url,
-                headers: headersForLogging,
-                hasAuthProvider: !!authProvider,
-                timeoutMs: MCP_REQUEST_TIMEOUT_MS,
+                headers: summary.headers,
+                hasAuthProvider: summary.hasAuthProvider,
+                timeoutMs: summary.timeoutMs,
             })}`);
             transport = new StreamableHTTPClientTransport(new URL(serverRef.url), transportOptions);
             logMCPDebug(name, `HTTP transport created successfully`);
@@ -658,27 +366,10 @@ export const connectToServer = memoize(async (name, serverRef, serverStats) => {
         }
         else if (serverRef.type === 'claudeai-proxy') {
             logMCPDebug(name, `Initializing claude.ai proxy transport for server ${serverRef.id}`);
-            const tokens = getClaudeAIOAuthTokens();
-            if (!tokens) {
-                throw new Error('No claude.ai OAuth token found');
-            }
-            const oauthConfig = getOauthConfig();
-            const proxyUrl = `${oauthConfig.MCP_PROXY_URL}${oauthConfig.MCP_PROXY_PATH.replace('{server_id}', serverRef.id)}`;
+            const { proxyUrl, options: transportOptions } = buildClaudeAiProxyTransportOptions({
+                serverId: serverRef.id,
+            });
             logMCPDebug(name, `Using claude.ai proxy at ${proxyUrl}`);
-            // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-            const fetchWithAuth = createClaudeAiProxyFetch(globalThis.fetch);
-            const proxyOptions = getProxyFetchOptions();
-            const transportOptions = {
-                // Wrap fetchWithAuth with fresh timeout per request
-                fetch: wrapFetchWithTimeout(fetchWithAuth),
-                requestInit: {
-                    ...proxyOptions,
-                    headers: {
-                        'User-Agent': getMCPUserAgent(),
-                        'X-Mcp-Client-Session-Id': getSessionId(),
-                    },
-                },
-            };
             transport = new StreamableHTTPClientTransport(new URL(proxyUrl), transportOptions);
             logMCPDebug(name, `claude.ai proxy transport created successfully`);
         }
@@ -700,19 +391,7 @@ export const connectToServer = memoize(async (name, serverRef, serverStats) => {
             logMCPDebug(name, `In-process Computer Use MCP server started`);
         }
         else if (serverType === 'stdio') {
-            const finalCommand = process.env.CLAUDE_CODE_SHELL_PREFIX || serverRef.command;
-            const finalArgs = process.env.CLAUDE_CODE_SHELL_PREFIX
-                ? [[serverRef.command, ...serverRef.args].join(' ')]
-                : serverRef.args;
-            transport = new StdioClientTransport({
-                command: finalCommand,
-                args: finalArgs,
-                env: {
-                    ...subprocessEnv(),
-                    ...serverRef.env,
-                },
-                stderr: 'pipe', // prevents error output from the MCP server from printing to the UI
-            });
+            transport = createStdioClientTransport(serverRef);
         }
         else {
             throw new Error(`Unsupported server type: ${serverType}`);
@@ -1337,295 +1016,209 @@ export function mcpToolInputToAutoClassifierInput(input, toolName) {
 export const fetchToolsForClient = memoizeWithLRU(async (client) => {
     if (client.type !== 'connected')
         return [];
-    try {
-        if (!client.capabilities?.tools) {
-            return [];
-        }
-        const result = (await client.client.request({ method: 'tools/list' }, ListToolsResultSchema));
-        // Sanitize tool data from MCP server
-        const toolsToProcess = recursivelySanitizeUnicode(result.tools);
-        // Check if we should skip the mcp__ prefix for SDK MCP servers
-        const skipPrefix = client.config.type === 'sdk' &&
-            isEnvTruthy(process.env.CLAUDE_AGENT_SDK_MCP_NO_PREFIX);
-        // Convert MCP tools to our Tool format
-        return toolsToProcess
-            .map((tool) => {
-            const fullyQualifiedName = buildMcpToolName(client.name, tool.name);
-            return {
-                ...MCPTool,
-                // In skip-prefix mode, use the original name for model invocation so MCP tools
-                // can override builtins by name. mcpInfo is used for permission checking.
-                name: skipPrefix ? tool.name : fullyQualifiedName,
-                mcpInfo: { serverName: client.name, toolName: tool.name },
-                isMcp: true,
-                // Collapse whitespace: _meta is open to external MCP servers, and
-                // a newline here would inject orphan lines into the deferred-tool
-                // list (formatDeferredToolLine joins on '\n').
-                searchHint: typeof tool._meta?.['anthropic/searchHint'] === 'string'
-                    ? tool._meta['anthropic/searchHint']
-                        .replace(/\s+/g, ' ')
-                        .trim() || undefined
-                    : undefined,
-                alwaysLoad: tool._meta?.['anthropic/alwaysLoad'] === true,
-                async description() {
-                    return tool.description ?? '';
-                },
-                async prompt() {
-                    const desc = tool.description ?? '';
-                    return desc.length > MAX_MCP_DESCRIPTION_LENGTH
-                        ? desc.slice(0, MAX_MCP_DESCRIPTION_LENGTH) + '… [truncated]'
-                        : desc;
-                },
-                isConcurrencySafe() {
-                    return tool.annotations?.readOnlyHint ?? false;
-                },
-                isReadOnly() {
-                    return tool.annotations?.readOnlyHint ?? false;
-                },
-                toAutoClassifierInput(input) {
-                    return mcpToolInputToAutoClassifierInput(input, tool.name);
-                },
-                isDestructive() {
-                    return tool.annotations?.destructiveHint ?? false;
-                },
-                isOpenWorld() {
-                    return tool.annotations?.openWorldHint ?? false;
-                },
-                isSearchOrReadCommand() {
-                    return classifyMcpToolForCollapse(client.name, tool.name);
-                },
-                inputJSONSchema: tool.inputSchema,
-                async checkPermissions() {
-                    return {
-                        behavior: 'passthrough',
-                        message: 'MCPTool requires permission.',
-                        suggestions: [
-                            {
-                                type: 'addRules',
-                                rules: [
-                                    {
-                                        toolName: fullyQualifiedName,
-                                        ruleContent: undefined,
-                                    },
-                                ],
-                                behavior: 'allow',
-                                destination: 'localSettings',
-                            },
-                        ],
-                    };
-                },
-                async call(args, context, _canUseTool, parentMessage, onProgress) {
-                    const toolUseId = extractToolUseId(parentMessage);
-                    const meta = toolUseId
-                        ? { 'claudecode/toolUseId': toolUseId }
-                        : {};
-                    // Emit progress when tool starts
-                    if (onProgress && toolUseId) {
-                        onProgress({
-                            toolUseID: toolUseId,
-                            data: {
-                                type: 'mcp_progress',
-                                status: 'started',
-                                serverName: client.name,
-                                toolName: tool.name,
-                            },
-                        });
-                    }
-                    const startTime = Date.now();
-                    const MAX_SESSION_RETRIES = 1;
-                    for (let attempt = 0;; attempt++) {
-                        try {
-                            const connectedClient = await ensureConnectedClient(client);
-                            const mcpResult = await callMCPToolWithUrlElicitationRetry({
-                                client: connectedClient,
-                                clientConnection: client,
-                                tool: tool.name,
-                                args,
-                                meta,
-                                signal: context.abortController.signal,
-                                setAppState: context.setAppState,
-                                onProgress: onProgress && toolUseId
-                                    ? progressData => {
-                                        onProgress({
-                                            toolUseID: toolUseId,
-                                            data: progressData,
-                                        });
-                                    }
-                                    : undefined,
-                                handleElicitation: context.handleElicitation,
-                            });
-                            // Emit progress when tool completes successfully
-                            if (onProgress && toolUseId) {
-                                onProgress({
-                                    toolUseID: toolUseId,
-                                    data: {
-                                        type: 'mcp_progress',
-                                        status: 'completed',
-                                        serverName: client.name,
-                                        toolName: tool.name,
-                                        elapsedTimeMs: Date.now() - startTime,
-                                    },
-                                });
-                            }
-                            return {
-                                data: mcpResult.content,
-                                ...((mcpResult._meta || mcpResult.structuredContent) && {
-                                    mcpMeta: {
-                                        ...(mcpResult._meta && {
-                                            _meta: mcpResult._meta,
-                                        }),
-                                        ...(mcpResult.structuredContent && {
-                                            structuredContent: mcpResult.structuredContent,
-                                        }),
-                                    },
-                                }),
-                            };
-                        }
-                        catch (error) {
-                            // Session expired — the connection cache has been
-                            // cleared, so retry with a fresh client.
-                            if (error instanceof McpSessionExpiredError &&
-                                attempt < MAX_SESSION_RETRIES) {
-                                logMCPDebug(client.name, `Retrying tool '${tool.name}' after session recovery`);
-                                continue;
-                            }
-                            // Emit progress when tool fails
-                            if (onProgress && toolUseId) {
-                                onProgress({
-                                    toolUseID: toolUseId,
-                                    data: {
-                                        type: 'mcp_progress',
-                                        status: 'failed',
-                                        serverName: client.name,
-                                        toolName: tool.name,
-                                        elapsedTimeMs: Date.now() - startTime,
-                                    },
-                                });
-                            }
-                            // Wrap MCP SDK errors so telemetry gets useful context
-                            // instead of just "Error" or "McpError" (the constructor
-                            // name). MCP SDK errors are protocol-level messages and
-                            // don't contain user file paths or code.
-                            if (error instanceof Error &&
-                                !(error instanceof
-                                    TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)) {
-                                const name = error.constructor.name;
-                                if (name === 'Error') {
-                                    throw new TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(error.message, error.message.slice(0, 200));
-                                }
-                                // McpError has a numeric `code` with the JSON-RPC error
-                                // code (e.g. -32000 ConnectionClosed, -32001 RequestTimeout)
-                                if (name === 'McpError' &&
-                                    'code' in error &&
-                                    typeof error.code === 'number') {
-                                    throw new TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(error.message, `McpError ${error.code}`);
-                                }
-                            }
-                            throw error;
-                        }
-                    }
-                },
-                userFacingName() {
-                    // Prefer title annotation if available, otherwise use tool name
-                    const displayName = tool.annotations?.title || tool.name;
-                    return `${client.name} - ${displayName} (MCP)`;
-                },
-                ...(isClaudeInChromeMCPServer(client.name) &&
-                    (client.config.type === 'stdio' || !client.config.type)
-                    ? claudeInChromeToolRendering().getClaudeInChromeMCPToolOverrides?.(tool.name) ??
-                        {}
-                    : {}),
-                ...(feature('CHICAGO_MCP') &&
-                    (client.config.type === 'stdio' || !client.config.type) &&
-                    isComputerUseMCPServer(client.name)
-                    ? getComputerUseMCPToolOverridesOrThrow(tool.name)
-                    : {}),
-            };
-        })
-            .filter(isIncludedMcpTool);
-    }
-    catch (error) {
-        logMCPError(client.name, `Failed to fetch tools: ${errorMessage(error)}`);
-        return [];
-    }
-}, (client) => client.name, MCP_FETCH_CACHE_SIZE);
-export const fetchResourcesForClient = memoizeWithLRU(async (client) => {
-    if (client.type !== 'connected')
-        return [];
-    try {
-        if (!client.capabilities?.resources) {
-            return [];
-        }
-        const result = await client.client.request({ method: 'resources/list' }, ListResourcesResultSchema);
-        if (!result.resources)
-            return [];
-        // Add server name to each resource
-        return result.resources.map(resource => ({
-            ...resource,
-            server: client.name,
-        }));
-    }
-    catch (error) {
-        logMCPError(client.name, `Failed to fetch resources: ${errorMessage(error)}`);
-        return [];
-    }
-}, (client) => client.name, MCP_FETCH_CACHE_SIZE);
-export const fetchCommandsForClient = memoizeWithLRU(async (client) => {
-    if (client.type !== 'connected')
-        return [];
-    try {
-        if (!client.capabilities?.prompts) {
-            return [];
-        }
-        // Request prompts list from client
-        const result = (await client.client.request({ method: 'prompts/list' }, ListPromptsResultSchema));
-        if (!result.prompts)
-            return [];
-        // Sanitize prompt data from MCP server
-        const promptsToProcess = recursivelySanitizeUnicode(result.prompts);
-        // Convert MCP prompts to our Command format
-        return promptsToProcess.map(prompt => {
-            const argNames = Object.values(prompt.arguments ?? {}).map(k => k.name);
-            return {
-                type: 'prompt',
-                name: 'mcp__' + normalizeNameForMCP(client.name) + '__' + prompt.name,
-                description: prompt.description ?? '',
-                hasUserSpecifiedDescription: !!prompt.description,
-                contentLength: 0, // Dynamic MCP content
-                isEnabled: () => true,
-                isHidden: false,
-                isMcp: true,
-                progressMessage: 'running',
-                userFacingName() {
-                    // Use prompt.name (programmatic identifier) not prompt.title (display name)
-                    // to avoid spaces breaking slash command parsing
-                    return `${client.name}:${prompt.name} (MCP)`;
-                },
-                argNames,
-                source: 'mcp',
-                async getPromptForCommand(args) {
-                    const argsArray = args.split(' ');
+    const toolsToProcess = await listMcpToolDefinitionsForClient(client);
+    const skipPrefix = shouldSkipMcpToolPrefix({
+        config: client.config,
+        noPrefixEnvValue: process.env.CLAUDE_AGENT_SDK_MCP_NO_PREFIX,
+    });
+    return toolsToProcess
+        .map((tool) => {
+        const fullyQualifiedName = buildMcpToolName(client.name, tool.name);
+        return {
+            ...MCPTool,
+            // In skip-prefix mode, use the original name for model invocation so MCP tools
+            // can override builtins by name. mcpInfo is used for permission checking.
+            name: skipPrefix ? tool.name : fullyQualifiedName,
+            mcpInfo: { serverName: client.name, toolName: tool.name },
+            isMcp: true,
+            // Collapse whitespace: _meta is open to external MCP servers, and
+            // a newline here would inject orphan lines into the deferred-tool
+            // list (formatDeferredToolLine joins on '\n').
+            searchHint: getMcpToolSearchHint(tool._meta),
+            alwaysLoad: tool._meta?.['anthropic/alwaysLoad'] === true,
+            async description() {
+                return tool.description ?? '';
+            },
+            async prompt() {
+                return getMcpToolPromptText(tool.description);
+            },
+            isConcurrencySafe() {
+                return tool.annotations?.readOnlyHint ?? false;
+            },
+            isReadOnly() {
+                return tool.annotations?.readOnlyHint ?? false;
+            },
+            toAutoClassifierInput(input) {
+                return mcpToolInputToAutoClassifierInput(input, tool.name);
+            },
+            isDestructive() {
+                return tool.annotations?.destructiveHint ?? false;
+            },
+            isOpenWorld() {
+                return tool.annotations?.openWorldHint ?? false;
+            },
+            isSearchOrReadCommand() {
+                return classifyMcpToolForCollapse(client.name, tool.name);
+            },
+            inputJSONSchema: tool.inputSchema,
+            async checkPermissions() {
+                return {
+                    behavior: 'passthrough',
+                    message: 'MCPTool requires permission.',
+                    suggestions: [
+                        {
+                            type: 'addRules',
+                            rules: [
+                                {
+                                    toolName: fullyQualifiedName,
+                                    ruleContent: undefined,
+                                },
+                            ],
+                            behavior: 'allow',
+                            destination: 'localSettings',
+                        },
+                    ],
+                };
+            },
+            async call(args, context, _canUseTool, parentMessage, onProgress) {
+                const toolUseId = extractToolUseId(parentMessage);
+                const meta = toolUseId
+                    ? { 'claudecode/toolUseId': toolUseId }
+                    : {};
+                // Emit progress when tool starts
+                if (onProgress && toolUseId) {
+                    onProgress({
+                        toolUseID: toolUseId,
+                        data: {
+                            type: 'mcp_progress',
+                            status: 'started',
+                            serverName: client.name,
+                            toolName: tool.name,
+                        },
+                    });
+                }
+                const startTime = Date.now();
+                const MAX_SESSION_RETRIES = 1;
+                for (let attempt = 0;; attempt++) {
                     try {
                         const connectedClient = await ensureConnectedClient(client);
-                        const result = await connectedClient.client.getPrompt({
-                            name: prompt.name,
-                            arguments: zipObject(argNames, argsArray),
+                        const mcpResult = await callMCPToolWithUrlElicitationRetry({
+                            client: connectedClient,
+                            clientConnection: client,
+                            tool: tool.name,
+                            args,
+                            meta,
+                            signal: context.abortController.signal,
+                            setAppState: context.setAppState,
+                            onProgress: onProgress && toolUseId
+                                ? progressData => {
+                                    onProgress({
+                                        toolUseID: toolUseId,
+                                        data: progressData,
+                                    });
+                                }
+                                : undefined,
+                            handleElicitation: context.handleElicitation,
                         });
-                        const transformed = await Promise.all(result.messages.map(message => transformResultContent(message.content, connectedClient.name)));
-                        return transformed.flat();
+                        // Emit progress when tool completes successfully
+                        if (onProgress && toolUseId) {
+                            onProgress({
+                                toolUseID: toolUseId,
+                                data: {
+                                    type: 'mcp_progress',
+                                    status: 'completed',
+                                    serverName: client.name,
+                                    toolName: tool.name,
+                                    elapsedTimeMs: Date.now() - startTime,
+                                },
+                            });
+                        }
+                        return {
+                            data: mcpResult.content,
+                            ...((mcpResult._meta || mcpResult.structuredContent) && {
+                                mcpMeta: {
+                                    ...(mcpResult._meta && {
+                                        _meta: mcpResult._meta,
+                                    }),
+                                    ...(mcpResult.structuredContent && {
+                                        structuredContent: mcpResult.structuredContent,
+                                    }),
+                                },
+                            }),
+                        };
                     }
                     catch (error) {
-                        logMCPError(client.name, `Error running command '${prompt.name}': ${errorMessage(error)}`);
+                        // Session expired — the connection cache has been
+                        // cleared, so retry with a fresh client.
+                        if (error instanceof McpSessionExpiredError &&
+                            attempt < MAX_SESSION_RETRIES) {
+                            logMCPDebug(client.name, `Retrying tool '${tool.name}' after session recovery`);
+                            continue;
+                        }
+                        // Emit progress when tool fails
+                        if (onProgress && toolUseId) {
+                            onProgress({
+                                toolUseID: toolUseId,
+                                data: {
+                                    type: 'mcp_progress',
+                                    status: 'failed',
+                                    serverName: client.name,
+                                    toolName: tool.name,
+                                    elapsedTimeMs: Date.now() - startTime,
+                                },
+                            });
+                        }
+                        // Wrap MCP SDK errors so telemetry gets useful context
+                        // instead of just "Error" or "McpError" (the constructor
+                        // name). MCP SDK errors are protocol-level messages and
+                        // don't contain user file paths or code.
+                        if (error instanceof Error &&
+                            !(error instanceof
+                                TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)) {
+                            const name = error.constructor.name;
+                            if (name === 'Error') {
+                                throw new TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(error.message, error.message.slice(0, 200));
+                            }
+                            // McpError has a numeric `code` with the JSON-RPC error
+                            // code (e.g. -32000 ConnectionClosed, -32001 RequestTimeout)
+                            if (name === 'McpError' &&
+                                'code' in error &&
+                                typeof error.code === 'number') {
+                                throw new TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(error.message, `McpError ${error.code}`);
+                            }
+                        }
                         throw error;
                     }
-                },
-            };
-        });
-    }
-    catch (error) {
-        logMCPError(client.name, `Failed to fetch commands: ${errorMessage(error)}`);
-        return [];
-    }
+                }
+            },
+            userFacingName() {
+                // Prefer title annotation if available, otherwise use tool name
+                const displayName = tool.annotations?.title || tool.name;
+                return `${client.name} - ${displayName} (MCP)`;
+            },
+            ...(isClaudeInChromeMCPServer(client.name) &&
+                (client.config.type === 'stdio' || !client.config.type)
+                ? claudeInChromeToolRendering().getClaudeInChromeMCPToolOverrides?.(tool.name) ??
+                    {}
+                : {}),
+            ...(feature('CHICAGO_MCP') &&
+                (client.config.type === 'stdio' || !client.config.type) &&
+                isComputerUseMCPServer(client.name)
+                ? getComputerUseMCPToolOverridesOrThrow(tool.name)
+                : {}),
+        };
+    })
+        .filter(isIncludedMcpTool);
+}, (client) => client.name, MCP_FETCH_CACHE_SIZE);
+export const fetchResourcesForClient = memoizeWithLRU(async (client) => {
+    return fetchResourcesForConnectedClient(client);
+}, (client) => client.name, MCP_FETCH_CACHE_SIZE);
+export const fetchCommandsForClient = memoizeWithLRU(async (client) => {
+    return fetchCommandsForConnectedClient({
+        client,
+        ensureConnectedClient,
+        transformResultContent,
+    });
 }, (client) => client.name, MCP_FETCH_CACHE_SIZE);
 /**
  * Call an IDE tool directly as an RPC
@@ -1680,18 +1273,9 @@ export async function reconnectMcpServerImpl(name, config) {
             supportsResources ? fetchResourcesForClient(client) : Promise.resolve([]),
         ]);
         const commands = [...mcpCommands, ...mcpSkills];
-        // Check if we need to add resource tools
-        const resourceTools = [];
-        if (supportsResources) {
-            // Only add resource tools if no other server has them
-            const hasResourceTools = [ListMcpResourcesTool, ReadMcpResourceTool].some(tool => tools.some(t => toolMatchesName(t, tool.name)));
-            if (!hasResourceTools) {
-                resourceTools.push(ListMcpResourcesTool, ReadMcpResourceTool);
-            }
-        }
         return {
             client,
-            tools: [...tools, ...resourceTools],
+            tools: appendResourceToolsIfNeeded({ supportsResources, tools }),
             commands,
             resources: resources.length > 0 ? resources : undefined,
         };
@@ -1821,7 +1405,7 @@ export async function getMcpToolsCommandsAndResources(onConnectionAttempt, mcpCo
             const resourceTools = [];
             if (supportsResources && !resourceToolsAdded) {
                 resourceToolsAdded = true;
-                resourceTools.push(ListMcpResourcesTool, ReadMcpResourceTool);
+                resourceTools.push(...getDefaultMcpResourceTools());
             }
             onConnectionAttempt({
                 client,
@@ -1902,244 +1486,6 @@ export function prefetchAllMcpResources(mcpConfigs) {
         });
     });
 }
-/**
- * Transform result content from an MCP tool or MCP prompt into message blocks
- */
-export async function transformResultContent(resultContent, serverName) {
-    switch (resultContent.type) {
-        case 'text':
-            return [
-                {
-                    type: 'text',
-                    text: resultContent.text,
-                },
-            ];
-        case 'audio': {
-            const audioData = resultContent;
-            return await persistBlobToTextBlock(Buffer.from(audioData.data, 'base64'), audioData.mimeType, serverName, `[Audio from ${serverName}] `);
-        }
-        case 'image': {
-            // Resize and compress image data, enforcing API dimension limits
-            const imageBuffer = Buffer.from(String(resultContent.data), 'base64');
-            const ext = resultContent.mimeType?.split('/')[1] || 'png';
-            const resized = await maybeResizeAndDownsampleImageBuffer(imageBuffer, imageBuffer.length, ext);
-            return [
-                {
-                    type: 'image',
-                    source: {
-                        data: resized.buffer.toString('base64'),
-                        media_type: `image/${resized.mediaType}`,
-                        type: 'base64',
-                    },
-                },
-            ];
-        }
-        case 'resource': {
-            const resource = resultContent.resource;
-            const prefix = `[Resource from ${serverName} at ${resource.uri}] `;
-            if ('text' in resource) {
-                return [
-                    {
-                        type: 'text',
-                        text: `${prefix}${resource.text}`,
-                    },
-                ];
-            }
-            else if ('blob' in resource) {
-                const isImage = IMAGE_MIME_TYPES.has(resource.mimeType ?? '');
-                if (isImage) {
-                    // Resize and compress image blob, enforcing API dimension limits
-                    const imageBuffer = Buffer.from(resource.blob, 'base64');
-                    const ext = resource.mimeType?.split('/')[1] || 'png';
-                    const resized = await maybeResizeAndDownsampleImageBuffer(imageBuffer, imageBuffer.length, ext);
-                    const content = [];
-                    if (prefix) {
-                        content.push({
-                            type: 'text',
-                            text: prefix,
-                        });
-                    }
-                    content.push({
-                        type: 'image',
-                        source: {
-                            data: resized.buffer.toString('base64'),
-                            media_type: `image/${resized.mediaType}`,
-                            type: 'base64',
-                        },
-                    });
-                    return content;
-                }
-                else {
-                    return await persistBlobToTextBlock(Buffer.from(resource.blob, 'base64'), resource.mimeType, serverName, prefix);
-                }
-            }
-            return [];
-        }
-        case 'resource_link': {
-            const resourceLink = resultContent;
-            let text = `[Resource link: ${resourceLink.name}] ${resourceLink.uri}`;
-            if (resourceLink.description) {
-                text += ` (${resourceLink.description})`;
-            }
-            return [
-                {
-                    type: 'text',
-                    text,
-                },
-            ];
-        }
-        default:
-            return [];
-    }
-}
-/**
- * Decode base64 binary content, write it to disk with the proper extension,
- * and return a small text block with the file path. Replaces the old behavior
- * of dumping raw base64 into the context.
- */
-async function persistBlobToTextBlock(bytes, mimeType, serverName, sourceDescription) {
-    const persistId = `mcp-${normalizeNameForMCP(serverName)}-blob-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const result = await persistBinaryContent(bytes, mimeType, persistId);
-    if ('error' in result) {
-        return [
-            {
-                type: 'text',
-                text: `${sourceDescription}Binary content (${mimeType || 'unknown type'}, ${bytes.length} bytes) could not be saved to disk: ${result.error}`,
-            },
-        ];
-    }
-    return [
-        {
-            type: 'text',
-            text: getBinaryBlobSavedMessage(result.filepath, mimeType, result.size, sourceDescription),
-        },
-    ];
-}
-/**
- * Generates a compact, jq-friendly type signature for a value.
- * e.g. "{title: string, items: [{id: number, name: string}]}"
- */
-export function inferCompactSchema(value, depth = 2) {
-    if (value === null)
-        return 'null';
-    if (Array.isArray(value)) {
-        if (value.length === 0)
-            return '[]';
-        return `[${inferCompactSchema(value[0], depth - 1)}]`;
-    }
-    if (typeof value === 'object') {
-        if (depth <= 0)
-            return '{...}';
-        const entries = Object.entries(value).slice(0, 10);
-        const props = entries.map(([k, v]) => `${k}: ${inferCompactSchema(v, depth - 1)}`);
-        const suffix = Object.keys(value).length > 10 ? ', ...' : '';
-        return `{${props.join(', ')}${suffix}}`;
-    }
-    return typeof value;
-}
-export async function transformMCPResult(result, tool, // Tool name for validation (e.g., "search")
-name) {
-    if (result && typeof result === 'object') {
-        if ('toolResult' in result) {
-            return {
-                content: String(result.toolResult),
-                type: 'toolResult',
-            };
-        }
-        if ('structuredContent' in result &&
-            result.structuredContent !== undefined) {
-            return {
-                content: jsonStringify(result.structuredContent),
-                type: 'structuredContent',
-                schema: inferCompactSchema(result.structuredContent),
-            };
-        }
-        if ('content' in result && Array.isArray(result.content)) {
-            const transformedContent = (await Promise.all(result.content.map(item => transformResultContent(item, name)))).flat();
-            return {
-                content: transformedContent,
-                type: 'contentArray',
-                schema: inferCompactSchema(transformedContent),
-            };
-        }
-    }
-    const errorMessage = `MCP server "${name}" tool "${tool}": unexpected response format`;
-    logMCPError(name, errorMessage);
-    throw new TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(errorMessage, 'MCP tool unexpected response format');
-}
-/**
- * Check if MCP content contains any image blocks.
- * Used to decide whether to persist to file (images should use truncation instead
- * to preserve image compression and viewability).
- */
-function contentContainsImages(content) {
-    if (!content || typeof content === 'string') {
-        return false;
-    }
-    return content.some(block => block.type === 'image');
-}
-export async function processMCPResult(result, tool, // Tool name for validation (e.g., "search")
-name) {
-    const { content, type, schema } = await transformMCPResult(result, tool, name);
-    // IDE tools are not going to the model directly, so we don't need to
-    // handle large output.
-    if (name === 'ide') {
-        return content;
-    }
-    // Check if content needs truncation (i.e., is too large)
-    if (!(await mcpContentNeedsTruncation(content))) {
-        return content;
-    }
-    const sizeEstimateTokens = getContentSizeEstimate(content);
-    // If large output files feature is disabled, fall back to old truncation behavior
-    if (isEnvDefinedFalsy(process.env.ENABLE_MCP_LARGE_OUTPUT_FILES)) {
-        logEvent('tengu_mcp_large_result_handled', {
-            outcome: 'truncated',
-            reason: 'env_disabled',
-            sizeEstimateTokens,
-        });
-        return await truncateMcpContentIfNeeded(content);
-    }
-    // Save large output to file and return instructions for reading it
-    // Content is guaranteed to exist at this point (we checked mcpContentNeedsTruncation)
-    if (!content) {
-        return content;
-    }
-    // If content contains images, fall back to truncation - persisting images as JSON
-    // defeats the image compression logic and makes them non-viewable
-    if (contentContainsImages(content)) {
-        logEvent('tengu_mcp_large_result_handled', {
-            outcome: 'truncated',
-            reason: 'contains_images',
-            sizeEstimateTokens,
-        });
-        return await truncateMcpContentIfNeeded(content);
-    }
-    // Generate a unique ID for the persisted file (server__tool-timestamp)
-    const timestamp = Date.now();
-    const persistId = `mcp-${normalizeNameForMCP(name)}-${normalizeNameForMCP(tool)}-${timestamp}`;
-    // Convert to string for persistence (persistToolResult expects string or specific block types)
-    const contentStr = typeof content === 'string' ? content : jsonStringify(content, null, 2);
-    const persistResult = await persistToolResult(contentStr, persistId);
-    if (isPersistError(persistResult)) {
-        // If file save failed, fall back to returning truncated content info
-        const contentLength = contentStr.length;
-        logEvent('tengu_mcp_large_result_handled', {
-            outcome: 'truncated',
-            reason: 'persist_failed',
-            sizeEstimateTokens,
-        });
-        return `Error: result (${contentLength.toLocaleString()} characters) exceeds maximum allowed tokens. Failed to save output to file: ${persistResult.error}. If this MCP server provides pagination or filtering tools, use them to retrieve specific portions of the data.`;
-    }
-    logEvent('tengu_mcp_large_result_handled', {
-        outcome: 'persisted',
-        reason: 'file_saved',
-        sizeEstimateTokens,
-        persistedSizeChars: persistResult.originalSize,
-    });
-    const formatDescription = getFormatDescription(type, schema);
-    return getLargeOutputInstructions(persistResult.filepath, persistResult.originalSize, formatDescription);
-}
 /** @internal Exported for testing. */
 export async function callMCPToolWithUrlElicitationRetry({ client: connectedClient, clientConnection, tool, args, meta, signal, setAppState, onProgress, callToolFn = callMCPTool, handleElicitation, }) {
     const MAX_URL_ELICITATION_RETRIES = 3;
@@ -2165,27 +1511,11 @@ export async function callMCPToolWithUrlElicitationRetry({ client: connectedClie
             if (attempt >= MAX_URL_ELICITATION_RETRIES) {
                 throw error;
             }
-            const errorData = error.data;
-            const rawElicitations = errorData != null &&
-                typeof errorData === 'object' &&
-                'elicitations' in errorData &&
-                Array.isArray(errorData.elicitations)
-                ? errorData.elicitations
-                : [];
-            // Validate each element has the required fields for ElicitRequestURLParams
-            const elicitations = rawElicitations.filter((e) => {
-                if (e == null || typeof e !== 'object')
-                    return false;
-                const obj = e;
-                return (obj.mode === 'url' &&
-                    typeof obj.url === 'string' &&
-                    typeof obj.elicitationId === 'string' &&
-                    typeof obj.message === 'string');
-            });
+            const elicitations = extractUrlElicitationsFromErrorData(error.data);
             const serverName = clientConnection.type === 'connected'
                 ? clientConnection.name
                 : 'unknown';
-            const blockedElicitation = elicitations.find(elicitation => isFileUrl(elicitation.url));
+            const blockedElicitation = findBlockedFileUrlElicitation(elicitations);
             if (blockedElicitation) {
                 logMCPDebug(serverName, `Tool '${tool}' requested blocked file URL elicitation: ${blockedElicitation.url}`);
                 throw createMcpFileUrlBlockedError(tool, blockedElicitation.url);
@@ -2206,7 +1536,11 @@ export async function callMCPToolWithUrlElicitationRetry({ client: connectedClie
                     logMCPDebug(serverName, `URL elicitation ${elicitationId} resolved by hook: ${jsonStringify(hookResponse)}`);
                     if (hookResponse.action !== 'accept') {
                         return {
-                            content: `URL elicitation was ${hookResponse.action === 'decline' ? 'declined' : hookResponse.action + 'ed'} by a hook. The tool "${tool}" could not complete because it requires the user to open a URL.`,
+                            content: getUrlElicitationNonAcceptContent({
+                                action: hookResponse.action,
+                                actor: 'hook',
+                                tool,
+                            }),
                         };
                     }
                     // Hook accepted — skip the UI and proceed to retry
@@ -2273,7 +1607,11 @@ export async function callMCPToolWithUrlElicitationRetry({ client: connectedClie
                 if (finalResult.action !== 'accept') {
                     logMCPDebug(serverName, `User ${finalResult.action === 'decline' ? 'declined' : finalResult.action + 'ed'} URL elicitation ${elicitationId}`);
                     return {
-                        content: `URL elicitation was ${finalResult.action === 'decline' ? 'declined' : finalResult.action + 'ed'} by the user. The tool "${tool}" could not complete because it requires the user to open a URL.`,
+                        content: getUrlElicitationNonAcceptContent({
+                            action: finalResult.action,
+                            actor: 'user',
+                            tool,
+                        }),
                     };
                 }
                 logMCPDebug(serverName, `Elicitation ${elicitationId} completed, retrying tool call`);
@@ -2306,7 +1644,11 @@ async function callMCPTool({ client: { client, name, config }, tool, args, meta,
         let timeoutId;
         const timeoutPromise = new Promise((_, reject) => {
             timeoutId = setTimeout((reject, name, tool, timeoutMs) => {
-                reject(new TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(`MCP server "${name}" tool "${tool}" timed out after ${Math.floor(timeoutMs / 1000)}s`, 'MCP tool timeout'));
+                reject(createMcpToolTimeoutError({
+                    serverName: name,
+                    toolName: tool,
+                    timeoutMs,
+                }));
             }, timeoutMs, reject, name, tool, timeoutMs);
         });
         const result = await Promise.race([
@@ -2338,30 +1680,12 @@ async function callMCPTool({ client: { client, name, config }, tool, args, meta,
             }
         });
         if ('isError' in result && result.isError) {
-            let errorDetails = 'Unknown error';
-            if ('content' in result &&
-                Array.isArray(result.content) &&
-                result.content.length > 0) {
-                const firstContent = result.content[0];
-                if (firstContent &&
-                    typeof firstContent === 'object' &&
-                    'text' in firstContent) {
-                    errorDetails = firstContent.text;
-                }
-            }
-            else if ('error' in result) {
-                // Fallback for legacy error format
-                errorDetails = String(result.error);
-            }
+            const errorDetails = getMcpToolResultErrorDetails(result);
             logMCPError(name, errorDetails);
             throw new McpToolCallError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS(errorDetails, 'MCP tool returned error', '_meta' in result && result._meta ? { _meta: result._meta } : undefined);
         }
         const elapsed = Date.now() - toolStartTime;
-        const duration = elapsed < 1000
-            ? `${elapsed}ms`
-            : elapsed < 60000
-                ? `${Math.floor(elapsed / 1000)}s`
-                : `${Math.floor(elapsed / 60000)}m ${Math.floor((elapsed % 60000) / 1000)}s`;
+        const duration = formatMcpToolDuration(elapsed);
         logMCPDebug(name, `Tool '${tool}' completed successfully in ${duration}`);
         // Log code indexing tool usage
         const codeIndexingTool = detectCodeIndexingFromMcpServerName(name);
@@ -2405,10 +1729,10 @@ async function callMCPTool({ client: { client, name, config }, tool, args, meta,
             // In both cases, clear the connection cache so the next tool call
             // creates a fresh session.
             const isSessionExpired = isMcpSessionExpiredError(e);
-            const isConnectionClosedOnHttp = 'code' in e &&
-                e.code === -32000 &&
-                e.message.includes('Connection closed') &&
-                (config.type === 'http' || config.type === 'claudeai-proxy');
+            const isConnectionClosedOnHttp = isMcpConnectionClosedOnHttp({
+                error: e,
+                configType: config.type,
+            });
             if (isSessionExpired || isConnectionClosedOnHttp) {
                 logMCPDebug(name, `MCP session expired during tool call (${isSessionExpired ? '404/-32001' : 'connection closed'}), clearing connection cache for re-initialization`);
                 logEvent('tengu_mcp_session_expired', {});
@@ -2448,7 +1772,7 @@ export async function setupSdkMcpClients(sdkMcpConfigs, sendMcpMessage) {
     const tools = [];
     // Connect to all servers in parallel
     const results = await Promise.allSettled(Object.entries(sdkMcpConfigs).map(async ([name, config]) => {
-        const transport = new SdkControlClientTransport(name, sendMcpMessage);
+        const transport = createSdkControlClientTransport(name, sendMcpMessage);
         const client = new Client({
             name: 'claude-code',
             title: 'Claude Code',

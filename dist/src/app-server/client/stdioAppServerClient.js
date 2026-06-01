@@ -92,6 +92,9 @@ export class StdioAppServerClient {
     uninstallMcp(params, options) {
         return this.rpc.request('mcp/install/uninstall', params, options);
     }
+    repairMcp(params, options) {
+        return this.rpc.request('mcp/install/repair', params, options);
+    }
     openWorkspace(params, options) {
         return this.rpc.request('workspace/open', params, options);
     }

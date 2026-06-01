@@ -173,6 +173,12 @@ type McpInstallUninstallInput = {
   confirmed: boolean
 }
 
+type McpInstallRepairInput = {
+  name: string
+  scope?: 'user' | 'project' | 'local'
+  confirmed: boolean
+}
+
 type ResumeThreadInput = {
   sessionId: string
   title?: string
@@ -345,6 +351,8 @@ const api = {
   listMcpInstalls: () => ipcRenderer.invoke('ccr:mcp-install-list'),
   uninstallMcp: (input: McpInstallUninstallInput) =>
     ipcRenderer.invoke('ccr:mcp-install-uninstall', input),
+  repairMcp: (input: McpInstallRepairInput) =>
+    ipcRenderer.invoke('ccr:mcp-install-repair', input),
   refreshRuntime: () => ipcRenderer.invoke('ccr:refresh-runtime'),
   runCompact: (instruction?: string) =>
     ipcRenderer.invoke('ccr:compact-run', instruction),

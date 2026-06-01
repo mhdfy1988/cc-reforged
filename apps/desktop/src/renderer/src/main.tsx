@@ -53,6 +53,7 @@ import type {
   McpInstallListState,
   McpInstallPlanState,
   McpInstallPlanViewState,
+  McpInstallRecord,
   McpInstallSearchState,
   McpTestState,
   McpWritableScope,
@@ -1008,6 +1009,47 @@ function App({ initialStatus = null }: AppProps) {
     }
   }
 
+  function repairMcpServer(record: McpInstallRecord): void {
+    const name = record.name
+    if (!name) {
+      setMcpPageError('安装记录缺少名称，无法修复。')
+      return
+    }
+    showConfirmDialog({
+      title: '修复 MCP',
+      message: `修复 CCR 安装的 MCP：${name}？`,
+      detail:
+        '确认后会按内置 preset 重新写入 MCP 配置。不会修改其他未关联的 MCP 配置。',
+      confirmLabel: '修复',
+      tone: 'warning',
+      onConfirm: () => {
+        void performMcpRepair(record)
+      },
+    })
+  }
+
+  async function performMcpRepair(record: McpInstallRecord): Promise<void> {
+    if (!record.name) {
+      return
+    }
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        await window.ccr.repairMcp({
+          name: record.name!,
+          scope: normalizeMcpScope(record.scope),
+          confirmed: true,
+        })
+        const installs =
+          (await window.ccr.listMcpInstalls()) as McpInstallListState
+        setMcpInstalls(installs)
+        setMcpPageMessage(`已修复 MCP：${record.name}`)
+      })
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   async function refreshPermissionSettings(): Promise<void> {
     const settings =
       (await window.ccr.getPermissionSettings()) as PermissionSettingsState
@@ -1395,6 +1437,7 @@ function App({ initialStatus = null }: AppProps) {
                   void planMcpInstallFromCandidate(candidate, scope)
                 }
                 onRefresh={() => void refreshMcpManagement()}
+                onRepair={record => void repairMcpServer(record)}
                 onRestart={name => void restartMcpServer(name)}
                 onSearchInstalls={query =>
                   void searchMcpInstallCandidates(query)

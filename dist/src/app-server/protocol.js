@@ -253,6 +253,13 @@ export const McpInstallUninstallParamsSchema = z
     confirmed: z.boolean(),
 })
     .strict();
+export const McpInstallRepairParamsSchema = z
+    .object({
+    name: z.string().min(1),
+    scope: McpWritableScopeSchema.default('user'),
+    confirmed: z.boolean(),
+})
+    .strict();
 export const WorkspaceOpenParamsSchema = z
     .object({
     path: z.string().min(1),

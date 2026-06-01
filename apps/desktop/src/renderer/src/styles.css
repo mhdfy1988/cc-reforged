@@ -1504,6 +1504,16 @@ h1 {
   align-items: center;
 }
 
+.mcp-candidate-item.blocked {
+  background: rgba(248, 244, 236, 0.82);
+}
+
+.mcp-candidate-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
 .mcp-server-item:not(.active):hover {
   border-color: rgba(239, 151, 0, 0.42);
   background: #fff8ea;
@@ -1577,6 +1587,47 @@ h1 {
   background: rgba(255, 230, 227, 0.92);
 }
 
+.mcp-candidate-meta,
+.mcp-candidate-permissions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mcp-candidate-meta small,
+.mcp-candidate-permissions small {
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  padding: 5px 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-candidate-meta small.neutral {
+  color: #6b5134;
+  background: rgba(232, 220, 202, 0.72);
+}
+
+.mcp-candidate-meta small.success {
+  color: #08745c;
+  background: rgba(218, 248, 238, 0.88);
+}
+
+.mcp-candidate-meta small.warning {
+  color: #9a5c00;
+  background: rgba(255, 237, 202, 0.92);
+}
+
+.mcp-candidate-permissions small {
+  color: #67513e;
+  background: rgba(255, 248, 234, 0.9);
+}
+
 .mcp-detail {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -1637,6 +1688,33 @@ h1 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+}
+
+.mcp-install-scope label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.mcp-install-scope select {
+  height: 34px;
+  min-width: 0;
+  border: 1px solid rgba(216, 190, 162, 0.72);
+  border-radius: 8px;
+  background: #fffdf8;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 10px;
+}
+
+.mcp-installed-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .mcp-install-search input {

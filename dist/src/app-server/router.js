@@ -4,7 +4,7 @@ import { coreEventToJsonRpcNotification, coreEventToThreadDisplayPatchNotificati
 import { AppServerError, errorResponse } from './errors.js';
 import { handleCompactRun, handleCompactStatus, handleContextAnalyze, handleContextStatus, handleMemorySessionStatus, } from './handlers/contextHandlers.js';
 import { handleAuthLogin, handleAuthStatus, handleConfigGet, handleModelAvailability, handleModelProfileCopy, handleModelProfileDelete, handleModelCredentialUpdate, handleModelList, handleModelProfileList, handleModelProfileSave, handleModelProfileSetCurrent, handleModelSet, handleModelTest, } from './handlers/llmHandlers.js';
-import { handleMcpAdd, handleMcpDisable, handleMcpEnable, handleMcpInstallApply, handleMcpInstallList, handleMcpInstallPlan, handleMcpInstallSearch, handleMcpInstallUninstall, handleMcpInspect, handleMcpList, handleMcpRemove, handleMcpRestart, handleMcpTest, handleMcpUpdate, } from './handlers/mcpHandlers.js';
+import { handleMcpAdd, handleMcpDisable, handleMcpEnable, handleMcpInstallApply, handleMcpInstallList, handleMcpInstallPlan, handleMcpInstallRepair, handleMcpInstallSearch, handleMcpInstallUninstall, handleMcpInspect, handleMcpList, handleMcpRemove, handleMcpRestart, handleMcpTest, handleMcpUpdate, } from './handlers/mcpHandlers.js';
 import { handlePermissionPendingList, handlePermissionRespond, handlePermissionSettingsGet, handlePermissionSettingsUpdate, } from './handlers/permissionHandlers.js';
 import { handleSessionHistoryList, handleSessionHistoryRename, handleThreadList, handleThreadMessagesList, handleThreadResume, handleThreadStart, handleTurnInterrupt, handleTurnStart, } from './handlers/sessionHandlers.js';
 import { handleWorkspaceOpen } from './handlers/workspaceHandlers.js';
@@ -104,6 +104,8 @@ export async function handleJsonRpcMessage(context, rawMessage) {
                 return successResponse(request.id, await handleMcpInstallList(context, request.params));
             case 'mcp/install/uninstall':
                 return successResponse(request.id, await handleMcpInstallUninstall(context, request.params));
+            case 'mcp/install/repair':
+                return successResponse(request.id, await handleMcpInstallRepair(context, request.params));
             case 'workspace/open':
                 return successResponse(request.id, await handleWorkspaceOpen(context, request.params));
             case 'thread/start':

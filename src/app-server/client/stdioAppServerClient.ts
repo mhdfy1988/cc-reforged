@@ -24,6 +24,8 @@ import type {
   McpInstallListResult,
   McpInstallPlanParams,
   McpInstallPlanResult,
+  McpInstallRepairParams,
+  McpInstallRepairResult,
   McpInstallSearchParams,
   McpInstallSearchResult,
   McpInstallUninstallParams,
@@ -304,6 +306,13 @@ export class StdioAppServerClient {
     options?: RequestOptions,
   ): Promise<McpInstallUninstallResult> {
     return this.rpc.request('mcp/install/uninstall', params, options)
+  }
+
+  repairMcp(
+    params: McpInstallRepairParams,
+    options?: RequestOptions,
+  ): Promise<McpInstallRepairResult> {
+    return this.rpc.request('mcp/install/repair', params, options)
   }
 
   openWorkspace(

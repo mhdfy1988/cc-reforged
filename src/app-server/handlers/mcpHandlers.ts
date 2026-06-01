@@ -5,6 +5,7 @@ import {
   McpInstallApplyParamsSchema,
   McpInstallListParamsSchema,
   McpInstallPlanParamsSchema,
+  McpInstallRepairParamsSchema,
   McpInstallSearchParamsSchema,
   McpInstallUninstallParamsSchema,
   McpInspectParamsSchema,
@@ -49,6 +50,12 @@ type McpInstallApplyParams = McpInstallPlanParams & {
 
 type McpInstallUninstallParams = {
   name: string
+  confirmed: boolean
+}
+
+type McpInstallRepairParams = {
+  name: string
+  scope?: 'user' | 'project' | 'local'
   confirmed: boolean
 }
 
@@ -178,4 +185,14 @@ export async function handleMcpInstallUninstall(
     params,
   ) as McpInstallUninstallParams
   return context.core.mcp.uninstallInstalledServer(parsedParams)
+}
+
+export async function handleMcpInstallRepair(
+  context: AppServerContext,
+  params: unknown,
+): Promise<Record<string, unknown>> {
+  const parsedParams = McpInstallRepairParamsSchema.parse(
+    params,
+  ) as McpInstallRepairParams
+  return context.core.mcp.repairInstalledServer(parsedParams)
 }

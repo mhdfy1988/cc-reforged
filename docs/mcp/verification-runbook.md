@@ -320,7 +320,32 @@ node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./cli.js
 | 模型 fetch failed | LLM provider/auth/network 问题 | 先用 MCP SDK 和 `mcp list/get` 排除 MCP 问题 |
 | `ccr mcp add-playwright` 重复添加失败 | 同名 `playwright` 已在该 scope 存在 | 使用 `ccr mcp add-playwright --force` 覆盖 |
 
-## 8. 回归命令
+## 8. Installer / Desktop 回归命令
+
+MCP installer、preset registry、Desktop MCP 页面或 App Server MCP API 改动后执行：
+
+```powershell
+npm.cmd run typecheck
+npm.cmd run typecheck:desktop
+npm.cmd run build
+npm.cmd run smoke:mcp-install-presets
+npm.cmd run smoke:mcp-cli-install
+npm.cmd run smoke:mcp-discovery-adapters
+npm.cmd run smoke:mcp-discovery-service
+npm.cmd run smoke:mcp-remote-transport-options
+npm.cmd run smoke:app-server-client
+npm.cmd run desktop:build
+```
+
+remote preset 验证要求：
+
+- 先确认官方 URL 和认证方式。
+- preset 不写用户 token、cookie 或静态个人 header。
+- `source.kind` 使用 `remote-url`，`dataBoundary` 使用 `remote-service`。
+- smoke 用临时 `CCR_CONFIG_DIR` 覆盖 install/status/repair/uninstall，不污染真实用户配置。
+- OAuth 型 remote MCP 可验证到 install plan / config preview / needs-auth 边界，不要求在 CI 中完成用户授权。
+
+## 9. 回归命令
 
 MCP 配置或运行时改动后至少执行：
 

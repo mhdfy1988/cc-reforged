@@ -1,4 +1,4 @@
-import { McpAddParamsSchema, McpDisableParamsSchema, McpEnableParamsSchema, McpInstallApplyParamsSchema, McpInstallListParamsSchema, McpInstallPlanParamsSchema, McpInstallSearchParamsSchema, McpInstallUninstallParamsSchema, McpInspectParamsSchema, McpListParamsSchema, McpRemoveParamsSchema, McpRestartParamsSchema, McpTestParamsSchema, McpUpdateParamsSchema, } from '../protocol.js';
+import { McpAddParamsSchema, McpDisableParamsSchema, McpEnableParamsSchema, McpInstallApplyParamsSchema, McpInstallListParamsSchema, McpInstallPlanParamsSchema, McpInstallRepairParamsSchema, McpInstallSearchParamsSchema, McpInstallUninstallParamsSchema, McpInspectParamsSchema, McpListParamsSchema, McpRemoveParamsSchema, McpRestartParamsSchema, McpTestParamsSchema, McpUpdateParamsSchema, } from '../protocol.js';
 export async function handleMcpList(context, params) {
     const parsedParams = McpListParamsSchema.parse(params ?? {});
     return context.core.mcp.listServers({
@@ -62,5 +62,9 @@ export async function handleMcpInstallList(context, params) {
 export async function handleMcpInstallUninstall(context, params) {
     const parsedParams = McpInstallUninstallParamsSchema.parse(params);
     return context.core.mcp.uninstallInstalledServer(parsedParams);
+}
+export async function handleMcpInstallRepair(context, params) {
+    const parsedParams = McpInstallRepairParamsSchema.parse(params);
+    return context.core.mcp.repairInstalledServer(parsedParams);
 }
 //# sourceMappingURL=mcpHandlers.js.map

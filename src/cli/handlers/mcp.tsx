@@ -14,6 +14,15 @@ import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEve
 import { clearMcpClientConfig, clearServerTokensFromLocalStorage, getMcpClientConfig, readClientSecret, saveMcpClientSecret } from '../../services/mcp/auth.js';
 import { connectToServer, getMcpServerConnectionBatchSize } from '../../services/mcp/client.js';
 import { addMcpConfig, getAllMcpConfigs, getMcpConfigByName, getMcpConfigsByScope, removeMcpConfig } from '../../services/mcp/config.js';
+import { getCcrMcpInstallPreset } from '../../services/mcp/installPresets.js';
+import {
+  applyCcrMcpInstallPlan,
+  createCcrMcpInstallPlan,
+  listCcrMcpInstalledServers,
+  searchCcrMcpInstallCandidates,
+  uninstallCcrMcpInstalledServer,
+  type CcrMcpWritableScope
+} from '../../services/mcp/installManager.js';
 import type { ConfigScope, McpStdioServerConfig, ScopedMcpServerConfig } from '../../services/mcp/types.js';
 import { describeMcpConfigFilePath, ensureConfigScope, getScopeLabel } from '../../services/mcp/utils.js';
 import { AppStateProvider } from '../../state/AppState.js';
@@ -26,6 +35,25 @@ import { cliError, cliOk } from '../exit.js';
 
 function isScopedMcpStdioServerConfig(server: ScopedMcpServerConfig): server is ScopedMcpServerConfig & McpStdioServerConfig {
   return server.type === undefined || server.type === 'stdio';
+}
+
+function ensureWritableMcpScope(scope: string | undefined): CcrMcpWritableScope {
+  const normalized = ensureConfigScope(scope ?? 'user');
+  if (normalized === 'user' || normalized === 'project' || normalized === 'local') {
+    return normalized;
+  }
+  return cliError(`MCP install scope must be local, user, or project. Got "${normalized}".`);
+}
+
+function formatInstallSummary(value: Record<string, unknown>): string {
+  return JSON.stringify(value, null, 2);
+}
+
+function getInstallCandidateByName(name: string) {
+  const result = searchCcrMcpInstallCandidates({
+    query: name
+  });
+  return result.candidates.find(candidate => candidate.manifest.name === name) ?? result.candidates[0] ?? null;
 }
 
 async function checkMcpServerHealth(name: string, server: ScopedMcpServerConfig): Promise<string> {
@@ -287,6 +315,127 @@ export async function mcpGetHandler(name: string): Promise<void> {
   // Use gracefulShutdown to properly clean up MCP server connections
   // (process.exit bypasses cleanup handlers, leaving child processes orphaned)
   await gracefulShutdown(0);
+}
+
+export async function mcpInstallSearchHandler(query = ''): Promise<void> {
+  const result = searchCcrMcpInstallCandidates({
+    query
+  });
+  if (result.candidates.length === 0) {
+    return cliOk(`No MCP install candidates found for "${result.query}".`);
+  }
+  const lines = result.candidates.map(candidate => {
+    const manifest = candidate.manifest;
+    return [
+      candidate.displayName,
+      `name=${manifest.name}`,
+      `kind=${manifest.kind}`,
+      `transport=${manifest.transport}`,
+      `data=${manifest.dataBoundary}`,
+      candidate.trusted ? 'trusted' : 'untrusted'
+    ].join(' | ');
+  });
+  return cliOk(lines.join('\n'));
+}
+
+export async function mcpInstallHandler(preset: string, options: {
+  scope?: string;
+  name?: string;
+  force?: boolean;
+  yes?: boolean;
+}): Promise<void> {
+  const candidate = getInstallCandidateByName(preset);
+  if (!candidate) {
+    return cliError(`No MCP install candidate found for "${preset}".`);
+  }
+  const scope = ensureWritableMcpScope(options.scope);
+  const plan = createCcrMcpInstallPlan({
+    name: options.name,
+    scope,
+    manifest: candidate.manifestInput,
+    force: Boolean(options.force)
+  });
+  if (!options.yes) {
+    return cliOk([
+      `Install plan for ${plan.name}:`,
+      formatInstallSummary({
+        scope: plan.scope,
+        installable: plan.installable,
+        existing: plan.existing,
+        manifest: plan.manifest,
+        serverConfigPreview: plan.serverConfigPreview,
+        risks: plan.risks
+      }),
+      '',
+      'No changes were written. Re-run with --yes to apply this plan.'
+    ].join('\n'));
+  }
+  const applied = await applyCcrMcpInstallPlan({
+    name: plan.name,
+    scope,
+    manifest: candidate.manifestInput,
+    confirmed: true,
+    confirmationToken: plan.confirmation.token,
+    force: Boolean(options.force)
+  });
+  return cliOk(formatInstallSummary(applied));
+}
+
+export async function mcpInstallStatusHandler(): Promise<void> {
+  const status = await listCcrMcpInstalledServers();
+  return cliOk(formatInstallSummary(status));
+}
+
+export async function mcpInstallUninstallHandler(name: string, options: {
+  yes?: boolean;
+}): Promise<void> {
+  if (!options.yes) {
+    return cliOk(`No changes were written. Re-run with --yes to uninstall "${name}".`);
+  }
+  const result = await uninstallCcrMcpInstalledServer({
+    name,
+    confirmed: true
+  });
+  return cliOk(formatInstallSummary(result));
+}
+
+export async function mcpInstallRepairHandler(name: string, options: {
+  scope?: string;
+  yes?: boolean;
+}): Promise<void> {
+  const preset = getCcrMcpInstallPreset(name);
+  if (!preset) {
+    return cliError(`MCP repair currently supports built-in presets only. No preset found for "${name}".`);
+  }
+  const scope = ensureWritableMcpScope(options.scope);
+  const plan = createCcrMcpInstallPlan({
+    name,
+    scope,
+    manifest: preset.manifest,
+    force: true
+  });
+  if (!options.yes) {
+    return cliOk([
+      `Repair plan for ${name}:`,
+      formatInstallSummary({
+        scope: plan.scope,
+        manifest: plan.manifest,
+        serverConfigPreview: plan.serverConfigPreview,
+        risks: plan.risks
+      }),
+      '',
+      'No changes were written. Re-run with --yes to apply this repair.'
+    ].join('\n'));
+  }
+  const result = await applyCcrMcpInstallPlan({
+    name,
+    scope,
+    manifest: preset.manifest,
+    confirmed: true,
+    confirmationToken: plan.confirmation.token,
+    force: true
+  });
+  return cliOk(formatInstallSummary(result));
 }
 
 // mcp add-json (lines 4801–4870)

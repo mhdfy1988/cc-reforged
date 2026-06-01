@@ -1,6 +1,7 @@
 import { addMcpConfig, getClaudeCodeMcpConfigs, getMcpConfigByName, getUserMcpFilePath, isMcpServerDisabled, removeMcpConfig, setMcpServerEnabled, updateMcpConfig, } from '../services/mcp/config.js';
 import { collectCcrMcpConfigInventory, summarizeCcrMcpConfigInventory, } from '../services/mcp/configInventory.js';
 import { getCcrMcpInstallTransport, inferCcrMcpInstallKindFromConfig, } from '../services/mcp/installManifest.js';
+import { getCcrMcpInstallPreset } from '../services/mcp/installPresets.js';
 import { applyCcrMcpInstallPlan, createCcrMcpInstallPlan, listCcrMcpInstalledServers, searchCcrMcpInstallCandidates, uninstallCcrMcpInstalledServer, } from '../services/mcp/installManager.js';
 import { getMcpToolsCommandsAndResources } from '../services/mcp/client.js';
 import { McpServerConfigSchema, } from '../services/mcp/types.js';
@@ -148,6 +149,29 @@ export function listCoreMcpInstalls() {
 }
 export function uninstallCoreMcpInstalledServer(input) {
     return uninstallCcrMcpInstalledServer(input);
+}
+export async function repairCoreMcpInstalledServer(input) {
+    if (!input.confirmed) {
+        throw new CoreError('invalid_params', 'MCP repair requires explicit user confirmation.');
+    }
+    const preset = getCcrMcpInstallPreset(input.name);
+    if (!preset) {
+        throw new CoreError('invalid_params', `MCP repair currently supports built-in presets only. No preset found for "${input.name}".`);
+    }
+    const plan = createCcrMcpInstallPlan({
+        name: input.name,
+        scope: input.scope ?? 'user',
+        manifest: preset.manifest,
+        force: true,
+    });
+    return applyCcrMcpInstallPlan({
+        name: input.name,
+        scope: input.scope ?? 'user',
+        manifest: preset.manifest,
+        force: true,
+        confirmed: true,
+        confirmationToken: plan.confirmation.token,
+    });
 }
 function summarizeMcpServer(name, config, installKind = inferCcrMcpInstallKindFromConfig(config, {
     pluginSource: config.pluginSource,

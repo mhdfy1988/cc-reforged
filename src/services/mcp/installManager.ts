@@ -125,6 +125,11 @@ type CcrMcpInstalledRecord = {
   lockKey: string
 }
 
+type CcrMcpInstallConfigStatus =
+  | 'configured'
+  | 'drifted'
+  | 'missing-config'
+
 type CcrMcpInstalledIndex = {
   schemaVersion: 1
   installed: Record<string, CcrMcpInstalledRecord>
@@ -342,8 +347,10 @@ export async function listCcrMcpInstalledServers(): Promise<
   Record<string, unknown>
 > {
   const index = await readInstalledIndex()
+  const installed = Object.values(index.installed).map(summarizeInstalledRecord)
   return {
-    installed: Object.values(index.installed).map(summarizeInstalledRecord),
+    installed,
+    statusSummary: summarizeInstalledConfigStatuses(installed),
     installPaths: getCcrMcpInstallPaths(),
   }
 }
@@ -826,6 +833,7 @@ async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
 function summarizeInstalledRecord(
   record: CcrMcpInstalledRecord,
 ): Record<string, unknown> {
+  const configStatus = summarizeInstalledConfigStatus(record)
   return {
     name: record.name,
     scope: record.scope,
@@ -839,7 +847,74 @@ function summarizeInstalledRecord(
       record.packageOwnerMarkerPath ??
       (record.packageDir ? getPackageOwnerMarkerPath(record.packageDir) : null),
     lockKey: record.lockKey,
+    configStatus,
   }
+}
+
+function summarizeInstalledConfigStatus(
+  record: CcrMcpInstalledRecord,
+): Record<string, unknown> & { state: CcrMcpInstallConfigStatus } {
+  const expectedConfig = record.serverConfig
+  const expectedConfigHash = hashMcpServerConfig(expectedConfig)
+  const currentConfig = getMcpConfigByName(record.name)
+
+  if (!currentConfig) {
+    return {
+      state: 'missing-config',
+      needsRepair: true,
+      configured: false,
+      drifted: false,
+      expectedConfigHash,
+      currentConfigHash: null,
+      configScope: null,
+      scopeMatches: false,
+      message:
+        'CCR installer record exists, but the MCP server config is missing.',
+    }
+  }
+
+  const currentConfigHash = hashMcpServerConfig(currentConfig)
+  const currentScope =
+    'scope' in currentConfig ? String(currentConfig.scope) : null
+  const scopeMatches = currentScope === record.scope
+  const contentMatches = currentConfigHash === expectedConfigHash
+  const state: CcrMcpInstallConfigStatus =
+    contentMatches && scopeMatches ? 'configured' : 'drifted'
+
+  return {
+    state,
+    needsRepair: state !== 'configured',
+    configured: state === 'configured',
+    drifted: state === 'drifted',
+    expectedConfigHash,
+    currentConfigHash,
+    configScope: currentScope,
+    scopeMatches,
+    expectedConfigPreview: summarizeServerConfigForPlan(expectedConfig),
+    currentConfigPreview: summarizeServerConfigForPlan(currentConfig),
+    message:
+      state === 'configured'
+        ? 'Current MCP config matches the CCR install record.'
+        : 'Current MCP config differs from the CCR install record.',
+  }
+}
+
+function summarizeInstalledConfigStatuses(
+  installed: Record<string, unknown>[],
+): Record<string, number> {
+  const summary: Record<string, number> = {
+    configured: 0,
+    drifted: 0,
+    'missing-config': 0,
+  }
+  for (const record of installed) {
+    const status = record.configStatus
+    if (status && typeof status === 'object' && 'state' in status) {
+      const state = String(status.state)
+      summary[state] = (summary[state] ?? 0) + 1
+    }
+  }
+  return summary
 }
 
 function summarizeServerConfigForPlan(
@@ -951,6 +1026,10 @@ function hashJson(value: unknown): string {
   return createHash('sha256')
     .update(jsonStringify(value))
     .digest('hex')
+}
+
+function hashMcpServerConfig(config: McpServerConfig): string {
+  return hashJson(stripScopedMcpConfig(config))
 }
 
 function sanitizePathPart(value: string): string {

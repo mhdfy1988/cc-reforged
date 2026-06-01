@@ -34,6 +34,8 @@ import type {
   McpInstallListResult,
   McpInstallPlanParams,
   McpInstallPlanResult,
+  McpInstallRepairParams,
+  McpInstallRepairResult,
   McpInstallSearchParams,
   McpInstallSearchResult,
   McpInstallUninstallParams,
@@ -1523,6 +1525,21 @@ async function uninstallMcp(
   return result
 }
 
+async function repairMcp(
+  params: McpInstallRepairParams,
+): Promise<McpInstallRepairResult> {
+  const client = await getAppServerClient()
+  const result = await client.repairMcp(params)
+  await refreshMcpSnapshot()
+  broadcast('state', {
+    message: 'mcp repaired',
+    name: params.name,
+    result,
+    mcp: status.mcp,
+  })
+  return result
+}
+
 async function loginAuth(params: AuthLoginParams = {}): Promise<AuthLoginResult> {
   await ensureAppServer()
   if (!managedClient) {
@@ -2976,6 +2993,13 @@ ipcMain.handle(
   'ccr:mcp-install-uninstall',
   async (_event, params: McpInstallUninstallParams) => {
     return uninstallMcp(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:mcp-install-repair',
+  async (_event, params: McpInstallRepairParams) => {
+    return repairMcp(params)
   },
 )
 

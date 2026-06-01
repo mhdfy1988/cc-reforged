@@ -35,6 +35,7 @@ export function McpPage(props: {
   onEnable: (name: string) => void
   onPlanInstall: (candidate: McpInstallCandidate, scope: McpWritableScope) => void
   onRefresh: () => void
+  onRepair: (record: McpInstallRecord) => void
   onRestart: (name: string) => void
   onSearchInstalls: (query: string) => void
   onTest: (name: string) => void
@@ -42,6 +43,9 @@ export function McpPage(props: {
 }) {
   const [selectedName, setSelectedName] = useState('')
   const [installQuery, setInstallQuery] = useState('')
+  const [installScope, setInstallScope] = useState<McpWritableScope>(
+    DEFAULT_MCP_INSTALL_SCOPE,
+  )
   const mcp = normalizeMcpState(props.mcp)
   const servers = useMemo(
     () => mergeMcpServers(mcp, props.installs),
@@ -51,8 +55,19 @@ export function McpPage(props: {
     servers.find(server => server.name === selectedName) ?? servers[0]
   const selectedTest = selectedServer ? props.testByName[selectedServer.name] : null
   const installedCount = props.installs?.installed?.length ?? 0
+  const needsRepairCount = (props.installs?.installed ?? []).filter(
+    record => record.configStatus?.needsRepair,
+  ).length
   const enabledCount = servers.filter(server => server.enabled !== false).length
-  const candidates = props.installSearch?.candidates ?? []
+  const candidates = useMemo(
+    () =>
+      sortMcpInstallCandidates(
+        props.installSearch?.candidates ?? [],
+        servers,
+        props.installs,
+      ),
+    [props.installSearch?.candidates, props.installs, servers],
+  )
 
   useEffect(() => {
     if (servers.length === 0) {
@@ -71,6 +86,7 @@ export function McpPage(props: {
           <h2>MCP 管理</h2>
           <span>
             {servers.length} 个 server · {enabledCount} 个启用 · {installedCount} 个安装记录
+            {needsRepairCount > 0 ? ` · ${needsRepairCount} 个需修复` : ''}
           </span>
         </div>
         <div className="models-title-actions">
@@ -172,6 +188,22 @@ export function McpPage(props: {
                 搜索
               </button>
             </div>
+            <div className="mcp-install-scope">
+              <label>
+                安装范围
+                <select
+                  disabled={props.busy}
+                  value={installScope}
+                  onChange={event =>
+                    setInstallScope(event.target.value as McpWritableScope)
+                  }
+                >
+                  <option value="user">用户全局</option>
+                  <option value="project">项目共享</option>
+                  <option value="local">本地项目</option>
+                </select>
+              </label>
+            </div>
             <div className="mcp-candidate-list">
               {candidates.length > 0 ? (
                 candidates.map(candidate => {
@@ -180,24 +212,46 @@ export function McpPage(props: {
                     servers,
                     props.installs,
                   )
+                  const metadata = getCandidateMetadata(candidate, installState)
+                  const permissionLabels = getCandidatePermissionLabels(candidate)
                   return (
                     <div
-                      className="mcp-candidate-item"
+                      className={
+                        installState.blocked
+                          ? 'mcp-candidate-item blocked'
+                          : 'mcp-candidate-item'
+                      }
                       key={getCandidateKey(candidate)}
                     >
-                      <span>
-                        <strong>
-                          {candidate.displayName ??
-                            candidate.manifest?.name ??
-                            '未命名 MCP'}
-                        </strong>
-                        <em>
-                          {installState.blocked
-                            ? installState.message
-                            : (candidate.description ??
-                              formatManifest(candidate.manifest))}
-                        </em>
-                      </span>
+                      <div className="mcp-candidate-main">
+                        <span>
+                          <strong>
+                            {candidate.displayName ??
+                              candidate.manifest?.name ??
+                              '未命名 MCP'}
+                          </strong>
+                          <em>
+                            {installState.blocked
+                              ? installState.message
+                              : (candidate.description ??
+                                formatManifest(candidate.manifest))}
+                          </em>
+                        </span>
+                        <div className="mcp-candidate-meta">
+                          {metadata.map(item => (
+                            <small className={item.tone} key={item.label}>
+                              {item.label}
+                            </small>
+                          ))}
+                        </div>
+                        {permissionLabels.length > 0 ? (
+                          <div className="mcp-candidate-permissions">
+                            {permissionLabels.map(label => (
+                              <small key={label}>{label}</small>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
                       <button
                         className="ghost-action"
                         disabled={
@@ -208,7 +262,7 @@ export function McpPage(props: {
                         title={installState.message || undefined}
                         type="button"
                         onClick={() =>
-                          props.onPlanInstall(candidate, DEFAULT_MCP_INSTALL_SCOPE)
+                          props.onPlanInstall(candidate, installScope)
                         }
                       >
                         {installState.label}
@@ -237,15 +291,30 @@ export function McpPage(props: {
                       <strong>{record.name ?? '未命名'}</strong>
                       <em>{formatInstalledRecord(record)}</em>
                     </span>
+                    <small className={getInstallRecordStatusTone(record)}>
+                      {formatInstallRecordStatus(record)}
+                    </small>
                     {record.name ? (
-                      <button
-                        className="ghost-action danger"
-                        disabled={props.busy}
-                        type="button"
-                        onClick={() => props.onUninstall(record.name!)}
-                      >
-                        卸载
-                      </button>
+                      <div className="mcp-installed-actions">
+                        {record.configStatus?.needsRepair ? (
+                          <button
+                            className="ghost-action"
+                            disabled={props.busy}
+                            type="button"
+                            onClick={() => props.onRepair(record)}
+                          >
+                            修复
+                          </button>
+                        ) : null}
+                        <button
+                          className="ghost-action danger"
+                          disabled={props.busy}
+                          type="button"
+                          onClick={() => props.onUninstall(record.name!)}
+                        >
+                          卸载
+                        </button>
+                      </div>
                     ) : null}
                   </div>
                 ))
@@ -332,6 +401,7 @@ function McpServerDetail(props: {
             <McpFactItem label="transport" value={server.transport ?? server.type ?? 'stdio'} />
             <McpFactItem label="来源" value={server.source ?? server.inventory?.sourceId ?? 'config'} />
             <McpFactItem label="安装类型" value={server.installKind ?? server.inventory?.installKind ?? 'manual-config'} />
+            <McpFactItem label="安装状态" value={formatInstallRecordStatus(server.installed)} />
             <McpFactItem label="配置文件" value={server.inventory?.configPath ?? server.installed?.configPath ?? '无'} />
             <McpFactItem label="写入目标" value={server.inventory?.writePath ?? server.installed?.configPath ?? '只读'} />
             <McpFactItem label="命令" value={formatCommand(server)} />
@@ -622,6 +692,12 @@ function formatMcpInstallKindLabel(kind: string | null | undefined): string {
   switch (kind) {
     case 'stdio-npm-package':
       return 'npm 包'
+    case 'remote-url':
+      return '远端服务'
+    case 'builtin-preset':
+      return '内置预设'
+    case 'plugin-provided':
+      return '插件提供'
     case 'manual-config':
       return '手动配置'
     default:
@@ -633,10 +709,12 @@ function formatMcpDataBoundaryLabel(value: string | null | undefined): string {
   switch (value) {
     case 'remote-service':
       return '可能连接外部服务'
-    case 'local':
+    case 'local-only':
       return '本地'
-    case 'same-provider':
-      return '同供应商'
+    case 'plugin-defined':
+      return '插件定义'
+    case 'unknown':
+      return '未知边界'
     default:
       return value || '未知'
   }
@@ -704,6 +782,116 @@ export function formatManifest(manifest: McpInstallCandidate['manifest']): strin
   return [manifest.kind, manifest.transport, manifest.version]
     .filter(Boolean)
     .join(' · ')
+}
+
+export function sortMcpInstallCandidates(
+  candidates: McpInstallCandidate[],
+  servers: McpServerView[],
+  installs: McpInstallListState | null,
+): McpInstallCandidate[] {
+  return [...candidates].sort((a, b) => {
+    const aState = getCandidateInstallState(a, servers, installs)
+    const bState = getCandidateInstallState(b, servers, installs)
+    if (aState.blocked !== bState.blocked) {
+      return aState.blocked ? 1 : -1
+    }
+    return getCandidateDisplayName(a).localeCompare(getCandidateDisplayName(b))
+  })
+}
+
+function getCandidateDisplayName(candidate: McpInstallCandidate): string {
+  return candidate.displayName ?? candidate.manifest?.name ?? '未命名 MCP'
+}
+
+function getCandidateMetadata(
+  candidate: McpInstallCandidate,
+  installState: ReturnType<typeof getCandidateInstallState>,
+): Array<{ label: string; tone: string }> {
+  const manifest = candidate.manifest
+  return [
+    {
+      label: installState.blocked ? installState.label : '可安装',
+      tone: installState.blocked ? 'warning' : 'success',
+    },
+    {
+      label: formatMcpInstallKindLabel(manifest?.kind),
+      tone: 'neutral',
+    },
+    {
+      label: formatMcpTransportLabel(manifest?.transport),
+      tone: 'neutral',
+    },
+    {
+      label: getCandidateSourceLabel(candidate),
+      tone: 'neutral',
+    },
+    {
+      label: formatMcpDataBoundaryLabel(manifest?.dataBoundary),
+      tone: manifest?.dataBoundary === 'remote-service' ? 'warning' : 'neutral',
+    },
+    candidate.trusted === true
+      ? {
+          label: '可信来源',
+          tone: 'success',
+        }
+      : null,
+  ].filter((item): item is { label: string; tone: string } => Boolean(item))
+}
+
+function getCandidatePermissionLabels(candidate: McpInstallCandidate): string[] {
+  return (candidate.manifest?.permissionKinds ?? []).map(formatMcpPermissionLabel)
+}
+
+function formatMcpPermissionLabel(kind: string): string {
+  switch (kind) {
+    case 'network':
+      return '网络'
+    case 'process':
+      return '本地进程'
+    case 'filesystem':
+      return '文件'
+    case 'oauth':
+      return 'OAuth'
+    case 'secret':
+      return '密钥'
+    case 'environment':
+      return '环境变量'
+    default:
+      return kind
+  }
+}
+
+function getCandidateSourceLabel(candidate: McpInstallCandidate): string {
+  const source = getCandidateManifestSource(candidate)
+  if (!source) {
+    return '未知来源'
+  }
+  if (source.kind === 'stdio-npm-package') {
+    return typeof source.packageName === 'string' ? source.packageName : 'npm 包'
+  }
+  if (source.kind === 'remote-url') {
+    return typeof source.url === 'string' ? source.url : '远端服务'
+  }
+  if (source.kind === 'builtin-preset') {
+    return typeof source.presetId === 'string' ? source.presetId : '内置预设'
+  }
+  if (source.kind === 'plugin-provided') {
+    return typeof source.pluginSource === 'string'
+      ? source.pluginSource
+      : '插件提供'
+  }
+  return typeof source.kind === 'string' ? source.kind : '未知来源'
+}
+
+function getCandidateManifestSource(
+  candidate: McpInstallCandidate,
+): Record<string, unknown> | null {
+  const source = candidate.manifestInput?.source
+  return isRecord(source) ? source : null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export function getCandidateKey(candidate: McpInstallCandidate): string {
@@ -784,4 +972,31 @@ export function formatInstalledRecord(record: McpInstallRecord): string {
   ]
     .filter(Boolean)
     .join(' · ')
+}
+
+function formatInstallRecordStatus(
+  record: McpInstallRecord | undefined,
+): string {
+  switch (record?.configStatus?.state) {
+    case 'configured':
+      return '配置一致'
+    case 'drifted':
+      return '配置漂移'
+    case 'missing-config':
+      return '配置缺失'
+    default:
+      return record ? '状态未知' : '未由 CCR 安装'
+  }
+}
+
+function getInstallRecordStatusTone(record: McpInstallRecord): string {
+  switch (record.configStatus?.state) {
+    case 'configured':
+      return 'success'
+    case 'drifted':
+    case 'missing-config':
+      return 'warning'
+    default:
+      return 'neutral'
+  }
 }

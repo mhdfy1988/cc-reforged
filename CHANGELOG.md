@@ -7,6 +7,23 @@
 ### 改动
 
 - MCP 安装推荐清单抽出为共享 `installPresets`，安装搜索、计划和应用流程复用同一套 preset 定义，减少后续新增 MCP 来源时在 client / installer 内重复维护。
+- MCP 安装 preset 继续模块化：新增 `presets/registry`、`presets/playwright` 和 C-1 设计文档，后续新增 MCP 候选不再需要改 `installManager`。
+- MCP 安装 preset registry 增加重复 id 校验、可实例化测试 registry、包名搜索覆盖和 smoke，避免新增候选时静默覆盖或漏搜。
+- MCP client 开始抽通用 helper：新增 `toolSafety` 承载 `file://` 导航阻断判断和错误构造，并补 `smoke:mcp-tool-safety`。
+- MCP client 结果处理抽出为 `resultProcessing`，统一承载 MCP content 转换、schema 推断、大输出处理和图片保护逻辑，并补 `smoke:mcp-result-processing`。
+- MCP URL elicitation 解析抽出为 `urlElicitation`，统一校验 error data、阻断 `file://` elicitation 并生成拒绝文案。
+- MCP 工具调用运行时辅助抽出为 `toolRuntime`，覆盖 timeout、duration、tool error 解析和 HTTP session closed 判断，并补 `smoke:mcp-tool-runtime`。
+- MCP 能力发现结果适配抽出为 `discoveryAdapters`，先承载 resource 映射、prompt command 包装、tool 搜索提示和描述截断规则，并补 smoke。
+- MCP discovery 编排继续拆分：新增 `discoveryService` 承载 tools/resources/prompts 的 SDK list 请求、prompt command 获取和资源工具补齐，`client.ts` 保留工具调用运行时闭包。
+- MCP transport 构造辅助抽出为 `transportFactory`，先承载 stdio launch config、Node websocket transport 和 SDK control transport 创建，并补 `smoke:mcp-transport-factory`。
+- MCP remote transport options 抽出为 `remoteTransportOptions`，统一承载 SSE / HTTP / claude.ai proxy 的 headers、auth provider、proxy、step-up detection 和 request timeout 组合，并补 `smoke:mcp-remote-transport-options`。
+- Playwright MCP 专属安装实现归位到 `providers/playwright/install`，旧 `playwrightPreset` 保留兼容导出口，并补 provider smoke 固定新旧导出一致。
+- MCP 安装 preset 新增 Context7，复用 registry / provider 结构暴露 `@upstash/context7-mcp` 的 stdio 安装候选，并补搜索与 plan smoke。
+- MCP 安装 preset 新增 Sentry hosted remote MCP，使用 `https://mcp.sentry.dev/mcp` 的 HTTP remote-url 配置，明确 OAuth / remote-service 数据边界，并补 CLI install/uninstall smoke。
+- Desktop MCP 页面安装候选适配多 preset 展示，候选卡会显示状态、来源、transport、数据边界和权限标签，并优先展示可安装项。
+- CLI 新增 `ccr mcp search/install/status/uninstall/repair` 管理命令，复用 `installManager`，默认 dry-run，显式 `--yes` 后才写入或卸载，并补端到端 smoke。
+- MCP installer status 新增安装记录与当前配置签名校验，能区分 `configured`、`drifted` 和 `missing-config`；Desktop MCP 页面会展示配置一致、漂移或缺失状态，repair smoke 覆盖缺失配置恢复。
+- Desktop MCP 管理页补齐安装范围选择和已安装记录修复入口；App Server 新增 `mcp/install/repair`，Desktop 可对内置 preset 的缺失/漂移配置执行用户确认后的修复。
 - Desktop 展示协议错误卡补齐诊断字段，缺失 projection 时会展示来源、item 类型、状态、内容形态、身份字段和原始引用等信息，便于定位真实坏协议来源。
 
 ### BUG 修复
