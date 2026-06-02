@@ -287,7 +287,7 @@ Provider 原始响应
 
 ## MCP 安装与使用
 
-MCP 已提前进入 `0.5.x` 工具治理线。CCR 当前已经有用户级 MCP 配置、Desktop MCP 管理页、受控安装计划、安装记录、启用/禁用、检测、卸载和 MCP 工具卡展示。
+MCP 已提前进入 `0.5.x` 工具治理线。CCR 当前已经有用户级 MCP 配置、Desktop MCP 管理页、受控安装计划、安装记录、导入 / 创建安装配置、常用候选、启用/禁用、检测、卸载和 MCP 工具卡展示。
 
 ### Desktop 推荐流程
 
@@ -302,6 +302,8 @@ MCP 已提前进入 `0.5.x` 工具治理线。CCR 当前已经有用户级 MCP �
 7. 会话里需要浏览器时，明确说“用浏览器打开/查询/操作”。成功时会看到 `MCP playwright / browser_*` 工具卡。
 
 如果已经安装，候选会显示“已安装”，不要重复安装；直接在 MCP 页面里使用 `检测`、`重启`、`禁用/启用`。由 CCR 安装器管理的 server 会在详情页提供 `卸载`，配置漂移或缺失时提供 `修复`。
+
+自写 MCP 优先使用 `导入 MCP 安装配置` 或 `创建 MCP 安装配置`。导入 / 创建后会先生成安装计划，用户确认后才写入真实 MCP 配置；确认弹窗可勾选 `保存到常用安装配置`，让它以后出现在安装候选里。
 
 ### CLI 安装
 
@@ -334,6 +336,7 @@ ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
 | 项目根目录 `.mcp.json` | 项目级共享 MCP 配置 |
 | `~/.ccr/mcp/installed.json` | CCR 受控安装记录 |
 | `~/.ccr/mcp/lock.json` | CCR 受控安装锁定记录 |
+| `~/.ccr/mcp/manifests/` | 用户保存的常用 MCP 安装配置 |
 | `~/.ccr/mcp/packages/` | CCR installer-owned 包缓存和 owner marker |
 | `~/.ccr/logs/mcp/` | MCP 安装、连接和诊断日志 |
 
@@ -341,9 +344,9 @@ ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
 
 模型可以建议需要某类 MCP 能力，但不能绕过用户确认自行下载安装、写配置、启动陌生 stdio server 或卸载删除文件。
 
-自写 MCP 推荐先通过手工配置进入 Server 列表；后续会补 `导入 manifest`、`创建本地 MCP` 和 `接管已有配置`，让本地 stdio、本地 HTTP、npm 包和远端 HTTP 都走同一套安装计划确认流程。
+自写 MCP 可以通过 `导入 MCP 安装配置`、`创建 MCP 安装配置` 或手写配置进入。手写配置只会进入 Server 列表；如需让 CCR 负责修复 / 卸载，需要在详情页显式 `接管`。
 
-更完整的 MCP 文档见 [MCP 文档入口](docs/mcp/README.md)。
+更完整的 MCP 文档见 [MCP 文档入口](docs/mcp/README.md) 和 [MCP 配置示例](docs/mcp/config-examples.md)。
 
 ## Desktop 能力
 

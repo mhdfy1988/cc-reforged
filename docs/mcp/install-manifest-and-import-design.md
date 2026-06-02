@@ -1,6 +1,6 @@
 # MCP 安装清单与导入设计
 
-本文档记录 CCR 对 MCP 安装清单、安装候选、手工配置和后续导入能力的产品与架构口径。它描述的是当前实现边界和下一步设计，不等同于 MCP 官方协议规范。
+本文档记录 CCR 对 MCP 安装清单、安装候选、手工配置和导入 / 创建能力的产品与架构口径。它描述的是当前实现边界和下一步设计，不等同于 MCP 官方协议规范。
 
 ## 目标
 
@@ -9,7 +9,7 @@ MCP 管理面必须区分三类对象：
 | 对象 | 含义 | 当前入口 | 管理能力 |
 | --- | --- | --- | --- |
 | 已配置 MCP | 当前 CCR 能从配置源读到的 MCP server | `~/.ccr/mcp.json`、项目 `.mcp.json`、旧 settings、插件、企业配置等 | 查看、检测、启用、禁用、重启 |
-| 可安装 MCP | 可以由 CCR 安装器生成安装计划的候选 | 当前仅来自内置 preset registry | 安装计划、确认安装 |
+| 可安装 MCP | 可以由 CCR 安装器生成安装计划的候选 | 内置 preset registry、用户本地 manifest 目录、远端 registry 占位 | 安装计划、确认安装 |
 | CCR 受控安装记录 | 由 CCR 安装器写入并记录 owner 的 MCP | `~/.ccr/mcp/installed.json`、`~/.ccr/mcp/lock.json` | 状态校验、修复、卸载 |
 
 这三者不能混成一个列表。安装列表展示“可以安装什么”，Server 列表展示“当前实际配置了什么”，安装记录只表示“CCR 安装器拥有管理权的东西”。
@@ -165,9 +165,9 @@ HTTP / SSE MCP 由 CCR 连接 URL。公网服务、本地 HTTP 服务都属于�
 
 ## 前台入口设计
 
-第一版先做“导入 manifest”，不做完整 manifest 可视化编辑器。
+当前已落地“导入 manifest”和轻量创建向导，不做完整 manifest 可视化编辑器。
 
-### 第一版：导入 MCP 安装配置
+### 导入 MCP 安装配置
 
 入口：`导入 MCP 安装配置`。
 
@@ -184,7 +184,7 @@ HTTP / SSE MCP 由 CCR 连接 URL。公网服务、本地 HTTP 服务都属于�
 
 第一版不直接上传或托管 MCP 包，只导入本地 manifest。包下载、服务启动或远端连接仍由 manifest 描述的来源类型决定。
 
-### 第二版：轻量创建向导
+### 创建 MCP 安装配置
 
 入口：`创建 MCP 安装配置`。
 
@@ -227,12 +227,17 @@ HTTP / SSE MCP 由 CCR 连接 URL。公网服务、本地 HTTP 服务都属于�
 - 没有 owner 记录的 MCP 不做 installer-owned 卸载。
 - 不把旧实现作为静默 fallback；manifest 校验失败要显式报错。
 
-## 推荐实现顺序
+## 当前已落地
 
-1. 补 `mcp/install/import-plan` 或复用现有 `mcp/install/plan` 接收前台导入 manifest。
-2. Desktop 增加 `导入 MCP` 按钮和文件读取。
-3. 安装确认弹窗展示导入来源、manifest 摘要和写入计划。
-4. 安装成功后刷新 Server 列表和安装状态。
-5. 增加本地 stdio / 本地 HTTP 创建向导。
-6. 增加“接管已有配置”。
-7. 最后再考虑远端 registry、分享安装源或上传包能力。
+1. Desktop 支持 `导入 MCP 安装配置`，本地 manifest 校验后进入安装计划确认。
+2. Desktop 支持 `创建 MCP 安装配置`，覆盖本地 stdio、本地 HTTP、npm 包和远端 HTTP。
+3. 安装确认弹窗支持 `保存到常用安装配置`，写入 `~/.ccr/mcp/manifests/<name>.json` 后进入安装候选。
+4. 用户本地 manifest 目录已经进入统一候选搜索结果。
+5. Server 详情页支持显式 `接管` 手工配置，接管后才获得 installer-owned 修复和卸载语义。
+
+## 后续增强
+
+1. 远端 registry 由占位升级为可配置来源，但必须有来源可信度、权限提示和失败诊断。
+2. 团队共享安装源需要区分“项目建议候选”和“项目已启用配置”。
+3. 本地 HTTP MCP 如需由 CCR 一键启动，需要在 manifest 中扩展受控启动任务，不能默认把 HTTP URL 当作可启动服务。
+4. 完整 JSON 编辑器只作为高级模式，仍必须复用当前 schema 校验和安装计划确认。

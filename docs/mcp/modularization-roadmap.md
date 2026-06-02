@@ -13,13 +13,16 @@ MCP 模块化已经完成第一轮 C 系列收口：
 - Playwright / Context7 的 provider 实现已从通用 installer 中隔离。
 - `installManager` 仍是安装计划、确认、写配置、记录安装和卸载的唯一业务入口。
 - Desktop MCP 页面已能展示多个安装候选；候选卡保持精简，只展示名称、说明和安装状态，详细风险与写入信息放在安装确认弹窗。
+- Desktop 已支持 `导入 MCP 安装配置`、`创建 MCP 安装配置`、`保存到常用安装配置` 和手工配置显式接管。
+- 安装候选已统一为多来源模型，来源包括内置 preset、用户本地 manifest 目录和远端 registry 占位。
 - CLI 已有 `ccr mcp search/install/status/uninstall/repair`，默认 dry-run，显式 `--yes` 后才写配置或卸载。
 - `client.ts` 已抽出若干低风险模块：`toolSafety`、`resultProcessing`、`urlElicitation`、`toolRuntime`、`discoveryAdapters`、`transportFactory`。
 
 当前最大剩余问题：
 
 - Desktop 当前默认用户全局安装，项目共享 / 本地项目 scope 暂不在界面展示。
-- 安装列表当前只支持内置 preset，还没有 manifest 导入、本地 MCP 创建向导或远端 registry。
+- 远端 registry 当前只是 disabled source 占位，还没有接入公网或团队共享安装源。
+- 本地 HTTP MCP 当前只负责连接 URL，不负责一键启动本地 HTTP 服务。
 - 手工配置可以在 Server 详情页显式接管为 CCR 受控安装记录；接管前不会自动获得 installer-owned 修复 / 卸载权限。
 - `client.ts` 仍承载连接生命周期、startup timeout、stderr、onerror/onclose、reconnect 和部分工具运行时闭包。
 
@@ -46,7 +49,7 @@ C-12 CLI install / uninstall / status / repair
 E-1 -> E-2 -> E-3 -> E-4 -> E-5
 ```
 
-D 系列已完成并提交，后续进入 E 系列：先做 manifest 导入，再做轻量创建向导，然后做手工配置接管，再统一安装来源和候选列表，最后做文档、smoke、CHANGELOG 与提交收口。
+D 系列已完成并提交，E 系列已经完成 manifest 导入、轻量创建向导、手工配置接管、统一安装来源和候选列表。后续继续时优先看本文“当前状态”和 [`install-manifest-and-import-design.md`](./install-manifest-and-import-design.md)，不要从旧的 E-1 / E-2 设计态重做。
 
 下面保留的 D 系列章节是历史执行记录。若历史记录中提到“安装范围选择”“已安装列表”等旧 Desktop 形态，以本文“当前状态”和 [`install-manifest-and-import-design.md`](./install-manifest-and-import-design.md) 为当前权威口径。
 
@@ -56,7 +59,7 @@ D 系列已完成并提交，后续进入 E 系列：先做 manifest 导入，�
 
 改动范围：
 
-- Desktop 增加 `导入 MCP` 入口。
+- Desktop 增加 `导入 MCP 安装配置` 入口。
 - 读取本地 JSON 并按 `CcrMcpInstallManifestSchema` 校验。
 - 展示 manifest 摘要：名称、来源、transport、权限、数据边界。
 - 复用 `mcp/install/plan` 和 `mcp/install/apply`。
@@ -78,9 +81,11 @@ D 系列已完成并提交，后续进入 E 系列：先做 manifest 导入，�
 迭代：
 
 - E-1.1 协议与基础设施：确认 Desktop preload / App Server 是否需要新增 `importManifest` 辅助；优先复用现有 `mcp/install/plan`，只补文件读取、JSON parse、schema 错误归一化。
-- E-1.2 Desktop 导入入口：在 MCP 安装区增加 `导入 MCP`，支持选择本地 JSON，导入后展示 manifest 摘要，不直接写配置。
+- E-1.2 Desktop 导入入口：在 MCP 安装区增加 `导入 MCP 安装配置`，支持选择本地 JSON，导入后展示 manifest 摘要，不直接写配置。
 - E-1.3 安装闭环：导入 manifest 后进入现有安装确认弹窗，确认后调用 `mcp/install/apply`，成功后刷新 Server、安装状态和候选状态。
 - E-1.4 验证与样例：补 local-directory stdio 和本地 HTTP manifest 示例 / smoke，覆盖坏 JSON、缺字段、重复名称和安装成功路径。
+
+状态：已实现。Desktop 入口名为 `导入 MCP 安装配置`，导入后复用安装计划确认链路；示例 manifest 位于 `docs/examples/mcp/`。验证命令包含 `npm.cmd run smoke:mcp-manifest-import`。
 
 ## Goal E-2：本地 MCP 创建向导
 
@@ -109,9 +114,11 @@ D 系列已完成并提交，后续进入 E 系列：先做 manifest 导入，�
 迭代：
 
 - E-2.1 manifest builder：新增纯函数把四类表单模型转换为 `CcrMcpInstallManifestInput`，并补字段级测试。
-- E-2.2 向导骨架：Desktop 增加 `创建本地 MCP` 入口、模板选择和基础表单布局，先覆盖本地 stdio / 本地 HTTP。
+- E-2.2 向导骨架：Desktop 增加 `创建 MCP 安装配置` 入口、模板选择和基础表单布局，先覆盖本地 stdio / 本地 HTTP。
 - E-2.3 扩展模板：补 npm 包 MCP、远端 HTTP MCP、env / headers 输入和基础校验。
 - E-2.4 计划接入与验证：表单生成 manifest 后进入 E-1 安装确认链路，补 UI 空状态、错误状态和 smoke。
+
+状态：已实现。创建向导支持本地 stdio、本地 HTTP、npm 包和远端 HTTP；生成计划后可在确认弹窗选择 `保存到常用安装配置`。验证命令包含 `npm.cmd run smoke:mcp-manifest-builder`。
 
 ## Goal E-3：接管已有手工配置
 
@@ -213,6 +220,8 @@ D 系列已完成并提交，后续进入 E 系列：先做 manifest 导入，�
 - E-5.2 验证矩阵：跑 installer、App Server、Desktop、manifest 导入、向导、接管相关 smoke。
 - E-5.3 变更盘点：确认 dist、docs、smoke、CHANGELOG 和源码提交范围。
 - E-5.4 提交发布：按项目规则 commit / push，并记录本轮残留风险。
+
+状态：进行中。本阶段已经补充 README、MCP 入口、配置示例和安装清单设计文档，后续提交前继续执行文档 diff / smoke 校验。
 
 ## Goal E-6：远端 registry / 分享安装源评估
 

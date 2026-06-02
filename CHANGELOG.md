@@ -2,7 +2,7 @@
 
 本文记录 CCR 面向用户可见的版本变化。主分支可能包含最新版本之后的开发中改动；正式发布以 GitHub Release 和 tag 为准。
 
-## Unreleased
+## 0.5.3 - 2026-06-02
 
 ### 改动
 
@@ -29,6 +29,7 @@
 - MCP 安装 manifest schema 补齐示例、文档和 builder smoke，可描述本地 stdio、本地 HTTP、npm 包和远端 HTTP MCP。
 - MCP 支持显式接管已有手工配置：从当前 config 反推最小 manifest，用户确认后写入 `installed.json` / `lock.json`，接管后才开放 installer-owned 修复 / 卸载，并补 `smoke:mcp-adopt`。
 - MCP 安装候选搜索升级为统一来源模型，支持内置 preset、本地 `~/.ccr/mcp/manifests/*.json` 只读扫描和远端 registry 占位，返回来源、路径、状态和同名冲突信息，并补 `smoke:mcp-install-candidates`。
+- MCP 文档同步当前导入 / 创建 / 保存常用安装配置 / 接管能力，新增配置示例说明 `~/.ccr/mcp.json`、项目 `.mcp.json`、安装清单和本地候选目录的区别。
 - Desktop 展示协议错误卡补齐诊断字段，缺失 projection 时会展示来源、item 类型、状态、内容形态、身份字段和原始引用等信息，便于定位真实坏协议来源。
 
 ### BUG 修复
