@@ -2,6 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, scre
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { appendFile, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -16,6 +17,7 @@ import {
 import {
   CcrMcpInstallManifestSchema,
   summarizeCcrMcpInstallManifest,
+  type CcrMcpInstallManifestInput,
 } from '../../../../src/services/mcp/installManifest.js'
 import { DesktopUpdateService } from './updateService.js'
 import type { DesktopUpdateState, DesktopUpdateStatus } from './updateState.js'
@@ -123,6 +125,11 @@ type ImportedMcpManifestResult = {
   path?: string
   manifest?: Record<string, unknown>
   summary?: ReturnType<typeof summarizeCcrMcpInstallManifest>
+}
+
+type SaveMcpInstallManifestInput = {
+  manifest: Record<string, unknown>
+  overwrite?: boolean
 }
 
 type DesktopRuntime = {
@@ -1514,11 +1521,11 @@ async function planMcpAdopt(
 
 async function chooseMcpInstallManifest(): Promise<ImportedMcpManifestResult> {
   const result = await dialog.showOpenDialog({
-    title: '导入 MCP manifest',
-    buttonLabel: '导入',
+    title: '导入 MCP 安装配置',
+    buttonLabel: '导入配置',
     properties: ['openFile'],
     filters: [
-      { name: 'MCP manifest', extensions: ['json'] },
+      { name: 'MCP 安装配置', extensions: ['json'] },
       { name: 'JSON', extensions: ['json'] },
     ],
   })
@@ -1558,6 +1565,40 @@ async function applyMcpInstall(
     mcp: status.mcp,
   })
   return result
+}
+
+async function saveMcpInstallManifest(
+  params: SaveMcpInstallManifestInput,
+): Promise<Record<string, unknown>> {
+  const manifest = CcrMcpInstallManifestSchema().parse(
+    params.manifest as CcrMcpInstallManifestInput,
+  )
+  const manifestDir = join(getDesktopCcrConfigDir(), 'mcp', 'manifests')
+  const filePath = join(manifestDir, `${sanitizeMcpManifestFileName(manifest.name)}.json`)
+  if (!params.overwrite && existsSync(filePath)) {
+    throw new Error(`MCP 安装配置已存在：${filePath}`)
+  }
+  await mkdir(manifestDir, { recursive: true })
+  await writeFile(filePath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+  const result = {
+    saved: true,
+    name: manifest.name,
+    path: filePath,
+    manifest: summarizeCcrMcpInstallManifest(manifest),
+  }
+  broadcast('state', {
+    message: 'mcp install manifest saved',
+    result,
+  })
+  return result
+}
+
+function getDesktopCcrConfigDir(): string {
+  return process.env.CCR_CONFIG_DIR || join(homedir(), '.ccr')
+}
+
+function sanitizeMcpManifestFileName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '_')
 }
 
 async function applyMcpAdopt(
@@ -3056,6 +3097,13 @@ ipcMain.handle(
   'ccr:mcp-install-apply',
   async (_event, params: McpInstallApplyParams) => {
     return applyMcpInstall(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:mcp-install-save-manifest',
+  async (_event, params: SaveMcpInstallManifestInput) => {
+    return saveMcpInstallManifest(params)
   },
 )
 

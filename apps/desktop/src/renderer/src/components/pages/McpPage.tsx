@@ -65,11 +65,12 @@ export function McpPage(props: {
   testByName: Record<string, McpTestState>
   onApplyInstall: (planView: McpInstallPlanViewState) => void
   onCancelInstall: () => void
+  onChangeInstallPlan: (planView: McpInstallPlanViewState) => void
   onAdopt: (name: string) => void
   onDisable: (name: string) => void
   onEnable: (name: string) => void
   onImportManifest: () => void
-  onCreateManifest: (manifest: Record<string, unknown>) => void
+  onCreateManifest: (manifest: Record<string, unknown>) => boolean | void
   onPlanInstall: (candidate: McpInstallCandidate, scope: McpWritableScope) => void
   onRefresh: () => void
   onRepair: (record: McpInstallRecord) => void
@@ -216,7 +217,7 @@ export function McpPage(props: {
                 type="button"
                 onClick={props.onImportManifest}
               >
-                导入 MCP
+                导入 MCP 安装配置
               </button>
               <button
                 className="ghost-action"
@@ -227,7 +228,7 @@ export function McpPage(props: {
                   setCreateError(null)
                 }}
               >
-                创建本地 MCP
+                创建 MCP 安装配置
               </button>
             </div>
             {createOpen ? (
@@ -243,7 +244,12 @@ export function McpPage(props: {
                   try {
                     const manifest = buildCcrMcpInstallManifestInput(createDraft)
                     setCreateError(null)
-                    props.onCreateManifest(manifest as Record<string, unknown>)
+                    const accepted = props.onCreateManifest(
+                      manifest as Record<string, unknown>,
+                    )
+                    if (accepted !== false) {
+                      setCreateOpen(false)
+                    }
                   } catch (error) {
                     setCreateError(
                       error instanceof Error ? error.message : String(error),
@@ -339,6 +345,7 @@ export function McpPage(props: {
           busy={props.busy}
           planView={props.installPlan}
           onApply={props.onApplyInstall}
+          onChange={props.onChangeInstallPlan}
           onCancel={props.onCancelInstall}
         />
       ) : null}
@@ -675,6 +682,7 @@ function McpInstallConfirmDialog(props: {
   busy: boolean
   planView: McpInstallPlanViewState
   onApply: (planView: McpInstallPlanViewState) => void
+  onChange: (planView: McpInstallPlanViewState) => void
   onCancel: () => void
 }) {
   const titleId = useId()
@@ -746,6 +754,25 @@ function McpInstallConfirmDialog(props: {
             <strong>需要注意</strong>
             <span>{getMcpInstallCaution(plan.risks ?? [])}</span>
           </div>
+          {props.planView.canSaveToCandidates ? (
+            <label className="mcp-install-save-option">
+              <input
+                checked={Boolean(props.planView.saveToCandidates)}
+                disabled={props.busy || installBlocked}
+                type="checkbox"
+                onChange={event =>
+                  props.onChange({
+                    ...props.planView,
+                    saveToCandidates: event.target.checked,
+                  })
+                }
+              />
+              <span>
+                <strong>保存到常用安装配置</strong>
+                <em>保存后会出现在安装候选列表中。</em>
+              </span>
+            </label>
+          ) : null}
           <details className="mcp-install-dialog-technical">
             <summary>技术细节</summary>
             <dl>

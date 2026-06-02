@@ -464,6 +464,30 @@ export async function listCcrMcpInstalledServers(): Promise<
   }
 }
 
+export async function saveCcrMcpInstallCandidateManifest(input: {
+  manifest: CcrMcpInstallManifestInput
+  overwrite?: boolean
+}): Promise<Record<string, unknown>> {
+  const manifest = createCcrMcpInstallManifest(input.manifest)
+  const manifestDir = getLocalManifestDir()
+  const filePath = join(manifestDir, `${sanitizePathPart(manifest.name)}.json`)
+  if (!input.overwrite) {
+    const existing = await readJsonFile<unknown | null>(filePath, null)
+    if (existing !== null) {
+      throw new Error(
+        `MCP install candidate manifest already exists: ${filePath}`,
+      )
+    }
+  }
+  await writeJsonFile(filePath, manifest)
+  return {
+    saved: true,
+    name: manifest.name,
+    path: filePath,
+    manifest: summarizeCcrMcpInstallManifest(manifest),
+  }
+}
+
 export async function createCcrMcpAdoptPlan(input: {
   name: string
 }): Promise<CcrMcpAdoptPlan> {

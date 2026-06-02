@@ -826,6 +826,46 @@
   padding: 12px;
 }
 
+.mcp-install-save-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid rgba(216, 190, 162, 0.58);
+  border-radius: 8px;
+  background: rgba(255, 253, 249, 0.74);
+  padding: 10px 12px;
+}
+
+.mcp-install-save-option input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.mcp-install-save-option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.mcp-install-save-option strong {
+  color: #3d2b1b;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.mcp-install-save-option em {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
 .mcp-install-dialog-summary strong,
 .mcp-install-dialog-note strong {
   color: #3d2b1b;

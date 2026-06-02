@@ -167,25 +167,26 @@ HTTP / SSE MCP 由 CCR 连接 URL。公网服务、本地 HTTP 服务都属于�
 
 第一版先做“导入 manifest”，不做完整 manifest 可视化编辑器。
 
-### 第一版：导入 manifest
+### 第一版：导入 MCP 安装配置
 
-入口：`导入 MCP`。
+入口：`导入 MCP 安装配置`。
 
 流程：
 
-1. 用户选择 `manifest.json`。
+1. 用户选择 MCP 安装配置 JSON。
 2. CCR 读取并用当前 manifest schema 校验。
 3. 前台展示名称、来源、连接方式、权限、数据边界、写入位置。
 4. CCR 调用现有 `mcp/install/plan` 生成安装计划。
-5. 用户确认安装。
+5. 用户确认安装，可选择“保存到常用安装配置”。
 6. CCR 写入 MCP 配置、`installed.json` 和 `lock.json`。
-7. 安装后进入 Server 列表，并获得卸载 / 修复能力。
+7. 如果用户选择保存，CCR 将 manifest 写入 `~/.ccr/mcp/manifests/<name>.json`，后续出现在安装候选列表中。
+8. 安装后进入 Server 列表，并获得卸载 / 修复能力。
 
 第一版不直接上传或托管 MCP 包，只导入本地 manifest。包下载、服务启动或远端连接仍由 manifest 描述的来源类型决定。
 
 ### 第二版：轻量创建向导
 
-入口：`创建本地 MCP`。
+入口：`创建 MCP 安装配置`。
 
 向导不暴露完整 JSON，而是给常见模板：
 
@@ -197,6 +198,7 @@ HTTP / SSE MCP 由 CCR 连接 URL。公网服务、本地 HTTP 服务都属于�
 | 远端 HTTP MCP | 名称、URL、OAuth/header 说明 | `source.kind = remote-url`、`transport = http` |
 
 向导生成 manifest 后，仍进入同一套安装计划确认流程。
+第一版只在安装计划确认弹窗提供“保存到常用安装配置”选项，避免创建表单和当前 server 详情页混入候选目录管理语义。
 
 ### 高级模式：JSON 编辑
 

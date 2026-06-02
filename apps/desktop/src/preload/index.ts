@@ -168,6 +168,11 @@ type McpInstallApplyInput = McpInstallPlanInput & {
   confirmationToken: string
 }
 
+type McpInstallSaveManifestInput = {
+  manifest: Record<string, unknown>
+  overwrite?: boolean
+}
+
 type McpInstallAdoptPlanInput = {
   name: string
 }
@@ -375,6 +380,8 @@ const api = {
     ipcRenderer.invoke('ccr:mcp-install-choose-manifest'),
   applyMcpInstall: (input: McpInstallApplyInput) =>
     ipcRenderer.invoke('ccr:mcp-install-apply', input),
+  saveMcpInstallManifest: (input: McpInstallSaveManifestInput) =>
+    ipcRenderer.invoke('ccr:mcp-install-save-manifest', input),
   planMcpAdopt: (input: McpInstallAdoptPlanInput) =>
     ipcRenderer.invoke('ccr:mcp-install-adopt-plan', input),
   applyMcpAdopt: (input: McpInstallAdoptApplyInput) =>

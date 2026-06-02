@@ -25,6 +25,7 @@
 - MCP installer status 新增安装记录与当前配置签名校验，能区分 `configured`、`drifted` 和 `missing-config`；Desktop MCP 页面会展示配置一致、漂移或缺失状态，repair smoke 覆盖缺失配置恢复。
 - Desktop MCP 管理页补齐安装范围选择和已安装记录修复入口；App Server 新增 `mcp/install/repair`，Desktop 可对内置 preset 的缺失/漂移配置执行用户确认后的修复。
 - Desktop MCP 安装入口收敛为用户全局默认安装，新增本地 manifest 导入和轻量创建向导；导入 / 创建都会进入统一安装计划确认，不直接写配置。
+- Desktop MCP 安装确认支持将导入 / 创建生成的 manifest 保存到常用安装配置，保存后会进入本地候选目录并出现在安装候选列表中。
 - MCP 安装 manifest schema 补齐示例、文档和 builder smoke，可描述本地 stdio、本地 HTTP、npm 包和远端 HTTP MCP。
 - MCP 支持显式接管已有手工配置：从当前 config 反推最小 manifest，用户确认后写入 `installed.json` / `lock.json`，接管后才开放 installer-owned 修复 / 卸载，并补 `smoke:mcp-adopt`。
 - MCP 安装候选搜索升级为统一来源模型，支持内置 preset、本地 `~/.ccr/mcp/manifests/*.json` 只读扫描和远端 registry 占位，返回来源、路径、状态和同名冲突信息，并补 `smoke:mcp-install-candidates`。

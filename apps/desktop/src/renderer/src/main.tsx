@@ -917,6 +917,8 @@ function App({ initialStatus = null }: AppProps) {
           plan,
           manifestInput,
           manifestPath: imported.path,
+          canSaveToCandidates: true,
+          saveToCandidates: false,
         })
         const name = plan.name ?? imported.summary?.name ?? '未命名 MCP'
         setMcpPageMessage(
@@ -941,7 +943,12 @@ function App({ initialStatus = null }: AppProps) {
           scope: 'user',
           manifest: manifestInput,
         })) as McpInstallPlanState
-        setMcpInstallPlan({ plan, manifestInput })
+        setMcpInstallPlan({
+          plan,
+          manifestInput,
+          canSaveToCandidates: true,
+          saveToCandidates: false,
+        })
         setMcpPageMessage(
           plan.installable === false
             ? (plan.existing?.message ?? '该 MCP 已存在，无需重复安装。')
@@ -981,11 +988,28 @@ function App({ initialStatus = null }: AppProps) {
           confirmed: true,
           confirmationToken: token,
         })
+        if (planView.saveToCandidates) {
+          await window.ccr.saveMcpInstallManifest({
+            manifest: planView.manifestInput,
+            overwrite: true,
+          })
+        }
+        const search =
+          planView.saveToCandidates
+            ? ((await window.ccr.searchMcpInstalls({})) as McpInstallSearchState)
+            : null
         const installs =
           (await window.ccr.listMcpInstalls()) as McpInstallListState
         setMcpInstalls(installs)
+        if (search) {
+          setMcpInstallSearch(search)
+        }
         setMcpInstallPlan(null)
-        setMcpPageMessage(`已安装 MCP：${planView.plan.name ?? '未命名'}`)
+        setMcpPageMessage(
+          planView.saveToCandidates
+            ? `已安装并保存到常用安装配置：${planView.plan.name ?? '未命名'}`
+            : `已安装 MCP：${planView.plan.name ?? '未命名'}`,
+        )
       })
     } catch (error) {
       setMcpPageError(error instanceof Error ? error.message : String(error))
@@ -1554,9 +1578,10 @@ function App({ initialStatus = null }: AppProps) {
                 message={mcpPageMessage}
                 mcp={status?.mcp ?? { servers: [], errors: [] }}
                 testByName={mcpTestByName}
-                onApplyInstall={planView => void applyMcpInstallPlan(planView)}
-                onCancelInstall={() => setMcpInstallPlan(null)}
-                onDisable={name => void disableMcpServer(name)}
+                  onApplyInstall={planView => void applyMcpInstallPlan(planView)}
+                  onCancelInstall={() => setMcpInstallPlan(null)}
+                  onChangeInstallPlan={setMcpInstallPlan}
+                  onDisable={name => void disableMcpServer(name)}
                 onEnable={name => void enableMcpServer(name)}
                 onPlanInstall={(candidate, scope) =>
                   void planMcpInstallFromCandidate(candidate, scope)

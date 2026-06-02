@@ -219,6 +219,24 @@ export async function listCcrMcpInstalledServers() {
         installPaths: getCcrMcpInstallPaths(),
     };
 }
+export async function saveCcrMcpInstallCandidateManifest(input) {
+    const manifest = createCcrMcpInstallManifest(input.manifest);
+    const manifestDir = getLocalManifestDir();
+    const filePath = join(manifestDir, `${sanitizePathPart(manifest.name)}.json`);
+    if (!input.overwrite) {
+        const existing = await readJsonFile(filePath, null);
+        if (existing !== null) {
+            throw new Error(`MCP install candidate manifest already exists: ${filePath}`);
+        }
+    }
+    await writeJsonFile(filePath, manifest);
+    return {
+        saved: true,
+        name: manifest.name,
+        path: filePath,
+        manifest: summarizeCcrMcpInstallManifest(manifest),
+    };
+}
 export async function createCcrMcpAdoptPlan(input) {
     const name = input.name.trim();
     if (!name) {

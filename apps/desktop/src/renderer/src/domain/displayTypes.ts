@@ -224,6 +224,8 @@ export type McpInstallPlanViewState = {
   plan: McpInstallPlanState
   manifestInput: Record<string, unknown>
   manifestPath?: string
+  canSaveToCandidates?: boolean
+  saveToCandidates?: boolean
 }
 
 export type McpAdoptPlanState = {
