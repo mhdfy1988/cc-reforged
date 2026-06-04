@@ -209,6 +209,70 @@ type McpInstallRepairInput = {
   confirmed: boolean
 }
 
+type SkillRefInput = {
+  skillRef: string
+}
+
+type SkillInstallSearchInput = {
+  query?: string
+}
+
+type SkillInstallPlanInput = {
+  scope?: 'user' | 'project'
+  manifest: Record<string, unknown>
+  force?: boolean
+  securityOverrideToken?: string
+}
+
+type SkillInstallApplyInput = SkillInstallPlanInput & {
+  confirmed: boolean
+  confirmationToken: string
+}
+
+type SkillImportPlanInput = {
+  source: Record<string, unknown>
+}
+
+type SkillImportApplyInput = SkillImportPlanInput & {
+  confirmed: boolean
+  confirmationToken: string
+}
+
+type SkillSetEnabledInput = SkillRefInput & {
+  enabled: boolean
+}
+
+type SkillSetInvocationInput = SkillRefInput & {
+  modelInvocable?: boolean
+  userInvocable?: boolean
+}
+
+type SkillInstallUninstallInput = SkillRefInput & {
+  confirmed: boolean
+}
+
+type SkillInstallRepairInput = SkillInstallUninstallInput
+
+type SkillInstallSaveManifestInput = {
+  manifest: Record<string, unknown>
+  overwrite?: boolean
+}
+
+type DesktopPathPickerInput = {
+  mode: 'file' | 'directory'
+  title?: string
+  buttonLabel?: string
+  filters?: Array<{
+    name: string
+    extensions: string[]
+  }>
+}
+
+type DesktopPathPickerResult = {
+  canceled: boolean
+  path?: string
+}
+
 type ResumeThreadInput = {
   sessionId: string
   title?: string
@@ -335,6 +399,8 @@ const api = {
   getStatus: () => ipcRenderer.invoke('ccr:get-status'),
   restartAppServer: () => ipcRenderer.invoke('ccr:restart-app-server'),
   chooseWorkspace: () => ipcRenderer.invoke('ccr:choose-workspace'),
+  choosePath: (input: DesktopPathPickerInput): Promise<DesktopPathPickerResult> =>
+    ipcRenderer.invoke('ccr:choose-path', input),
   openWorkspace: (path: string) => ipcRenderer.invoke('ccr:open-workspace', path),
   startThread: (title?: string) => ipcRenderer.invoke('ccr:start-thread', title),
   listThreads: () => ipcRenderer.invoke('ccr:list-threads'),
@@ -391,6 +457,29 @@ const api = {
     ipcRenderer.invoke('ccr:mcp-install-uninstall', input),
   repairMcp: (input: McpInstallRepairInput) =>
     ipcRenderer.invoke('ccr:mcp-install-repair', input),
+  listSkillInstalls: () => ipcRenderer.invoke('ccr:skill-install-list'),
+  inspectSkill: (input: SkillRefInput) =>
+    ipcRenderer.invoke('ccr:skill-inspect', input),
+  searchSkillInstalls: (input?: SkillInstallSearchInput) =>
+    ipcRenderer.invoke('ccr:skill-install-search', input ?? {}),
+  planSkillInstall: (input: SkillInstallPlanInput) =>
+    ipcRenderer.invoke('ccr:skill-install-plan', input),
+  applySkillInstall: (input: SkillInstallApplyInput) =>
+    ipcRenderer.invoke('ccr:skill-install-apply', input),
+  planSkillImport: (input: SkillImportPlanInput) =>
+    ipcRenderer.invoke('ccr:skill-import-plan', input),
+  applySkillImport: (input: SkillImportApplyInput) =>
+    ipcRenderer.invoke('ccr:skill-import-apply', input),
+  setSkillEnabled: (input: SkillSetEnabledInput) =>
+    ipcRenderer.invoke('ccr:skill-state-enabled', input),
+  setSkillInvocation: (input: SkillSetInvocationInput) =>
+    ipcRenderer.invoke('ccr:skill-state-invocation', input),
+  uninstallSkill: (input: SkillInstallUninstallInput) =>
+    ipcRenderer.invoke('ccr:skill-install-uninstall', input),
+  repairSkill: (input: SkillInstallRepairInput) =>
+    ipcRenderer.invoke('ccr:skill-install-repair', input),
+  saveSkillInstallManifest: (input: SkillInstallSaveManifestInput) =>
+    ipcRenderer.invoke('ccr:skill-install-save-manifest', input),
   refreshRuntime: () => ipcRenderer.invoke('ccr:refresh-runtime'),
   runCompact: (instruction?: string) =>
     ipcRenderer.invoke('ccr:compact-run', instruction),

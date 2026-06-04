@@ -9,7 +9,7 @@ MCP 管理面必须区分三类对象：
 | 对象 | 含义 | 当前入口 | 管理能力 |
 | --- | --- | --- | --- |
 | 已配置 MCP | 当前 CCR 能从配置源读到的 MCP server | `~/.ccr/mcp.json`、项目 `.mcp.json`、旧 settings、插件、企业配置等 | 查看、检测、启用、禁用、重启 |
-| 可安装 MCP | 可以由 CCR 安装器生成安装计划的候选 | 内置 preset registry、用户本地 manifest 目录、远端 registry 占位 | 安装计划、确认安装 |
+| 可安装 MCP | 可以由 CCR 安装器生成安装计划的候选 | 内置 preset registry、用户本地 manifest 目录；远端 registry 已暂停 | 安装计划、确认安装 |
 | CCR 受控安装记录 | 由 CCR 安装器写入并记录 owner 的 MCP | `~/.ccr/mcp/installed.json`、`~/.ccr/mcp/lock.json` | 状态校验、修复、卸载 |
 
 这三者不能混成一个列表。安装列表展示“可以安装什么”，Server 列表展示“当前实际配置了什么”，安装记录只表示“CCR 安装器拥有管理权的东西”。
@@ -23,7 +23,7 @@ MCP 管理面必须区分三类对象：
 - `src/services/mcp/presets/sentry.ts`
 - `src/services/mcp/presets/registry.ts`
 - 用户本地 manifest 目录：`~/.ccr/mcp/manifests/*.json`
-- 远端 registry：仅保留来源占位，当前不访问公网服务
+- 远端 registry：已暂停，仅保留 disabled source / backlog 记录，当前不访问公网服务
 
 Desktop 的安装区调用 `mcp/install/search`，最终走 `searchCcrMcpInstallCandidates(...)`。返回候选会带 `sourceType`、`sourceLabel`、`originPath`、`state`、`stateMessage` 和 `duplicateGroupCount`，前台只负责展示这些状态，不自行推断来源语义。
 
@@ -204,6 +204,18 @@ HTTP / SSE MCP 由 CCR 连接 URL。公网服务、本地 HTTP 服务都属于�
 
 完整 JSON 编辑器只作为高级模式。它可以用于调试和快速验证，但不作为主入口。原因是 manifest 字段较多，直接暴露会让普通用户难以判断 `source`、`serverConfig`、`entry`、`permissions` 和 `dataBoundary` 的关系。
 
+### 安装确认弹窗
+
+MCP 安装确认弹窗沿用“先理解，再确认，再看技术细节”的结构：
+
+1. 顶部展示动作标题、MCP 名称和安装范围。
+2. 如果 manifest 提供 `description`，以独立说明块展示；没有说明时不占位。
+3. 主确认区只放确认后会发生的动作和必要注意事项，例如写入用户全局 MCP 配置、以后可在 MCP 页面管理、使用时会启动本地进程或连接远端服务。
+4. 启动方式、数据边界、来源类型、配置变更数量、具体路径和原始 manifest 事实放入折叠的“技术细节”。
+5. 前台只展示安装计划返回的风险、写入项和注意事项，不自行复制 installer 的判断逻辑。
+
+本地进程、HTTP、SSE、远端服务这几类对象在用户侧的风险感知不同。主确认区应优先说清“运行时会启动本地进程”或“运行时会连接远端 URL”，不要只展示 `transport=stdio/http` 这类实现字段。
+
 ## 接管已有配置
 
 手工配置可以被“接管为 CCR 管理”，但必须单独确认。
@@ -237,7 +249,7 @@ HTTP / SSE MCP 由 CCR 连接 URL。公网服务、本地 HTTP 服务都属于�
 
 ## 后续增强
 
-1. 远端 registry 由占位升级为可配置来源，但必须有来源可信度、权限提示和失败诊断。
+1. 远端 registry 暂停，后续若恢复，需要先完成 registry URL 配置、index schema、checksum、缓存、信任策略、权限提示和失败诊断设计。
 2. 团队共享安装源需要区分“项目建议候选”和“项目已启用配置”。
 3. 本地 HTTP MCP 如需由 CCR 一键启动，需要在 manifest 中扩展受控启动任务，不能默认把 HTTP URL 当作可启动服务。
 4. 完整 JSON 编辑器只作为高级模式，仍必须复用当前 schema 校验和安装计划确认。

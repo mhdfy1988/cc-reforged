@@ -250,6 +250,9 @@ export class ThreadDisplayReducer {
     }
     if (isThreadDisplayMessageLikeFact(fact)) {
       const item = createMessageLikeDisplayItem(fact)
+      if (!item.projection) {
+        return null
+      }
       this.appendStateItem(item, inputEvent)
       return { op: 'append_item', item }
     }

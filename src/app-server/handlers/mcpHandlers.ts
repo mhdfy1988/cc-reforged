@@ -8,6 +8,7 @@ import {
   McpInstallListParamsSchema,
   McpInstallPlanParamsSchema,
   McpInstallRepairParamsSchema,
+  McpInstallSaveManifestParamsSchema,
   McpInstallSearchParamsSchema,
   McpInstallUninstallParamsSchema,
   McpInspectParamsSchema,
@@ -48,6 +49,11 @@ type McpInstallPlanParams = {
 type McpInstallApplyParams = McpInstallPlanParams & {
   confirmed: boolean
   confirmationToken: string
+}
+
+type McpInstallSaveManifestParams = {
+  manifest: Record<string, unknown>
+  overwrite?: boolean
 }
 
 type McpInstallAdoptPlanParams = {
@@ -178,6 +184,16 @@ export async function handleMcpInstallApply(
     params,
   ) as McpInstallApplyParams
   return context.core.mcp.applyInstall(parsedParams)
+}
+
+export async function handleMcpInstallSaveManifest(
+  context: AppServerContext,
+  params: unknown,
+): Promise<Record<string, unknown>> {
+  const parsedParams = McpInstallSaveManifestParamsSchema.parse(
+    params,
+  ) as McpInstallSaveManifestParams
+  return context.core.mcp.saveInstallManifest(parsedParams)
 }
 
 export async function handleMcpInstallAdoptPlan(

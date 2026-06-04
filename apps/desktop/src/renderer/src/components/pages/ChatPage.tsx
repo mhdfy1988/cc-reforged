@@ -75,7 +75,7 @@ export function ChatPage(props: {
 
   return (
     <>
-      <section className="workbench-main">
+      <section className="workbench-main chat-workbench">
         <div className="workbench-top">
           <div className="workbench-head">
             <div className="session-meta">{props.threadTitle ?? '当前会话'}</div>

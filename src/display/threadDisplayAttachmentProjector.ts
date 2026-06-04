@@ -14,6 +14,7 @@ import type {
 
 type JsonObject = Record<string, unknown>
 type PathSafety = 'workspace' | 'outside_workspace' | 'remote' | 'unknown'
+type AttachmentNameSource = 'metadata' | 'path' | 'fallback'
 
 export function extractAttachmentSnapshotsFromContentBlocks(input: {
   eventId: string
@@ -125,7 +126,7 @@ export function formatAttachmentSummary(value: unknown): string {
 
 export function formatAttachmentContentBlock(block: JsonObject): string {
   const type = getString(block, ['type']) ?? ''
-  return `${getAttachmentTypeText(type)}：${getAttachmentName(block, undefined, 0)}`
+  return `${getAttachmentTypeText(type)}：${getAttachmentNameResolution(block, undefined, 0).name}`
 }
 
 const GENERATED_OUTPUT_IMAGE_PATH_PATTERN =
@@ -206,10 +207,23 @@ function createAttachmentSnapshotFromBlock(input: {
 }): ThreadDisplayAttachmentSnapshot {
   const generatedArtifact = getGeneratedArtifactSnapshotFromBlock(input.block)
   const path = getAttachmentPath(input.block, generatedArtifact)
-  const name = getAttachmentName(input.block, path, input.index)
+  const nameResolution = getAttachmentNameResolution(
+    input.block,
+    path,
+    input.index,
+  )
+  const name = nameResolution.name
   const pathFields = path ? getPathFields(path) : { safety: 'unknown' as const }
   const origin = getAttachmentOrigin(input.block)
   const source = origin === 'model_output' ? 'ModelOutput' : input.source
+  const diagnostic = getAttachmentDiagnostic({
+    block: input.block,
+    eventId: input.eventId,
+    index: input.index,
+    nameSource: nameResolution.source,
+    path,
+    source,
+  })
   return {
     id: getAttachmentId(input.block, input.eventId, input.index),
     source,
@@ -238,6 +252,7 @@ function createAttachmentSnapshotFromBlock(input: {
     expiresAt: getString(input.block, ['expiresAt', 'expires_at']),
     generatedArtifact,
     identity: input.identity,
+    ...(diagnostic ? { diagnostic } : {}),
     raw: input.block,
   }
 }
@@ -253,25 +268,65 @@ function getAttachmentId(
   )
 }
 
-function getAttachmentName(
+function getAttachmentNameResolution(
   block: JsonObject,
   path: string | undefined,
   index: number,
-): string {
+): { name: string; source: AttachmentNameSource } {
   const nestedFile = getJsonObject(block.file)
-  return (
-    getString(block, [
-      'displayPath',
-      'displayName',
-      'display_name',
-      'name',
-      'filename',
-      'fileName',
-    ]) ??
-    getString(nestedFile, ['displayPath', 'filePath', 'path']) ??
-    (path ? getPathBasename(path) : undefined) ??
-    `附件 ${index + 1}`
-  )
+  const explicitName = getString(block, [
+    'displayPath',
+    'displayName',
+    'display_name',
+    'name',
+    'filename',
+    'fileName',
+  ])
+  if (explicitName) {
+    return { name: explicitName, source: 'metadata' }
+  }
+  const nestedName = getString(nestedFile, ['displayPath', 'filePath', 'path'])
+  if (nestedName) {
+    return { name: nestedName, source: 'metadata' }
+  }
+  if (path) {
+    return { name: getPathBasename(path), source: 'path' }
+  }
+  return { name: `附件 ${index + 1}`, source: 'fallback' }
+}
+
+function getAttachmentDiagnostic(input: {
+  block: JsonObject
+  eventId: string
+  index: number
+  nameSource: AttachmentNameSource
+  path: string | undefined
+  source: ThreadDisplayAttachmentSnapshot['source']
+}): ThreadDisplayAttachmentSnapshot['diagnostic'] | undefined {
+  const missingFields: string[] = []
+  if (input.nameSource === 'fallback') {
+    missingFields.push('displayName/name/filename/file.path')
+  }
+  if (!input.path) {
+    missingFields.push('savedPath/path/url/source.path')
+  }
+  if (missingFields.length === 0) {
+    return undefined
+  }
+
+  return {
+    reason:
+      input.nameSource === 'fallback' && !input.path
+        ? '附件块缺少名称和路径，无法判断具体文件。'
+        : input.nameSource === 'fallback'
+          ? '附件块缺少可读名称，已使用兜底名称。'
+          : '附件块缺少可操作路径，只能展示元数据。',
+    missingFields,
+    rawType: getString(input.block, ['type']) ?? 'unknown',
+    eventId: input.eventId,
+    index: input.index,
+    source: input.source,
+  }
 }
 
 function getAttachmentPath(

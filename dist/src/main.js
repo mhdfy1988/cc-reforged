@@ -3582,6 +3582,36 @@ async function run() {
         const { mcpResetChoicesHandler } = await import('./cli/handlers/mcp.js');
         await mcpResetChoicesHandler();
     });
+    // claude skill
+    const skill = program.command('skill').description('Manage CCR Skill install candidates and installed packages').configureHelp(createSortedHelpConfig()).enablePositionalOptions();
+    skill.command('search [query]').description('Search installable Skill candidates').option('--json', 'Output as JSON').action(async (query, options) => {
+        const { skillSearchHandler } = await import('./cli/handlers/skills.js');
+        await skillSearchHandler(query ?? '', options);
+    });
+    skill.command('status').description('List Skill packages installed through the CCR installer').option('--json', 'Output as JSON').action(async (options) => {
+        const { skillStatusHandler } = await import('./cli/handlers/skills.js');
+        await skillStatusHandler(options);
+    });
+    skill.command('inspect <name>').description('Inspect an installed Skill package').option('--json', 'Output as JSON').action(async (name, options) => {
+        const { skillInspectHandler } = await import('./cli/handlers/skills.js');
+        await skillInspectHandler(name, options);
+    });
+    skill.command('import').description('Prepare or apply a Skill import plan').requiredOption('--kind <kind>', 'Import source kind: local-skill-dir, local-archive, codex-skill-dir, openclaw-skill-dir, claude-command').requiredOption('--path <path>', 'Import source path').option('-y, --yes', 'Apply without printing a dry-run plan').option('--json', 'Output as JSON').action(async (options) => {
+        const { skillImportHandler } = await import('./cli/handlers/skills.js');
+        await skillImportHandler(options);
+    });
+    skill.command('install [candidate]').description('Prepare or apply a Skill install plan').option('--manifest <path>', 'Install manifest JSON file').option('-s, --scope <scope>', 'Install scope: user or project', 'user').option('--force', 'Replace an existing installed Skill with the same name').option('-y, --yes', 'Apply without printing a dry-run plan').option('--json', 'Output as JSON').action(async (candidate, options) => {
+        const { skillInstallHandler } = await import('./cli/handlers/skills.js');
+        await skillInstallHandler(candidate, options);
+    });
+    skill.command('uninstall <name>').description('Uninstall a Skill package owned by the CCR installer').option('-y, --yes', 'Confirm uninstall').option('--json', 'Output as JSON').action(async (name, options) => {
+        const { skillUninstallHandler } = await import('./cli/handlers/skills.js');
+        await skillUninstallHandler(name, options);
+    });
+    skill.command('repair <name>').description('Repair a Skill package owned by the CCR installer').option('-y, --yes', 'Confirm repair').option('--json', 'Output as JSON').action(async (name, options) => {
+        const { skillRepairHandler } = await import('./cli/handlers/skills.js');
+        await skillRepairHandler(name, options);
+    });
     // claude server
     if (feature('DIRECT_CONNECT')) {
         program.command('server').description('Start a CCR session server').option('--port <number>', 'HTTP port', '0').option('--host <string>', 'Bind address', '0.0.0.0').option('--auth-token <token>', 'Bearer token for auth').option('--unix <path>', 'Listen on a unix domain socket').option('--workspace <dir>', 'Default working directory for sessions that do not specify cwd').option('--idle-timeout <ms>', 'Idle timeout for detached sessions in ms (0 = never expire)', '600000').option('--max-sessions <n>', 'Maximum concurrent sessions (0 = unlimited)', '32').action(async (opts) => {

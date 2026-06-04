@@ -22,6 +22,28 @@ YYYY-MM-DD-p<阶段号>-<简短主题>.md
 
 当前 Goal：
 
+- [2026-06-02 Skill S-1 标准模型与现有运行时归一](./2026-06-02-skill-s1-standard-model-plan.md)
+  - [S-1.1 模型与 Schema 边界](./2026-06-02-skill-s1-1-model-schema.md)
+  - [S-1.2 Frontmatter 归一与兼容元数据](./2026-06-02-skill-s1-2-normalizer.md)
+  - [S-1.3 Command Adapter 等价适配](./2026-06-02-skill-s1-3-command-adapter.md)
+  - [S-1.4 SkillCatalog 查询、分组和去重](./2026-06-02-skill-s1-4-catalog.md)
+  - [S-1.5 Loader 最小接入与回归验证](./2026-06-02-skill-s1-5-loader-integration.md)
+- [2026-06-02 Skill S-2 本地导入与兼容转换](./2026-06-02-skill-s2-import-conversion-plan.md)
+- [2026-06-02 Skill S-3 安装计划与记录](./2026-06-02-skill-s3-install-record-plan.md)
+- [2026-06-02 Skill S-1 到 S-3 基础阶段收口核验](./2026-06-02-skill-s1-s3-closeout.md)
+- [2026-06-02 Skill S-4 安全扫描与风险提示](./2026-06-02-skill-s4-security-scan-plan.md)
+- [2026-06-03 Skill S-4 安全扫描与风险提示收口](./2026-06-03-skill-s4-closeout.md)
+- [2026-06-03 Skill S-5 Desktop Skill 管理面](./2026-06-03-skill-s5-desktop-management-plan.md)
+- [2026-06-03 Skill S-5 Desktop Skill 管理面收口](./2026-06-03-skill-s5-closeout.md)
+- [2026-06-03 Skill S-6 运行时启用治理与 installed package 接入](./2026-06-03-skill-s6-runtime-activation-plan.md)
+- [2026-06-03 Skill S-6 运行时启用治理与 installed package 接入收口](./2026-06-03-skill-s6-closeout.md)
+- [2026-06-03 Skill hooks / shell 运行时等价与安全收口](./2026-06-03-skill-hooks-shell-runtime-security-plan.md)
+- [2026-06-03 Skill S-7 来源扩展](./2026-06-03-skill-s7-source-expansion-plan.md)
+- [2026-06-03 Skill S-8 运行时 Catalog 统一](./2026-06-03-skill-s8-runtime-catalog-unification-plan.md)
+- [2026-06-03 Skill S-9 CLI 管理](./2026-06-03-skill-s9-cli-management-plan.md)
+- [2026-06-03 Skill / MCP S-10 发布前收口](./2026-06-03-skill-mcp-s10-closeout-plan.md)
+- [2026-06-03 Skill S-11 内置 Skill preset 内容层](./2026-06-03-skill-s11-builtin-presets-plan.md)
+- [2026-06-03 Skill / MCP 发布前测试用例体系](./2026-06-03-skill-mcp-test-goals-plan.md)
 - [2026-05-31 ThreadDisplay 残留入口与文档收口](./2026-05-31-thread-display-closeout.md)
 - [2026-05-31 ThreadDisplay 全事件 Ordered Display Reducer 深化](./2026-05-31-thread-display-full-ordered-reducer-next.md)
   - [2-1 输入来源矩阵与 unsupported 边界](./2026-05-31-thread-display-full-ordered-reducer-01-input-source-matrix.md)（已完成）

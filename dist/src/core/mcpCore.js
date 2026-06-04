@@ -2,7 +2,7 @@ import { addMcpConfig, getClaudeCodeMcpConfigs, getMcpConfigByName, getUserMcpFi
 import { collectCcrMcpConfigInventory, summarizeCcrMcpConfigInventory, } from '../services/mcp/configInventory.js';
 import { getCcrMcpInstallTransport, inferCcrMcpInstallKindFromConfig, } from '../services/mcp/installManifest.js';
 import { getCcrMcpInstallPreset } from '../services/mcp/installPresets.js';
-import { applyCcrMcpAdoptPlan, applyCcrMcpInstallPlan, createCcrMcpAdoptPlan, createCcrMcpInstallPlan, listCcrMcpInstalledServers, searchCcrMcpInstallCandidates, uninstallCcrMcpInstalledServer, } from '../services/mcp/installManager.js';
+import { applyCcrMcpAdoptPlan, applyCcrMcpInstallPlan, createCcrMcpAdoptPlan, createCcrMcpInstallPlan, listCcrMcpInstalledServers, saveCcrMcpInstallCandidateManifest, searchCcrMcpInstallCandidates, uninstallCcrMcpInstalledServer, } from '../services/mcp/installManager.js';
 import { getMcpToolsCommandsAndResources } from '../services/mcp/client.js';
 import { McpServerConfigSchema, } from '../services/mcp/types.js';
 import { getPluginErrorMessage } from '../types/plugin.js';
@@ -142,6 +142,12 @@ export async function applyCoreMcpInstall(input) {
         force: input.force ?? false,
         confirmed: input.confirmed,
         confirmationToken: input.confirmationToken,
+    });
+}
+export function saveCoreMcpInstallManifest(input) {
+    return saveCcrMcpInstallCandidateManifest({
+        manifest: input.manifest,
+        overwrite: input.overwrite,
     });
 }
 export function planCoreMcpAdopt(input) {

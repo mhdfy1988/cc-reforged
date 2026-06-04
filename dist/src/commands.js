@@ -136,7 +136,8 @@ import advisor from './commands/advisor.js';
 import { logError } from './utils/log.js';
 import { toError } from './utils/errors.js';
 import { logForDebugging } from './utils/debug.js';
-import { getSkillDirCommands, clearSkillCaches, getDynamicSkills, } from './skills/loadSkillsDir.js';
+import { getSkillDirCommands, clearSkillCaches, getDynamicSkills, getDynamicSkillsVersion, } from './skills/loadSkillsDir.js';
+import { createSkillRuntimeCatalog } from './skills/skillRuntimeCatalog.js';
 import { getBundledSkills } from './skills/bundledSkills.js';
 import { getBuiltinPluginSkillCommands } from './plugins/builtinPlugins.js';
 import { getPluginCommands, clearPluginCommandCache, getPluginSkills, clearPluginSkillsCache, } from './utils/plugins/loadPluginCommands.js';
@@ -383,55 +384,38 @@ export function meetsAvailabilityRequirement(cmd) {
  * Loads all command sources (skills, plugins, workflows). Memoized by cwd
  * because loading is expensive (disk I/O, dynamic imports).
  */
-const loadAllCommands = memoize(async (cwd) => {
+const loadAllCommands = memoize(async (cwd, dynamicSkillsVersion) => {
+    void dynamicSkillsVersion;
     const [{ skillDirCommands, pluginSkills, bundledSkills, builtinPluginSkills }, pluginCommands, workflowCommands,] = await Promise.all([
         getSkills(cwd),
         getPluginCommands(),
         getWorkflowCommands ? getWorkflowCommands(cwd) : Promise.resolve([]),
     ]);
-    return [
-        ...bundledSkills,
-        ...builtinPluginSkills,
+    const runtimeSkillCatalog = createSkillRuntimeCatalog([
         ...skillDirCommands,
+        ...pluginSkills,
+        ...builtinPluginSkills,
+        ...bundledSkills,
+        ...getDynamicSkills(),
+    ]);
+    if (runtimeSkillCatalog.diagnostics.length > 0) {
+        logForDebugging(`Skill runtime catalog diagnostics: ${runtimeSkillCatalog.diagnostics.length}`);
+    }
+    return [
+        ...runtimeSkillCatalog.commands,
         ...workflowCommands,
         ...pluginCommands,
-        ...pluginSkills,
         ...COMMANDS(),
     ];
-});
+}, (cwd, dynamicSkillsVersion) => `${cwd}\0${dynamicSkillsVersion}`);
 /**
  * Returns commands available to the current user. The expensive loading is
  * memoized, but availability and isEnabled checks run fresh every call so
  * auth changes (e.g. /login) take effect immediately.
  */
 export async function getCommands(cwd) {
-    const allCommands = await loadAllCommands(cwd);
-    // Get dynamic skills discovered during file operations
-    const dynamicSkills = getDynamicSkills();
-    // Build base commands without dynamic skills
-    const baseCommands = allCommands.filter(_ => meetsAvailabilityRequirement(_) && isCommandEnabled(_));
-    if (dynamicSkills.length === 0) {
-        return baseCommands;
-    }
-    // Dedupe dynamic skills - only add if not already present
-    const baseCommandNames = new Set(baseCommands.map(c => c.name));
-    const uniqueDynamicSkills = dynamicSkills.filter(s => !baseCommandNames.has(s.name) &&
-        meetsAvailabilityRequirement(s) &&
-        isCommandEnabled(s));
-    if (uniqueDynamicSkills.length === 0) {
-        return baseCommands;
-    }
-    // Insert dynamic skills after plugin skills but before built-in commands
-    const builtInNames = new Set(COMMANDS().map(c => c.name));
-    const insertIndex = baseCommands.findIndex(c => builtInNames.has(c.name));
-    if (insertIndex === -1) {
-        return [...baseCommands, ...uniqueDynamicSkills];
-    }
-    return [
-        ...baseCommands.slice(0, insertIndex),
-        ...uniqueDynamicSkills,
-        ...baseCommands.slice(insertIndex),
-    ];
+    const allCommands = await loadAllCommands(cwd, getDynamicSkillsVersion());
+    return allCommands.filter(_ => meetsAvailabilityRequirement(_) && isCommandEnabled(_));
 }
 /**
  * Clears only the memoization caches for commands, WITHOUT clearing skill caches.
@@ -478,6 +462,8 @@ export const getSkillToolCommands = memoize(async (cwd) => {
         // (they all get an auto-derived description from the first line if frontmatter is missing).
         // Plugin/MCP commands still require an explicit description to appear in the listing.
         (cmd.loadedFrom === 'bundled' ||
+            cmd.loadedFrom === 'managed' ||
+            cmd.loadedFrom === 'dynamic' ||
             cmd.loadedFrom === 'skills' ||
             cmd.loadedFrom === 'commands_DEPRECATED' ||
             cmd.hasUserSpecifiedDescription ||
@@ -491,8 +477,11 @@ export const getSlashCommandToolSkills = memoize(async (cwd) => {
         const allCommands = await getCommands(cwd);
         return allCommands.filter(cmd => cmd.type === 'prompt' &&
             cmd.source !== 'builtin' &&
+            cmd.userInvocable !== false &&
             (cmd.hasUserSpecifiedDescription || cmd.whenToUse) &&
-            (cmd.loadedFrom === 'skills' ||
+            (cmd.loadedFrom === 'managed' ||
+                cmd.loadedFrom === 'skills' ||
+                cmd.loadedFrom === 'dynamic' ||
                 cmd.loadedFrom === 'plugin' ||
                 cmd.loadedFrom === 'bundled' ||
                 cmd.disableModelInvocation));

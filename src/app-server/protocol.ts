@@ -295,6 +295,13 @@ export const McpInstallApplyParamsSchema = McpInstallPlanParamsSchema.extend({
   confirmationToken: z.string().min(1),
 }).strict()
 
+export const McpInstallSaveManifestParamsSchema = z
+  .object({
+    manifest: JsonRpcParamsSchema,
+    overwrite: z.boolean().optional(),
+  })
+  .strict()
+
 export const McpInstallAdoptPlanParamsSchema = z
   .object({
     name: z.string().min(1),
@@ -321,6 +328,79 @@ export const McpInstallRepairParamsSchema = z
     name: z.string().min(1),
     scope: McpWritableScopeSchema.default('user'),
     confirmed: z.boolean(),
+  })
+  .strict()
+
+const SkillInstallScopeSchema = z.enum(['user', 'project'])
+
+export const SkillInstallSearchParamsSchema = z
+  .object({
+    query: z.string().optional(),
+  })
+  .strict()
+  .default({})
+
+export const SkillInstallPlanParamsSchema = z
+  .object({
+    scope: SkillInstallScopeSchema.default('user'),
+    manifest: JsonRpcParamsSchema,
+    force: z.boolean().optional(),
+    securityOverrideToken: z.string().min(1).optional(),
+  })
+  .strict()
+
+export const SkillInstallApplyParamsSchema = SkillInstallPlanParamsSchema.extend({
+  confirmed: z.boolean(),
+  confirmationToken: z.string().min(1),
+}).strict()
+
+export const SkillInstallListParamsSchema = z.object({}).strict().default({})
+
+export const SkillInspectParamsSchema = z
+  .object({
+    skillRef: z.string().min(1),
+  })
+  .strict()
+
+export const SkillImportPlanParamsSchema = z
+  .object({
+    source: JsonRpcParamsSchema,
+  })
+  .strict()
+
+export const SkillImportApplyParamsSchema = SkillImportPlanParamsSchema.extend({
+  confirmed: z.boolean(),
+  confirmationToken: z.string().min(1),
+}).strict()
+
+export const SkillSetEnabledParamsSchema = z
+  .object({
+    skillRef: z.string().min(1),
+    enabled: z.boolean(),
+  })
+  .strict()
+
+export const SkillSetInvocationParamsSchema = z
+  .object({
+    skillRef: z.string().min(1),
+    modelInvocable: z.boolean().optional(),
+    userInvocable: z.boolean().optional(),
+  })
+  .strict()
+
+export const SkillInstallUninstallParamsSchema = z
+  .object({
+    skillRef: z.string().min(1),
+    confirmed: z.boolean(),
+  })
+  .strict()
+
+export const SkillInstallRepairParamsSchema = SkillInstallUninstallParamsSchema
+
+export const SkillInstallSaveManifestParamsSchema = z
+  .object({
+    manifest: JsonRpcParamsSchema,
+    overwrite: z.boolean().optional(),
   })
   .strict()
 
@@ -602,6 +682,9 @@ export type McpInstallSearchParams = z.infer<
 >
 export type McpInstallPlanParams = z.infer<typeof McpInstallPlanParamsSchema>
 export type McpInstallApplyParams = z.infer<typeof McpInstallApplyParamsSchema>
+export type McpInstallSaveManifestParams = z.infer<
+  typeof McpInstallSaveManifestParamsSchema
+>
 export type McpInstallAdoptPlanParams = z.infer<
   typeof McpInstallAdoptPlanParamsSchema
 >
@@ -614,6 +697,32 @@ export type McpInstallUninstallParams = z.infer<
 >
 export type McpInstallRepairParams = z.infer<
   typeof McpInstallRepairParamsSchema
+>
+export type SkillInstallSearchParams = z.infer<
+  typeof SkillInstallSearchParamsSchema
+>
+export type SkillInstallPlanParams = z.infer<
+  typeof SkillInstallPlanParamsSchema
+>
+export type SkillInstallApplyParams = z.infer<
+  typeof SkillInstallApplyParamsSchema
+>
+export type SkillInstallListParams = z.infer<typeof SkillInstallListParamsSchema>
+export type SkillInspectParams = z.infer<typeof SkillInspectParamsSchema>
+export type SkillImportPlanParams = z.infer<typeof SkillImportPlanParamsSchema>
+export type SkillImportApplyParams = z.infer<typeof SkillImportApplyParamsSchema>
+export type SkillSetEnabledParams = z.infer<typeof SkillSetEnabledParamsSchema>
+export type SkillSetInvocationParams = z.infer<
+  typeof SkillSetInvocationParamsSchema
+>
+export type SkillInstallUninstallParams = z.infer<
+  typeof SkillInstallUninstallParamsSchema
+>
+export type SkillInstallRepairParams = z.infer<
+  typeof SkillInstallRepairParamsSchema
+>
+export type SkillInstallSaveManifestParams = z.infer<
+  typeof SkillInstallSaveManifestParamsSchema
 >
 export type WorkspaceOpenParams = z.infer<typeof WorkspaceOpenParamsSchema>
 export type ThreadStartParams = z.infer<typeof ThreadStartParamsSchema>
@@ -659,6 +768,7 @@ export type ServerCapabilities = {
   auth: boolean
   models: boolean
   mcp: boolean
+  skills: boolean
   workspace: boolean
   threads: boolean
   turns: boolean
@@ -764,11 +874,24 @@ export type McpTestResult = Record<string, unknown>
 export type McpInstallSearchResult = Record<string, unknown>
 export type McpInstallPlanResult = Record<string, unknown>
 export type McpInstallApplyResult = Record<string, unknown>
+export type McpInstallSaveManifestResult = Record<string, unknown>
 export type McpInstallAdoptPlanResult = Record<string, unknown>
 export type McpInstallAdoptApplyResult = Record<string, unknown>
 export type McpInstallListResult = Record<string, unknown>
 export type McpInstallUninstallResult = Record<string, unknown>
 export type McpInstallRepairResult = Record<string, unknown>
+export type SkillInstallSearchResult = Record<string, unknown>
+export type SkillInstallPlanResult = Record<string, unknown>
+export type SkillInstallApplyResult = Record<string, unknown>
+export type SkillInstallListResult = Record<string, unknown>
+export type SkillInspectResult = Record<string, unknown>
+export type SkillImportPlanResult = Record<string, unknown>
+export type SkillImportApplyResult = Record<string, unknown>
+export type SkillSetEnabledResult = Record<string, unknown>
+export type SkillSetInvocationResult = Record<string, unknown>
+export type SkillInstallUninstallResult = Record<string, unknown>
+export type SkillInstallRepairResult = Record<string, unknown>
+export type SkillInstallSaveManifestResult = Record<string, unknown>
 
 export type WorkspaceOpenResult = {
   workspace: {
@@ -1099,6 +1222,7 @@ export const DEFAULT_SERVER_CAPABILITIES: ServerCapabilities = {
   auth: true,
   models: true,
   mcp: true,
+  skills: true,
   workspace: true,
   threads: true,
   turns: true,

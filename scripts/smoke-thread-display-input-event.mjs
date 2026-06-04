@@ -278,6 +278,50 @@ assert.equal(resolveThreadDisplayFacts(classifiedHistoryEvents[0])[0].factType, 
 assert.equal(resolveThreadDisplayFacts(classifiedHistoryEvents[1])[0].factType, 'error')
 assert.equal(resolveThreadDisplayFacts(classifiedHistoryEvents[2])[0].factType, 'system')
 
+const syntheticSystemSnapshot = buildThreadDisplaySnapshot({
+  threadId,
+  sessionId,
+  source: 'history',
+  messages: [
+    {
+      id: 'message-system-synthetic-no-response',
+      role: 'system',
+      text: 'No response requested.',
+      status: 'completed',
+      content: [{ type: 'text', text: 'No response requested.' }],
+    },
+  ],
+})
+assert.equal(
+  syntheticSystemSnapshot.items.length,
+  0,
+  'synthetic system notices must not enter ThreadDisplay items without projection',
+)
+assert.deepEqual(
+  syntheticSystemSnapshot.diagnostics ?? [],
+  [],
+  'filtered synthetic system notices must not create projection diagnostics',
+)
+
+const visibleSystemSnapshot = buildThreadDisplaySnapshot({
+  threadId,
+  sessionId,
+  source: 'history',
+  messages: [
+    {
+      id: 'message-system-visible',
+      role: 'system',
+      kind: 'system_notice',
+      text: '系统提示仍应展示。',
+      status: 'completed',
+      content: [{ type: 'text', text: '系统提示仍应展示。' }],
+    },
+  ],
+})
+assert.equal(visibleSystemSnapshot.items.length, 1)
+assert.equal(visibleSystemSnapshot.items[0].type, 'system_notice')
+assert.equal(visibleSystemSnapshot.items[0].projection?.event.type, 'system_notice')
+
 const snapshot = buildThreadDisplaySnapshot({
   threadId,
   sessionId,
@@ -479,6 +523,36 @@ assert.equal(
   multiUserEvent?.text.includes('[图片]'),
   false,
   'user image placeholder should be removed only after confirmed attachment fact',
+)
+
+const unknownAttachmentSnapshot = buildThreadDisplaySnapshot({
+  threadId,
+  sessionId,
+  source: 'history',
+  messages: [
+    {
+      id: 'message-unknown-attachment',
+      role: 'assistant',
+      text: '',
+      content: [{ type: 'file' }],
+    },
+  ],
+})
+const unknownAttachment = unknownAttachmentSnapshot.items[0].projection?.event
+  ?.attachmentSnapshots?.[0]
+assert.equal(
+  unknownAttachment?.name,
+  '附件 1',
+  'unknown attachment keeps deterministic fallback name for identity stability',
+)
+assert.equal(
+  unknownAttachment?.diagnostic?.reason,
+  '附件块缺少名称和路径，无法判断具体文件。',
+  'unknown attachment should explain why it cannot identify the file',
+)
+assert.deepEqual(
+  unknownAttachment?.diagnostic?.missingFields,
+  ['displayName/name/filename/file.path', 'savedPath/path/url/source.path'],
 )
 
 const snapshotReducer = createThreadDisplayReducer({ threadId, sessionId })

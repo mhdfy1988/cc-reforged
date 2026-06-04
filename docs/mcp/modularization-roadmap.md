@@ -14,14 +14,14 @@ MCP 模块化已经完成第一轮 C 系列收口：
 - `installManager` 仍是安装计划、确认、写配置、记录安装和卸载的唯一业务入口。
 - Desktop MCP 页面已能展示多个安装候选；候选卡保持精简，只展示名称、说明和安装状态，详细风险与写入信息放在安装确认弹窗。
 - Desktop 已支持 `导入 MCP 安装配置`、`创建 MCP 安装配置`、`保存到常用安装配置` 和手工配置显式接管。
-- 安装候选已统一为多来源模型，来源包括内置 preset、用户本地 manifest 目录和远端 registry 占位。
+- 安装候选已统一为多来源模型，来源包括内置 preset 和用户本地 manifest 目录；远端 registry 已暂停，仅保留 disabled source / backlog 记录。
 - CLI 已有 `ccr mcp search/install/status/uninstall/repair`，默认 dry-run，显式 `--yes` 后才写配置或卸载。
 - `client.ts` 已抽出若干低风险模块：`toolSafety`、`resultProcessing`、`urlElicitation`、`toolRuntime`、`discoveryAdapters`、`transportFactory`。
 
 当前最大剩余问题：
 
 - Desktop 当前默认用户全局安装，项目共享 / 本地项目 scope 暂不在界面展示。
-- 远端 registry 当前只是 disabled source 占位，还没有接入公网或团队共享安装源。
+- 远端 registry 已暂停，不接入公网或团队共享安装源；后续恢复前需要单独补 registry URL 配置、index schema、checksum、缓存、信任策略和失败诊断。
 - 本地 HTTP MCP 当前只负责连接 URL，不负责一键启动本地 HTTP 服务。
 - 手工配置可以在 Server 详情页显式接管为 CCR 受控安装记录；接管前不会自动获得 installer-owned 修复 / 卸载权限。
 - `client.ts` 仍承载连接生命周期、startup timeout、stderr、onerror/onclose、reconnect 和部分工具运行时闭包。
@@ -161,14 +161,14 @@ D 系列已完成并提交，E 系列已经完成 manifest 导入、轻量创建
 
 - 内置 preset 候选。
 - 用户导入过的 manifest 或本地 manifest 目录。
-- 未来远端 registry 的接口占位。
+- 远端 registry 的 disabled source / backlog 记录。
 - 候选去重、状态判断、来源展示。
 
 不变式：
 
 - 候选来源必须可解释，不能只显示一个同名项。
 - 同名候选要能判断已配置、已安装、可安装、冲突或不可用。
-- 远端 registry 只做接口占位，不在本 goal 接入公网服务。
+- 远端 registry 已暂停，不在本 goal 接入公网服务，也不作为当前候选提供器实现。
 
 验收：
 
@@ -184,7 +184,7 @@ D 系列已完成并提交，E 系列已经完成 manifest 导入、轻量创建
 - E-4.3 去重与状态：统一内置 preset、本地 manifest、已安装记录、已配置 server 的同名状态判断。
 - E-4.4 Desktop 呈现：候选卡保持简洁，详情 / 安装确认里展示来源、权限、数据边界、冲突和不可用原因。
 
-状态：已实现。候选搜索现在返回统一 `candidateId`、`sourceType`、`sourceLabel`、`originPath`、`state`、`stateMessage` 和 `duplicateGroupCount`；本地 manifest 目录为 `~/.ccr/mcp/manifests/`；远端 registry 仅作为 disabled source 占位。验证命令为 `npm.cmd run smoke:mcp-install-candidates`。
+状态：已实现。候选搜索现在返回统一 `candidateId`、`sourceType`、`sourceLabel`、`originPath`、`state`、`stateMessage` 和 `duplicateGroupCount`；本地 manifest 目录为 `~/.ccr/mcp/manifests/`；远端 registry 已暂停，仅保留 disabled source / backlog 记录。验证命令为 `npm.cmd run smoke:mcp-install-candidates`。
 
 ## Goal E-5：收口、文档、smoke、发布准备
 
@@ -225,9 +225,9 @@ D 系列已完成并提交，E 系列已经完成 manifest 导入、轻量创建
 
 ## Goal E-6：远端 registry / 分享安装源评估
 
-目标：评估是否引入远端 MCP registry 或共享安装源。
+目标：记录远端 MCP registry 或共享安装源为暂停项，后续单独评估是否恢复。
 
-第一版只做设计，不直接接入公网 registry。需要先明确信任模型、签名 / checksum、版本固定、权限展示、撤回策略和离线行为。
+当前暂停，不直接接入公网 registry。恢复前必须先明确信任模型、签名 / checksum、版本固定、权限展示、撤回策略、缓存、失败诊断和离线行为。
 
 说明：E-6 暂不进入当前实现序列，只作为 E-1 到 E-5 完成后的下一轮候选 goal。
 

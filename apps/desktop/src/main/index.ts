@@ -46,6 +46,8 @@ import type {
   McpInstallPlanResult,
   McpInstallRepairParams,
   McpInstallRepairResult,
+  McpInstallSaveManifestParams,
+  McpInstallSaveManifestResult,
   McpInstallSearchParams,
   McpInstallSearchResult,
   McpInstallUninstallParams,
@@ -80,6 +82,29 @@ import type {
   PermissionSettingsUpdateParams,
   SessionHistoryListParams,
   SessionHistoryListResult,
+  SkillImportApplyParams,
+  SkillImportApplyResult,
+  SkillImportPlanParams,
+  SkillImportPlanResult,
+  SkillInspectParams,
+  SkillInspectResult,
+  SkillInstallApplyParams,
+  SkillInstallApplyResult,
+  SkillInstallListResult,
+  SkillInstallPlanParams,
+  SkillInstallPlanResult,
+  SkillInstallRepairParams,
+  SkillInstallRepairResult,
+  SkillInstallSaveManifestParams,
+  SkillInstallSaveManifestResult,
+  SkillInstallSearchParams,
+  SkillInstallSearchResult,
+  SkillInstallUninstallParams,
+  SkillInstallUninstallResult,
+  SkillSetEnabledParams,
+  SkillSetEnabledResult,
+  SkillSetInvocationParams,
+  SkillSetInvocationResult,
   ThreadListResult,
   ThreadDisplayItem,
   ThreadDisplayPatch,
@@ -127,9 +152,19 @@ type ImportedMcpManifestResult = {
   summary?: ReturnType<typeof summarizeCcrMcpInstallManifest>
 }
 
-type SaveMcpInstallManifestInput = {
-  manifest: Record<string, unknown>
-  overwrite?: boolean
+type DesktopPathPickerInput = {
+  mode?: 'file' | 'directory'
+  title?: string
+  buttonLabel?: string
+  filters?: Array<{
+    name: string
+    extensions: string[]
+  }>
+}
+
+type DesktopPathPickerResult = {
+  canceled: boolean
+  path?: string
 }
 
 type DesktopRuntime = {
@@ -1552,6 +1587,29 @@ async function chooseMcpInstallManifest(): Promise<ImportedMcpManifestResult> {
   }
 }
 
+async function chooseDesktopPath(
+  event: Electron.IpcMainInvokeEvent,
+  params: DesktopPathPickerInput = {},
+): Promise<DesktopPathPickerResult> {
+  const result = await dialog.showOpenDialog(getIpcWindow(event), {
+    title: params.title,
+    buttonLabel: params.buttonLabel,
+    properties: [params.mode === 'file' ? 'openFile' : 'openDirectory'],
+    ...(params.mode === 'file' && params.filters?.length
+      ? { filters: params.filters }
+      : {}),
+  })
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true }
+  }
+
+  return {
+    canceled: false,
+    path: result.filePaths[0]!,
+  }
+}
+
 async function applyMcpInstall(
   params: McpInstallApplyParams,
 ): Promise<McpInstallApplyResult> {
@@ -1568,37 +1626,15 @@ async function applyMcpInstall(
 }
 
 async function saveMcpInstallManifest(
-  params: SaveMcpInstallManifestInput,
-): Promise<Record<string, unknown>> {
-  const manifest = CcrMcpInstallManifestSchema().parse(
-    params.manifest as CcrMcpInstallManifestInput,
-  )
-  const manifestDir = join(getDesktopCcrConfigDir(), 'mcp', 'manifests')
-  const filePath = join(manifestDir, `${sanitizeMcpManifestFileName(manifest.name)}.json`)
-  if (!params.overwrite && existsSync(filePath)) {
-    throw new Error(`MCP 安装配置已存在：${filePath}`)
-  }
-  await mkdir(manifestDir, { recursive: true })
-  await writeFile(filePath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
-  const result = {
-    saved: true,
-    name: manifest.name,
-    path: filePath,
-    manifest: summarizeCcrMcpInstallManifest(manifest),
-  }
+  params: McpInstallSaveManifestParams,
+): Promise<McpInstallSaveManifestResult> {
+  const client = await getAppServerClient()
+  const result = await client.saveMcpInstallManifest(params)
   broadcast('state', {
     message: 'mcp install manifest saved',
     result,
   })
   return result
-}
-
-function getDesktopCcrConfigDir(): string {
-  return process.env.CCR_CONFIG_DIR || join(homedir(), '.ccr')
-}
-
-function sanitizeMcpManifestFileName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, '_')
 }
 
 async function applyMcpAdopt(
@@ -1647,6 +1683,129 @@ async function repairMcp(
     name: params.name,
     result,
     mcp: status.mcp,
+  })
+  return result
+}
+
+async function listSkillInstalls(): Promise<SkillInstallListResult> {
+  const client = await getAppServerClient()
+  return client.listSkillInstalls()
+}
+
+async function inspectSkill(
+  params: SkillInspectParams,
+): Promise<SkillInspectResult> {
+  const client = await getAppServerClient()
+  return client.inspectSkill(params)
+}
+
+async function searchSkillInstalls(
+  params: SkillInstallSearchParams = {},
+): Promise<SkillInstallSearchResult> {
+  const client = await getAppServerClient()
+  return client.searchSkillInstalls(params)
+}
+
+async function planSkillInstall(
+  params: SkillInstallPlanParams,
+): Promise<SkillInstallPlanResult> {
+  const client = await getAppServerClient()
+  return client.planSkillInstall(params)
+}
+
+async function applySkillInstall(
+  params: SkillInstallApplyParams,
+): Promise<SkillInstallApplyResult> {
+  const client = await getAppServerClient()
+  const result = await client.applySkillInstall(params)
+  broadcast('state', {
+    message: 'skill install applied',
+    name: params.manifest['name'],
+    result,
+  })
+  return result
+}
+
+async function planSkillImport(
+  params: SkillImportPlanParams,
+): Promise<SkillImportPlanResult> {
+  const client = await getAppServerClient()
+  return client.planSkillImport(params)
+}
+
+async function applySkillImport(
+  params: SkillImportApplyParams,
+): Promise<SkillImportApplyResult> {
+  const client = await getAppServerClient()
+  const result = await client.applySkillImport(params)
+  broadcast('state', {
+    message: 'skill import applied',
+    source: params.source,
+    result,
+  })
+  return result
+}
+
+async function setSkillEnabled(
+  params: SkillSetEnabledParams,
+): Promise<SkillSetEnabledResult> {
+  const client = await getAppServerClient()
+  const result = await client.setSkillEnabled(params)
+  broadcast('state', {
+    message: params.enabled ? 'skill enabled' : 'skill disabled',
+    skillRef: params.skillRef,
+    result,
+  })
+  return result
+}
+
+async function setSkillInvocation(
+  params: SkillSetInvocationParams,
+): Promise<SkillSetInvocationResult> {
+  const client = await getAppServerClient()
+  const result = await client.setSkillInvocation(params)
+  broadcast('state', {
+    message: 'skill invocation updated',
+    skillRef: params.skillRef,
+    result,
+  })
+  return result
+}
+
+async function uninstallSkill(
+  params: SkillInstallUninstallParams,
+): Promise<SkillInstallUninstallResult> {
+  const client = await getAppServerClient()
+  const result = await client.uninstallSkill(params)
+  broadcast('state', {
+    message: 'skill uninstalled',
+    skillRef: params.skillRef,
+    result,
+  })
+  return result
+}
+
+async function repairSkill(
+  params: SkillInstallRepairParams,
+): Promise<SkillInstallRepairResult> {
+  const client = await getAppServerClient()
+  const result = await client.repairSkill(params)
+  broadcast('state', {
+    message: 'skill repaired',
+    skillRef: params.skillRef,
+    result,
+  })
+  return result
+}
+
+async function saveSkillInstallManifest(
+  params: SkillInstallSaveManifestParams,
+): Promise<SkillInstallSaveManifestResult> {
+  const client = await getAppServerClient()
+  const result = await client.saveSkillInstallManifest(params)
+  broadcast('state', {
+    message: 'skill install manifest saved',
+    result,
   })
   return result
 }
@@ -2956,6 +3115,13 @@ ipcMain.handle('ccr:choose-workspace', async () => {
   return openWorkspace(result.filePaths[0]!)
 })
 
+ipcMain.handle(
+  'ccr:choose-path',
+  async (event, params?: DesktopPathPickerInput) => {
+    return chooseDesktopPath(event, params ?? {})
+  },
+)
+
 ipcMain.handle('ccr:open-workspace', async (_event, path: string) => {
   return openWorkspace(path)
 })
@@ -3102,7 +3268,7 @@ ipcMain.handle(
 
 ipcMain.handle(
   'ccr:mcp-install-save-manifest',
-  async (_event, params: SaveMcpInstallManifestInput) => {
+  async (_event, params: McpInstallSaveManifestParams) => {
     return saveMcpInstallManifest(params)
   },
 )
@@ -3136,6 +3302,87 @@ ipcMain.handle(
   'ccr:mcp-install-repair',
   async (_event, params: McpInstallRepairParams) => {
     return repairMcp(params)
+  },
+)
+
+ipcMain.handle('ccr:skill-install-list', async () => {
+  return listSkillInstalls()
+})
+
+ipcMain.handle(
+  'ccr:skill-inspect',
+  async (_event, params: SkillInspectParams) => {
+    return inspectSkill(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:skill-install-search',
+  async (_event, params?: SkillInstallSearchParams) => {
+    return searchSkillInstalls(params ?? {})
+  },
+)
+
+ipcMain.handle(
+  'ccr:skill-install-plan',
+  async (_event, params: SkillInstallPlanParams) => {
+    return planSkillInstall(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:skill-install-apply',
+  async (_event, params: SkillInstallApplyParams) => {
+    return applySkillInstall(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:skill-import-plan',
+  async (_event, params: SkillImportPlanParams) => {
+    return planSkillImport(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:skill-import-apply',
+  async (_event, params: SkillImportApplyParams) => {
+    return applySkillImport(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:skill-state-enabled',
+  async (_event, params: SkillSetEnabledParams) => {
+    return setSkillEnabled(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:skill-state-invocation',
+  async (_event, params: SkillSetInvocationParams) => {
+    return setSkillInvocation(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:skill-install-uninstall',
+  async (_event, params: SkillInstallUninstallParams) => {
+    return uninstallSkill(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:skill-install-repair',
+  async (_event, params: SkillInstallRepairParams) => {
+    return repairSkill(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:skill-install-save-manifest',
+  async (_event, params: SkillInstallSaveManifestParams) => {
+    return saveSkillInstallManifest(params)
   },
 )
 

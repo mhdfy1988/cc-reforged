@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { PageStatusNotice } from '../common/PageStatusNotice.js'
 import type {
   DesktopStatus,
   LlmAuthStrategy,
@@ -408,7 +409,11 @@ export function ModelsPage(props: {
         </div>
       </div>
 
-      {props.error ? <div className="models-alert">{props.error}</div> : null}
+      <PageStatusNotice
+        autoDismiss={false}
+        message={props.error}
+        tone="error"
+      />
 
       <div className="models-workspace">
         <aside className="models-provider-column" aria-label="供应商类型">

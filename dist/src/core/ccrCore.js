@@ -1,9 +1,10 @@
 import { getCoreAuthStatus, loginCoreAuth } from './authCore.js';
 import { getCoreConfigSnapshot } from './configCore.js';
-import { addCoreMcpServer, applyCoreMcpAdopt, applyCoreMcpInstall, inspectCoreMcpServer, listCoreMcpServers, listCoreMcpInstalls, planCoreMcpAdopt, planCoreMcpInstall, repairCoreMcpInstalledServer, removeCoreMcpServer, restartCoreMcpServer, searchCoreMcpInstallCandidates, setCoreMcpServerEnabled, testCoreMcpServer, uninstallCoreMcpInstalledServer, updateCoreMcpServer, } from './mcpCore.js';
+import { addCoreMcpServer, applyCoreMcpAdopt, applyCoreMcpInstall, inspectCoreMcpServer, listCoreMcpServers, listCoreMcpInstalls, planCoreMcpAdopt, planCoreMcpInstall, repairCoreMcpInstalledServer, removeCoreMcpServer, restartCoreMcpServer, saveCoreMcpInstallManifest, searchCoreMcpInstallCandidates, setCoreMcpServerEnabled, testCoreMcpServer, uninstallCoreMcpInstalledServer, updateCoreMcpServer, } from './mcpCore.js';
 import { copyCoreModelProfile, deleteCoreModelProfile, getCoreModelAvailability, listCoreModelProfiles, listCoreModels, saveCoreModelProfile, setCoreModel, setCoreModelProfile, testCoreModelConnection, updateCoreModelCredential, } from './modelCore.js';
 import { CorePermissionService } from './permissionCore.js';
 import { CoreSessionService } from './sessionCore.js';
+import { applyCoreSkillImport, applyCoreSkillInstall, inspectCoreSkill, listCoreSkillInstalls, planCoreSkillImport, planCoreSkillInstall, repairCoreSkill, saveCoreSkillInstallManifest, searchCoreSkillInstallCandidates, setCoreSkillEnabled, setCoreSkillInvocation, uninstallCoreSkill, } from './skillCore.js';
 import { CoreWorkspaceService } from './workspaceCore.js';
 export function createCcrCore(options = {}) {
     const emit = options.emit ?? (() => { });
@@ -48,10 +49,25 @@ export function createCcrCore(options = {}) {
             applyAdopt: applyCoreMcpAdopt,
             planInstall: planCoreMcpInstall,
             applyInstall: applyCoreMcpInstall,
+            saveInstallManifest: saveCoreMcpInstallManifest,
             listInstalls: listCoreMcpInstalls,
             repairInstalledServer: repairCoreMcpInstalledServer,
             uninstallInstalledServer: uninstallCoreMcpInstalledServer,
             updateServer: updateCoreMcpServer,
+        },
+        skills: {
+            applyImport: applyCoreSkillImport,
+            applyInstall: applyCoreSkillInstall,
+            inspect: inspectCoreSkill,
+            listInstalls: listCoreSkillInstalls,
+            planImport: planCoreSkillImport,
+            planInstall: planCoreSkillInstall,
+            repair: repairCoreSkill,
+            saveInstallManifest: saveCoreSkillInstallManifest,
+            searchInstallCandidates: searchCoreSkillInstallCandidates,
+            setEnabled: setCoreSkillEnabled,
+            setInvocation: setCoreSkillInvocation,
+            uninstall: uninstallCoreSkill,
         },
         workspace,
         permission,

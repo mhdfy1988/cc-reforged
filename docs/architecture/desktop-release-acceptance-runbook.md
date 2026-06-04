@@ -272,6 +272,104 @@ npm.cmd run smoke:desktop-packaged
 Get-Process | Where-Object { $_.ProcessName -like '*CCR*' }
 ```
 
+## 4.1 Skill / MCP 管理页人工验收
+
+这一组验收用于发布前确认 Desktop 管理页和 App Server 管理 API 的实际交互可用。自动 smoke 已覆盖协议和 Core 行为；这里重点看页面状态、按钮位置、确认区和错误展示。
+
+详细用例见：
+
+```text
+docs/qa/skill-mcp-desktop-manual-test-cases.md
+```
+
+前置自动验证：
+
+```powershell
+npm.cmd run typecheck:desktop
+npm.cmd run smoke:mcp-end-to-end
+npm.cmd run smoke:skill-end-to-end
+npm.cmd run smoke:skill-mcp-negative-boundaries
+```
+
+准备本地验收数据：
+
+```powershell
+npm.cmd run fixtures:desktop-management-acceptance
+```
+
+该命令只写入系统临时目录，不修改 `~\.ccr`。输出里的路径用于下面的导入操作：
+
+```text
+skillDir=<本地 Skill 目录>
+claudeCommand=<Claude command markdown 文件>
+mcpLocalHttpManifest=<本地 HTTP MCP 安装清单>
+mcpLocalStdioManifest=<本地 stdio MCP 安装清单>
+skillInstallManifest=<Skill 安装清单>
+```
+
+### 4.1.1 MCP 管理页
+
+验收步骤：
+
+1. 打开 Desktop 的 MCP 管理页。
+2. 确认顶部统计能显示 server、启用和安装记录数量。
+3. 确认安装候选区能看到内置候选，例如 Context7、Sentry、Playwright。
+4. 确认默认安装范围是用户全局，页面不展示无意义的范围切换。
+5. 点击“导入 MCP 安装配置”，选择 `mcpLocalHttpManifest`。
+6. 确认进入安装计划确认区，能看到名称、transport、URL、权限和数据边界摘要。
+7. 勾选保存到常用安装配置后确认安装。
+8. 刷新候选列表，确认保存后的配置能作为本地 manifest 候选出现。
+9. 在详情或已安装记录中执行修复和卸载；卸载入口应位于详情 / 已安装语义下，不放在普通候选卡片上。
+10. 重复导入 `mcpLocalStdioManifest`，确认 stdio 类型能生成安装计划。
+
+通过标准：
+
+- 已安装项和安装候选不会重复成两个同义卡片。
+- 已安装候选只显示“已安装”状态，不提供重复安装主操作。
+- 修复只针对 installer-owned 记录开放。
+- 卸载不会删除手工导入的 manifest 文件。
+- 错误区能显示字段、来源和下一步，不出现空白卡。
+
+### 4.1.2 Skill 管理页
+
+验收步骤：
+
+1. 打开 Desktop 的 Skill 管理页。
+2. 确认页面能显示已安装、候选、需处理和风险统计。
+3. 点击“导入 Skill”，选择 `skillDir`。
+4. 确认导入计划显示写入目标和来源类型，确认后候选列表出现 `desktop_acceptance_skill`。
+5. 对该候选点击安装，确认安装计划显示安全摘要、安装来源和目标路径。
+6. 安装后在详情页切换启用、模型自动调用、用户 slash 调用三个状态。
+7. 刷新页面，确认三个状态仍与刚才选择一致。
+8. 执行修复，确认 installed 状态保持正常。
+9. 执行卸载，确认 installed 列表移除该 Skill，但 imported 来源仍可再次作为候选出现。
+10. 再导入 `claudeCommand`，确认页面提示这是 command 转 Skill 的转换来源。
+11. 导入或保存 `skillInstallManifest`，确认本地 manifest 会进入候选列表。
+
+通过标准：
+
+- 安装候选卡片只展示名称、短说明、来源和风险等级，不堆满路径和 finding。
+- 详情页能看到来源、状态、安全摘要、资源和 `SKILL.md` 预览。
+- high 风险需要显式 override；critical 风险不能安装。
+- 禁用状态与 runtime 可见性语义一致：页面不直接承诺“已注入上下文”，只展示管理状态和诊断。
+- 修复 / 卸载都需要用户明确动作，不自动写入。
+
+### 4.1.3 页面错误卡
+
+验收步骤：
+
+1. 导入一个缺少 `name` 或缺少 `serverConfig/url` 的 MCP manifest。
+2. 导入一个没有 `SKILL.md` 的空目录。
+3. 对已经卸载的记录尝试再次修复。
+4. 在 App Server 未就绪时刷新页面。
+
+通过标准：
+
+- 错误卡必须说明来源是 MCP、Skill、App Server 还是 schema。
+- 错误卡必须包含可读 message；有字段路径时展示字段路径。
+- 不把协议错误伪装成安装成功。
+- 不出现空白区域、重复解释文本或按钮挤压。
+
 ## 5. 卸载验收
 
 卸载前先关闭 CCR。
@@ -308,7 +406,32 @@ Get-Process | Where-Object { $_.ProcessName -like '*CCR*' }
 
 ## 7. 正式发布前门禁
 
-正式公开发布前必须补齐：
+正式公开发布前先运行通用门禁：
+
+```powershell
+npm.cmd run typecheck -- --pretty false
+npm.cmd run build
+npm.cmd run smoke:mcp-release
+npm.cmd run smoke:skill-release
+npm.cmd pack --dry-run
+```
+
+Desktop 发布前再运行 Desktop 门禁。`smoke:desktop-release-gate` 不依赖已经生成安装器，用来提前确认 Desktop 类型、页面验收 fixture 和 Skill / MCP 管理 API 前置链路：
+
+```powershell
+npm.cmd run smoke:desktop-release-gate
+```
+
+生成安装器后运行产物门禁：
+
+```powershell
+npm.cmd run desktop:dist
+npm.cmd run smoke:desktop-release-artifacts
+npm.cmd run smoke:desktop-signing-readiness
+npm.cmd run release:desktop:check
+```
+
+正式公开发布前还必须补齐：
 
 - 正式图标 `.ico / .png / .icns`。
 - `smoke:desktop-branding` 通过。

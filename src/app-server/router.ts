@@ -37,6 +37,7 @@ import {
   handleMcpInstallList,
   handleMcpInstallPlan,
   handleMcpInstallRepair,
+  handleMcpInstallSaveManifest,
   handleMcpInstallSearch,
   handleMcpInstallUninstall,
   handleMcpInspect,
@@ -52,6 +53,20 @@ import {
   handlePermissionSettingsGet,
   handlePermissionSettingsUpdate,
 } from './handlers/permissionHandlers.js'
+import {
+  handleSkillImportApply,
+  handleSkillImportPlan,
+  handleSkillInspect,
+  handleSkillInstallApply,
+  handleSkillInstallList,
+  handleSkillInstallPlan,
+  handleSkillInstallRepair,
+  handleSkillInstallSaveManifest,
+  handleSkillInstallSearch,
+  handleSkillInstallUninstall,
+  handleSkillSetEnabled,
+  handleSkillSetInvocation,
+} from './handlers/skillHandlers.js'
 import {
   handleSessionHistoryList,
   handleSessionHistoryRename,
@@ -265,6 +280,11 @@ export async function handleJsonRpcMessage(
           request.id,
           await handleMcpInstallApply(context, request.params),
         )
+      case 'mcp/install/save-manifest':
+        return successResponse(
+          request.id,
+          await handleMcpInstallSaveManifest(context, request.params),
+        )
       case 'mcp/install/adopt/plan':
         return successResponse(
           request.id,
@@ -289,6 +309,66 @@ export async function handleJsonRpcMessage(
         return successResponse(
           request.id,
           await handleMcpInstallRepair(context, request.params),
+        )
+      case 'skill/install/list':
+        return successResponse(
+          request.id,
+          await handleSkillInstallList(context, request.params),
+        )
+      case 'skill/inspect':
+        return successResponse(
+          request.id,
+          await handleSkillInspect(context, request.params),
+        )
+      case 'skill/install/search':
+        return successResponse(
+          request.id,
+          await handleSkillInstallSearch(context, request.params),
+        )
+      case 'skill/install/plan':
+        return successResponse(
+          request.id,
+          await handleSkillInstallPlan(context, request.params),
+        )
+      case 'skill/install/apply':
+        return successResponse(
+          request.id,
+          await handleSkillInstallApply(context, request.params),
+        )
+      case 'skill/import/plan':
+        return successResponse(
+          request.id,
+          await handleSkillImportPlan(context, request.params),
+        )
+      case 'skill/import/apply':
+        return successResponse(
+          request.id,
+          await handleSkillImportApply(context, request.params),
+        )
+      case 'skill/state/enabled':
+        return successResponse(
+          request.id,
+          await handleSkillSetEnabled(context, request.params),
+        )
+      case 'skill/state/invocation':
+        return successResponse(
+          request.id,
+          await handleSkillSetInvocation(context, request.params),
+        )
+      case 'skill/install/uninstall':
+        return successResponse(
+          request.id,
+          await handleSkillInstallUninstall(context, request.params),
+        )
+      case 'skill/install/repair':
+        return successResponse(
+          request.id,
+          await handleSkillInstallRepair(context, request.params),
+        )
+      case 'skill/install/save-manifest':
+        return successResponse(
+          request.id,
+          await handleSkillInstallSaveManifest(context, request.params),
         )
       case 'workspace/open':
         return successResponse(

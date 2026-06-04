@@ -3939,6 +3939,7 @@ async function run(): Promise<CommanderCommand> {
     } = await import('./cli/handlers/mcp.js');
     await mcpInstallRepairHandler(name, options);
   });
+
   mcp.command('add-json <name> <json>').description('Add an MCP server (stdio or SSE) with a JSON string').option('-s, --scope <scope>', 'Configuration scope (local, user, or project)', 'local').option('--client-secret', 'Prompt for OAuth client secret (or set MCP_CLIENT_SECRET env var)').action(async (name: string, json: string, options: {
     scope?: string;
     clientSecret?: true;
@@ -3961,6 +3962,75 @@ async function run(): Promise<CommanderCommand> {
       mcpResetChoicesHandler
     } = await import('./cli/handlers/mcp.js');
     await mcpResetChoicesHandler();
+  });
+
+  // claude skill
+
+  const skill = program.command('skill').description('Manage CCR Skill install candidates and installed packages').configureHelp(createSortedHelpConfig()).enablePositionalOptions();
+  skill.command('search [query]').description('Search installable Skill candidates').option('--json', 'Output as JSON').action(async (query: string | undefined, options: {
+    json?: boolean;
+  }) => {
+    const {
+      skillSearchHandler
+    } = await import('./cli/handlers/skills.js');
+    await skillSearchHandler(query ?? '', options);
+  });
+  skill.command('status').description('List Skill packages installed through the CCR installer').option('--json', 'Output as JSON').action(async (options: {
+    json?: boolean;
+  }) => {
+    const {
+      skillStatusHandler
+    } = await import('./cli/handlers/skills.js');
+    await skillStatusHandler(options);
+  });
+  skill.command('inspect <name>').description('Inspect an installed Skill package').option('--json', 'Output as JSON').action(async (name: string, options: {
+    json?: boolean;
+  }) => {
+    const {
+      skillInspectHandler
+    } = await import('./cli/handlers/skills.js');
+    await skillInspectHandler(name, options);
+  });
+  skill.command('import').description('Prepare or apply a Skill import plan').requiredOption('--kind <kind>', 'Import source kind: local-skill-dir, local-archive, codex-skill-dir, openclaw-skill-dir, claude-command').requiredOption('--path <path>', 'Import source path').option('-y, --yes', 'Apply without printing a dry-run plan').option('--json', 'Output as JSON').action(async (options: {
+    kind?: string;
+    path?: string;
+    yes?: boolean;
+    json?: boolean;
+  }) => {
+    const {
+      skillImportHandler
+    } = await import('./cli/handlers/skills.js');
+    await skillImportHandler(options);
+  });
+  skill.command('install [candidate]').description('Prepare or apply a Skill install plan').option('--manifest <path>', 'Install manifest JSON file').option('-s, --scope <scope>', 'Install scope: user or project', 'user').option('--force', 'Replace an existing installed Skill with the same name').option('-y, --yes', 'Apply without printing a dry-run plan').option('--json', 'Output as JSON').action(async (candidate: string | undefined, options: {
+    manifest?: string;
+    scope?: string;
+    force?: boolean;
+    yes?: boolean;
+    json?: boolean;
+  }) => {
+    const {
+      skillInstallHandler
+    } = await import('./cli/handlers/skills.js');
+    await skillInstallHandler(candidate, options);
+  });
+  skill.command('uninstall <name>').description('Uninstall a Skill package owned by the CCR installer').option('-y, --yes', 'Confirm uninstall').option('--json', 'Output as JSON').action(async (name: string, options: {
+    yes?: boolean;
+    json?: boolean;
+  }) => {
+    const {
+      skillUninstallHandler
+    } = await import('./cli/handlers/skills.js');
+    await skillUninstallHandler(name, options);
+  });
+  skill.command('repair <name>').description('Repair a Skill package owned by the CCR installer').option('-y, --yes', 'Confirm repair').option('--json', 'Output as JSON').action(async (name: string, options: {
+    yes?: boolean;
+    json?: boolean;
+  }) => {
+    const {
+      skillRepairHandler
+    } = await import('./cli/handlers/skills.js');
+    await skillRepairHandler(name, options);
   });
 
   // claude server

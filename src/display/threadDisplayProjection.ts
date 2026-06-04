@@ -219,7 +219,17 @@ export type ThreadDisplayAttachmentSnapshot = {
   expiresAt?: string
   generatedArtifact?: CcrGeneratedArtifactSnapshot
   identity?: ThreadDisplayProjectionIdentity
+  diagnostic?: ThreadDisplayAttachmentDiagnostic
   raw?: unknown
+}
+
+export type ThreadDisplayAttachmentDiagnostic = {
+  reason: string
+  missingFields: string[]
+  rawType?: string
+  eventId: string
+  index: number
+  source: ThreadDisplayAttachmentSnapshot['source']
 }
 
 export type ThreadDisplayReferenceSnapshot = {

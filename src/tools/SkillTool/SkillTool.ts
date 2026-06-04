@@ -1,6 +1,5 @@
 import { feature } from 'bun:bundle'
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import uniqBy from 'lodash-es/uniqBy.js'
 import { createRequire } from 'node:module'
 import { dirname } from 'path'
 import { getProjectRoot } from 'src/bootstrap/state.js'
@@ -8,8 +7,10 @@ import {
   builtInCommandNames,
   findCommand,
   getCommands,
+  getMcpSkillCommands,
   type PromptCommand,
 } from 'src/commands.js'
+import { createSkillRuntimeCatalog } from 'src/skills/skillRuntimeCatalog.js'
 import type {
   Tool,
   ToolCallProgress,
@@ -86,14 +87,19 @@ async function getAllCommands(context: ToolUseContext): Promise<Command[]> {
   // Before this filter, the model could invoke MCP prompts via SkillTool
   // if it guessed the mcp__server__prompt name — they weren't discoverable
   // but were technically reachable.
-  const mcpSkills = context
-    .getAppState()
-    .mcp.commands.filter(
-      cmd => cmd.type === 'prompt' && cmd.loadedFrom === 'mcp',
-    )
-  if (mcpSkills.length === 0) return getCommands(getProjectRoot())
   const localCommands = await getCommands(getProjectRoot())
-  return uniqBy([...localCommands, ...mcpSkills], 'name')
+  const mcpSkills = getMcpSkillCommands(context.getAppState().mcp.commands)
+  if (mcpSkills.length === 0) return localCommands
+  const runtimeSkillCatalog = createSkillRuntimeCatalog([
+    ...localCommands,
+    ...mcpSkills,
+  ])
+  if (runtimeSkillCatalog.diagnostics.length > 0) {
+    logForDebugging(
+      `SkillTool runtime catalog diagnostics: ${runtimeSkillCatalog.diagnostics.length}`,
+    )
+  }
+  return runtimeSkillCatalog.commands
 }
 
 // Re-export Progress from centralized types to break import cycles

@@ -2,6 +2,34 @@
 
 本文记录 CCR 面向用户可见的版本变化。主分支可能包含最新版本之后的开发中改动；正式发布以 GitHub Release 和 tag 为准。
 
+## 0.6.0 - 2026-06-05
+
+### 改动
+
+- MCP 保存常用安装配置收敛到 Core / App Server / client 统一入口，并新增 `smoke:mcp-end-to-end` 覆盖 manifest 矩阵、保存候选、安装、修复、卸载和 registry 暂停边界。
+- Skill 安装闭环接入运行时：`~/.ccr/skills/installed.json` / `lock.json` / `packages/` 会生成 managed skill，`enabled`、`modelInvocable`、`userInvocable` 会影响 SkillTool prompt 和 slash command；drifted / missing / invalid package 不再进入运行时，并补 S-6 runtime smoke 覆盖。
+- Skill managed installed runtime 补齐 `hooks` / `shell` / `version` / `paths` frontmatter 等价透传，安全扫描新增 hook command / HTTP / env 风险提示，并补 runtime / security smoke。
+- Skill 来源扩展完成 S-7：导入来源新增本地 zip/tar archive，安装候选新增内置 `ccr-skill-starter` preset；builtin preset 可生成安装计划、安装成 managed package，并支持检查和修复。
+- Skill 内置 preset 内容层完成 S-11：内置候选扩展为 `ccr-skill-starter`、`skill-install-helper`、`mcp-config-helper`、`bug-debug-helper`、`release-check-helper` 和 `docs-update-helper`，并拆分 `builtinPresetDefinitions` registry，避免后续继续堆大文件。
+- Desktop Skill 安装入口收敛为“导入 Skill”：移除手填 manifest 壳的“创建 Skill 安装配置”表单，新建 Skill 改由会话中的 `Skill 包助手` 生成完整包后进入候选登记链路。
+- Desktop Skill 导入表单新增文件夹 / 文件选择器：本地 Skill、Codex Skill、OpenClaw Skill 选择文件夹，本地 archive、Claude command 和 `openai.yaml` 选择文件，仍保留手填路径。
+- Desktop Skill / MCP 管理页的导入和新建入口移到页面标题区；右侧安装栏只保留搜索和候选列表，导入 / 新建表单改用弹窗承载。
+- 新增 `smoke:skill-install-builtin-presets`，遍历所有内置 Skill preset，覆盖候选搜索、安装计划、安装、检查、缺失修复和安全等级，后续新增内置 Skill 会自动进入回归。
+- Skill runtime catalog 完成 S-8：dynamic skill 和 MCP skill 进入统一运行时优先级与 duplicate diagnostics，SkillTool 不再私下合并 MCP skill，管理 API 可暴露 runtime diagnostics。
+- CLI 新增 `ccr skill search/import/install/status/inspect/repair/uninstall` 管理命令，复用 Skill Core 与 Management Service；导入、安装、修复和卸载默认 dry-run，显式 `--yes` 后才写入。
+- Skill 新增 `smoke:skill-end-to-end`，通过 App Server stdio client 覆盖内置 preset 搜索、本地目录导入、安装、启用 / 禁用、保存常用安装配置、修复和卸载闭环。
+- Skill / MCP 新增 `smoke:skill-mcp-negative-boundaries`，固定坏 manifest 诊断、Skill import schema 拒绝暂停来源，以及远端 registry 暂停能力不进入安装候选。
+- Desktop 发布验收 Runbook 新增 Skill / MCP 管理页人工验收清单，并新增 `fixtures:desktop-management-acceptance` 生成本地页面验收数据。
+- 发布前测试门禁新增 `smoke:mcp-release`、`smoke:skill-release` 和 `smoke:desktop-release-gate` 分组入口，统一输出失败 group / step，发布前可直接运行领域级 smoke。
+- Skill / MCP 发布前 closeout 完成：同步 README、Skill / MCP 文档、goal 文档和 dist，补齐 Skill / MCP 关键 smoke 验证记录。
+- Skill 文档补齐 Codex 用户 Skill 复用边界：`bug-debug-helper`、`docs-update-helper` 和 `release-check-helper` 复制到 `~/.codex/skills` 后需用新线程验证可用 Skill 注入，旧线程恢复不视为刷新成功。
+- MCP 和 Skill 的远端 registry 候选提供器暂停实现，当前只记录为后续 backlog；后续恢复前需先补 registry URL 配置、index schema、checksum、缓存、信任策略和失败诊断。
+
+### BUG 修复
+
+- 修复 dynamic / conditional Skill 纳入 runtime catalog 后的缓存边界：路径命中激活的 conditional Skill 会触发 command cache 重新装配，并保留原始 `managed` / `skills` 来源元数据。
+- 修复 `smoke:desktop-display-events` 仍引用 MCP 页面旧 helper 的问题，补回 `formatInstalledRecord` 导出以固定 installed record 摘要格式。
+
 ## 0.5.3 - 2026-06-02
 
 ### 改动

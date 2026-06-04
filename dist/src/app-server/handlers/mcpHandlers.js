@@ -1,4 +1,4 @@
-import { McpAddParamsSchema, McpDisableParamsSchema, McpEnableParamsSchema, McpInstallAdoptApplyParamsSchema, McpInstallAdoptPlanParamsSchema, McpInstallApplyParamsSchema, McpInstallListParamsSchema, McpInstallPlanParamsSchema, McpInstallRepairParamsSchema, McpInstallSearchParamsSchema, McpInstallUninstallParamsSchema, McpInspectParamsSchema, McpListParamsSchema, McpRemoveParamsSchema, McpRestartParamsSchema, McpTestParamsSchema, McpUpdateParamsSchema, } from '../protocol.js';
+import { McpAddParamsSchema, McpDisableParamsSchema, McpEnableParamsSchema, McpInstallAdoptApplyParamsSchema, McpInstallAdoptPlanParamsSchema, McpInstallApplyParamsSchema, McpInstallListParamsSchema, McpInstallPlanParamsSchema, McpInstallRepairParamsSchema, McpInstallSaveManifestParamsSchema, McpInstallSearchParamsSchema, McpInstallUninstallParamsSchema, McpInspectParamsSchema, McpListParamsSchema, McpRemoveParamsSchema, McpRestartParamsSchema, McpTestParamsSchema, McpUpdateParamsSchema, } from '../protocol.js';
 export async function handleMcpList(context, params) {
     const parsedParams = McpListParamsSchema.parse(params ?? {});
     return context.core.mcp.listServers({
@@ -54,6 +54,10 @@ export function handleMcpInstallPlan(context, params) {
 export async function handleMcpInstallApply(context, params) {
     const parsedParams = McpInstallApplyParamsSchema.parse(params);
     return context.core.mcp.applyInstall(parsedParams);
+}
+export async function handleMcpInstallSaveManifest(context, params) {
+    const parsedParams = McpInstallSaveManifestParamsSchema.parse(params);
+    return context.core.mcp.saveInstallManifest(parsedParams);
 }
 export async function handleMcpInstallAdoptPlan(context, params) {
     const parsedParams = McpInstallAdoptPlanParamsSchema.parse(params);

@@ -11,9 +11,9 @@
 
 ## 当前版本与路线
 
-- 当前公开版本：`0.5.2`，发布于 2026-05-31。
-- 当前版本线：`0.5.x` 继续收敛多模态、多模型、工具调用和 MCP 基础管理面。
-- 下一条主线：`0.6.0` 进入 Skill、Plugin 与外部能力包治理。
+- 当前公开版本：`0.6.0`，发布于 2026-06-05。
+- 当前版本线：`0.6.0` 聚焦 Skill / Plugin 和外部能力包治理，补齐 Skill 安装管理、运行时启用、审计和管理入口。
+- 后续主线：继续深化企业 trust policy、能力发现、命名空间、审计和远端 registry 等能力。
 - 路线详情：[CCR 版本路线图](./architecture/version-roadmap.md)。
 - 逐版本变化：[CHANGELOG.md](../CHANGELOG.md)。
 
@@ -74,6 +74,8 @@
 - [MCP 验证与排查手册](./mcp/verification-runbook.md)
 - [Playwright MCP 接入设计](./mcp/playwright-integration-design.md)
 - [MCP 示例配置](./examples/mcp/README.md)
+- [Skill 文档入口](./skills/README.md)
+- [Skill 标准兼容与安装管理设计](./skills/skill-standard-and-install-management-design.md)
 - [Codex / OpenClaw 工具系统源码对照索引](./references/codex-openclaw-tool-system-source-evidence.md)
 - [OpenAI Codex 生成物源码对照索引](./references/openai-codex-generated-artifacts.md)
 - [npm 发布流程](./release/npm-publish-workflow.md)
@@ -114,6 +116,7 @@
 
 - 要找“某能力怎么设计、怎么接”：看 `architecture/`。
 - 要找“某厂商怎么接入”：看 `architecture/provider-integrations/`。
+- 要找“Skill 标准、兼容、安装管理”：看 `skills/`。
 - 要找“现在做到哪、下一步是什么”：看 `stages/`。
 - 要找“某轮为什么做、验收了什么”：看 `goals/`。
 - 要找“修复恢复、审计清单、运行时缺口”：看 `recovery/`。

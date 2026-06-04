@@ -64,6 +64,14 @@ import type {
   PermissionRespondPayload,
   PermissionSettingsState,
   PermissionSettingsUpdateInput,
+  SkillImportPlanState,
+  SkillImportPlanViewState,
+  SkillInstalledInspection,
+  SkillInstallCandidate,
+  SkillInstallListState,
+  SkillInstallPlanState,
+  SkillInstallPlanViewState,
+  SkillInstallSearchState,
   ThreadDisplaySnapshot,
   ThreadHistoryItem,
   ThreadHistoryState,
@@ -155,6 +163,16 @@ function App({ initialStatus = null }: AppProps) {
   >({})
   const [mcpPageError, setMcpPageError] = useState<string | null>(null)
   const [mcpPageMessage, setMcpPageMessage] = useState<string | null>(null)
+  const [skillInstalls, setSkillInstalls] =
+    useState<SkillInstallListState | null>(null)
+  const [skillInstallSearch, setSkillInstallSearch] =
+    useState<SkillInstallSearchState | null>(null)
+  const [skillInstallPlan, setSkillInstallPlan] =
+    useState<SkillInstallPlanViewState | null>(null)
+  const [skillImportPlan, setSkillImportPlan] =
+    useState<SkillImportPlanViewState | null>(null)
+  const [skillPageError, setSkillPageError] = useState<string | null>(null)
+  const [skillPageMessage, setSkillPageMessage] = useState<string | null>(null)
   const [threadHistory, setThreadHistory] = useState<ThreadHistoryState>({
     status: 'closed',
     scope: 'allProjects',
@@ -238,6 +256,13 @@ function App({ initialStatus = null }: AppProps) {
       return
     }
     void refreshMcpManagement().catch(() => undefined)
+  }, [page])
+
+  useEffect(() => {
+    if (page !== 'skills') {
+      return
+    }
+    void refreshSkillManagement().catch(() => undefined)
   }, [page])
 
   useEffect(() => {
@@ -1199,6 +1224,285 @@ function App({ initialStatus = null }: AppProps) {
     }
   }
 
+  async function refreshSkillManagement(query = ''): Promise<void> {
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        const [installs, search] = await Promise.all([
+          window.ccr.listSkillInstalls(),
+          window.ccr.searchSkillInstalls({ query }),
+        ])
+        setSkillInstalls(installs as SkillInstallListState)
+        setSkillInstallSearch(search as SkillInstallSearchState)
+      })
+    } catch (error) {
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function searchSkillInstallCandidates(query: string): Promise<void> {
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        const search = (await window.ccr.searchSkillInstalls({
+          query,
+        })) as SkillInstallSearchState
+        setSkillInstallSearch(search)
+      })
+    } catch (error) {
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function planSkillInstallFromCandidate(
+    candidate: SkillInstallCandidate,
+  ): Promise<void> {
+    const manifestInput = candidate.manifestInput
+    if (!manifestInput) {
+      setSkillPageError('该 Skill 候选缺少完整安装清单，无法准备安装确认。')
+      return
+    }
+    await planSkillInstallFromManifest(manifestInput, {
+      canSaveToCandidates: false,
+    })
+  }
+
+  async function planSkillInstallFromManifest(
+    manifestInput: Record<string, unknown>,
+    options: { canSaveToCandidates?: boolean } = { canSaveToCandidates: true },
+  ): Promise<boolean> {
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        const plan = (await window.ccr.planSkillInstall({
+          scope: 'user',
+          manifest: manifestInput,
+        })) as SkillInstallPlanState
+        setSkillInstallPlan({
+          plan,
+          manifestInput,
+          canSaveToCandidates: options.canSaveToCandidates,
+          saveToCandidates: false,
+        })
+        setSkillPageMessage(
+          plan.installable === false
+            ? getSkillInstallPlanBlockedMessage(plan)
+            : `已生成 ${plan.name ?? '未命名 Skill'} 的安装计划，请确认。`,
+        )
+      })
+      return true
+    } catch (error) {
+      setSkillInstallPlan(null)
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+      return false
+    }
+  }
+
+  async function applySkillInstallPlan(
+    planView: SkillInstallPlanViewState,
+  ): Promise<void> {
+    if (planView.plan.installable === false) {
+      setSkillPageError(getSkillInstallPlanBlockedMessage(planView.plan))
+      return
+    }
+    const token = planView.plan.confirmation?.token
+    if (!token) {
+      setSkillPageError('安装确认缺少 token。')
+      return
+    }
+    const securityOverrideToken =
+      planView.securityOverrideAccepted
+        ? planView.plan.securityDecision?.overrideToken
+        : undefined
+
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        await window.ccr.applySkillInstall({
+          scope: normalizeSkillScope(planView.plan.scope),
+          manifest: planView.manifestInput,
+          force: Boolean(planView.plan.force),
+          confirmed: true,
+          confirmationToken: token,
+          ...(securityOverrideToken ? { securityOverrideToken } : {}),
+        })
+        if (planView.saveToCandidates) {
+          await window.ccr.saveSkillInstallManifest({
+            manifest: planView.manifestInput,
+            overwrite: true,
+          })
+        }
+        const [installs, search] = await Promise.all([
+          window.ccr.listSkillInstalls(),
+          window.ccr.searchSkillInstalls({}),
+        ])
+        setSkillInstalls(installs as SkillInstallListState)
+        setSkillInstallSearch(search as SkillInstallSearchState)
+        setSkillInstallPlan(null)
+        setSkillPageMessage(
+          planView.saveToCandidates
+            ? `已安装并保存到常用安装配置：${planView.plan.name ?? '未命名'}`
+            : `已安装 Skill：${planView.plan.name ?? '未命名'}`,
+        )
+      })
+    } catch (error) {
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function planSkillImport(source: Record<string, unknown>): Promise<void> {
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        const plan = (await window.ccr.planSkillImport({
+          source,
+        })) as SkillImportPlanState
+        setSkillImportPlan({ plan, source })
+        setSkillPageMessage(
+          plan.importable === false
+            ? getSkillImportPlanBlockedMessage(plan)
+            : `已生成 ${plan.name ?? '未命名 Skill'} 的导入计划，请确认。`,
+        )
+      })
+    } catch (error) {
+      setSkillImportPlan(null)
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function applySkillImportPlan(
+    planView: SkillImportPlanViewState,
+  ): Promise<void> {
+    if (planView.plan.importable === false) {
+      setSkillPageError(getSkillImportPlanBlockedMessage(planView.plan))
+      return
+    }
+    const token = planView.plan.confirmation?.token
+    if (!token) {
+      setSkillPageError('导入确认缺少 token。')
+      return
+    }
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        await window.ccr.applySkillImport({
+          source: planView.source,
+          confirmed: true,
+          confirmationToken: token,
+        })
+        const [installs, search] = await Promise.all([
+          window.ccr.listSkillInstalls(),
+          window.ccr.searchSkillInstalls({}),
+        ])
+        setSkillInstalls(installs as SkillInstallListState)
+        setSkillInstallSearch(search as SkillInstallSearchState)
+        setSkillImportPlan(null)
+        setSkillPageMessage(`已导入 Skill：${planView.plan.name ?? '未命名'}`)
+      })
+    } catch (error) {
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function setSkillEnabled(
+    skillRef: string,
+    enabled: boolean,
+  ): Promise<void> {
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        await window.ccr.setSkillEnabled({ skillRef, enabled })
+        const installs =
+          (await window.ccr.listSkillInstalls()) as SkillInstallListState
+        setSkillInstalls(installs)
+        setSkillPageMessage(`${enabled ? '已启用' : '已禁用'} Skill：${skillRef}`)
+      })
+    } catch (error) {
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function setSkillInvocation(
+    skillRef: string,
+    patch: { modelInvocable?: boolean; userInvocable?: boolean },
+  ): Promise<void> {
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        await window.ccr.setSkillInvocation({ skillRef, ...patch })
+        const installs =
+          (await window.ccr.listSkillInstalls()) as SkillInstallListState
+        setSkillInstalls(installs)
+        setSkillPageMessage(`已更新 Skill 调用开关：${skillRef}`)
+      })
+    } catch (error) {
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  function uninstallSkill(skill: SkillInstalledInspection): void {
+    const skillRef = getInstalledSkillRef(skill)
+    showConfirmDialog({
+      title: '卸载 Skill',
+      message: `卸载应用管理的 Skill：${getInstalledSkillTitle(skill)}？`,
+      detail:
+        '会移除受管理 package、installed record 和 lock record；不会删除 imported 或 manifest 候选。',
+      confirmLabel: '卸载',
+      tone: 'danger',
+      onConfirm: () => {
+        void performSkillUninstall(skillRef)
+      },
+    })
+  }
+
+  async function performSkillUninstall(skillRef: string): Promise<void> {
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        await window.ccr.uninstallSkill({ skillRef, confirmed: true })
+        const [installs, search] = await Promise.all([
+          window.ccr.listSkillInstalls(),
+          window.ccr.searchSkillInstalls({}),
+        ])
+        setSkillInstalls(installs as SkillInstallListState)
+        setSkillInstallSearch(search as SkillInstallSearchState)
+        setSkillPageMessage(`已卸载 Skill：${skillRef}`)
+      })
+    } catch (error) {
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  function repairSkill(skill: SkillInstalledInspection): void {
+    const skillRef = getInstalledSkillRef(skill)
+    showConfirmDialog({
+      title: '修复 Skill',
+      message: `修复应用管理的 Skill：${getInstalledSkillTitle(skill)}？`,
+      detail:
+        '确认后会从安装记录的来源重新复制 package，并刷新 installed record 与 lock record。',
+      confirmLabel: '修复',
+      tone: 'warning',
+      onConfirm: () => {
+        void performSkillRepair(skillRef)
+      },
+    })
+  }
+
+  async function performSkillRepair(skillRef: string): Promise<void> {
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        await window.ccr.repairSkill({ skillRef, confirmed: true })
+        const installs =
+          (await window.ccr.listSkillInstalls()) as SkillInstallListState
+        setSkillInstalls(installs)
+        setSkillPageMessage(`已修复 Skill：${skillRef}`)
+      })
+    } catch (error) {
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   async function refreshPermissionSettings(): Promise<void> {
     const settings =
       (await window.ccr.getPermissionSettings()) as PermissionSettingsState
@@ -1452,10 +1756,14 @@ function App({ initialStatus = null }: AppProps) {
   function navigatePage(nextPage: PageId): void {
     if (nextPage === 'settings') {
       if (page !== 'settings') {
+        clearTransientPageMessage(page)
         setReturnPage(page as AppPageId)
       }
       setPage('settings')
       return
+    }
+    if (nextPage !== page) {
+      clearTransientPageMessage(page)
     }
     setReturnPage(nextPage)
     setPage(nextPage)
@@ -1463,6 +1771,16 @@ function App({ initialStatus = null }: AppProps) {
 
   function closeSettings(): void {
     setPage(returnPage)
+  }
+
+  function clearTransientPageMessage(currentPage: PageId): void {
+    if (currentPage === 'mcp') {
+      setMcpPageMessage(null)
+      return
+    }
+    if (currentPage === 'skills') {
+      setSkillPageMessage(null)
+    }
   }
 
   return (
@@ -1578,20 +1896,20 @@ function App({ initialStatus = null }: AppProps) {
                 message={mcpPageMessage}
                 mcp={status?.mcp ?? { servers: [], errors: [] }}
                 testByName={mcpTestByName}
-                  onApplyInstall={planView => void applyMcpInstallPlan(planView)}
-                  onCancelInstall={() => setMcpInstallPlan(null)}
-                  onChangeInstallPlan={setMcpInstallPlan}
-                  onDisable={name => void disableMcpServer(name)}
+                onApplyInstall={planView => void applyMcpInstallPlan(planView)}
+                onCancelInstall={() => setMcpInstallPlan(null)}
+                onChangeInstallPlan={setMcpInstallPlan}
+                onDisable={name => void disableMcpServer(name)}
                 onEnable={name => void enableMcpServer(name)}
                 onPlanInstall={(candidate, scope) =>
                   void planMcpInstallFromCandidate(candidate, scope)
                 }
-                  onImportManifest={() => void importMcpInstallManifest()}
-                  onCreateManifest={manifest =>
-                    void planMcpInstallFromManifest(manifest)
-                  }
-                  onAdopt={name => void adoptMcpServer(name)}
-                  onRefresh={() => void refreshMcpManagement()}
+                onImportManifest={() => void importMcpInstallManifest()}
+                onCreateManifest={manifest =>
+                  void planMcpInstallFromManifest(manifest)
+                }
+                onAdopt={name => void adoptMcpServer(name)}
+                onRefresh={() => void refreshMcpManagement()}
                 onRepair={record => void repairMcpServer(record)}
                 onRestart={name => void restartMcpServer(name)}
                 onSearchInstalls={query =>
@@ -1659,7 +1977,39 @@ function App({ initialStatus = null }: AppProps) {
               />
             ) : null}
 
-            {page === 'skills' ? <SkillsPage /> : null}
+            {page === 'skills' ? (
+              <SkillsPage
+                busy={busy}
+                error={skillPageError}
+                importPlan={skillImportPlan}
+                installPlan={skillInstallPlan}
+                installSearch={skillInstallSearch}
+                installs={skillInstalls}
+                message={skillPageMessage}
+                onApplyImport={planView => void applySkillImportPlan(planView)}
+                onApplyInstall={planView => void applySkillInstallPlan(planView)}
+                onCancelImport={() => setSkillImportPlan(null)}
+                onCancelInstall={() => setSkillInstallPlan(null)}
+                onChangeInstallPlan={setSkillInstallPlan}
+                onChoosePath={input => window.ccr.choosePath(input)}
+                onPlanImport={source => void planSkillImport(source)}
+                onPlanInstall={candidate =>
+                  void planSkillInstallFromCandidate(candidate)
+                }
+                onRefresh={() => void refreshSkillManagement()}
+                onRepair={skill => void repairSkill(skill)}
+                onSearchInstalls={query =>
+                  void searchSkillInstallCandidates(query)
+                }
+                onSetEnabled={(skillRef, enabled) =>
+                  void setSkillEnabled(skillRef, enabled)
+                }
+                onSetInvocation={(skillRef, patch) =>
+                  void setSkillInvocation(skillRef, patch)
+                }
+                onUninstall={skill => void uninstallSkill(skill)}
+              />
+            ) : null}
 
             {page === 'plugins' ? <PluginsPage /> : null}
 
@@ -1705,6 +2055,38 @@ function getMcpCandidateManifestInput(
 
 function normalizeMcpScope(value: unknown): McpWritableScope {
   return value === 'project' || value === 'local' ? value : 'user'
+}
+
+function normalizeSkillScope(value: unknown): 'user' | 'project' {
+  return value === 'project' ? 'project' : 'user'
+}
+
+function getSkillInstallPlanBlockedMessage(plan: SkillInstallPlanState): string {
+  return (
+    plan.conflicts?.map(conflict => conflict.message).filter(Boolean).join('；') ||
+    plan.securityDecision?.reasons?.join('；') ||
+    '该 Skill 当前不可安装。'
+  )
+}
+
+function getSkillImportPlanBlockedMessage(plan: SkillImportPlanState): string {
+  return (
+    plan.conflicts?.map(conflict => conflict.message).filter(Boolean).join('；') ||
+    '该 Skill 当前不可导入。'
+  )
+}
+
+function getInstalledSkillRef(skill: SkillInstalledInspection): string {
+  return skill.lockKey ?? skill.installedRecord?.lockKey ?? skill.name ?? ''
+}
+
+function getInstalledSkillTitle(skill: SkillInstalledInspection): string {
+  return (
+    skill.package?.displayName ??
+    skill.installedRecord?.manifest?.displayName ??
+    skill.name ??
+    '未命名 Skill'
+  )
 }
 
 function formatMcpAdoptPlanDetail(plan: McpAdoptPlanState): string {

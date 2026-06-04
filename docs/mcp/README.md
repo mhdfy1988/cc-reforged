@@ -143,7 +143,7 @@ ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
 
 后续再继续做：
 
-- 远端 registry、团队共享安装源和 manifest 分享机制，详见 [MCP 安装清单与导入设计](./install-manifest-and-import-design.md)。
+- 远端 registry、团队共享安装源和 manifest 分享机制已暂停，不进入当前 MCP 实现序列；后续恢复前需要先补 registry URL 配置、index schema、checksum、缓存、信任策略和失败诊断设计，详见 [MCP 安装清单与导入设计](./install-manifest-and-import-design.md)。
 - MCP 连接失败诊断和 availability 原因继续细化。
 - 浏览器工具风险分类和权限提示继续细化。
 - Skill / Plugin 复用 MCP installer-owned、registry、availability 和 Desktop 管理页模式。

@@ -19,16 +19,9 @@ import {
 } from '../services/analytics/index.js'
 import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
 import type { Command, PromptCommand } from '../types/command.js'
-import {
-  parseArgumentNames,
-  substituteArguments,
-} from '../utils/argumentSubstitution.js'
+import { substituteArguments } from '../utils/argumentSubstitution.js'
 import { logForDebugging } from '../utils/debug.js'
-import {
-  EFFORT_LEVELS,
-  type EffortValue,
-  parseEffortValue,
-} from '../utils/effort.js'
+import type { EffortValue } from '../utils/effort.js'
 import {
   getClaudeConfigHomeDir,
   isBareMode,
@@ -36,33 +29,40 @@ import {
 } from '../utils/envUtils.js'
 import { isENOENT, isFsInaccessible } from '../utils/errors.js'
 import {
-  coerceDescriptionToString,
   type FrontmatterData,
   type FrontmatterShell,
-  parseBooleanFrontmatter,
   parseFrontmatter,
-  parseShellFrontmatter,
-  splitPathInFrontmatter,
 } from '../utils/frontmatterParser.js'
 import { getFsImplementation } from '../utils/fsOperations.js'
 import { isPathGitignored } from '../utils/git/gitignore.js'
 import { logError } from '../utils/log.js'
 import {
-  extractDescriptionFromMarkdown,
   getProjectDirsUpToHome,
   loadMarkdownFilesForSubdir,
   type MarkdownFile,
-  parseSlashCommandToolsFromFrontmatter,
 } from '../utils/markdownConfigLoader.js'
-import { parseUserSpecifiedModel } from '../utils/model/model.js'
 import { executeShellCommandsInPrompt } from '../utils/promptShellExecution.js'
 import type { SettingSource } from '../utils/settings/constants.js'
 import { isSettingSourceEnabled } from '../utils/settings/constants.js'
 import { getManagedFilePath } from '../utils/settings/managedPath.js'
 import { isRestrictedToPluginOnly } from '../utils/settings/pluginOnlyPolicy.js'
-import { HooksSchema, type HooksSettings } from '../utils/settings/types.js'
+import type { HooksSettings } from '../utils/settings/types.js'
 import { createSignal } from '../utils/signal.js'
+import {
+  loadInstalledSkillRuntimePackages,
+  type InstalledSkillRuntimeEntry,
+} from './installedSkillLoader.js'
+import { normalizeSkillPackage } from './normalizeSkillPackage.js'
+import { toPromptCommand } from './skillCommandAdapter.js'
+import {
+  parseSkillFrontmatterFields,
+  parseSkillPaths,
+} from './skillFrontmatter.js'
 import { registerMCPSkillBuilders } from './mcpSkillBuilders.js'
+import type { CcrSkillCompatibilityHints } from './skillCompatibility.js'
+import type { CcrSkillSource } from './sourceTypes.js'
+
+export { parseSkillFrontmatterFields } from './skillFrontmatter.js'
 
 export type LoadedFrom =
   | 'commands_DEPRECATED'
@@ -70,6 +70,7 @@ export type LoadedFrom =
   | 'plugin'
   | 'managed'
   | 'bundled'
+  | 'dynamic'
   | 'mcp'
 
 /**
@@ -127,141 +128,6 @@ async function getFileIdentity(filePath: string): Promise<string | null> {
 type SkillWithPath = {
   skill: Command
   filePath: string
-}
-
-/**
- * Parse and validate hooks from frontmatter.
- * Returns undefined if hooks are not defined or invalid.
- */
-function parseHooksFromFrontmatter(
-  frontmatter: FrontmatterData,
-  skillName: string,
-): HooksSettings | undefined {
-  if (!frontmatter.hooks) {
-    return undefined
-  }
-
-  const result = HooksSchema().safeParse(frontmatter.hooks)
-  if (!result.success) {
-    logForDebugging(
-      `Invalid hooks in skill '${skillName}': ${result.error.message}`,
-    )
-    return undefined
-  }
-
-  return result.data
-}
-
-/**
- * Parse paths frontmatter from a skill, using the same format as CLAUDE.md rules.
- * Returns undefined if no paths are specified or if all patterns are match-all.
- */
-function parseSkillPaths(frontmatter: FrontmatterData): string[] | undefined {
-  if (!frontmatter.paths) {
-    return undefined
-  }
-
-  const patterns = splitPathInFrontmatter(frontmatter.paths)
-    .map(pattern => {
-      // Remove /** suffix - ignore library treats 'path' as matching both
-      // the path itself and everything inside it
-      return pattern.endsWith('/**') ? pattern.slice(0, -3) : pattern
-    })
-    .filter((p: string) => p.length > 0)
-
-  // If all patterns are ** (match-all), treat as no paths (undefined)
-  if (patterns.length === 0 || patterns.every((p: string) => p === '**')) {
-    return undefined
-  }
-
-  return patterns
-}
-
-/**
- * Parses all skill frontmatter fields that are shared between file-based and
- * MCP skill loading. Caller supplies the resolved skill name and the
- * source/loadedFrom/baseDir/paths fields separately.
- */
-export function parseSkillFrontmatterFields(
-  frontmatter: FrontmatterData,
-  markdownContent: string,
-  resolvedName: string,
-  descriptionFallbackLabel: 'Skill' | 'Custom command' = 'Skill',
-): {
-  displayName: string | undefined
-  description: string
-  hasUserSpecifiedDescription: boolean
-  allowedTools: string[]
-  argumentHint: string | undefined
-  argumentNames: string[]
-  whenToUse: string | undefined
-  version: string | undefined
-  model: ReturnType<typeof parseUserSpecifiedModel> | undefined
-  disableModelInvocation: boolean
-  userInvocable: boolean
-  hooks: HooksSettings | undefined
-  executionContext: 'fork' | undefined
-  agent: string | undefined
-  effort: EffortValue | undefined
-  shell: FrontmatterShell | undefined
-} {
-  const validatedDescription = coerceDescriptionToString(
-    frontmatter.description,
-    resolvedName,
-  )
-  const description =
-    validatedDescription ??
-    extractDescriptionFromMarkdown(markdownContent, descriptionFallbackLabel)
-
-  const userInvocable =
-    frontmatter['user-invocable'] === undefined
-      ? true
-      : parseBooleanFrontmatter(frontmatter['user-invocable'])
-
-  const model =
-    frontmatter.model === 'inherit'
-      ? undefined
-      : frontmatter.model
-        ? parseUserSpecifiedModel(frontmatter.model as string)
-        : undefined
-
-  const effortRaw = frontmatter['effort']
-  const effort =
-    effortRaw !== undefined ? parseEffortValue(effortRaw) : undefined
-  if (effortRaw !== undefined && effort === undefined) {
-    logForDebugging(
-      `Skill ${resolvedName} has invalid effort '${effortRaw}'. Valid options: ${EFFORT_LEVELS.join(', ')} or an integer`,
-    )
-  }
-
-  return {
-    displayName:
-      frontmatter.name != null ? String(frontmatter.name) : undefined,
-    description,
-    hasUserSpecifiedDescription: validatedDescription !== null,
-    allowedTools: parseSlashCommandToolsFromFrontmatter(
-      frontmatter['allowed-tools'],
-    ),
-    argumentHint:
-      frontmatter['argument-hint'] != null
-        ? String(frontmatter['argument-hint'])
-        : undefined,
-    argumentNames: parseArgumentNames(
-      frontmatter.arguments as string | string[] | undefined,
-    ),
-    whenToUse: frontmatter.when_to_use as string | undefined,
-    version: frontmatter.version as string | undefined,
-    model,
-    disableModelInvocation: parseBooleanFrontmatter(
-      frontmatter['disable-model-invocation'],
-    ),
-    userInvocable,
-    hooks: parseHooksFromFrontmatter(frontmatter, resolvedName),
-    executionContext: frontmatter.context === 'fork' ? 'fork' : undefined,
-    agent: frontmatter.agent as string | undefined,
-    effort,
-    shell: parseShellFrontmatter(frontmatter.shell, resolvedName),
-  }
 }
 
 /**
@@ -400,6 +266,115 @@ export function createSkillCommand({
   } satisfies Command
 }
 
+function createSkillCommandFromPackage(input: {
+  skillName: string
+  markdownContent: string
+  frontmatter: FrontmatterData
+  parsed: ReturnType<typeof parseSkillFrontmatterFields>
+  source: PromptCommand['source']
+  ccrSource: CcrSkillSource
+  baseDir: string | undefined
+  filePath: string | null
+  loadedFrom: LoadedFrom
+  paths: string[] | undefined
+  compatibilityHints?: CcrSkillCompatibilityHints
+}): Command {
+  const skillPackage = normalizeSkillPackage({
+    skillName: input.skillName,
+    markdownContent: input.markdownContent,
+    frontmatter: input.frontmatter,
+    parsed: input.parsed,
+    source: input.ccrSource,
+    filePath: input.filePath,
+    baseDir: input.baseDir ?? null,
+    compatibilityHints: input.compatibilityHints,
+  })
+
+  return toPromptCommand(skillPackage, {
+    source: input.source,
+    loadedFrom: input.loadedFrom,
+    createSkillCommand,
+    hasUserSpecifiedDescription: input.parsed.hasUserSpecifiedDescription,
+    hooks: input.parsed.hooks,
+    paths: input.paths,
+    shell: input.parsed.shell,
+    version: input.parsed.version,
+  })
+}
+
+function ccrSkillSourceForSettingSource(
+  source: PromptCommand['source'],
+  loadedFrom: LoadedFrom,
+): CcrSkillSource {
+  if (loadedFrom === 'plugin') return 'plugin'
+  if (loadedFrom === 'bundled') return 'bundled'
+  if (loadedFrom === 'mcp') return 'mcp'
+  if (loadedFrom === 'managed') return 'managed'
+
+  switch (source) {
+    case 'userSettings':
+      return 'user'
+    case 'projectSettings':
+    case 'localSettings':
+    case 'flagSettings':
+      return 'project'
+    case 'policySettings':
+      return 'policy'
+    case 'plugin':
+      return 'plugin'
+    case 'mcp':
+      return 'mcp'
+    case 'bundled':
+      return 'bundled'
+    case 'builtin':
+      return 'bundled'
+  }
+}
+
+function createSkillCommandFromInstalledEntry(
+  entry: InstalledSkillRuntimeEntry,
+): SkillWithPath {
+  const source: PromptCommand['source'] =
+    entry.inspection.scope === 'project' ? 'projectSettings' : 'userSettings'
+  const rawFrontmatter =
+    entry.package.compatibility.rawFrontmatter as FrontmatterData
+  const parsed = parseSkillFrontmatterFields(
+    rawFrontmatter,
+    entry.package.body,
+    entry.package.name,
+    'Skill',
+  )
+  return {
+    skill: toPromptCommand(entry.package, {
+      source,
+      loadedFrom: 'managed',
+      createSkillCommand,
+      hasUserSpecifiedDescription: parsed.hasUserSpecifiedDescription,
+      hooks: parsed.hooks,
+      paths: parseSkillPaths(rawFrontmatter),
+      shell: parsed.shell,
+      version: parsed.version,
+    }),
+    filePath: entry.inspection.installedRecord.skillFilePath,
+  }
+}
+
+async function loadInstalledManagedSkills(): Promise<SkillWithPath[]> {
+  try {
+    const result = await loadInstalledSkillRuntimePackages()
+    if (result.diagnostics.length > 0) {
+      logForDebugging(
+        `[skills] installed runtime diagnostics: ${result.diagnostics.length}`,
+      )
+    }
+    return result.entries.map(createSkillCommandFromInstalledEntry)
+  } catch (error) {
+    logError(error)
+    logForDebugging('[skills] failed to load installed managed skills')
+    return []
+  }
+}
+
 /**
  * Loads skills from a /skills/ directory path.
  * Only supports directory format: skill-name/SKILL.md
@@ -458,12 +433,15 @@ async function loadSkillsFromSkillsDir(
         const paths = parseSkillPaths(frontmatter)
 
         return {
-          skill: createSkillCommand({
-            ...parsed,
+          skill: createSkillCommandFromPackage({
             skillName,
             markdownContent,
             source,
+            ccrSource: ccrSkillSourceForSettingSource(source, 'skills'),
+            frontmatter,
+            parsed,
             baseDir: skillDirPath,
+            filePath: skillFilePath,
             loadedFrom: 'skills',
             paths,
           }),
@@ -598,15 +576,24 @@ async function loadSkillsFromCommandsDir(
         )
 
         skills.push({
-          skill: createSkillCommand({
-            ...parsed,
+          skill: createSkillCommandFromPackage({
             skillName: cmdName,
-            displayName: undefined,
             markdownContent: content,
             source,
+            ccrSource: 'legacy-command',
+            frontmatter,
+            parsed: {
+              ...parsed,
+              displayName: undefined,
+            },
             baseDir: skillDirectory,
+            filePath,
             loadedFrom: 'commands_DEPRECATED',
             paths: undefined,
+            compatibilityHints: {
+              vendor: 'claude',
+              legacyCommand: true,
+            },
           }),
           filePath,
         })
@@ -678,6 +665,7 @@ export const getSkillDirCommands = memoize(
     // (all independent — different directories, no shared state)
     const [
       managedSkills,
+      installedManagedSkills,
       userSkills,
       projectSkillsNested,
       additionalSkillsNested,
@@ -686,6 +674,9 @@ export const getSkillDirCommands = memoize(
       isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_POLICY_SKILLS)
         ? Promise.resolve([])
         : loadSkillsFromSkillsDir(managedSkillsDir, 'policySettings'),
+      isSettingSourceEnabled('userSettings') && !skillsLocked
+        ? loadInstalledManagedSkills()
+        : Promise.resolve([]),
       isSettingSourceEnabled('userSettings') && !skillsLocked
         ? loadSkillsFromSkillsDir(userSkillsDir, 'userSettings')
         : Promise.resolve([]),
@@ -716,6 +707,7 @@ export const getSkillDirCommands = memoize(
     // Flatten and combine all skills
     const allSkillsWithPaths = [
       ...managedSkills,
+      ...installedManagedSkills,
       ...userSkills,
       ...projectSkillsNested.flat(),
       ...additionalSkillsNested.flat(),
@@ -796,7 +788,7 @@ export const getSkillDirCommands = memoize(
     }
 
     logForDebugging(
-      `Loaded ${deduplicatedSkills.length} unique skills (${unconditionalSkills.length} unconditional, ${newConditionalSkills.length} conditional, managed: ${managedSkills.length}, user: ${userSkills.length}, project: ${projectSkillsNested.flat().length}, additional: ${additionalSkillsNested.flat().length}, legacy commands: ${legacyCommands.length})`,
+      `Loaded ${deduplicatedSkills.length} unique skills (${unconditionalSkills.length} unconditional, ${newConditionalSkills.length} conditional, policy managed: ${managedSkills.length}, installed managed: ${installedManagedSkills.length}, user: ${userSkills.length}, project: ${projectSkillsNested.flat().length}, additional: ${additionalSkillsNested.flat().length}, legacy commands: ${legacyCommands.length})`,
     )
 
     return unconditionalSkills
@@ -820,6 +812,7 @@ export { transformSkillFiles }
 // State for dynamically discovered skills
 const dynamicSkillDirs = new Set<string>()
 const dynamicSkills = new Map<string, Command>()
+let dynamicSkillsVersion = 0
 
 // --- Conditional skills (path-filtered) ---
 
@@ -945,13 +938,17 @@ export async function addSkillDirectories(dirs: string[]): Promise<void> {
   for (let i = loadedSkills.length - 1; i >= 0; i--) {
     for (const { skill } of loadedSkills[i] ?? []) {
       if (skill.type === 'prompt') {
-        dynamicSkills.set(skill.name, skill)
+        dynamicSkills.set(skill.name, {
+          ...skill,
+          loadedFrom: 'dynamic',
+        })
       }
     }
   }
 
   const newSkillCount = loadedSkills.flat().length
   if (newSkillCount > 0) {
+    dynamicSkillsVersion += 1
     const addedSkills = [...dynamicSkills.keys()].filter(
       n => !previousSkillNamesForLogging.has(n),
     )
@@ -980,6 +977,10 @@ export async function addSkillDirectories(dirs: string[]): Promise<void> {
  */
 export function getDynamicSkills(): Command[] {
   return Array.from(dynamicSkills.values())
+}
+
+export function getDynamicSkillsVersion(): number {
+  return dynamicSkillsVersion
 }
 
 /**
@@ -1027,7 +1028,7 @@ export function activateConditionalSkillsForPaths(
       }
 
       if (skillIgnore.ignores(relativePath)) {
-        // Activate this skill by moving it to dynamic skills
+        // Activate this conditional skill without changing its original source.
         dynamicSkills.set(name, skill)
         conditionalSkills.delete(name)
         activatedConditionalSkillNames.add(name)
@@ -1041,6 +1042,7 @@ export function activateConditionalSkillsForPaths(
   }
 
   if (activated.length > 0) {
+    dynamicSkillsVersion += 1
     logEvent('tengu_dynamic_skills_changed', {
       source:
         'conditional_paths' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
@@ -1072,6 +1074,7 @@ export function clearDynamicSkills(): void {
   dynamicSkills.clear()
   conditionalSkills.clear()
   activatedConditionalSkillNames.clear()
+  dynamicSkillsVersion += 1
 }
 
 // Expose createSkillCommand + parseSkillFrontmatterFields to MCP skill

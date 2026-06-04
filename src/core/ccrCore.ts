@@ -12,6 +12,7 @@ import {
   repairCoreMcpInstalledServer,
   removeCoreMcpServer,
   restartCoreMcpServer,
+  saveCoreMcpInstallManifest,
   searchCoreMcpInstallCandidates,
   setCoreMcpServerEnabled,
   testCoreMcpServer,
@@ -32,6 +33,20 @@ import {
 } from './modelCore.js'
 import { CorePermissionService } from './permissionCore.js'
 import { CoreSessionService } from './sessionCore.js'
+import {
+  applyCoreSkillImport,
+  applyCoreSkillInstall,
+  inspectCoreSkill,
+  listCoreSkillInstalls,
+  planCoreSkillImport,
+  planCoreSkillInstall,
+  repairCoreSkill,
+  saveCoreSkillInstallManifest,
+  searchCoreSkillInstallCandidates,
+  setCoreSkillEnabled,
+  setCoreSkillInvocation,
+  uninstallCoreSkill,
+} from './skillCore.js'
 import type { CoreEventEmitter } from './types.js'
 import { CoreWorkspaceService } from './workspaceCore.js'
 
@@ -83,10 +98,25 @@ export function createCcrCore(options: {
       applyAdopt: applyCoreMcpAdopt,
       planInstall: planCoreMcpInstall,
       applyInstall: applyCoreMcpInstall,
+      saveInstallManifest: saveCoreMcpInstallManifest,
       listInstalls: listCoreMcpInstalls,
       repairInstalledServer: repairCoreMcpInstalledServer,
       uninstallInstalledServer: uninstallCoreMcpInstalledServer,
       updateServer: updateCoreMcpServer,
+    },
+    skills: {
+      applyImport: applyCoreSkillImport,
+      applyInstall: applyCoreSkillInstall,
+      inspect: inspectCoreSkill,
+      listInstalls: listCoreSkillInstalls,
+      planImport: planCoreSkillImport,
+      planInstall: planCoreSkillInstall,
+      repair: repairCoreSkill,
+      saveInstallManifest: saveCoreSkillInstallManifest,
+      searchInstallCandidates: searchCoreSkillInstallCandidates,
+      setEnabled: setCoreSkillEnabled,
+      setInvocation: setCoreSkillInvocation,
+      uninstall: uninstallCoreSkill,
     },
     workspace,
     permission,

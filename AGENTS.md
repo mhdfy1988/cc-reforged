@@ -113,6 +113,11 @@
 6. 每次解释影响面时，必须明确标注该改动属于：Desktop-only、App Server 协议层、Core 共享层、LLM 共享层或构建产物同步。
 7. `npm.cmd run typecheck:desktop` 必须加载根仓库已有类型环境；`apps/desktop/tsconfig.json` 需要保留 `bun` 类型，以及 `../../src/types/**/*.d.ts`、`../../sdk-tools.d.ts` include。遇到 `MACRO`、`Bun` 或可选依赖缺失时，优先检查 Desktop tsconfig 是否丢了这些 root ambient declarations，不要把它长期归类为已知噪音。
 
+## 11.1 Skill 口径护栏
+
+1. 内置 Skill preset 默认写成跨项目通用能力，不要把 CCR 当作唯一适用项目；CCR 专用路径、smoke、文档清单只能放在明确标注“目标项目是 CCR 时使用”的参考资料里。
+2. 为兼容已安装记录和 lock 记录，已有 preset id / Skill name 不要随手重命名；优先调整 `displayName`、`description`、正文和 UI 文案。确需重命名时，必须先确认没有现存安装记录，或同时设计 alias / 迁移。
+
 ## 12. Desktop / Electron 视觉验证护栏
 
 1. 验证 CCR Desktop / Electron 界面时，不得使用 `PrintWindow` 截图结果作为布局判断依据；该方式在 Electron 窗口上可能出现裁切、错位或只截到标题栏。
@@ -120,6 +125,9 @@
 3. 截图脚本必须先设置进程 DPI aware，再检查窗口状态：如果窗口最小化，不能直接截；需要恢复或最大化后再截。
 4. 截图后必须同时记录并汇报关键尺寸：`windowRect`、`windowSize`、`showCmd`、`screen`。若尺寸异常，例如 `159x27`、小于预期窗口、或与屏幕/用户截图明显不一致，该截图视为无效。
 5. Desktop 视觉结论以用户实际截图和肉眼确认为准；本机截图只能作为辅助证据。截图异常或与用户所见不一致时，先判定为截图环境问题，不得据此擅自修改 UI。
+6. 页面级成功提示、安装计划提示、导入完成提示属于瞬时 UI 状态；离开对应页面时必须清理对应 success / notice message，避免切菜单回来重新出现旧提示。错误提示、未确认计划弹窗和正在进行的操作状态不能被同一个清理函数顺手清掉。
+7. 聊天时间线采用“头像列 + 内容面板”结构时，头像应靠近内容第一行，不要对整条消息做全局垂直居中；长 Markdown、表格和工具卡会把头像挤到正文中段。
+8. Desktop 聊天页的用户消息可以用轻色相、边框或阴影做区分，但默认仍铺满内容列；不要把系统提示、工具调用和错误卡改成左右跳动的聊天气泡。
 
 ## 13. 历史恢复与回放口径护栏
 

@@ -60,7 +60,7 @@ MCP 管理面固定区分三类对象：
 | 对象 | 来源 | 前台位置 | 可执行动作 |
 | --- | --- | --- | --- |
 | 已配置 MCP | 配置文件、旧 settings、插件、企业配置等 | Server 列表和详情页 | 查看、检测、启用、禁用、重启 |
-| 可安装 MCP | 当前是内置 preset registry，后续扩展到 manifest 导入和远端 registry | 安装候选列表 | 生成安装计划、确认安装 |
+| 可安装 MCP | 当前是内置 preset registry 和本地 manifest；远端 registry 已暂停 | 安装候选列表 | 生成安装计划、确认安装 |
 | CCR 受控安装记录 | `installed.json` / `lock.json` | 详情页状态和 installer-owned 操作 | 配置状态校验、修复、卸载 |
 
 手工写入的 MCP 配置不会自动进入安装记录，也不应自动获得 installer-owned 卸载能力。后续如果要管理手工配置，必须走“接管已有配置”的显式确认流程。

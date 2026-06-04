@@ -30,6 +30,8 @@ import type {
   McpInstallPlanResult,
   McpInstallRepairParams,
   McpInstallRepairResult,
+  McpInstallSaveManifestParams,
+  McpInstallSaveManifestResult,
   McpInstallSearchParams,
   McpInstallSearchResult,
   McpInstallUninstallParams,
@@ -77,6 +79,30 @@ import type {
   SessionHistoryListResult,
   SessionHistoryRenameParams,
   SessionHistoryRenameResult,
+  SkillImportApplyParams,
+  SkillImportApplyResult,
+  SkillImportPlanParams,
+  SkillImportPlanResult,
+  SkillInspectParams,
+  SkillInspectResult,
+  SkillInstallApplyParams,
+  SkillInstallApplyResult,
+  SkillInstallListParams,
+  SkillInstallListResult,
+  SkillInstallPlanParams,
+  SkillInstallPlanResult,
+  SkillInstallRepairParams,
+  SkillInstallRepairResult,
+  SkillInstallSaveManifestParams,
+  SkillInstallSaveManifestResult,
+  SkillInstallSearchParams,
+  SkillInstallSearchResult,
+  SkillInstallUninstallParams,
+  SkillInstallUninstallResult,
+  SkillSetEnabledParams,
+  SkillSetEnabledResult,
+  SkillSetInvocationParams,
+  SkillSetInvocationResult,
   ThreadMessagesListParams,
   ThreadMessagesListResult,
   ShutdownResult,
@@ -298,6 +324,13 @@ export class StdioAppServerClient {
     return this.rpc.request('mcp/install/apply', params, options)
   }
 
+  saveMcpInstallManifest(
+    params: McpInstallSaveManifestParams,
+    options?: RequestOptions,
+  ): Promise<McpInstallSaveManifestResult> {
+    return this.rpc.request('mcp/install/save-manifest', params, options)
+  }
+
   planMcpAdopt(
     params: McpInstallAdoptPlanParams,
     options?: RequestOptions,
@@ -331,6 +364,90 @@ export class StdioAppServerClient {
     options?: RequestOptions,
   ): Promise<McpInstallRepairResult> {
     return this.rpc.request('mcp/install/repair', params, options)
+  }
+
+  listSkillInstalls(
+    params: SkillInstallListParams = {},
+    options?: RequestOptions,
+  ): Promise<SkillInstallListResult> {
+    return this.rpc.request('skill/install/list', params, options)
+  }
+
+  inspectSkill(
+    params: SkillInspectParams,
+    options?: RequestOptions,
+  ): Promise<SkillInspectResult> {
+    return this.rpc.request('skill/inspect', params, options)
+  }
+
+  searchSkillInstalls(
+    params: SkillInstallSearchParams = {},
+    options?: RequestOptions,
+  ): Promise<SkillInstallSearchResult> {
+    return this.rpc.request('skill/install/search', params, options)
+  }
+
+  planSkillInstall(
+    params: SkillInstallPlanParams,
+    options?: RequestOptions,
+  ): Promise<SkillInstallPlanResult> {
+    return this.rpc.request('skill/install/plan', params, options)
+  }
+
+  applySkillInstall(
+    params: SkillInstallApplyParams,
+    options?: RequestOptions,
+  ): Promise<SkillInstallApplyResult> {
+    return this.rpc.request('skill/install/apply', params, options)
+  }
+
+  planSkillImport(
+    params: SkillImportPlanParams,
+    options?: RequestOptions,
+  ): Promise<SkillImportPlanResult> {
+    return this.rpc.request('skill/import/plan', params, options)
+  }
+
+  applySkillImport(
+    params: SkillImportApplyParams,
+    options?: RequestOptions,
+  ): Promise<SkillImportApplyResult> {
+    return this.rpc.request('skill/import/apply', params, options)
+  }
+
+  setSkillEnabled(
+    params: SkillSetEnabledParams,
+    options?: RequestOptions,
+  ): Promise<SkillSetEnabledResult> {
+    return this.rpc.request('skill/state/enabled', params, options)
+  }
+
+  setSkillInvocation(
+    params: SkillSetInvocationParams,
+    options?: RequestOptions,
+  ): Promise<SkillSetInvocationResult> {
+    return this.rpc.request('skill/state/invocation', params, options)
+  }
+
+  uninstallSkill(
+    params: SkillInstallUninstallParams,
+    options?: RequestOptions,
+  ): Promise<SkillInstallUninstallResult> {
+    return this.rpc.request('skill/install/uninstall', params, options)
+  }
+
+  repairSkill(
+    params: SkillInstallRepairParams,
+    options?: RequestOptions,
+  ): Promise<SkillInstallRepairResult> {
+    return this.rpc.request('skill/install/repair', params, options)
+  }
+
+  saveSkillInstallManifest(
+    params: SkillInstallSaveManifestParams,
+    options?: RequestOptions,
+  ): Promise<SkillInstallSaveManifestResult> {
+    return this.rpc.request('skill/install/save-manifest', params, options)
   }
 
   openWorkspace(

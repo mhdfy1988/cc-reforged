@@ -24,6 +24,7 @@ import {
   createCcrMcpAdoptPlan,
   createCcrMcpInstallPlan,
   listCcrMcpInstalledServers,
+  saveCcrMcpInstallCandidateManifest,
   searchCcrMcpInstallCandidates,
   uninstallCcrMcpInstalledServer,
   type CcrMcpWritableScope,
@@ -238,6 +239,16 @@ export async function applyCoreMcpInstall(input: {
     force: input.force ?? false,
     confirmed: input.confirmed,
     confirmationToken: input.confirmationToken,
+  })
+}
+
+export function saveCoreMcpInstallManifest(input: {
+  manifest: unknown
+  overwrite?: boolean
+}): Promise<Record<string, unknown>> {
+  return saveCcrMcpInstallCandidateManifest({
+    manifest: input.manifest as CcrMcpInstallManifestInput,
+    overwrite: input.overwrite,
   })
 }
 

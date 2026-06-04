@@ -23,6 +23,12 @@ CCR 的用户级默认目录是 `~/.ccr`，也就是 Windows 当前用户下的 
     presets/
     cache/
   skills/
+    installed.json
+    lock.json
+    packages/
+    manifests/
+    imported/
+    cache/
   plugins/
   rules/
   projects/
@@ -64,6 +70,8 @@ CCR 的用户级默认目录是 `~/.ccr`，也就是 Windows 当前用户下的 
 | `~/.ccr/mcp/presets/` | 用户自定义 MCP 预设 | 例如自定义 browser/db/search preset |
 | `~/.ccr/skills/` | 用户安装的 skill | 类似 Codex skill，但归 CCR 管理 |
 | `~/.ccr/plugins/` | 用户安装的 plugin | 插件包、manifest、版本目录 |
+
+Skill 第一版以 `SKILL.md` 为核心标准。CCR 自己的安装信息不写进 `SKILL.md`，而是通过 `~/.ccr/skills/installed.json`、`~/.ccr/skills/lock.json` 和 `~/.ccr/skills/manifests/` 管理。外部 Claude / Codex / OpenClaw 风格 skill 进入 CCR 后应先归一成统一 skill package，再适配到现有 `Command` / `SkillTool` 运行链路。详细设计见 [Skill 标准兼容与安装管理设计](../skills/skill-standard-and-install-management-design.md)。
 
 第三方 MCP 如果通过 npm 临时执行，例如 `npx.cmd -y @playwright/mcp@latest`，不复制到 `~/.ccr/mcp/servers/`。它只是配置引用的外部执行源。
 

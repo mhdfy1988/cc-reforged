@@ -1,4 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { DetailTabs, type DetailTabOption } from '../common/DetailTabs.js'
+import { PageStatusNotice } from '../common/PageStatusNotice.js'
 import {
   buildCcrMcpInstallManifestInput,
   type CcrMcpManifestTemplate,
@@ -23,6 +25,14 @@ export type McpServerView = McpServerSummary & {
 }
 
 const DEFAULT_MCP_INSTALL_SCOPE: McpWritableScope = 'user'
+
+type McpDetailTab = 'overview' | 'tools' | 'diagnostics'
+
+const MCP_DETAIL_TABS: Array<DetailTabOption<McpDetailTab>> = [
+  { id: 'overview', label: '概览' },
+  { id: 'tools', label: '工具' },
+  { id: 'diagnostics', label: '诊断' },
+]
 
 type McpCreateDraft = {
   template: CcrMcpManifestTemplate
@@ -134,6 +144,25 @@ export function McpPage(props: {
             className="ghost-action"
             disabled={props.busy}
             type="button"
+            onClick={props.onImportManifest}
+          >
+            导入 MCP 配置
+          </button>
+          <button
+            className="ghost-action"
+            disabled={props.busy}
+            type="button"
+            onClick={() => {
+              setCreateOpen(true)
+              setCreateError(null)
+            }}
+          >
+            新建 MCP 配置
+          </button>
+          <button
+            className="ghost-action"
+            disabled={props.busy}
+            type="button"
             onClick={props.onRefresh}
           >
             刷新
@@ -141,10 +170,11 @@ export function McpPage(props: {
         </div>
       </div>
 
-      {props.error ? <div className="models-alert">{props.error}</div> : null}
-      {props.message ? (
-        <div className="mcp-inline-message">{props.message}</div>
-      ) : null}
+      <PageStatusNotice
+        autoDismiss={!props.error}
+        message={props.error ?? props.message}
+        tone={props.error ? 'error' : 'success'}
+      />
 
       <div className="mcp-workspace">
         <aside className="mcp-server-column" aria-label="MCP servers">
@@ -210,54 +240,6 @@ export function McpPage(props: {
                 <span>{candidates.length} 个候选</span>
               </div>
             </div>
-            <div className="mcp-install-actions">
-              <button
-                className="ghost-action"
-                disabled={props.busy}
-                type="button"
-                onClick={props.onImportManifest}
-              >
-                导入 MCP 安装配置
-              </button>
-              <button
-                className="ghost-action"
-                disabled={props.busy}
-                type="button"
-                onClick={() => {
-                  setCreateOpen(open => !open)
-                  setCreateError(null)
-                }}
-              >
-                创建 MCP 安装配置
-              </button>
-            </div>
-            {createOpen ? (
-              <McpCreateManifestPanel
-                busy={props.busy}
-                draft={createDraft}
-                error={createError}
-                onChange={patch => {
-                  setCreateDraft(current => ({ ...current, ...patch }))
-                  setCreateError(null)
-                }}
-                onCreate={() => {
-                  try {
-                    const manifest = buildCcrMcpInstallManifestInput(createDraft)
-                    setCreateError(null)
-                    const accepted = props.onCreateManifest(
-                      manifest as Record<string, unknown>,
-                    )
-                    if (accepted !== false) {
-                      setCreateOpen(false)
-                    }
-                  } catch (error) {
-                    setCreateError(
-                      error instanceof Error ? error.message : String(error),
-                    )
-                  }
-                }}
-              />
-            ) : null}
             <div className="mcp-install-search">
               <input
                 disabled={props.busy}
@@ -279,66 +261,96 @@ export function McpPage(props: {
                 搜索
               </button>
             </div>
-            <div className="mcp-candidate-list">
-              {candidates.length > 0 ? (
-                candidates.map(candidate => {
-                  const installState = getCandidateInstallState(
-                    candidate,
-                    servers,
-                    props.installs,
-                  )
-                  return (
-                    <div
-                      className={
-                        installState.blocked
-                          ? 'mcp-candidate-item blocked'
-                          : 'mcp-candidate-item'
-                      }
-                      key={getCandidateKey(candidate)}
-                    >
-                      <div className="mcp-candidate-main">
-                        <span>
-                          <strong>
-                            {candidate.displayName ??
-                              candidate.manifest?.name ??
-                              '未命名 MCP'}
-                          </strong>
+            <div className="mcp-install-scroll">
+              <div className="mcp-candidate-list">
+                {candidates.length > 0 ? (
+                  candidates.map(candidate => {
+                    const installState = getCandidateInstallState(
+                      candidate,
+                      servers,
+                      props.installs,
+                    )
+                    return (
+                      <div
+                        className={
+                          installState.blocked
+                            ? 'mcp-candidate-item blocked'
+                            : 'mcp-candidate-item'
+                        }
+                        key={getCandidateKey(candidate)}
+                      >
+                        <div className="mcp-candidate-main">
+                          <span>
+                            <strong>
+                              {candidate.displayName ??
+                                candidate.manifest?.name ??
+                                '未命名 MCP'}
+                            </strong>
                             <em>
                               {installState.blocked
                                 ? installState.message
                                 : formatCandidateSummary(candidate)}
                             </em>
-                        </span>
+                          </span>
+                        </div>
+                        <button
+                          className="ghost-action"
+                          disabled={
+                            props.busy ||
+                            !candidate.manifestInput ||
+                            installState.blocked
+                          }
+                          title={installState.message || undefined}
+                          type="button"
+                          onClick={() =>
+                            props.onPlanInstall(
+                              candidate,
+                              DEFAULT_MCP_INSTALL_SCOPE,
+                            )
+                          }
+                        >
+                          {installState.label}
+                        </button>
                       </div>
-                      <button
-                        className="ghost-action"
-                        disabled={
-                          props.busy ||
-                          !candidate.manifestInput ||
-                          installState.blocked
-                        }
-                        title={installState.message || undefined}
-                        type="button"
-                        onClick={() =>
-                          props.onPlanInstall(
-                            candidate,
-                            DEFAULT_MCP_INSTALL_SCOPE,
-                          )
-                        }
-                      >
-                        {installState.label}
-                      </button>
-                    </div>
-                  )
-                })
-              ) : (
-                <div className="models-empty">暂无可安装候选。</div>
-              )}
+                    )
+                  })
+                ) : (
+                  <div className="models-empty">暂无可安装候选。</div>
+                )}
+              </div>
             </div>
           </section>
-
         </aside>
       </div>
+
+      {createOpen ? (
+        <McpCreateManifestDialog
+          busy={props.busy}
+          draft={createDraft}
+          error={createError}
+          onCancel={() => setCreateOpen(false)}
+          onChange={patch => {
+            setCreateDraft(current => ({ ...current, ...patch }))
+            setCreateError(null)
+          }}
+          onCreate={() => {
+            try {
+              const manifest = buildCcrMcpInstallManifestInput(createDraft)
+              setCreateError(null)
+              const accepted = props.onCreateManifest(
+                manifest as Record<string, unknown>,
+              )
+              if (accepted !== false) {
+                setCreateOpen(false)
+              }
+            } catch (error) {
+              setCreateError(
+                error instanceof Error ? error.message : String(error),
+              )
+            }
+          }}
+        />
+      ) : null}
 
       {props.installPlan ? (
         <McpInstallConfirmDialog
@@ -369,134 +381,213 @@ function McpServerDetail(props: {
   const enabled = server.enabled !== false
   const tools = props.test?.tools ?? server.tools ?? []
   const canAdopt = isMcpServerAdoptable(server)
+  const [activeTab, setActiveTab] = useState<McpDetailTab>('overview')
+
+  useEffect(() => {
+    setActiveTab('overview')
+  }, [server.name])
 
   return (
     <>
-      <div className="models-detail-head">
-        <div>
-          <h3>{server.name}</h3>
-          <span>{formatServerSubtitle(server)}</span>
-        </div>
-        <div className="models-actions">
-          <button
-            className="ghost-action"
-            disabled={props.busy}
-            type="button"
-            onClick={() =>
-              enabled ? props.onDisable(server.name) : props.onEnable(server.name)
-            }
-          >
-            {enabled ? '禁用' : '启用'}
-          </button>
-          <button
-            className="ghost-action"
-            disabled={props.busy}
-            type="button"
-            onClick={() => props.onTest(server.name)}
-          >
-            检测
-          </button>
-          <button
-            className="ghost-action"
-            disabled={props.busy}
-            type="button"
-            onClick={() => props.onRestart(server.name)}
-          >
-            重启
-          </button>
-          {canAdopt ? (
+      <div className="detail-fixed">
+        <div className="models-detail-head">
+          <div>
+            <h3>{server.name}</h3>
+            <span>{formatServerSubtitle(server)}</span>
+            <div className="mcp-tags detail-status-tags">
+              <small className={getMcpTestTone(props.test)}>
+                检测：{formatMcpTestStatusLabel(props.test)}
+              </small>
+            </div>
+          </div>
+          <div className="models-actions">
             <button
               className="ghost-action"
               disabled={props.busy}
               type="button"
-              onClick={() => props.onAdopt(server.name)}
+              onClick={() =>
+                enabled ? props.onDisable(server.name) : props.onEnable(server.name)
+              }
             >
-              接管
+              {enabled ? '禁用' : '启用'}
             </button>
-          ) : null}
-          {server.installed?.configStatus?.needsRepair ? (
             <button
               className="ghost-action"
               disabled={props.busy}
               type="button"
-              onClick={() => props.onRepair(server.installed!)}
+              onClick={() => props.onTest(server.name)}
             >
-              修复
+              检测
             </button>
-          ) : null}
-          {server.installed?.name ? (
             <button
-              className="ghost-action danger"
+              className="ghost-action"
               disabled={props.busy}
               type="button"
-              onClick={() => props.onUninstall(server.installed!.name!)}
+              onClick={() => props.onRestart(server.name)}
             >
-              卸载
+              重启
             </button>
-          ) : null}
+            {canAdopt ? (
+              <button
+                className="ghost-action"
+                disabled={props.busy}
+                type="button"
+                onClick={() => props.onAdopt(server.name)}
+              >
+                接管
+              </button>
+            ) : null}
+            {server.installed?.configStatus?.needsRepair ? (
+              <button
+                className="ghost-action"
+                disabled={props.busy}
+                type="button"
+                onClick={() => props.onRepair(server.installed!)}
+              >
+                修复
+              </button>
+            ) : null}
+            {server.installed?.name ? (
+              <button
+                className="ghost-action danger"
+                disabled={props.busy}
+                type="button"
+                onClick={() => props.onUninstall(server.installed!.name!)}
+              >
+                卸载
+              </button>
+            ) : null}
+          </div>
         </div>
+
+        <DetailTabs<McpDetailTab>
+          activeTab={activeTab}
+          ariaLabel="MCP 详情"
+          tabs={MCP_DETAIL_TABS}
+          onChange={setActiveTab}
+        />
       </div>
 
       <div className="models-detail-body">
-        <section className="models-section">
-          <div className="models-section-head">
-            <div>
-              <h3>配置</h3>
-              <span>{getServerStatusLabel(server)}</span>
+        {activeTab === 'overview' ? (
+          <section className="models-section">
+            <div className="models-section-head">
+              <div>
+                <h3>概览</h3>
+                <span>{getServerStatusLabel(server)}</span>
+              </div>
             </div>
-          </div>
-          <dl className="models-facts">
-            <McpFactItem label="范围" value={formatMcpScopeLabel(server.scope ?? server.inventory?.scope)} />
-            <McpFactItem label="transport" value={server.transport ?? server.type ?? 'stdio'} />
-            <McpFactItem label="来源" value={server.source ?? server.inventory?.sourceId ?? 'config'} />
-            <McpFactItem label="安装类型" value={server.installKind ?? server.inventory?.installKind ?? 'manual-config'} />
-            <McpFactItem label="安装状态" value={formatInstallRecordStatus(server.installed)} />
-            <McpFactItem label="配置文件" value={server.inventory?.configPath ?? server.installed?.configPath ?? '无'} />
-            <McpFactItem label="写入目标" value={server.inventory?.writePath ?? server.installed?.configPath ?? '只读'} />
-            <McpFactItem label="命令" value={formatCommand(server)} />
-            <McpFactItem label="URL" value={server.url ?? '无'} />
-          </dl>
-        </section>
+            <dl className="models-facts">
+              <McpFactItem label="范围" value={formatMcpScopeLabel(server.scope ?? server.inventory?.scope)} />
+              <McpFactItem label="transport" value={server.transport ?? server.type ?? 'stdio'} />
+              <McpFactItem label="来源" value={server.source ?? server.inventory?.sourceId ?? 'config'} />
+              <McpFactItem label="安装类型" value={server.installKind ?? server.inventory?.installKind ?? 'manual-config'} />
+              <McpFactItem label="安装状态" value={formatInstallRecordStatus(server.installed)} />
+              <McpFactItem label="检测状态" value={formatMcpTestStatusLabel(props.test)} />
+              <McpFactItem label="配置文件" value={server.inventory?.configPath ?? server.installed?.configPath ?? '无'} />
+              <McpFactItem label="写入目标" value={server.inventory?.writePath ?? server.installed?.configPath ?? '只读'} />
+              <McpFactItem label="命令" value={formatCommand(server)} />
+              <McpFactItem label="URL" value={server.url ?? '无'} />
+            </dl>
+          </section>
+        ) : null}
 
-        <section className="models-section">
-          <div className="models-section-head">
-            <div>
-              <h3>工具与资源</h3>
-              <span>{tools.length} 个工具</span>
+        {activeTab === 'tools' ? (
+          <section className="models-section">
+            <div className="models-section-head">
+              <div>
+                <h3>工具与资源</h3>
+                <span>{tools.length} 个工具</span>
+              </div>
             </div>
-          </div>
-          {tools.length > 0 ? (
-            <div className="mcp-tool-list">
-              {tools.map(tool => (
-                <div className="mcp-tool-item" key={tool.name ?? JSON.stringify(tool)}>
-                  <strong>{tool.name ?? '未命名工具'}</strong>
-                  <span>{formatToolAnnotations(tool)}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="models-empty">当前运行时未返回工具清单。</div>
-          )}
-        </section>
+            {tools.length > 0 ? (
+              <div className="mcp-tool-list">
+                {tools.map(tool => (
+                  <div className="mcp-tool-item" key={tool.name ?? JSON.stringify(tool)}>
+                    <strong>{tool.name ?? '未命名工具'}</strong>
+                    <span>{formatToolAnnotations(tool)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="models-empty">当前运行时未返回工具清单。</div>
+            )}
+          </section>
+        ) : null}
 
-        {props.test ? (
+        {activeTab === 'diagnostics' ? (
           <section className="models-section">
             <div className="models-section-head">
               <div>
                 <h3>诊断</h3>
-                <span>{props.test.state ?? 'unknown'}</span>
+                <span>{props.test?.state ?? '未检测'}</span>
               </div>
             </div>
-            <dl className="models-facts compact">
-              <McpFactItem label="结果" value={props.test.ok ? '可用' : '不可用'} />
-              <McpFactItem label="状态" value={props.test.state ?? '未知'} />
-              <McpFactItem label="检测" value={props.test.networkChecked ? '联网检测' : '本地判断'} />
-              <McpFactItem label="说明" value={props.test.message ?? '无'} />
-            </dl>
+            {props.test ? (
+              <dl className="models-facts compact">
+                <McpFactItem label="结果" value={props.test.ok ? '可用' : '不可用'} />
+                <McpFactItem label="状态" value={props.test.state ?? '未知'} />
+                <McpFactItem label="检测" value={props.test.networkChecked ? '联网检测' : '本地判断'} />
+                <McpFactItem label="说明" value={props.test.message ?? '无'} />
+              </dl>
+            ) : (
+              <div className="models-empty">点击检测后展示诊断结果。</div>
+            )}
           </section>
         ) : null}
       </div>
     </>
+  )
+}
+
+function McpCreateManifestDialog(props: {
+  busy: boolean
+  draft: McpCreateDraft
+  error: string | null
+  onCancel: () => void
+  onChange: (patch: Partial<McpCreateDraft>) => void
+  onCreate: () => void
+}) {
+  const titleId = useId()
+
+  return (
+    <div
+      className="confirm-dialog-backdrop"
+      onMouseDown={props.onCancel}
+      role="presentation"
+    >
+      <section
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="confirm-dialog mcp-config-dialog"
+        onMouseDown={event => event.stopPropagation()}
+        role="dialog"
+      >
+        <span className="confirm-dialog-marker" aria-hidden="true" />
+        <div className="confirm-dialog-body">
+          <header className="confirm-dialog-header">
+            <strong id={titleId}>新建 MCP 配置</strong>
+            <button
+              aria-label="关闭"
+              className="dialog-close-button"
+              disabled={props.busy}
+              title="关闭"
+              type="button"
+              onClick={props.onCancel}
+            >
+              ×
+            </button>
+          </header>
+          <McpCreateManifestPanel
+            busy={props.busy}
+            draft={props.draft}
+            error={props.error}
+            onChange={props.onChange}
+            onCreate={props.onCreate}
+          />
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -694,6 +785,7 @@ function McpInstallConfirmDialog(props: {
   const writes = plan.writes ?? []
   const actionItems = getMcpInstallActionItems(plan, writes)
   const scopeLabel = formatMcpScopeLabel(plan.scope ?? 'user')
+  const description = getMcpInstallPlanDescription(props.planView)
 
   useEffect(() => {
     cancelRef.current?.focus()
@@ -736,23 +828,28 @@ function McpInstallConfirmDialog(props: {
                 : `安装到${scopeLabel}，确认后可在 MCP 页面管理`}
             </span>
           </div>
-          {props.planView.manifestPath ? (
-            <div className="mcp-install-dialog-note">
-              <strong>导入来源</strong>
-              <span>{props.planView.manifestPath}</span>
-            </div>
+          {description ? (
+            <p className="install-description-card">{description}</p>
           ) : null}
-          <div className="mcp-install-dialog-summary">
-            <strong>确认后会做这些事</strong>
-            <ul>
-              {actionItems.map(item => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-          <div className="mcp-install-dialog-note">
-            <strong>需要注意</strong>
-            <span>{getMcpInstallCaution(plan.risks ?? [])}</span>
+          <div className="install-confirm-flow">
+            {props.planView.manifestPath ? (
+              <div className="install-confirm-row">
+                <strong>来源</strong>
+                <span>{props.planView.manifestPath}</span>
+              </div>
+            ) : null}
+            <div className="install-confirm-section">
+              <strong>确认后会做这些事</strong>
+              <ul>
+                {actionItems.map(item => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="install-confirm-row">
+              <strong>注意</strong>
+              <span>{getMcpInstallCaution(plan.risks ?? [])}</span>
+            </div>
           </div>
           {props.planView.canSaveToCandidates ? (
             <label className="mcp-install-save-option">
@@ -924,6 +1021,13 @@ function getMcpInstallCaution(risks: string[]): string {
   return '安装后可以在 MCP 页面随时卸载。'
 }
 
+function getMcpInstallPlanDescription(
+  planView: McpInstallPlanViewState,
+): string {
+  const value = planView.manifestInput.description
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 function formatMcpTransportLabel(transport: string | null | undefined): string {
   switch (transport) {
     case 'stdio':
@@ -1016,6 +1120,39 @@ export function getServerTone(server: McpServerView): string {
     return 'danger'
   }
   return 'success'
+}
+
+function getMcpTestTone(test: McpTestState | null): string {
+  if (!test) {
+    return ''
+  }
+  if (test.ok === true || test.state === 'connected') {
+    return 'success'
+  }
+  if (test.ok === false || test.state === 'failed') {
+    return 'danger'
+  }
+  return 'warning'
+}
+
+function formatMcpTestStatusLabel(test: McpTestState | null): string {
+  if (!test) {
+    return '未检测'
+  }
+  if (test.ok === true) {
+    return '可用'
+  }
+  if (test.ok === false) {
+    return '不可用'
+  }
+  switch (test.state) {
+    case 'connected':
+      return '可用'
+    case 'failed':
+      return '不可用'
+    default:
+      return test.state ?? '未知'
+  }
 }
 
 export function formatCommand(server: McpServerView): string {
@@ -1196,6 +1333,17 @@ function getCandidateInstallName(candidate: McpInstallCandidate): string | null 
   return typeof inputName === 'string' && inputName.trim()
     ? inputName.trim()
     : null
+}
+
+export function formatInstalledRecord(record: McpInstallRecord): string {
+  return [
+    formatMcpScopeLabel(record.scope),
+    record.manifest?.kind,
+    record.manifest?.transport,
+    record.installedAt ?? record.updatedAt,
+  ]
+    .filter(value => typeof value === 'string' && value.trim())
+    .join(' · ')
 }
 
 function formatInstallRecordStatus(

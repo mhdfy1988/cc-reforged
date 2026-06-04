@@ -86,6 +86,9 @@ export class StdioAppServerClient {
     applyMcpInstall(params, options) {
         return this.rpc.request('mcp/install/apply', params, options);
     }
+    saveMcpInstallManifest(params, options) {
+        return this.rpc.request('mcp/install/save-manifest', params, options);
+    }
     planMcpAdopt(params, options) {
         return this.rpc.request('mcp/install/adopt/plan', params, options);
     }
@@ -100,6 +103,42 @@ export class StdioAppServerClient {
     }
     repairMcp(params, options) {
         return this.rpc.request('mcp/install/repair', params, options);
+    }
+    listSkillInstalls(params = {}, options) {
+        return this.rpc.request('skill/install/list', params, options);
+    }
+    inspectSkill(params, options) {
+        return this.rpc.request('skill/inspect', params, options);
+    }
+    searchSkillInstalls(params = {}, options) {
+        return this.rpc.request('skill/install/search', params, options);
+    }
+    planSkillInstall(params, options) {
+        return this.rpc.request('skill/install/plan', params, options);
+    }
+    applySkillInstall(params, options) {
+        return this.rpc.request('skill/install/apply', params, options);
+    }
+    planSkillImport(params, options) {
+        return this.rpc.request('skill/import/plan', params, options);
+    }
+    applySkillImport(params, options) {
+        return this.rpc.request('skill/import/apply', params, options);
+    }
+    setSkillEnabled(params, options) {
+        return this.rpc.request('skill/state/enabled', params, options);
+    }
+    setSkillInvocation(params, options) {
+        return this.rpc.request('skill/state/invocation', params, options);
+    }
+    uninstallSkill(params, options) {
+        return this.rpc.request('skill/install/uninstall', params, options);
+    }
+    repairSkill(params, options) {
+        return this.rpc.request('skill/install/repair', params, options);
+    }
+    saveSkillInstallManifest(params, options) {
+        return this.rpc.request('skill/install/save-manifest', params, options);
     }
     openWorkspace(params, options) {
         return this.rpc.request('workspace/open', params, options);

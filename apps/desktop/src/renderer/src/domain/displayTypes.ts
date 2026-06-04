@@ -262,6 +262,272 @@ export type McpTestState = {
   inspected?: Record<string, unknown>
 }
 
+export type SkillSecurityDigest = {
+  schemaVersion?: 1
+  skillName?: string
+  packageId?: string
+  highestSeverity?: 'info' | 'low' | 'medium' | 'high' | 'critical' | string
+  totalFindings?: number
+  action?: string
+  installAllowed?: boolean | null
+  requiresOverride?: boolean
+  headline?: string
+  primaryFindings?: Array<{
+    severity?: string
+    category?: string
+    title?: string
+    message?: string
+    relativePath?: string | null
+    recommendation?: string
+  }>
+}
+
+export type SkillPackageSummary = {
+  schemaVersion?: 1
+  id?: string
+  name?: string
+  displayName?: string
+  description?: string
+  body?: string
+  bodyPath?: string | null
+  baseDir?: string | null
+  source?: string
+  origin?: {
+    vendor?: string
+    sourcePath?: string | null
+    importedFrom?: string
+  }
+  resources?: {
+    scripts?: string[]
+    references?: string[]
+    assets?: string[]
+  }
+  invocation?: {
+    modelInvocable?: boolean
+    userInvocable?: boolean
+    context?: string
+    allowedTools?: string[]
+    argumentHint?: string
+    argumentNames?: string[]
+    whenToUse?: string
+  }
+  compatibility?: {
+    warnings?: string[]
+    rawFrontmatter?: Record<string, unknown>
+  }
+}
+
+export type SkillInstallRecord = {
+  schemaVersion?: 1
+  name?: string
+  scope?: 'user' | 'project' | string
+  installedAt?: string
+  updatedAt?: string
+  manifest?: SkillInstallManifestSummary & {
+    source?: Record<string, unknown>
+    defaults?: {
+      enabled?: boolean
+      modelInvocable?: boolean
+      userInvocable?: boolean
+    }
+    trust?: Record<string, unknown>
+    compatibility?: Record<string, unknown>
+  }
+  packageDir?: string
+  skillFilePath?: string
+  packageOwnerMarkerPath?: string
+  enabled?: boolean
+  modelInvocable?: boolean
+  userInvocable?: boolean
+  lockKey?: string
+}
+
+export type SkillInstalledInspection = {
+  schemaVersion?: 1
+  lockKey?: string
+  name?: string
+  scope?: 'user' | 'project' | string
+  status?:
+    | 'installed'
+    | 'disabled'
+    | 'missing-package'
+    | 'missing-skill-md'
+    | 'missing-owner-marker'
+    | 'missing-lock'
+    | 'drifted'
+    | 'invalid'
+    | string
+  statusMessage?: string
+  installedRecord?: SkillInstallRecord
+  lockRecord?: Record<string, unknown> | null
+  ownerMarker?: Record<string, unknown> | null
+  package?: SkillPackageSummary | null
+  securityReport?: Record<string, unknown> | null
+  securityDigest?: SkillSecurityDigest | null
+  checksum?: {
+    algorithm?: string
+    expectedSkillMd?: string | null
+    actualSkillMd?: string | null
+    drifted?: boolean
+  }
+  errors?: string[]
+}
+
+export type SkillInstallManifestSummary = {
+  schemaVersion?: 1
+  name?: string
+  displayName?: string
+  description?: string
+  kind?: string
+  targetScope?: 'user' | 'project' | string
+  enabled?: boolean
+  modelInvocable?: boolean
+  userInvocable?: boolean
+  originVendor?: string | null
+  convertedFromCommand?: boolean
+}
+
+export type SkillInstallCandidate = {
+  candidateId?: string
+  sourceType?: 'imported-skill' | 'local-manifest' | 'builtin-preset' | string
+  sourceLabel?: string
+  originPath?: string | null
+  state?: 'available' | 'installed' | 'duplicate-name' | 'invalid' | string
+  stateMessage?: string
+  duplicateGroupCount?: number
+  manifest?: SkillInstallManifestSummary
+  manifestInput?: Record<string, unknown>
+  packagePreview?: SkillPackageSummary
+  securityDigest?: SkillSecurityDigest | null
+  displayName?: string
+  description?: string
+  trusted?: boolean
+  risks?: string[]
+}
+
+export type SkillInstallSearchState = {
+  query?: string
+  candidates?: SkillInstallCandidate[]
+  errors?: Array<{
+    sourceType?: string
+    originPath?: string | null
+    message?: string
+  }>
+  sources?: Array<{
+    sourceType?: string
+    sourceLabel?: string
+    originPath?: string | null
+    enabled?: boolean
+  }>
+}
+
+export type SkillInstallListState = {
+  installPaths?: {
+    skillsRootDir?: string
+    importedRootDir?: string
+    packagesRootDir?: string
+    manifestsDir?: string
+    cacheDir?: string
+    installedIndexPath?: string
+    lockFilePath?: string
+  }
+  installed?: SkillInstalledInspection[]
+  summary?: Record<string, number>
+  candidates?: SkillInstallCandidate[]
+  candidateErrors?: SkillInstallSearchState['errors']
+  sources?: SkillInstallSearchState['sources']
+}
+
+export type SkillInstallPlanState = {
+  schemaVersion?: 1
+  planId?: string
+  name?: string
+  scope?: 'user' | 'project' | string
+  installable?: boolean
+  force?: boolean
+  manifest?: SkillInstallManifestSummary
+  manifestInput?: Record<string, unknown>
+  securityDigest?: SkillSecurityDigest | null
+  securityDecision?: {
+    action?: string
+    installAllowed?: boolean
+    requiresOverride?: boolean
+    overrideToken?: string
+    reasons?: string[]
+  }
+  overrideRequired?: boolean
+  packagePreview?: {
+    name?: string
+    description?: string
+    originVendor?: string
+    resources?: {
+      scripts?: number
+      references?: number
+      assets?: number
+    }
+  }
+  writes?: Array<{
+    kind?: string
+    path?: string
+    mode?: string
+  }>
+  conflicts?: Array<{
+    kind?: string
+    message?: string
+  }>
+  risks?: string[]
+  requiresConfirmation?: boolean
+  confirmation?: {
+    token?: string
+    message?: string
+  }
+}
+
+export type SkillInstallPlanViewState = {
+  plan: SkillInstallPlanState
+  manifestInput: Record<string, unknown>
+  canSaveToCandidates?: boolean
+  saveToCandidates?: boolean
+  securityOverrideAccepted?: boolean
+}
+
+export type SkillImportPlanState = {
+  schemaVersion?: 1
+  planId?: string
+  candidateId?: string
+  name?: string
+  source?: Record<string, unknown>
+  originVendor?: string
+  targetDir?: string
+  writes?: Array<{
+    kind?: string
+    fromPath?: string
+    toPath?: string
+    mode?: string
+  }>
+  conversion?: {
+    required?: boolean
+    kind?: string
+    notes?: string[]
+  }
+  conflicts?: Array<{
+    kind?: string
+    message?: string
+  }>
+  risks?: string[]
+  importable?: boolean
+  requiresConfirmation?: boolean
+  confirmation?: {
+    token?: string
+    message?: string
+  }
+}
+
+export type SkillImportPlanViewState = {
+  plan: SkillImportPlanState
+  source: Record<string, unknown>
+}
+
 export type DesktopStatus = {
   appServer: string
   platform: string

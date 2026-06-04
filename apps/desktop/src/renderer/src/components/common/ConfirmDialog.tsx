@@ -51,6 +51,9 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
   const confirmClassName = ['primary-action', tone === 'danger' ? 'danger' : '']
     .filter(Boolean)
     .join(' ')
+  const detailClassName = props.detail
+    ? getConfirmDialogDetailClassName(props.detail)
+    : undefined
 
   return (
     <div
@@ -73,7 +76,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
           </header>
           <p className="confirm-dialog-message">{props.message}</p>
           {props.detail ? (
-            <pre className="confirm-dialog-detail" id={detailId}>
+            <pre className={detailClassName} id={detailId}>
               {props.detail}
             </pre>
           ) : null}
@@ -104,4 +107,22 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
 
 export function getConfirmDialogToneClass(tone: ConfirmDialogTone): string {
   return `confirm-dialog--${tone}`
+}
+
+function getConfirmDialogDetailClassName(detail: string): string {
+  return [
+    'confirm-dialog-detail',
+    isTechnicalDialogDetail(detail)
+      ? 'confirm-dialog-detail--technical'
+      : 'confirm-dialog-detail--note',
+  ].join(' ')
+}
+
+function isTechnicalDialogDetail(detail: string): boolean {
+  const trimmed = detail.trim()
+  return (
+    /^[{\[]/.test(trimmed) ||
+    /[A-Za-z]:[\\/]/.test(trimmed) ||
+    /(^|\s)(~\/|\.{1,2}\/|\/)[^\s]+/.test(trimmed)
+  )
 }

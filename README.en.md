@@ -6,7 +6,7 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.5.2-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.6.0-orange?style=flat-square)
 
 CCR is a recovery and evolution build of a terminal coding agent. It keeps the original terminal-first workflow, adds a CCR-owned configuration/runtime boundary, and is growing a Desktop client around a stable App Server protocol.
 
@@ -17,7 +17,7 @@ The current main line focuses on:
 - Built-in LLM runtime abstractions for multiple providers, profiles, protocols, multimodal content blocks, generated artifacts, and per-turn model metadata.
 - Codex OAuth, OpenAI, DeepSeek official API, MiniMax International / China, Kimi, GLM API / Coding Plan, and shared OpenAI Chat Completions plus Anthropic Messages protocol adapters.
 - Provider-neutral image generation through `GenerateImage`, with generated images persisted before Desktop thumbnail / preview rendering.
-- MCP management baseline, including user-level config, Desktop MCP page, Playwright MCP install flow, enable/disable, diagnostics, and MCP tool cards.
+- MCP and Skill management baseline, including user-level MCP config, Desktop MCP / Skill pages, install flows, enable/disable, diagnostics, and managed records.
 - Project-local `.ccr` settings isolation, avoiding conflicts with Claude Code, Codex, or OpenClaw on the same machine.
 
 ![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
@@ -25,7 +25,7 @@ The current main line focuses on:
 ## Current Status
 
 - Package: `cc-reforged`
-- Version: `0.5.2`
+- Version: `0.6.0`
 - CLI command: `ccr`
 - Desktop app: `CCR`
 - Runtime requirement: Node.js `>=24.0.0`
@@ -36,7 +36,7 @@ The current main line focuses on:
 
 The repository may contain unreleased work after the latest tagged version. See [CHANGELOG.md](CHANGELOG.md) for user-facing changes.
 
-The `0.5.x` line continues to harden multimodal, multi-provider, tool-calling, and MCP management behavior. The next larger line, `0.6.0`, is planned for Skill, Plugin, and external capability package governance work.
+The `0.6.0` line focuses on Skill / Plugin and external capability package governance, building on the MCP management baseline with Skill installation, runtime activation, audit, and management flows.
 
 ## Install
 
@@ -133,6 +133,7 @@ Built-in providers:
 - Workspace switching and project-local settings isolation.
 - Session history grouped by workspace.
 - First-level Models page for provider profiles, credentials, models, and connection testing.
+- First-level MCP and Skill pages for install, enable/disable, diagnostics, repair, and uninstall flows.
 - Current model and profile quick switching in the top bar.
 - Multimodal input cards, generated image cards, local thumbnail / preview flow, and persisted generated outputs.
 - Permission settings UI for local / project / user settings.

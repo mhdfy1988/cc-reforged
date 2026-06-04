@@ -246,6 +246,12 @@ export const McpInstallApplyParamsSchema = McpInstallPlanParamsSchema.extend({
     confirmed: z.boolean(),
     confirmationToken: z.string().min(1),
 }).strict();
+export const McpInstallSaveManifestParamsSchema = z
+    .object({
+    manifest: JsonRpcParamsSchema,
+    overwrite: z.boolean().optional(),
+})
+    .strict();
 export const McpInstallAdoptPlanParamsSchema = z
     .object({
     name: z.string().min(1),
@@ -267,6 +273,66 @@ export const McpInstallRepairParamsSchema = z
     name: z.string().min(1),
     scope: McpWritableScopeSchema.default('user'),
     confirmed: z.boolean(),
+})
+    .strict();
+const SkillInstallScopeSchema = z.enum(['user', 'project']);
+export const SkillInstallSearchParamsSchema = z
+    .object({
+    query: z.string().optional(),
+})
+    .strict()
+    .default({});
+export const SkillInstallPlanParamsSchema = z
+    .object({
+    scope: SkillInstallScopeSchema.default('user'),
+    manifest: JsonRpcParamsSchema,
+    force: z.boolean().optional(),
+    securityOverrideToken: z.string().min(1).optional(),
+})
+    .strict();
+export const SkillInstallApplyParamsSchema = SkillInstallPlanParamsSchema.extend({
+    confirmed: z.boolean(),
+    confirmationToken: z.string().min(1),
+}).strict();
+export const SkillInstallListParamsSchema = z.object({}).strict().default({});
+export const SkillInspectParamsSchema = z
+    .object({
+    skillRef: z.string().min(1),
+})
+    .strict();
+export const SkillImportPlanParamsSchema = z
+    .object({
+    source: JsonRpcParamsSchema,
+})
+    .strict();
+export const SkillImportApplyParamsSchema = SkillImportPlanParamsSchema.extend({
+    confirmed: z.boolean(),
+    confirmationToken: z.string().min(1),
+}).strict();
+export const SkillSetEnabledParamsSchema = z
+    .object({
+    skillRef: z.string().min(1),
+    enabled: z.boolean(),
+})
+    .strict();
+export const SkillSetInvocationParamsSchema = z
+    .object({
+    skillRef: z.string().min(1),
+    modelInvocable: z.boolean().optional(),
+    userInvocable: z.boolean().optional(),
+})
+    .strict();
+export const SkillInstallUninstallParamsSchema = z
+    .object({
+    skillRef: z.string().min(1),
+    confirmed: z.boolean(),
+})
+    .strict();
+export const SkillInstallRepairParamsSchema = SkillInstallUninstallParamsSchema;
+export const SkillInstallSaveManifestParamsSchema = z
+    .object({
+    manifest: JsonRpcParamsSchema,
+    overwrite: z.boolean().optional(),
 })
     .strict();
 export const WorkspaceOpenParamsSchema = z
@@ -478,6 +544,7 @@ export const DEFAULT_SERVER_CAPABILITIES = {
     auth: true,
     models: true,
     mcp: true,
+    skills: true,
     workspace: true,
     threads: true,
     turns: true,
