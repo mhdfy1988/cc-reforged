@@ -143,7 +143,7 @@ async function inspectInstalledRecord(lockKey, record, lockIndex, configHomeDir)
             lockRecord,
             source: 'installed',
         });
-        const enabled = record.enabled && record.modelInvocable;
+        const enabled = record.enabled;
         return completeInspection({
             ...base,
             ownerMarker,

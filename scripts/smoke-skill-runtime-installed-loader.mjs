@@ -52,8 +52,8 @@ try {
   assert.equal(entriesByName.get('runtime-model-off').activation.userInvocable, true)
   assert.equal(entriesByName.get('runtime-user-off').activation.modelInvocable, true)
   assert.equal(entriesByName.get('runtime-user-off').activation.userInvocable, false)
-  assert.equal(result.summary.installed, 2)
-  assert.equal(result.summary.disabled, 2)
+  assert.equal(result.summary.installed, 3)
+  assert.equal(result.summary.disabled, 1)
   assert.equal(result.summary.drifted, 1)
 } finally {
   await env.cleanup()

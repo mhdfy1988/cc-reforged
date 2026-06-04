@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { DetailTabs, type DetailTabOption } from '../common/DetailTabs.js'
+import { IconActionButton } from '../common/IconActionButton.js'
 import { PageStatusNotice } from '../common/PageStatusNotice.js'
 import {
   buildCcrMcpInstallManifestInput,
@@ -184,29 +185,52 @@ export function McpPage(props: {
           </div>
           <div className="mcp-server-list">
             {servers.length > 0 ? (
-              servers.map(server => (
-                <button
-                  className={
-                    server.name === selectedServer?.name
-                      ? 'mcp-server-item active'
-                      : 'mcp-server-item'
-                  }
-                  key={server.name}
-                  type="button"
-                  onClick={() => setSelectedName(server.name)}
-                >
-                  <span>
-                    <strong>{server.name}</strong>
-                    <em>{formatServerSubtitle(server)}</em>
-                  </span>
-                  <div className="mcp-tags">
-                    <small className={getServerTone(server)}>
-                      {getServerStatusLabel(server)}
-                    </small>
-                    <small>{server.installKind ?? server.inventory?.installKind ?? 'manual'}</small>
+              servers.map(server => {
+                const serverEnabled = server.enabled !== false
+                return (
+                  <div
+                    className={
+                      server.name === selectedServer?.name
+                        ? 'mcp-server-item active'
+                        : 'mcp-server-item'
+                    }
+                    key={server.name}
+                  >
+                    <button
+                      className="mcp-server-main"
+                      type="button"
+                      onClick={() => setSelectedName(server.name)}
+                    >
+                      <span>
+                        <strong>{server.name}</strong>
+                        <em>{formatServerSubtitle(server)}</em>
+                      </span>
+                    </button>
+                    <div className="mcp-server-item-foot">
+                      <div className="mcp-tags">
+                        <small>
+                          {server.installKind ??
+                            server.inventory?.installKind ??
+                            'manual'}
+                        </small>
+                      </div>
+                      <label className="mcp-list-toggle">
+                        <input
+                          checked={serverEnabled}
+                          disabled={props.busy}
+                          type="checkbox"
+                          onChange={event =>
+                            event.target.checked
+                              ? props.onEnable(server.name)
+                              : props.onDisable(server.name)
+                          }
+                        />
+                        <i aria-hidden="true" />
+                      </label>
+                    </div>
                   </div>
-                </button>
-              ))
+                )
+              })
             ) : (
               <div className="models-empty">暂无 MCP server。</div>
             )}
@@ -219,8 +243,6 @@ export function McpPage(props: {
               busy={props.busy}
               server={selectedServer}
               test={selectedTest ?? null}
-              onDisable={props.onDisable}
-              onEnable={props.onEnable}
               onAdopt={props.onAdopt}
               onRepair={props.onRepair}
               onRestart={props.onRestart}
@@ -252,14 +274,12 @@ export function McpPage(props: {
                   }
                 }}
               />
-              <button
-                className="ghost-action"
+              <IconActionButton
                 disabled={props.busy}
-                type="button"
+                icon="search"
+                label="搜索"
                 onClick={() => props.onSearchInstalls(installQuery)}
-              >
-                搜索
-              </button>
+              />
             </div>
             <div className="mcp-install-scroll">
               <div className="mcp-candidate-list">
@@ -369,8 +389,6 @@ function McpServerDetail(props: {
   busy: boolean
   server: McpServerView
   test: McpTestState | null
-  onDisable: (name: string) => void
-  onEnable: (name: string) => void
   onAdopt: (name: string) => void
   onRepair: (record: McpInstallRecord) => void
   onRestart: (name: string) => void
@@ -378,7 +396,6 @@ function McpServerDetail(props: {
   onUninstall: (name: string) => void
 }) {
   const server = props.server
-  const enabled = server.enabled !== false
   const tools = props.test?.tools ?? server.tools ?? []
   const canAdopt = isMcpServerAdoptable(server)
   const [activeTab, setActiveTab] = useState<McpDetailTab>('overview')
@@ -401,32 +418,18 @@ function McpServerDetail(props: {
             </div>
           </div>
           <div className="models-actions">
-            <button
-              className="ghost-action"
+            <IconActionButton
               disabled={props.busy}
-              type="button"
-              onClick={() =>
-                enabled ? props.onDisable(server.name) : props.onEnable(server.name)
-              }
-            >
-              {enabled ? '禁用' : '启用'}
-            </button>
-            <button
-              className="ghost-action"
-              disabled={props.busy}
-              type="button"
+              icon="activity"
+              label="检测"
               onClick={() => props.onTest(server.name)}
-            >
-              检测
-            </button>
-            <button
-              className="ghost-action"
+            />
+            <IconActionButton
               disabled={props.busy}
-              type="button"
+              icon="rotate"
+              label="重启"
               onClick={() => props.onRestart(server.name)}
-            >
-              重启
-            </button>
+            />
             {canAdopt ? (
               <button
                 className="ghost-action"
@@ -438,24 +441,21 @@ function McpServerDetail(props: {
               </button>
             ) : null}
             {server.installed?.configStatus?.needsRepair ? (
-              <button
-                className="ghost-action"
+              <IconActionButton
                 disabled={props.busy}
-                type="button"
+                icon="wrench"
+                label="修复"
                 onClick={() => props.onRepair(server.installed!)}
-              >
-                修复
-              </button>
+              />
             ) : null}
             {server.installed?.name ? (
-              <button
-                className="ghost-action danger"
+              <IconActionButton
+                danger
                 disabled={props.busy}
-                type="button"
+                icon="trash"
+                label="卸载"
                 onClick={() => props.onUninstall(server.installed!.name!)}
-              >
-                卸载
-              </button>
+              />
             ) : null}
           </div>
         </div>

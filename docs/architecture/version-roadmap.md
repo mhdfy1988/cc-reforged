@@ -6,19 +6,17 @@
 
 ## 2. 当前发布版本
 
-当前公开版本：`0.6.0`。
+当前公开版本：`0.6.1`。
 
-发布时间：2026-05-31。
+发布时间：2026-06-05。
 
-发布入口：<https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.5.2>
+发布入口：<https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.6.1>
 
-`0.5.2` 的核心范围：
+`0.6.1` 的核心范围：
 
-- ThreadDisplay 历史恢复和实时展示统一到 `ThreadDisplaySnapshot` / `ThreadDisplayPatch` 与 Ordered Display Reducer。
-- compact 后当前模型上下文和 UI 可见历史改为同源双投影，减少恢复旧上下文和历史裁剪问题。
-- 并行工具、乱序结果、工具进度 / 失败 / 中断、用户图片和模型输出图片进入展示黄金回归覆盖。
-- 新增模型调用使用事件流和 Desktop 使用统计页面，支持按 provider、profile、model、project 聚合。
-- Desktop Windows 安装包、GitHub Release 公开发布、npm Trusted Publishing 和远端自动更新 feed 验证完成。
+- Skill / MCP 管理页状态语义继续收敛，整体启用状态从文字标签改为无文字切换开关。
+- Skill / MCP 详情页操作区改为 icon-only 按钮，保留 `title` / `aria-label` 与危险操作视觉区分。
+- Skill 安装检查修复 `modelInvocable=false` 被误判为 Skill 已禁用的问题，并补回归 smoke。
 
 ## 3. `0.5.x` 版本线
 

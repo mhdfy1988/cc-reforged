@@ -243,7 +243,7 @@ async function inspectInstalledRecord(
       lockRecord,
       source: 'installed',
     })
-    const enabled = record.enabled && record.modelInvocable
+    const enabled = record.enabled
     return completeInspection(
       {
         ...base,

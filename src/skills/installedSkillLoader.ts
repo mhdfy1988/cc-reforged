@@ -192,14 +192,14 @@ async function inspectInstalledRuntimeRecord(
         package: skillPackage,
         checksum,
       },
-      record.enabled && record.modelInvocable
+      record.enabled
         ? {
             status: 'installed',
             message: `Skill is installed: ${record.name}`,
           }
         : {
             status: 'disabled',
-            message: `Skill is installed but disabled for at least one runtime surface: ${record.name}`,
+            message: `Skill is installed but disabled: ${record.name}`,
           },
     )
   } catch (error) {

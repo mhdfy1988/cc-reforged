@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { DetailTabs, type DetailTabOption } from '../common/DetailTabs.js'
+import { IconActionButton } from '../common/IconActionButton.js'
 import { PageStatusNotice } from '../common/PageStatusNotice.js'
 import { RawDataBlock } from '../common/RawDataBlock.js'
 import type {
@@ -178,30 +179,45 @@ export function SkillsPage(props: {
             {installed.length > 0 ? (
               installed.map(skill => {
                 const ref = getSkillRef(skill)
+                const skillEnabled = skill.installedRecord?.enabled !== false
                 return (
-                  <button
+                  <div
                     className={
                       ref === getSkillRef(selectedSkill)
                         ? 'mcp-server-item active'
                         : 'mcp-server-item'
                     }
                     key={ref}
-                    type="button"
-                    onClick={() => setSelectedRef(ref)}
                   >
-                    <span>
-                      <strong>{getSkillTitle(skill)}</strong>
-                      <em>{formatInstalledSkillSubtitle(skill)}</em>
-                    </span>
-                    <div className="mcp-tags">
-                      <small className={getSkillStatusTone(skill.status)}>
-                        {formatSkillStatus(skill.status)}
-                      </small>
-                      <small className={getSeverityTone(skill.securityDigest)}>
-                        {formatSeverity(skill.securityDigest)}
-                      </small>
+                    <button
+                      className="mcp-server-main"
+                      type="button"
+                      onClick={() => setSelectedRef(ref)}
+                    >
+                      <span>
+                        <strong>{getSkillTitle(skill)}</strong>
+                        <em>{formatInstalledSkillSubtitle(skill)}</em>
+                      </span>
+                    </button>
+                    <div className="mcp-server-item-foot">
+                      <div className="mcp-tags">
+                        <small className={getSeverityTone(skill.securityDigest)}>
+                          {formatSeverity(skill.securityDigest)}
+                        </small>
+                      </div>
+                      <label className="skill-list-toggle">
+                        <input
+                          checked={skillEnabled}
+                          disabled={props.busy}
+                          type="checkbox"
+                          onChange={event =>
+                            props.onSetEnabled(ref, event.target.checked)
+                          }
+                        />
+                        <i aria-hidden="true" />
+                      </label>
                     </div>
-                  </button>
+                  </div>
                 )
               })
             ) : (
@@ -245,14 +261,12 @@ export function SkillsPage(props: {
                   }
                 }}
               />
-              <button
-                className="ghost-action"
+              <IconActionButton
                 disabled={props.busy}
-                type="button"
+                icon="search"
+                label="搜索"
                 onClick={() => props.onSearchInstalls(installQuery)}
-              >
-                搜索
-              </button>
+              />
             </div>
 
             <div className="mcp-install-scroll">
@@ -385,30 +399,19 @@ function SkillDetail(props: {
             <span>{skillPackage?.description ?? record?.manifest?.description ?? props.skill.statusMessage ?? '无说明'}</span>
           </div>
           <div className="models-actions">
-            <button
-              className="ghost-action"
+            <IconActionButton
               disabled={props.busy}
-              type="button"
-              onClick={() => props.onSetEnabled(skillRef, !enabled)}
-            >
-              {enabled ? '禁用' : '启用'}
-            </button>
-            <button
-              className="ghost-action"
-              disabled={props.busy}
-              type="button"
+              icon="wrench"
+              label="修复"
               onClick={() => props.onRepair(props.skill)}
-            >
-              修复
-            </button>
-            <button
-              className="ghost-action danger"
+            />
+            <IconActionButton
+              danger
               disabled={props.busy}
-              type="button"
+              icon="trash"
+              label="卸载"
               onClick={() => props.onUninstall(props.skill)}
-            >
-              卸载
-            </button>
+            />
           </div>
         </div>
 
@@ -426,7 +429,6 @@ function SkillDetail(props: {
             <div className="models-section-head">
               <div>
                 <h3>概览</h3>
-                <span>{formatSkillStatus(props.skill.status)}</span>
               </div>
             </div>
             <dl className="models-facts compact">

@@ -29,6 +29,7 @@ try {
   const installedNames = [
     'ok-skill',
     'disabled-skill',
+    'model-off-skill',
     'drift-skill',
     'missing-skill',
     'missing-marker',
@@ -40,6 +41,12 @@ try {
       modelInvocable: name !== 'disabled-skill',
     })
   }
+  await setInstalledRecord('disabled-skill', { enabled: false })
+  await setInstalledRecord('model-off-skill', {
+    enabled: true,
+    modelInvocable: false,
+    userInvocable: true,
+  })
 
   await writeFile(
     join(configHome, 'skills', 'packages', 'drift-skill', 'SKILL.md'),
@@ -69,7 +76,7 @@ try {
   const statusByName = Object.fromEntries(
     listed.installed.map(inspection => [inspection.name, inspection.status]),
   )
-  assert.equal(listed.summary.installed, 1)
+  assert.equal(listed.summary.installed, 2)
   assert.equal(listed.summary.disabled, 1)
   assert.equal(listed.summary.drifted, 1)
   assert.equal(listed.summary['missing-skill-md'], 1)
@@ -78,6 +85,7 @@ try {
   assert.equal(listed.summary['missing-lock'], 1)
   assert.equal(statusByName['ok-skill'], 'installed')
   assert.equal(statusByName['disabled-skill'], 'disabled')
+  assert.equal(statusByName['model-off-skill'], 'installed')
   assert.equal(statusByName['drift-skill'], 'drifted')
   assert.equal(statusByName['missing-skill'], 'missing-skill-md')
   assert.equal(statusByName['missing-marker'], 'missing-owner-marker')
@@ -159,6 +167,31 @@ async function installImportedSkill(name, options = {}) {
     configHomeDir: configHome,
     now: new Date('2026-06-02T00:00:00.000Z'),
   })
+}
+
+async function setInstalledRecord(name, patch) {
+  const installedPath = join(configHome, 'skills', 'installed.json')
+  const installedIndex = JSON.parse(await readFile(installedPath, 'utf8'))
+  const lockKey = `user:${name}`
+  const record = installedIndex.installed?.[lockKey]
+  assert.ok(record, `missing installed record for ${name}`)
+  installedIndex.installed[lockKey] = {
+    ...record,
+    ...patch,
+    manifest: {
+      ...record.manifest,
+      defaults: {
+        ...record.manifest?.defaults,
+        ...(patch.modelInvocable === undefined
+          ? {}
+          : { modelInvocable: patch.modelInvocable }),
+        ...(patch.userInvocable === undefined
+          ? {}
+          : { userInvocable: patch.userInvocable }),
+      },
+    },
+  }
+  await writeFile(installedPath, `${JSON.stringify(installedIndex, null, 2)}\n`, 'utf8')
 }
 
 function skillMarkdown(name, options = {}) {

@@ -1842,6 +1842,25 @@ h1 {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.mcp-server-main {
+  display: grid;
+  min-width: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mcp-server-item-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
 .mcp-candidate-item {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -2178,6 +2197,86 @@ h1 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   min-width: 0;
+}
+
+.skill-list-toggle,
+.mcp-list-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  color: #5b452f;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+  user-select: none;
+}
+
+.skill-list-toggle input,
+.mcp-list-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.skill-list-toggle i,
+.mcp-list-toggle i {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border: 1px solid rgba(153, 125, 93, 0.36);
+  border-radius: 999px;
+  background: #fffaf0;
+  box-shadow: inset 0 1px 2px rgba(91, 69, 47, 0.1);
+}
+
+.skill-list-toggle i::after,
+.mcp-list-toggle i::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #b59b78;
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.skill-list-toggle:has(input:checked),
+.mcp-list-toggle:has(input:checked) {
+  color: #0b6f5b;
+}
+
+.skill-list-toggle:has(input:checked) i,
+.mcp-list-toggle:has(input:checked) i {
+  border-color: rgba(11, 154, 126, 0.34);
+  background: #f2fff9;
+  box-shadow: 0 0 0 3px rgba(11, 154, 126, 0.08);
+}
+
+.skill-list-toggle:has(input:checked) i::after,
+.mcp-list-toggle:has(input:checked) i::after {
+  background: #0b9a7e;
+  transform: translateX(14px);
+}
+
+.skill-list-toggle:has(input:focus-visible),
+.mcp-list-toggle:has(input:focus-visible) {
+  outline: 2px solid rgba(239, 151, 0, 0.38);
+  outline-offset: 3px;
+}
+
+.skill-list-toggle:has(input:disabled),
+.mcp-list-toggle:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .skill-toggle-row label {
@@ -2524,6 +2623,56 @@ h1 {
 
 .ghost-action.danger {
   color: #8b2f2f;
+}
+
+.icon-action {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(208, 186, 158, 0.85);
+  border-radius: 12px;
+  color: #4f3b27;
+  background: #fff8ea;
+  padding: 0;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.icon-action svg {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-action.danger {
+  color: #8b2f2f;
+}
+
+.icon-action:not(:disabled):hover {
+  border-color: rgba(239, 151, 0, 0.58);
+  box-shadow: 0 10px 22px rgba(158, 105, 25, 0.11);
+  transform: translateY(-1px);
+}
+
+.icon-action.danger:not(:disabled):hover {
+  border-color: rgba(194, 64, 55, 0.42);
+  color: #9f2424;
+  background: rgba(255, 241, 238, 0.92);
+  box-shadow: 0 10px 22px rgba(138, 42, 37, 0.1);
+}
+
+.icon-action:focus-visible {
+  outline: 2px solid rgba(239, 151, 0, 0.38);
+  outline-offset: 2px;
+}
+
+.icon-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
 }
 
 .primary-action:not(:disabled):hover,

@@ -6,11 +6,11 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.6.0-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.6.1-orange?style=flat-square)
 
 CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留终端优先的工作方式，同时把配置、LLM 运行时、App Server 和 Desktop 客户端逐步收敛到 CCR 自己的边界内。
 
-当前 `0.6.0` 版本线聚焦 Skill / Plugin 和外部能力包治理，在 MCP 管理面基础上补齐 Skill 安装、运行时启用、审计和管理入口。
+当前 `0.6.1` 版本线聚焦 Skill / Plugin 和外部能力包治理，在 MCP 管理面基础上补齐 Skill 安装、运行时启用、审计和管理入口，并继续打磨 Desktop 管理页体验。
 
 ![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
 
@@ -47,7 +47,7 @@ Provider Adapters
 | 项目 | 当前值 |
 | --- | --- |
 | npm 包名 | `cc-reforged` |
-| 当前版本 | `0.6.0` |
+| 当前版本 | `0.6.1` |
 | CLI 命令 | `ccr` |
 | 桌面应用 | `CCR` |
 | 运行时要求 | Node.js `>=24.0.0` |
@@ -497,6 +497,7 @@ npm.cmd run smoke:desktop-release-artifacts
 | --- | --- |
 | `0.5.x` | 多模态、多模型、工具调用、MCP 管理面、错误诊断、历史会话、发布质量继续稳定化 |
 | `0.6.0` | Skill / Plugin 和外部能力包治理，补齐 Skill 安装管理、运行时启用、审计和管理入口 |
+| `0.6.1` | Skill / MCP 管理页状态语义与详情操作区体验优化 |
 | 后续 | 跨供应商能力路由、音频 / 视频 / 文件生成、更多 provider conformance matrix |
 
 `0.5.x` 期间不会把没有能力声明的模型伪装成全能模型，也不会默认跨供应商发送用户数据。所有 provider 能力都应进入模型目录、Profile 覆盖或显式工具配置。
