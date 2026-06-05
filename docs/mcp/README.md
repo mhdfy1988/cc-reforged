@@ -1,6 +1,6 @@
 # CCR MCP 文档入口
 
-本目录用于沉淀 CCR 的通用 MCP 接入设计、安装使用流程、验证方法、风险边界和具体 MCP 服务方案。原则是：核心运行时保持通用，具体 MCP 服务通过配置、预设、受控安装计划和文档进入，不把单个 MCP 硬编码进主循环。
+本目录用于沉淀 CCR 的通用 MCP 接入设计、安装使用流程、验证方法、风险边界和具体 MCP 服务方案。Skill / MCP / Plugin / Tool 的总体关系先看 [CCR 扩展能力体系总览](../architecture/extension-capability-system.md)。原则是：核心运行时保持通用，具体 MCP 服务通过配置、预设、受控安装计划和文档进入，不把单个 MCP 硬编码进主循环。
 
 ## 目录职责
 
@@ -52,7 +52,7 @@
 
 ## 当前路线
 
-第一阶段已经从“示例验证”推进到“用户级默认入口 + Desktop 管理面”。当前版本线调整为：MCP 动态工具治理和基础管理面提前进入 `0.5.x` 收尾；Skill / Plugin 扩展包治理留到 `0.6.0`。
+第一阶段已经从“示例验证”推进到“用户级默认入口 + Desktop 管理面”。当前版本线已经进入 `0.6.x` 扩展能力治理：MCP server 和 MCP tool 会进入统一 Capability Catalog，MCP 管理页继续负责连接、检测、重启、安装、修复和卸载等 server 级操作。
 
 已完成：
 
@@ -68,6 +68,7 @@
 - `ccr mcp add-playwright --mode npx` 保持快速模式，Windows 使用 `npx.cmd -y @playwright/mcp@<version>`。
 - `ccr mcp list/get` 和 TUI 默认 MCP 启动链路都会读取 `~/.ccr/mcp.json`。
 - 旧 settings 中的 user MCP 只作为迁移期只读兼容来源，新写入不再进入旧配置文件。
+- MCP server / MCP tool 已接入统一能力目录；需要跨 Skill / MCP / Tool 查看来源和运行时可见性时，可使用 `capabilities/list` 或 CLI `capabilities list`。
 
 ## 使用入口
 

@@ -1,4 +1,5 @@
 import { getCoreAuthStatus, loginCoreAuth } from './authCore.js'
+import { listCoreCapabilities } from './capabilityCore.js'
 import { getCoreConfigSnapshot } from './configCore.js'
 import {
   addCoreMcpServer,
@@ -72,6 +73,9 @@ export function createCcrCore(options: {
     auth: {
       getStatus: getCoreAuthStatus,
       login: loginCoreAuth,
+    },
+    capabilities: {
+      list: listCoreCapabilities,
     },
     model: {
       getAvailability: getCoreModelAvailability,

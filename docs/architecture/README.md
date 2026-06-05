@@ -10,6 +10,8 @@
 - [CCR 升级管理策略](./upgrade-management-strategy.md)
 - [CCR 项目级 Settings 隔离设计](./ccr-project-settings-isolation-design.md)
 - [CCR 用户目录与安装布局](./ccr-home-layout.md)
+- [CCR 扩展能力体系总览](./extension-capability-system.md)
+- [CCR Skill 系统整体架构](./skill-system-architecture.md)
 
 ## 工程兼容与迁移
 

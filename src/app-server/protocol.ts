@@ -93,6 +93,14 @@ export const ShutdownParamsSchema = z.object({}).strict().default({})
 
 export const ConfigGetParamsSchema = z.object({}).strict().default({})
 
+export const CapabilitiesListParamsSchema = z
+  .object({
+    cwd: z.string().min(1).optional(),
+    configHomeDir: z.string().min(1).optional(),
+  })
+  .strict()
+  .default({})
+
 export const AuthStatusParamsSchema = z
   .object({
     provider: z.string().min(1).optional(),
@@ -642,6 +650,9 @@ export type JsonRpcRequest = z.infer<typeof JsonRpcRequestSchema>
 export type ClientInfo = z.infer<typeof ClientInfoSchema>
 export type ClientCapabilities = z.infer<typeof ClientCapabilitiesSchema>
 export type InitializeParams = z.infer<typeof InitializeParamsSchema>
+export type CapabilitiesListParams = z.infer<
+  typeof CapabilitiesListParamsSchema
+>
 export type AuthStatusParams = z.infer<typeof AuthStatusParamsSchema>
 export type AuthLoginParams = z.infer<typeof AuthLoginParamsSchema>
 export type ModelListParams = z.infer<typeof ModelListParamsSchema>
@@ -837,6 +848,8 @@ export type ShutdownResult = {
 }
 
 export type ConfigGetResult = Record<string, unknown>
+
+export type CapabilitiesListResult = Record<string, unknown>
 
 export type AuthStatusResult = Record<string, unknown>
 

@@ -3,6 +3,7 @@ import { createCcrCore } from '../core/index.js';
 import { coreEventToJsonRpcNotification, coreEventToThreadDisplayPatchNotification, } from './coreEventMapper.js';
 import { AppServerError, errorResponse } from './errors.js';
 import { handleCompactRun, handleCompactStatus, handleContextAnalyze, handleContextStatus, handleMemorySessionStatus, } from './handlers/contextHandlers.js';
+import { handleCapabilitiesList } from './handlers/capabilityHandlers.js';
 import { handleAuthLogin, handleAuthStatus, handleConfigGet, handleModelAvailability, handleModelProfileCopy, handleModelProfileDelete, handleModelCredentialUpdate, handleModelList, handleModelProfileList, handleModelProfileSave, handleModelProfileSetCurrent, handleModelSet, handleModelTest, } from './handlers/llmHandlers.js';
 import { handleMcpAdd, handleMcpDisable, handleMcpEnable, handleMcpInstallAdoptApply, handleMcpInstallAdoptPlan, handleMcpInstallApply, handleMcpInstallList, handleMcpInstallPlan, handleMcpInstallRepair, handleMcpInstallSaveManifest, handleMcpInstallSearch, handleMcpInstallUninstall, handleMcpInspect, handleMcpList, handleMcpRemove, handleMcpRestart, handleMcpTest, handleMcpUpdate, } from './handlers/mcpHandlers.js';
 import { handlePermissionPendingList, handlePermissionRespond, handlePermissionSettingsGet, handlePermissionSettingsUpdate, } from './handlers/permissionHandlers.js';
@@ -53,6 +54,8 @@ export async function handleJsonRpcMessage(context, rawMessage) {
                 return successResponse(request.id, shutdown(context, request.params));
             case 'config/get':
                 return successResponse(request.id, handleConfigGet(context, request.params));
+            case 'capabilities/list':
+                return successResponse(request.id, await handleCapabilitiesList(context, request.params));
             case 'auth/status':
                 return successResponse(request.id, await handleAuthStatus(context, request.params));
             case 'auth/login':

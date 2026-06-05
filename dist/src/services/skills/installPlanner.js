@@ -19,7 +19,9 @@ export function createSkillInstallPlan(candidate, options = {}) {
         }),
         ...collectSecurityConflicts(securityDecision),
     ];
-    const installable = candidate.state === 'available' &&
+    const installableState = candidate.state === 'available' ||
+        (candidate.state === 'installed' && force);
+    const installable = installableState &&
         conflicts.length === 0 &&
         securityDecision.installAllowed;
     return {
@@ -81,7 +83,7 @@ export function createSkillInstallPlan(candidate, options = {}) {
 }
 function collectInstallConflicts(input) {
     const conflicts = [];
-    if (input.candidate.state === 'installed') {
+    if (input.candidate.state === 'installed' && !input.force) {
         conflicts.push({
             kind: 'already-installed',
             message: `Skill ${input.candidate.manifestInput.name} 已安装。`,

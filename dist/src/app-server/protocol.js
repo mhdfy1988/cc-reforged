@@ -71,6 +71,13 @@ export const InitializeParamsSchema = z
     .default({});
 export const ShutdownParamsSchema = z.object({}).strict().default({});
 export const ConfigGetParamsSchema = z.object({}).strict().default({});
+export const CapabilitiesListParamsSchema = z
+    .object({
+    cwd: z.string().min(1).optional(),
+    configHomeDir: z.string().min(1).optional(),
+})
+    .strict()
+    .default({});
 export const AuthStatusParamsSchema = z
     .object({
     provider: z.string().min(1).optional(),

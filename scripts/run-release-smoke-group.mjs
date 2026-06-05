@@ -39,6 +39,16 @@ const groups = {
     'smoke:skill-security-apply-inspect',
     'smoke:skill-mcp-negative-boundaries',
   ],
+  'skill-internal': [
+    'smoke:skill-management-service',
+    'smoke:skill-management-api',
+    'smoke:skill-install-reliability',
+    'smoke:skill-installed-package-inspection',
+    'smoke:skill-capability-catalog',
+    'smoke:skill-runtime-installed-loader',
+    'smoke:skill-runtime-tool-context',
+    'smoke:skill-runtime-slash-command',
+  ],
   desktop: [
     'typecheck:desktop',
     'fixtures:desktop-management-acceptance',

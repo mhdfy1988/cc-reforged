@@ -1,8 +1,3 @@
-import { mkdir, readFile, rm, writeFile } from 'fs/promises';
-import { existsSync } from 'fs';
-import { dirname, join } from 'path';
-import { jsonStringify } from '../../utils/slowOperations.js';
-import { getLastSkillRuntimeCatalogDiagnostics } from '../../skills/skillRuntimeCatalog.js';
 import { discoverSkillImportCandidate } from './importDiscovery.js';
 import { applySkillImportPlan } from './importManager.js';
 import { createSkillImportPlan } from './importPlanner.js';
@@ -10,18 +5,25 @@ import { parseSkillImportSource, } from './importSource.js';
 import { loadSkillPackageForManifest, } from './installCandidates.js';
 import { inspectInstalledSkill, listInstalledSkills } from './installInspector.js';
 import { applySkillInstallPlan } from './installManager.js';
-import { createCcrSkillInstallManifest, parseCcrSkillInstallManifest, parseCcrSkillInstalledIndex, parseCcrSkillLockIndex, parseCcrSkillPackageOwnerMarker, summarizeCcrSkillInstallManifest, } from './installManifest.js';
+import { createCcrSkillInstallManifest, parseCcrSkillInstallManifest, summarizeCcrSkillInstallManifest, } from './installManifest.js';
 import { getCcrSkillInstallPaths, } from './installPaths.js';
 import { createSkillInstallPlan } from './installPlanner.js';
 import { summarizeSecurityReportRisks, } from './securityPolicy.js';
-import { summarizeSkillSecurityDecision, summarizeSkillSecurityReport, } from './securityReporter.js';
 import { scanSkillPackage } from './securityScanner.js';
+import { createSkillManagementCapabilityCatalog } from './capabilityProvider.js';
+import { addCandidateDigest, addInspectionDigest, addPlanDigest, isProblemInspectionStatus, } from './managementDtos.js';
+import { assertPackageOwnership, findInstalledEntry, isSkillNameInstalled, saveSkillInstallManifestFile, uninstallInstalledSkillPackage, updateInstalledRecord, } from './managementStore.js';
+import { readInstalledIndex } from './installTransaction.js';
 export async function listSkillManagementState(options = {}) {
     const [installed, search] = await Promise.all([
         listInstalledSkills(options),
         searchSkillManagementInstallCandidates({}, options),
     ]);
     const normalizedInstalled = installed.installed.map(addInspectionDigest);
+    const capabilityCatalog = await createSkillManagementCapabilityCatalog({
+        cwd: options.cwd ?? process.cwd(),
+        installed: normalizedInstalled,
+    });
     const problemCount = normalizedInstalled.filter(item => isProblemInspectionStatus(String(item.status))).length;
     return {
         schemaVersion: 1,
@@ -30,13 +32,15 @@ export async function listSkillManagementState(options = {}) {
         summary: {
             ...installed.summary,
             totalInstalled: normalizedInstalled.length,
+            totalCapabilities: capabilityCatalog.capabilities.length,
             totalCandidates: search.candidates.length,
             problemCount,
         },
+        capabilities: capabilityCatalog.capabilities,
         candidates: search.candidates,
         candidateErrors: search.errors,
         sources: search.sources,
-        runtimeDiagnostics: getLastSkillRuntimeCatalogDiagnostics(),
+        runtimeDiagnostics: capabilityCatalog.diagnostics,
     };
 }
 export async function inspectSkillManagementItem(input, options = {}) {
@@ -158,31 +162,14 @@ export async function uninstallSkillManagementPackage(input, options = {}) {
     if (!input.confirmed) {
         throw new Error('Skill uninstall requires explicit user confirmation.');
     }
-    const paths = getCcrSkillInstallPaths(options.configHomeDir);
-    const [installedIndex, lockIndex] = await Promise.all([
-        readInstalledIndex(paths.installedIndexPath),
-        readLockIndex(paths.lockFilePath),
-    ]);
-    const match = findInstalledEntry(installedIndex, input.skillRef);
-    if (!match) {
-        throw new Error(`Skill install record was not found: ${input.skillRef}`);
-    }
-    const { lockKey, record } = match;
-    await assertPackageOwnership(record);
-    await rm(record.packageDir, { recursive: true, force: true });
-    delete installedIndex.installed[lockKey];
-    delete lockIndex.locks[record.lockKey];
-    await Promise.all([
-        writeJson(paths.installedIndexPath, installedIndex),
-        writeJson(paths.lockFilePath, lockIndex),
-    ]);
+    const removed = await uninstallInstalledSkillPackage({ skillRef: input.skillRef }, options);
     await clearSkillRuntimeCaches();
     return {
         schemaVersion: 1,
         uninstalled: true,
-        name: record.name,
-        lockKey,
-        removedPackageDir: record.packageDir,
+        name: removed.name,
+        lockKey: removed.lockKey,
+        removedPackageDir: removed.removedPackageDir,
         installed: await listSkillManagementState(options),
     };
 }
@@ -202,7 +189,6 @@ export async function repairSkillManagementPackage(input, options = {}) {
         throw new Error(`Skill repair currently supports imported-skill and builtin-preset sources only: ${record.name}`);
     }
     await assertPackageOwnership(record);
-    await rm(record.packageDir, { recursive: true, force: true });
     const candidate = await createCandidateFromManifest(record.manifest, {
         configHomeDir: options.configHomeDir,
         ignoreInstalled: true,
@@ -225,19 +211,7 @@ export async function repairSkillManagementPackage(input, options = {}) {
 }
 export async function saveSkillManagementInstallManifest(input, options = {}) {
     const manifest = parseCcrSkillInstallManifest(input.manifest);
-    const paths = getCcrSkillInstallPaths(options.configHomeDir);
-    const manifestPath = join(paths.manifestsDir, `${sanitizeManifestFileName(manifest.name)}.json`);
-    if (!input.overwrite && existsSync(manifestPath)) {
-        throw new Error(`Skill install manifest already exists: ${manifestPath}`);
-    }
-    await writeJson(manifestPath, manifest);
-    return {
-        schemaVersion: 1,
-        saved: true,
-        name: manifest.name,
-        path: manifestPath,
-        manifest: summarizeCcrSkillInstallManifest(manifest),
-    };
+    return saveSkillInstallManifestFile({ manifest, overwrite: input.overwrite }, options);
 }
 async function createCandidateFromManifestInput(input, options = {}) {
     const parsed = parseCcrSkillInstallManifest(input);
@@ -284,123 +258,6 @@ async function createCandidateFromManifest(manifest, options = {}) {
         trusted: !manifest.trust.thirdParty,
         risks,
     };
-}
-async function isSkillNameInstalled(name, configHomeDir) {
-    const paths = getCcrSkillInstallPaths(configHomeDir);
-    const installedIndex = await readInstalledIndex(paths.installedIndexPath);
-    return Object.values(installedIndex.installed).some(record => record.name === name);
-}
-function addCandidateDigest(candidate) {
-    return {
-        ...candidate,
-        securityDigest: summarizeSkillSecurityReport(candidate.securityReport),
-    };
-}
-function addPlanDigest(plan) {
-    const decision = plan.securityDecision;
-    if (isSecurityDecision(decision)) {
-        return {
-            ...plan,
-            securityDigest: summarizeSkillSecurityDecision(decision),
-        };
-    }
-    if (isSecurityReport(plan.securityReport)) {
-        return {
-            ...plan,
-            securityDigest: summarizeSkillSecurityReport(plan.securityReport),
-        };
-    }
-    return {
-        ...plan,
-        securityDigest: null,
-    };
-}
-function addInspectionDigest(inspection) {
-    return {
-        ...inspection,
-        securityDigest: isSecurityReport(inspection.securityReport)
-            ? summarizeSkillSecurityReport(inspection.securityReport)
-            : null,
-    };
-}
-function isSecurityDecision(value) {
-    return Boolean(value && typeof value === 'object' && 'installAllowed' in value);
-}
-function isSecurityReport(value) {
-    return Boolean(value && typeof value === 'object' && 'summary' in value);
-}
-async function updateInstalledRecord(skillRef, options, mutate) {
-    const paths = getCcrSkillInstallPaths(options.configHomeDir);
-    const installedIndex = await readInstalledIndex(paths.installedIndexPath);
-    const match = findInstalledEntry(installedIndex, skillRef);
-    if (!match) {
-        throw new Error(`Skill install record was not found: ${skillRef}`);
-    }
-    mutate(match.record);
-    match.record.updatedAt = new Date().toISOString();
-    installedIndex.installed[match.lockKey] = match.record;
-    await writeJson(paths.installedIndexPath, installedIndex);
-}
-function findInstalledEntry(installedIndex, skillRef) {
-    for (const [lockKey, record] of Object.entries(installedIndex.installed)) {
-        if (lockKey === skillRef || record.lockKey === skillRef || record.name === skillRef) {
-            return { lockKey, record };
-        }
-    }
-    return null;
-}
-async function assertPackageOwnership(record) {
-    if (!existsSync(record.packageDir)) {
-        return;
-    }
-    const marker = parseCcrSkillPackageOwnerMarker(JSON.parse(await readFile(record.packageOwnerMarkerPath, 'utf8')));
-    if (marker.owner !== 'ccr-skill-installer' ||
-        marker.packageId !== record.lockKey ||
-        marker.name !== record.name) {
-        throw new Error(`Skill package is not owned by CCR installer: ${record.packageDir}`);
-    }
-}
-async function readInstalledIndex(path) {
-    try {
-        return parseCcrSkillInstalledIndex(JSON.parse(await readFile(path, 'utf8')));
-    }
-    catch (error) {
-        if (getErrorCode(error) === 'ENOENT') {
-            return parseCcrSkillInstalledIndex({ schemaVersion: 1 });
-        }
-        throw error;
-    }
-}
-async function readLockIndex(path) {
-    try {
-        return parseCcrSkillLockIndex(JSON.parse(await readFile(path, 'utf8')));
-    }
-    catch (error) {
-        if (getErrorCode(error) === 'ENOENT') {
-            return parseCcrSkillLockIndex({ schemaVersion: 1 });
-        }
-        throw error;
-    }
-}
-async function writeJson(path, value) {
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `${jsonStringify(value, null, 2)}\n`, 'utf8');
-}
-function sanitizeManifestFileName(value) {
-    return value.replace(/[^a-zA-Z0-9._-]+/g, '_');
-}
-function isProblemInspectionStatus(status) {
-    return (status === 'missing-package' ||
-        status === 'missing-skill-md' ||
-        status === 'missing-owner-marker' ||
-        status === 'missing-lock' ||
-        status === 'drifted' ||
-        status === 'invalid');
-}
-function getErrorCode(error) {
-    return typeof error === 'object' && error != null && 'code' in error
-        ? error.code
-        : undefined;
 }
 async function clearSkillRuntimeCaches() {
     const [{ clearSkillCaches }, { clearCommandMemoizationCaches }] = await Promise.all([

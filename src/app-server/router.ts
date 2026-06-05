@@ -12,6 +12,7 @@ import {
   handleContextStatus,
   handleMemorySessionStatus,
 } from './handlers/contextHandlers.js'
+import { handleCapabilitiesList } from './handlers/capabilityHandlers.js'
 import {
   handleAuthLogin,
   handleAuthStatus,
@@ -163,6 +164,11 @@ export async function handleJsonRpcMessage(
         return successResponse(request.id, shutdown(context, request.params))
       case 'config/get':
         return successResponse(request.id, handleConfigGet(context, request.params))
+      case 'capabilities/list':
+        return successResponse(
+          request.id,
+          await handleCapabilitiesList(context, request.params),
+        )
       case 'auth/status':
         return successResponse(
           request.id,

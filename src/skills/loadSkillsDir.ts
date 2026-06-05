@@ -50,9 +50,9 @@ import type { HooksSettings } from '../utils/settings/types.js'
 import { createSignal } from '../utils/signal.js'
 import {
   loadInstalledSkillRuntimePackages,
-  type InstalledSkillRuntimeEntry,
 } from './installedSkillLoader.js'
 import { normalizeSkillPackage } from './normalizeSkillPackage.js'
+import { createManagedSkillCommandFromInstalledEntry } from './skillRuntimeAdapter.js'
 import { toPromptCommand } from './skillCommandAdapter.js'
 import {
   parseSkillFrontmatterFields,
@@ -331,34 +331,6 @@ function ccrSkillSourceForSettingSource(
   }
 }
 
-function createSkillCommandFromInstalledEntry(
-  entry: InstalledSkillRuntimeEntry,
-): SkillWithPath {
-  const source: PromptCommand['source'] =
-    entry.inspection.scope === 'project' ? 'projectSettings' : 'userSettings'
-  const rawFrontmatter =
-    entry.package.compatibility.rawFrontmatter as FrontmatterData
-  const parsed = parseSkillFrontmatterFields(
-    rawFrontmatter,
-    entry.package.body,
-    entry.package.name,
-    'Skill',
-  )
-  return {
-    skill: toPromptCommand(entry.package, {
-      source,
-      loadedFrom: 'managed',
-      createSkillCommand,
-      hasUserSpecifiedDescription: parsed.hasUserSpecifiedDescription,
-      hooks: parsed.hooks,
-      paths: parseSkillPaths(rawFrontmatter),
-      shell: parsed.shell,
-      version: parsed.version,
-    }),
-    filePath: entry.inspection.installedRecord.skillFilePath,
-  }
-}
-
 async function loadInstalledManagedSkills(): Promise<SkillWithPath[]> {
   try {
     const result = await loadInstalledSkillRuntimePackages()
@@ -367,7 +339,11 @@ async function loadInstalledManagedSkills(): Promise<SkillWithPath[]> {
         `[skills] installed runtime diagnostics: ${result.diagnostics.length}`,
       )
     }
-    return result.entries.map(createSkillCommandFromInstalledEntry)
+    return result.entries.map(entry =>
+      createManagedSkillCommandFromInstalledEntry(entry, {
+        createSkillCommand,
+      }),
+    )
   } catch (error) {
     logError(error)
     logForDebugging('[skills] failed to load installed managed skills')

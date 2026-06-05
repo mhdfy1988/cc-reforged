@@ -92,8 +92,11 @@ export function createSkillInstallPlan(
     }),
     ...collectSecurityConflicts(securityDecision),
   ]
+  const installableState =
+    candidate.state === 'available' ||
+    (candidate.state === 'installed' && force)
   const installable =
-    candidate.state === 'available' &&
+    installableState &&
     conflicts.length === 0 &&
     securityDecision.installAllowed
 
@@ -162,7 +165,7 @@ function collectInstallConflicts(input: {
   force: boolean
 }): SkillInstallPlan['conflicts'] {
   const conflicts: SkillInstallPlan['conflicts'] = []
-  if (input.candidate.state === 'installed') {
+  if (input.candidate.state === 'installed' && !input.force) {
     conflicts.push({
       kind: 'already-installed',
       message: `Skill ${input.candidate.manifestInput.name} 已安装。`,

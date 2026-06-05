@@ -408,6 +408,20 @@ const loadAllCommands = memoize(async (cwd, dynamicSkillsVersion) => {
         ...COMMANDS(),
     ];
 }, (cwd, dynamicSkillsVersion) => `${cwd}\0${dynamicSkillsVersion}`);
+export async function getSkillRuntimeCatalogForCwd(cwd) {
+    const { skillDirCommands, pluginSkills, bundledSkills, builtinPluginSkills } = await getSkills(cwd);
+    const sourceCommands = [
+        ...skillDirCommands,
+        ...pluginSkills,
+        ...builtinPluginSkills,
+        ...bundledSkills,
+        ...getDynamicSkills(),
+    ];
+    return {
+        sourceCommands,
+        catalog: createSkillRuntimeCatalog(sourceCommands),
+    };
+}
 /**
  * Returns commands available to the current user. The expensive loading is
  * memoized, but availability and isEnabled checks run fresh every call so

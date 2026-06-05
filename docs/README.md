@@ -11,8 +11,8 @@
 
 ## 当前版本与路线
 
-- 当前公开版本：`0.6.1`，发布于 2026-06-05。
-- 当前版本线：`0.6.1` 聚焦 Skill / Plugin 和外部能力包治理，补齐 Skill 安装管理、运行时启用、审计和管理入口，并继续打磨 Desktop 管理页体验。
+- 当前公开版本：`0.6.2`，发布于 2026-06-05。
+- 当前版本线：`0.6.2` 聚焦 Skill / Plugin 和外部能力包治理，补齐统一能力目录、Skill 内部分层、安装可靠性、运行时启用、审计和管理入口。
 - 后续主线：继续深化企业 trust policy、能力发现、命名空间、审计和远端 registry 等能力。
 - 路线详情：[CCR 版本路线图](./architecture/version-roadmap.md)。
 - 逐版本变化：[CHANGELOG.md](../CHANGELOG.md)。
@@ -68,6 +68,7 @@
 
 ### MCP、参考与示例
 
+- [CCR 扩展能力体系总览](./architecture/extension-capability-system.md)
 - [MCP 文档入口](./mcp/README.md)
 - [MCP 安装与使用](./mcp/README.md#使用入口)
 - [通用 MCP 接入规范](./mcp/integration-standard.md)
@@ -75,6 +76,7 @@
 - [Playwright MCP 接入设计](./mcp/playwright-integration-design.md)
 - [MCP 示例配置](./examples/mcp/README.md)
 - [Skill 文档入口](./skills/README.md)
+- [CCR Skill 系统整体架构](./architecture/skill-system-architecture.md)
 - [Skill 标准兼容与安装管理设计](./skills/skill-standard-and-install-management-design.md)
 - [Codex / OpenClaw 工具系统源码对照索引](./references/codex-openclaw-tool-system-source-evidence.md)
 - [OpenAI Codex 生成物源码对照索引](./references/openai-codex-generated-artifacts.md)

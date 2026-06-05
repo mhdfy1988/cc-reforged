@@ -20,6 +20,40 @@ export type SkillRuntimeCatalog = {
   diagnostics: SkillRuntimeCatalogDiagnostic[]
 }
 
+export type SkillRuntimeCapability = {
+  schemaVersion: 1
+  name: string
+  displayName: string
+  description: string
+  sourceKind:
+    | 'managed-installed'
+    | 'plugin'
+    | 'builtin-plugin'
+    | 'bundled'
+    | 'dynamic'
+    | 'mcp'
+    | 'project'
+    | 'user'
+    | 'policy'
+    | 'legacy-command'
+    | 'unknown'
+  sourceLabel: string
+  loadedFrom: string
+  installedRef: string | null
+  modelInvocable: boolean
+  userInvocable: boolean
+  enabled: boolean
+  runtimeVisible: boolean
+  hiddenReason: string | null
+  diagnostics: string[]
+}
+
+export type SkillRuntimeCapabilityCatalog = {
+  schemaVersion: 1
+  capabilities: SkillRuntimeCapability[]
+  diagnostics: SkillRuntimeCatalogDiagnostic[]
+}
+
 let lastSkillRuntimeCatalogDiagnostics: SkillRuntimeCatalogDiagnostic[] = []
 
 type RankedCommand = {
@@ -69,6 +103,85 @@ export function getLastSkillRuntimeCatalogDiagnostics(): SkillRuntimeCatalogDiag
   return [...lastSkillRuntimeCatalogDiagnostics]
 }
 
+export function createSkillRuntimeCapabilityCatalog(input: {
+  commands: readonly Command[]
+  installed?: readonly {
+    name: string
+    lockKey: string
+    status: string
+    statusMessage: string
+    installedRecord: {
+      enabled: boolean
+      modelInvocable: boolean
+      userInvocable: boolean
+    }
+  }[]
+}): SkillRuntimeCapabilityCatalog {
+  const catalog = createSkillRuntimeCatalog(input.commands)
+  const keptNames = new Set(catalog.commands.map(command => command.name))
+  const diagnosticsBySkippedName = new Map<string, string[]>()
+  for (const diagnostic of catalog.diagnostics) {
+    const list = diagnosticsBySkippedName.get(diagnostic.skipped.name) ?? []
+    list.push(diagnostic.message)
+    diagnosticsBySkippedName.set(diagnostic.skipped.name, list)
+  }
+
+  const installedByName = new Map(
+    (input.installed ?? []).map(inspection => [inspection.name, inspection]),
+  )
+  const capabilities: SkillRuntimeCapability[] = []
+  const seenCapabilityIds = new Set<string>()
+
+  for (const command of input.commands.filter(command => command.type === 'prompt')) {
+    const installed = installedByName.get(command.name)
+    const runtimeVisible = keptNames.has(command.name)
+    const capability = commandToCapability({
+      command,
+      installedRef: installed?.lockKey ?? null,
+      runtimeVisible,
+      diagnostics: diagnosticsBySkippedName.get(command.name) ?? [],
+    })
+    const id = `${capability.name}\0${capability.sourceKind}\0${capability.loadedFrom}\0${capability.installedRef ?? ''}`
+    if (seenCapabilityIds.has(id)) {
+      continue
+    }
+    seenCapabilityIds.add(id)
+    capabilities.push(capability)
+  }
+
+  for (const inspection of input.installed ?? []) {
+    const id = `${inspection.name}\0managed-installed\0managed\0${inspection.lockKey}`
+    if (seenCapabilityIds.has(id)) {
+      continue
+    }
+    capabilities.push({
+      schemaVersion: 1,
+      name: inspection.name,
+      displayName: inspection.name,
+      description: inspection.statusMessage,
+      sourceKind: 'managed-installed',
+      sourceLabel: 'CCR installed package',
+      loadedFrom: 'managed',
+      installedRef: inspection.lockKey,
+      modelInvocable: inspection.installedRecord.modelInvocable,
+      userInvocable: inspection.installedRecord.userInvocable,
+      enabled: inspection.installedRecord.enabled,
+      runtimeVisible: inspection.status === 'installed',
+      hiddenReason:
+        inspection.status === 'installed' ? null : `inspection:${inspection.status}`,
+      diagnostics:
+        inspection.status === 'installed' ? [] : [inspection.statusMessage],
+    })
+    seenCapabilityIds.add(id)
+  }
+
+  return {
+    schemaVersion: 1,
+    capabilities: capabilities.sort(compareCapabilities),
+    diagnostics: catalog.diagnostics,
+  }
+}
+
 export function getSkillRuntimePriority(command: Command): number {
   if (command.type !== 'prompt') {
     return 100
@@ -105,6 +218,70 @@ export function getSkillRuntimePriority(command: Command): number {
     return 7
   }
   return 9
+}
+
+function commandToCapability(input: {
+  command: Command
+  installedRef: string | null
+  runtimeVisible: boolean
+  diagnostics: string[]
+}): SkillRuntimeCapability {
+  const command = input.command
+  const enabled = command.isEnabled?.() ?? true
+  const sourceKind = getCapabilitySourceKind(command)
+  return {
+    schemaVersion: 1,
+    name: command.name,
+    displayName: command.userFacingName?.() ?? command.name,
+    description: command.description,
+    sourceKind,
+    sourceLabel: toSourceLabel(command),
+    loadedFrom: command.loadedFrom ?? 'unknown',
+    installedRef: input.installedRef,
+    modelInvocable: !command.disableModelInvocation,
+    userInvocable: command.userInvocable !== false,
+    enabled,
+    runtimeVisible: input.runtimeVisible && enabled,
+    hiddenReason: input.runtimeVisible
+      ? enabled
+        ? null
+        : 'disabled'
+      : 'duplicate-name',
+    diagnostics: input.diagnostics,
+  }
+}
+
+function getCapabilitySourceKind(
+  command: Command,
+): SkillRuntimeCapability['sourceKind'] {
+  if (command.type !== 'prompt') return 'unknown'
+  if (command.loadedFrom === 'managed') return 'managed-installed'
+  if (command.loadedFrom === 'dynamic') return 'dynamic'
+  if (command.loadedFrom === 'bundled') return 'bundled'
+  if (command.loadedFrom === 'mcp' || command.source === 'mcp') return 'mcp'
+  if (command.loadedFrom === 'commands_DEPRECATED') return 'legacy-command'
+  if (command.loadedFrom === 'plugin' || command.source === 'plugin') {
+    return command.pluginInfo ? 'plugin' : 'builtin-plugin'
+  }
+  if (command.source === 'policySettings') return 'policy'
+  if (command.source === 'userSettings') return 'user'
+  if (
+    command.source === 'projectSettings' ||
+    command.source === 'localSettings' ||
+    command.source === 'flagSettings'
+  ) {
+    return 'project'
+  }
+  return 'unknown'
+}
+
+function compareCapabilities(
+  a: SkillRuntimeCapability,
+  b: SkillRuntimeCapability,
+): number {
+  const nameDiff = a.name.localeCompare(b.name)
+  if (nameDiff !== 0) return nameDiff
+  return a.sourceKind.localeCompare(b.sourceKind)
 }
 
 function compareRankedCommands(a: RankedCommand, b: RankedCommand): number {

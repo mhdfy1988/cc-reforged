@@ -1,10 +1,11 @@
 import { createHash } from 'crypto';
-import { cp, mkdir, readFile, writeFile } from 'fs/promises';
-import { dirname, join } from 'path';
-import { jsonStringify } from '../../utils/slowOperations.js';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 import { loadSkillPackageForManifest, loadSkillPackageFromDir, } from './installCandidates.js';
-import { createCcrSkillInstallManifest, parseCcrSkillInstalledIndex, parseCcrSkillLockIndex, parseCcrSkillPackageOwnerMarker, parseSkillInstallResult, } from './installManifest.js';
-import { CCR_SKILL_PACKAGE_OWNER_MARKER_FILE, getCcrSkillInstallPaths, } from './installPaths.js';
+import { parseSkillInstallResult, } from './installManifest.js';
+import { getCcrSkillInstallPaths, } from './installPaths.js';
+import { applySkillInstallTransaction } from './installTransaction.js';
+import { hashSkillPackageTree } from './packageTreeIntegrity.js';
 import { evaluateSkillSecurityPolicy } from './securityPolicy.js';
 import { scanSkillPackage } from './securityScanner.js';
 export async function applySkillInstallPlan(plan, options) {
@@ -43,28 +44,33 @@ export async function applySkillInstallPlan(plan, options) {
     if (!liveSecurityDecision.installAllowed) {
         throw new Error(`Skill install blocked by live security scan: ${liveSecurityDecision.reasons.join('; ')}`);
     }
-    await mkdir(dirname(packageDir), { recursive: true });
-    await cp(liveSource.packageDir, packageDir, {
-        recursive: true,
-        errorOnExist: true,
-        force: false,
-    });
     const now = options.now ?? new Date();
     const lockKey = `${plan.scope}:${plan.name}`;
-    const ownerMarkerPath = join(packageDir, CCR_SKILL_PACKAGE_OWNER_MARKER_FILE);
-    const ownerMarker = parseCcrSkillPackageOwnerMarker({
-        schemaVersion: 1,
-        packageId: lockKey,
-        name: plan.name,
-        installedAt: now.toISOString(),
-        source: plan.manifestInput.source,
-        owner: 'ccr-skill-installer',
-    });
-    await writeJson(ownerMarkerPath, ownerMarker);
     const warnings = [
         ...plan.risks,
         ...(securityOverrideAccepted ? ['Security override token accepted.'] : []),
     ];
+    const skillFilePath = join(packageDir, 'SKILL.md');
+    const checksum = await hashFileSha256(liveSourcePackage.bodyPath);
+    const packageTree = await hashSkillPackageTree(liveSource.packageDir);
+    const transaction = await applySkillInstallTransaction({
+        sourceDir: liveSource.packageDir,
+        packageDir,
+        installedIndexPath: paths.installedIndexPath,
+        lockFilePath: paths.lockFilePath,
+        plan: {
+            name: plan.name,
+            scope: plan.scope,
+            manifestInput: plan.manifestInput,
+        },
+        lockKey,
+        checksum: {
+            skillMd: checksum,
+            packageTree: packageTree.sha256,
+        },
+        originVendor: liveSourcePackage.origin.vendor,
+        now,
+    });
     const skillPackage = await loadSkillPackageFromDir({
         skillDir: packageDir,
         originVendor: liveSource.originVendor,
@@ -72,50 +78,13 @@ export async function applySkillInstallPlan(plan, options) {
         legacyCommand: liveSource.legacyCommand,
         risks: warnings,
     });
-    const skillFilePath = join(packageDir, 'SKILL.md');
-    const checksum = await hashFileSha256(skillFilePath);
-    const manifest = createCcrSkillInstallManifest(plan.manifestInput);
-    const installedRecord = {
-        schemaVersion: 1,
-        name: plan.name,
-        scope: plan.scope,
-        installedAt: now.toISOString(),
-        updatedAt: now.toISOString(),
-        manifest,
-        packageDir,
-        skillFilePath,
-        packageOwnerMarkerPath: ownerMarkerPath,
-        enabled: manifest.defaults.enabled,
-        modelInvocable: manifest.defaults.modelInvocable,
-        userInvocable: manifest.defaults.userInvocable,
-        lockKey,
-    };
-    const lockRecord = {
-        name: plan.name,
-        scope: plan.scope,
-        sourceKind: manifest.source.kind,
-        packageDir,
-        skillFilePath,
-        checksum: {
-            algorithm: 'sha256',
-            skillMd: checksum,
-        },
-        originVendor: skillPackage.origin.vendor,
-        updatedAt: now.toISOString(),
-    };
-    const installedIndex = await readInstalledIndex(paths.installedIndexPath);
-    installedIndex.installed[lockKey] = installedRecord;
-    await writeJson(paths.installedIndexPath, installedIndex);
-    const lockIndex = await readLockIndex(paths.lockFilePath);
-    lockIndex.locks[lockKey] = lockRecord;
-    await writeJson(paths.lockFilePath, lockIndex);
     return parseSkillInstallResult({
         schemaVersion: 1,
         name: plan.name,
         scope: plan.scope,
         packageDir,
-        installedRecord,
-        lockRecord,
+        installedRecord: transaction.installedRecord,
+        lockRecord: transaction.lockRecord,
         package: skillPackage,
         warnings,
     });
@@ -125,38 +94,7 @@ function isSecurityOverrideAccepted(plan, options) {
         plan.securityDecision.overrideToken !== undefined &&
         options.securityOverrideToken === plan.securityDecision.overrideToken);
 }
-async function readInstalledIndex(path) {
-    try {
-        return parseCcrSkillInstalledIndex(JSON.parse(await readFile(path, 'utf8')));
-    }
-    catch (error) {
-        if (getErrorCode(error) === 'ENOENT') {
-            return parseCcrSkillInstalledIndex({ schemaVersion: 1 });
-        }
-        throw error;
-    }
-}
-async function readLockIndex(path) {
-    try {
-        return parseCcrSkillLockIndex(JSON.parse(await readFile(path, 'utf8')));
-    }
-    catch (error) {
-        if (getErrorCode(error) === 'ENOENT') {
-            return parseCcrSkillLockIndex({ schemaVersion: 1 });
-        }
-        throw error;
-    }
-}
-async function writeJson(path, value) {
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, `${jsonStringify(value, null, 2)}\n`, 'utf8');
-}
 async function hashFileSha256(path) {
     return createHash('sha256').update(await readFile(path)).digest('hex');
-}
-function getErrorCode(error) {
-    return typeof error === 'object' && error != null && 'code' in error
-        ? error.code
-        : undefined;
 }
 //# sourceMappingURL=installManager.js.map

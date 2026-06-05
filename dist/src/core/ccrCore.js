@@ -1,4 +1,5 @@
 import { getCoreAuthStatus, loginCoreAuth } from './authCore.js';
+import { listCoreCapabilities } from './capabilityCore.js';
 import { getCoreConfigSnapshot } from './configCore.js';
 import { addCoreMcpServer, applyCoreMcpAdopt, applyCoreMcpInstall, inspectCoreMcpServer, listCoreMcpServers, listCoreMcpInstalls, planCoreMcpAdopt, planCoreMcpInstall, repairCoreMcpInstalledServer, removeCoreMcpServer, restartCoreMcpServer, saveCoreMcpInstallManifest, searchCoreMcpInstallCandidates, setCoreMcpServerEnabled, testCoreMcpServer, uninstallCoreMcpInstalledServer, updateCoreMcpServer, } from './mcpCore.js';
 import { copyCoreModelProfile, deleteCoreModelProfile, getCoreModelAvailability, listCoreModelProfiles, listCoreModels, saveCoreModelProfile, setCoreModel, setCoreModelProfile, testCoreModelConnection, updateCoreModelCredential, } from './modelCore.js';
@@ -23,6 +24,9 @@ export function createCcrCore(options = {}) {
         auth: {
             getStatus: getCoreAuthStatus,
             login: loginCoreAuth,
+        },
+        capabilities: {
+            list: listCoreCapabilities,
         },
         model: {
             getAvailability: getCoreModelAvailability,

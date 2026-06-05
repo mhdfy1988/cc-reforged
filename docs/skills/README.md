@@ -1,6 +1,6 @@
 # CCR Skill 文档入口
 
-本目录用于沉淀 CCR 的 Skill 标准、兼容策略、安装管理、上下文注入和后续 Plugin / 外部能力包治理设计。
+本目录用于沉淀 CCR 的 Skill 标准、兼容策略、安装管理、上下文注入和后续 Plugin / 外部能力包治理设计。Skill / MCP / Plugin / Tool 的总体关系先看 [CCR 扩展能力体系总览](../architecture/extension-capability-system.md)。
 
 Skill 在 CCR 中不是普通命令的同义词。Skill 的核心语义是：一个可被模型按需使用的本地指令包，入口文件是 `SKILL.md`，可以带脚本、参考资料和输出资源。Command 是显式调用入口；一个 skill 可以暴露成 command，也可以只允许模型通过 Skill 工具调用。
 
@@ -24,6 +24,8 @@ Skill 在 CCR 中不是普通命令的同义词。Skill 的核心语义是：一
 - `src/skills/loadSkillsDir.ts` 能从 `.claude/skills`、用户目录、项目目录、managed installed package、plugin、bundled 和 MCP skill 加载 `SKILL.md`，并转成 `PromptCommand`。
 - `src/tools/SkillTool/` 会把可用 skill 摘要暴露给模型；模型命中后再通过 Skill 工具加载正文，Desktop 安装的 enabled installed skill 已可进入模型可见列表。
 - `src/services/skills/` 已提供导入、安装、安装记录、安全扫描、管理 API 聚合、运行时检查、修复 / 卸载和 cache 刷新基础能力。
+- Skill 内部结构已拆为管理编排、安装事务、包检查、管理 DTO、能力 provider、运行时 adapter 和运行时 catalog；模块边界详见 [CCR Skill 系统整体架构](../architecture/skill-system-architecture.md)。
+- Skill 能力已接入统一 Capability Catalog；需要跨 Skill / MCP / Tool 查看来源、调用面和运行时可见性时，使用 App Server `capabilities/list` 或 CLI `capabilities list`。
 - `apps/desktop/src/renderer/src/components/pages/SkillsPage.tsx` 已提供三栏管理面，支持已安装列表、详情、安全摘要、导入外部 Skill、安装、启用 / 禁用、修复和卸载；新建 Skill 由会话里的 `Skill 包助手` 生成完整包后再进入候选登记链路。
 - installed managed Skill 与直接文件 Skill 在运行时已补齐 `hooks` / `shell` / `version` / `paths` 等关键 frontmatter 透传；安全扫描会提示 hook command / HTTP / env 风险。
 - 导入来源已支持本地 zip/tar archive；安装候选已支持第一批 CCR 内置 Skill preset，并可安装成 managed package。

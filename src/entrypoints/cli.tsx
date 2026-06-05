@@ -245,6 +245,16 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  if (args[0] === 'capabilities' && (args[1] === undefined || args[1] === 'list')) {
+    profileCheckpoint('cli_capabilities_list_path');
+    const { enableConfigs } = await import('../utils/config.js');
+    enableConfigs();
+    const { listCoreCapabilities } = await import('../core/capabilityCore.js');
+    const catalog = await listCoreCapabilities({ cwd: process.cwd() });
+    process.stdout.write(`${JSON.stringify(catalog, null, 2)}\n`);
+    return;
+  }
+
   // Fast-path for `claude environment-runner`: headless BYOC runner.
   // feature() must stay inline for build-time dead code elimination.
   if (feature('BYOC_ENVIRONMENT_RUNNER') && args[0] === 'environment-runner') {

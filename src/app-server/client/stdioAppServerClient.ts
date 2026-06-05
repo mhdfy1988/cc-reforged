@@ -3,6 +3,8 @@ import type {
   AuthStatusResult,
   AuthLoginParams,
   AuthLoginResult,
+  CapabilitiesListParams,
+  CapabilitiesListResult,
   CompactRunParams,
   CompactRunResult,
   CompactStatusResult,
@@ -154,6 +156,13 @@ export class StdioAppServerClient {
 
   getConfig(options?: RequestOptions): Promise<ConfigGetResult> {
     return this.rpc.request('config/get', {}, options)
+  }
+
+  listCapabilities(
+    params: CapabilitiesListParams = {},
+    options?: RequestOptions,
+  ): Promise<CapabilitiesListResult> {
+    return this.rpc.request('capabilities/list', params, options)
   }
 
   getAuthStatus(

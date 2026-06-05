@@ -1,21 +1,40 @@
-# CCR 更新日志
+# Change Log
 
-本文记录 CCR 面向用户可见的版本变化。主分支可能包含最新版本之后的开发中改动；正式发布以 GitHub Release 和 tag 为准。
+All notable changes to this project will be documented in this file.
 
-## 0.6.1 - 2026-06-05
+主分支可能包含最新版本之后的开发中改动；正式发布以 GitHub Release 和 tag 为准。
 
-### 改动
+## [Unreleased]
+
+- 描述未发布的改动
+
+## [0.6.2] - 2026-06-05
+
+### Changed
+
+- 新增统一扩展能力目录第一版：`ExtensionCapability` 可表达 Skill、MCP server、MCP tool、Tool、Command 和 Plugin；Skill / MCP / Tool / Plugin provider 接入统一 Capability Catalog，并新增 Core / App Server `capabilities/list` / CLI `capabilities list` 只读查询入口。
+- Skill 内部结构完成 B1-B6 重构：`managementService.ts` 瘦身为编排层，安装写入抽到 `installTransaction.ts`，管理 DTO 抽到 `managementDtos.ts`，持久化 helper 抽到 `managementStore.ts`，Skill 管理 capability 抽到 `capabilityProvider.ts`，managed package 到 runtime `Command` 的转换抽到 `skillRuntimeAdapter.ts`。
+- 新增 `smoke:skill-internal-refactor`，覆盖 Skill 管理、安装事务、installed package inspection、能力目录和 runtime adapter 边界；`smoke:skill-release` 已覆盖完整 Skill 发布回归。
+
+### Fixed
+
+- 修复 Skill install `force` 计划与实际 apply 的语义不一致：installer-owned 目录可由确认后的安装事务受控替换，非 owner 目录仍不会被覆盖。
+- 修复 Skill repair 先删除旧包再重建候选导致可用 Skill 可能临时变成缺包状态的问题；修复流程现在先构建候选和计划，验证通过后再由安装事务替换。
+
+## [0.6.1] - 2026-06-05
+
+### Changed
 
 - Desktop Skill / MCP 管理页列表收敛状态展示：左侧卡片不再重复显示已安装 / 已配置状态文案，整体启用状态改为卡片内无文字切换开关，降低列表噪音。
 - Desktop Skill / MCP 详情页操作区改为 36px 图标按钮：修复、检测、重启和卸载保留 `title` / `aria-label`，卸载保留危险色 hover 状态；Skill / MCP 安装搜索按钮同步改为放大镜图标。
 
-### BUG 修复
+### Fixed
 
 - 修复 Skill 管理页把 `modelInvocable=false` 误显示为 Skill 已禁用的问题；安装完整性状态现在只由 `enabled` 决定，模型调用和用户调用继续作为独立调用面展示，并补 smoke 回归。
 
-## 0.6.0 - 2026-06-05
+## [0.6.0] - 2026-06-05
 
-### 改动
+### Changed
 
 - MCP 保存常用安装配置收敛到 Core / App Server / client 统一入口，并新增 `smoke:mcp-end-to-end` 覆盖 manifest 矩阵、保存候选、安装、修复、卸载和 registry 暂停边界。
 - Skill 安装闭环接入运行时：`~/.ccr/skills/installed.json` / `lock.json` / `packages/` 会生成 managed skill，`enabled`、`modelInvocable`、`userInvocable` 会影响 SkillTool prompt 和 slash command；drifted / missing / invalid package 不再进入运行时，并补 S-6 runtime smoke 覆盖。
@@ -36,7 +55,7 @@
 - Skill 文档补齐 Codex 用户 Skill 复用边界：`bug-debug-helper`、`docs-update-helper` 和 `release-check-helper` 复制到 `~/.codex/skills` 后需用新线程验证可用 Skill 注入，旧线程恢复不视为刷新成功。
 - MCP 和 Skill 的远端 registry 候选提供器暂停实现，当前只记录为后续 backlog；后续恢复前需先补 registry URL 配置、index schema、checksum、缓存、信任策略和失败诊断。
 
-### BUG 修复
+### Fixed
 
 - 修复 dynamic / conditional Skill 纳入 runtime catalog 后的缓存边界：路径命中激活的 conditional Skill 会触发 command cache 重新装配，并保留原始 `managed` / `skills` 来源元数据。
 - 修复 `smoke:desktop-display-events` 仍引用 MCP 页面旧 helper 的问题，补回 `formatInstalledRecord` 导出以固定 installed record 摘要格式。

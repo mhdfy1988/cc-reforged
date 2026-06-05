@@ -1,26 +1,20 @@
 import { createHash } from 'crypto'
-import { cp, mkdir, readFile, writeFile } from 'fs/promises'
-import { dirname, join } from 'path'
-import { jsonStringify } from '../../utils/slowOperations.js'
+import { readFile } from 'fs/promises'
+import { join } from 'path'
 import {
   loadSkillPackageForManifest,
   loadSkillPackageFromDir,
 } from './installCandidates.js'
 import {
-  createCcrSkillInstallManifest,
-  parseCcrSkillInstalledIndex,
-  parseCcrSkillLockIndex,
-  parseCcrSkillPackageOwnerMarker,
   parseSkillInstallResult,
-  type CcrSkillInstalledIndex,
-  type CcrSkillLockIndex,
   type SkillInstallResult,
 } from './installManifest.js'
 import {
-  CCR_SKILL_PACKAGE_OWNER_MARKER_FILE,
   getCcrSkillInstallPaths,
 } from './installPaths.js'
 import type { SkillInstallPlan } from './installPlanner.js'
+import { applySkillInstallTransaction } from './installTransaction.js'
+import { hashSkillPackageTree } from './packageTreeIntegrity.js'
 import { evaluateSkillSecurityPolicy } from './securityPolicy.js'
 import { scanSkillPackage } from './securityScanner.js'
 
@@ -80,30 +74,33 @@ export async function applySkillInstallPlan(
     )
   }
 
-  await mkdir(dirname(packageDir), { recursive: true })
-  await cp(liveSource.packageDir, packageDir, {
-    recursive: true,
-    errorOnExist: true,
-    force: false,
-  })
-
   const now = options.now ?? new Date()
   const lockKey = `${plan.scope}:${plan.name}`
-  const ownerMarkerPath = join(packageDir, CCR_SKILL_PACKAGE_OWNER_MARKER_FILE)
-  const ownerMarker = parseCcrSkillPackageOwnerMarker({
-    schemaVersion: 1,
-    packageId: lockKey,
-    name: plan.name,
-    installedAt: now.toISOString(),
-    source: plan.manifestInput.source,
-    owner: 'ccr-skill-installer',
-  })
-  await writeJson(ownerMarkerPath, ownerMarker)
-
   const warnings: string[] = [
     ...plan.risks,
     ...(securityOverrideAccepted ? ['Security override token accepted.'] : []),
   ]
+  const skillFilePath = join(packageDir, 'SKILL.md')
+  const checksum = await hashFileSha256(liveSourcePackage.bodyPath)
+  const packageTree = await hashSkillPackageTree(liveSource.packageDir)
+  const transaction = await applySkillInstallTransaction({
+    sourceDir: liveSource.packageDir,
+    packageDir,
+    installedIndexPath: paths.installedIndexPath,
+    lockFilePath: paths.lockFilePath,
+    plan: {
+      name: plan.name,
+      scope: plan.scope,
+      manifestInput: plan.manifestInput,
+    },
+    lockKey,
+    checksum: {
+      skillMd: checksum,
+      packageTree: packageTree.sha256,
+    },
+    originVendor: liveSourcePackage.origin.vendor,
+    now,
+  })
   const skillPackage = await loadSkillPackageFromDir({
     skillDir: packageDir,
     originVendor: liveSource.originVendor,
@@ -111,54 +108,14 @@ export async function applySkillInstallPlan(
     legacyCommand: liveSource.legacyCommand,
     risks: warnings,
   })
-  const skillFilePath = join(packageDir, 'SKILL.md')
-  const checksum = await hashFileSha256(skillFilePath)
-  const manifest = createCcrSkillInstallManifest(plan.manifestInput)
-
-  const installedRecord = {
-    schemaVersion: 1 as const,
-    name: plan.name,
-    scope: plan.scope,
-    installedAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-    manifest,
-    packageDir,
-    skillFilePath,
-    packageOwnerMarkerPath: ownerMarkerPath,
-    enabled: manifest.defaults.enabled,
-    modelInvocable: manifest.defaults.modelInvocable,
-    userInvocable: manifest.defaults.userInvocable,
-    lockKey,
-  }
-  const lockRecord = {
-    name: plan.name,
-    scope: plan.scope,
-    sourceKind: manifest.source.kind,
-    packageDir,
-    skillFilePath,
-    checksum: {
-      algorithm: 'sha256' as const,
-      skillMd: checksum,
-    },
-    originVendor: skillPackage.origin.vendor,
-    updatedAt: now.toISOString(),
-  }
-
-  const installedIndex = await readInstalledIndex(paths.installedIndexPath)
-  installedIndex.installed[lockKey] = installedRecord
-  await writeJson(paths.installedIndexPath, installedIndex)
-
-  const lockIndex = await readLockIndex(paths.lockFilePath)
-  lockIndex.locks[lockKey] = lockRecord
-  await writeJson(paths.lockFilePath, lockIndex)
 
   return parseSkillInstallResult({
     schemaVersion: 1,
     name: plan.name,
     scope: plan.scope,
     packageDir,
-    installedRecord,
-    lockRecord,
+    installedRecord: transaction.installedRecord,
+    lockRecord: transaction.lockRecord,
     package: skillPackage,
     warnings,
   })
@@ -175,39 +132,6 @@ function isSecurityOverrideAccepted(
   )
 }
 
-async function readInstalledIndex(path: string): Promise<CcrSkillInstalledIndex> {
-  try {
-    return parseCcrSkillInstalledIndex(JSON.parse(await readFile(path, 'utf8')))
-  } catch (error) {
-    if (getErrorCode(error) === 'ENOENT') {
-      return parseCcrSkillInstalledIndex({ schemaVersion: 1 })
-    }
-    throw error
-  }
-}
-
-async function readLockIndex(path: string): Promise<CcrSkillLockIndex> {
-  try {
-    return parseCcrSkillLockIndex(JSON.parse(await readFile(path, 'utf8')))
-  } catch (error) {
-    if (getErrorCode(error) === 'ENOENT') {
-      return parseCcrSkillLockIndex({ schemaVersion: 1 })
-    }
-    throw error
-  }
-}
-
-async function writeJson(path: string, value: unknown): Promise<void> {
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, `${jsonStringify(value, null, 2)}\n`, 'utf8')
-}
-
 async function hashFileSha256(path: string): Promise<string> {
   return createHash('sha256').update(await readFile(path)).digest('hex')
-}
-
-function getErrorCode(error: unknown): unknown {
-  return typeof error === 'object' && error != null && 'code' in error
-    ? (error as { code?: unknown }).code
-    : undefined
 }

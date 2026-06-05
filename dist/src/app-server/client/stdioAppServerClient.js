@@ -14,6 +14,9 @@ export class StdioAppServerClient {
     getConfig(options) {
         return this.rpc.request('config/get', {}, options);
     }
+    listCapabilities(params = {}, options) {
+        return this.rpc.request('capabilities/list', params, options);
+    }
     getAuthStatus(params = {}, options) {
         return this.rpc.request('auth/status', params, options);
     }

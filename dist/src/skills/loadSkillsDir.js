@@ -21,6 +21,7 @@ import { isRestrictedToPluginOnly } from '../utils/settings/pluginOnlyPolicy.js'
 import { createSignal } from '../utils/signal.js';
 import { loadInstalledSkillRuntimePackages, } from './installedSkillLoader.js';
 import { normalizeSkillPackage } from './normalizeSkillPackage.js';
+import { createManagedSkillCommandFromInstalledEntry } from './skillRuntimeAdapter.js';
 import { toPromptCommand } from './skillCommandAdapter.js';
 import { parseSkillFrontmatterFields, parseSkillPaths, } from './skillFrontmatter.js';
 import { registerMCPSkillBuilders } from './mcpSkillBuilders.js';
@@ -191,31 +192,15 @@ function ccrSkillSourceForSettingSource(source, loadedFrom) {
             return 'bundled';
     }
 }
-function createSkillCommandFromInstalledEntry(entry) {
-    const source = entry.inspection.scope === 'project' ? 'projectSettings' : 'userSettings';
-    const rawFrontmatter = entry.package.compatibility.rawFrontmatter;
-    const parsed = parseSkillFrontmatterFields(rawFrontmatter, entry.package.body, entry.package.name, 'Skill');
-    return {
-        skill: toPromptCommand(entry.package, {
-            source,
-            loadedFrom: 'managed',
-            createSkillCommand,
-            hasUserSpecifiedDescription: parsed.hasUserSpecifiedDescription,
-            hooks: parsed.hooks,
-            paths: parseSkillPaths(rawFrontmatter),
-            shell: parsed.shell,
-            version: parsed.version,
-        }),
-        filePath: entry.inspection.installedRecord.skillFilePath,
-    };
-}
 async function loadInstalledManagedSkills() {
     try {
         const result = await loadInstalledSkillRuntimePackages();
         if (result.diagnostics.length > 0) {
             logForDebugging(`[skills] installed runtime diagnostics: ${result.diagnostics.length}`);
         }
-        return result.entries.map(createSkillCommandFromInstalledEntry);
+        return result.entries.map(entry => createManagedSkillCommandFromInstalledEntry(entry, {
+            createSkillCommand,
+        }));
     }
     catch (error) {
         logError(error);
