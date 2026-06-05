@@ -39,14 +39,14 @@ if (workflow.permissions?.contents !== 'write') {
   })
 }
 
-if (releaseJob?.['runs-on'] !== 'windows-latest') {
-  fail('desktop release workflow must run on windows-latest', {
+if (releaseJob?.['runs-on'] !== 'windows-2022') {
+  fail('desktop release workflow must run on windows-2022', {
     runsOn: releaseJob?.['runs-on'],
   })
 }
 
-assertStepUses(usesValues, 'actions/checkout@v4')
-assertStepUses(usesValues, 'actions/setup-node@v4')
+assertStepUses(usesValues, 'actions/checkout@v6')
+assertStepUses(usesValues, 'actions/setup-node@v6')
 assertText(workflowText, "node-version: '24'", 'workflow must use Node 24')
 assertText(workflowText, 'fetch-depth: 0', 'workflow must fetch tags')
 assertText(workflowText, 'contents: write', 'workflow must be able to write releases')

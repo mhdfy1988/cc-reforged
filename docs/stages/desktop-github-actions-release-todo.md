@@ -60,7 +60,7 @@
 当前进展：
 
 - 已新增 `.github/workflows/desktop-release.yml`。
-- workflow 使用 `windows-latest`、Node 24、`npm.cmd install`。
+- workflow 使用固定 Windows runner、Node 24、`npm.cmd install`。
 - workflow 会先跑 `ci:smoke`，再按 `signed` 输入选择 `desktop:dist` 或 `desktop:dist:signed`。
 - workflow 会运行 `smoke:desktop-release-artifacts`、`smoke:desktop-signing-readiness`、`release:desktop:check`。
 - workflow 使用 `GH_TOKEN` 调用 `scripts/prepare-desktop-github-release.mjs --execute` 创建 GitHub Release。

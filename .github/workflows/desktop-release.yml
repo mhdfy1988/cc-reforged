@@ -29,7 +29,7 @@ permissions:
 jobs:
   desktop-release:
     name: Build and publish Desktop release draft
-    runs-on: windows-2025
+    runs-on: windows-2022
 
     steps:
       - name: Checkout tag

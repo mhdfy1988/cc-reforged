@@ -18,7 +18,7 @@ permissions:
 jobs:
   publish:
     name: Publish npm package via Trusted Publishing
-    runs-on: windows-2025
+    runs-on: windows-2022
 
     steps:
       - name: Checkout tag (manual)
