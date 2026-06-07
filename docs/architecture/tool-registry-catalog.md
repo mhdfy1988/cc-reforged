@@ -10,15 +10,15 @@
 - **常规可见**：普通会话里是否属于基础工具池。最终是否真的给模型，还会受权限、平台、模式、MCP 连接状态和 feature gate 影响。
 - **开启条件**：只有满足条件时才注册或暴露。
 
-当前内置工具的源头是 `src/tools.ts` 的 `getAllBaseTools()`；普通会话会再经过 `getTools()` 过滤，App Server / REPL 最终通过 `assembleToolPool()` 把内置工具和 MCP 工具合并。
+当前内置工具的源头是 `src/tools.ts` 的 `getAllBaseTools()`；普通会话会再经过 `getTools()` 过滤。App Server 的最终工具池统一由 `buildAppServerToolPool()` 生成，它会复用 `assembleToolPool()` 合并内置工具和 MCP 工具，再应用平台默认、权限过滤、active agent 数量和 MCP server runtime 状态。Capability Catalog 的 Tool provider 必须消费这份已解析工具池，不能自行回退到 `getAllBaseTools()` 猜测模型可见工具。
 
 外部参考：Codex 与 OpenClaw 的工具注册、工具搜索、动态工具、插件工具和 UI 展示链路已整理到 [Codex / OpenClaw 工具系统源码对照索引](../references/codex-openclaw-tool-system-source-evidence.md)。后续改 CCR 工具治理时，先同时参考本目录和外部源码证据索引。
 
 ## 当前 registry 落地状态
 
-当前已完成到第 5 期第三轮 T27：在不改模型协议和 App Server 事件协议的前提下，Desktop 工具卡已接入共享中文名、分类、`summaryKeys` 摘要 fallback、`detailKeys` 详情裁剪和 `showInMainTimeline` 主时间线隐藏建议；`GenerateImage` 的 provider 生图能力也已经有统一的 `provider/model/source/route/dataBoundary/message` 快照；MCP 动态工具进入 registry 后会带 `serverName/toolName`，默认按 deferred 暴露，能通过 availability 表达连接、认证、禁用、发现失败和调用失败状态，并能在 ToolSearch / Desktop fallback 中消费 MCP 来源和状态信息；MCP 管理 API 已具备 list / inspect / add / update / remove / enable / disable / restart / test；MCP install 受控入口已具备 search / plan / apply / list / uninstall；Desktop 已新增 MCP 管理页承接配置查看、启停、检测、安装计划和 installer-owned 卸载；安装安全边界新增 scope 可写校验、包缓存 owner marker、lockfile/dataBoundary 审计记录、force 覆盖失败回滚和 secret 脱敏摘要；项目级 `.mcp.json` inventory 的 active 判断已与运行时“近目录覆盖父目录”保持一致；T27 已补配置合并、启停、安装清单、卸载残留、Desktop 管理页数据契约和 inspect 输出验证。
+当前已完成到第 5 期第三轮 T27，并在扩展能力 R15 中补齐 ToolSearch / Tool Registry / Capability Catalog 对齐：在不改模型协议和 App Server 事件协议的前提下，Desktop 工具卡已接入共享中文名、分类、`summaryKeys` 摘要 fallback、`detailKeys` 详情裁剪和 `showInMainTimeline` 主时间线隐藏建议；`GenerateImage` 的 provider 生图能力也已经有统一的 `provider/model/source/route/dataBoundary/message` 快照；MCP 动态工具进入 registry 后会带 `serverName/toolName`，默认按 deferred 暴露，能通过 availability 表达连接、认证、禁用、发现失败和调用失败状态；`ToolCapabilitySnapshot` 现在是 ToolSearch 候选策略和 Capability Catalog tool provider 的共享输入，避免同一个工具在搜索、目录和诊断里被重复解释；MCP 管理 API 已具备 list / inspect / add / update / remove / enable / disable / restart / test；MCP install 受控入口已具备 search / plan / apply / list / uninstall；Desktop 已新增 MCP 管理页承接配置查看、启停、检测、安装计划和 installer-owned 卸载；安装安全边界新增 scope 可写校验、包缓存 owner marker、lockfile/dataBoundary 审计记录、force 覆盖失败回滚和 secret 脱敏摘要；项目级 `.mcp.json` inventory 的 active 判断已与运行时“近目录覆盖父目录”保持一致；T27 已补配置合并、启停、安装清单、卸载残留、Desktop 管理页数据契约和 inspect 输出验证。
 
-下一步治理重点：进入第 6 期 Skill / Plugin 扩展包治理。MCP 运行时工具面、管理 API、受控 install 入口、Desktop 管理页、安全边界和 T27 自动化验证已经收口；后续 Skill / Plugin 应复用 registry、availability、ToolSearch、Desktop 管理页和 installer-owned 安全边界的既有模式。
+当前治理重点已经从“进入 Skill / Plugin 扩展包治理”推进到“外部扩展能力底层事实收口”。MCP 运行时工具面、管理 API、受控 install 入口、Desktop 管理页、安全边界和 T27 自动化验证已经收口；G1-G4 又补齐请求级能力运行环境、来源感知身份、Plugin / App / MCP 关系图、App registry 生命周期和 85 项反例矩阵。后续 Skill / Plugin 不应另造一套工具目录，而应复用 registry、availability、ToolSearch、Capability Catalog、Desktop 管理页和 installer-owned 安全边界的既有模式。
 
 ## MCP 管理面收口边界
 
@@ -54,8 +54,10 @@ registry / availability 确认当前缺少能力
 
 - `src/services/tools/toolRegistry.ts`：新增只读 `CcrToolRegistry`，从现有 `Tool[]` 生成 registry entries；MCP 动态工具会归一化 `serverName/toolName`，并在缺少 `mcpInfo` 时从 `mcp__<server>__<tool>` 名称兜底解析。
 - `src/services/tools/toolAvailability.ts`：新增 `CcrToolAvailability`，集中判断工具是否真实可用，并返回不可用原因；MCP 动态工具支持 `connected`、`needs-auth`、`failed`、`disabled`、`pending`、`discovery-failed`、`call-failed` 状态。
-- `src/services/tools/toolSearchPolicy.ts`：新增 `CcrToolSearchPolicy`，集中决定哪些工具允许被 `ToolSearch` 搜索。
+- `src/services/tools/toolCapabilitySnapshot.ts`：新增共享工具能力快照，把 registry entry、availability 和 searchable 结果放在同一层，供 ToolSearch 与 Capability Catalog 共同消费。
+- `src/services/tools/toolSearchPolicy.ts`：新增 `CcrToolSearchPolicy`，集中决定哪些工具允许被 `ToolSearch` 搜索；当前候选来自 `ToolCapabilitySnapshot.searchable=true`。
 - `src/services/tools/appServerToolFilters.ts`：抽出 App Server 平台过滤，供运行时和检查脚本复用。
+- `src/services/tools/appServerToolPool.ts`：抽出 App Server 最终工具池 builder，供 turn runner 和 Capability Catalog 共用，确保工具目录和模型实际工具集合一致。
 - `src/services/llm/providerCapabilityTools.ts`：新增 provider 能力工具快照，当前覆盖 `GenerateImage` 生图能力来源、同供应商边界和不可用提示。
 - `src/services/mcp/configInventory.ts`：新增 MCP 配置与安装位置 inventory，输出 enterprise、claude.ai、plugin、user legacy、user file、project、local、dynamic 来源的优先级、读写路径、可写性、安装目录、lockfile、日志目录和 server active/suppressed 状态。
 - `src/services/mcp/installManifest.ts`：新增 `CcrMcpInstallManifest` 运行时 schema 和安装来源分类，覆盖手动配置、远程 URL、stdio npm 包、本地目录、内置 preset、plugin-provided MCP，并记录 entry、envSchema、permissions、homepage、checksum 和 dataBoundary。
@@ -73,7 +75,7 @@ registry / availability 确认当前缺少能力
 - `apps/desktop/src/renderer/src/domain/displayEvents.ts`：主时间线隐藏逻辑优先消费 `showInMainTimeline`，失败工具调用仍保持可见。
 - `apps/desktop/src/renderer/src/components/pages/ModelsPage.tsx`：模型页展示当前 provider 的生图能力工具来源。
 - `scripts/inspect-app-server-tools.mjs`：打印当前 App Server 最终工具池、`alwaysLoad`、`shouldDefer`、MCP 工具、平台过滤结果和 `mcpConfigInventory`。
-- `scripts/smoke-tool-registry.mjs`：验证 registry 不改变基础工具顺序和数量，并覆盖 `GenerateImage`、`TodoWrite`、内部 MCP 资源工具、Windows App Server 过滤、provider 生图能力工具快照、MCP 配置 inventory、MCP install manifest、可用性原因、MCP 动态工具 identity 和 `ToolSearchTool.call()` 候选策略。
+- `scripts/smoke-tool-registry.mjs`：验证 registry 不改变基础工具顺序和数量，并覆盖 `GenerateImage`、`TodoWrite`、内部 MCP 资源工具、Windows App Server 过滤、provider 生图能力工具快照、MCP 配置 inventory、MCP install manifest、可用性原因、MCP 动态工具 identity、`ToolSearchTool.call()` 候选策略，以及同一个 MCP tool 在 `ToolCapabilitySnapshot`、ToolSearch 和 Capability Catalog 中的来源/可用性/暴露策略一致。
 - `scripts/smoke-desktop-display-events.mjs`：验证 Desktop 工具卡能消费 `summaryKeys/detailKeys/showInMainTimeline`，并保留失败内部工具卡可见。
 
 当前 registry 字段：
@@ -118,7 +120,7 @@ registry / availability 确认当前缺少能力
 - 普通启用后的内置工具池：21 个。
 - App Server 最终工具池：19 个。
 - 最终工具池包含：`PowerShell`、`GenerateImage`、`TodoWrite`、`Read`、`Edit`、`Write`、`Glob`、`Grep` 等。
-- Windows App Server 平台过滤只移除：`Agent`、`Bash`。
+- Windows App Server 平台过滤只移除：`Agent`、`Bash`；Capability Catalog 中的 Tool 能力也消费同一份过滤后的 app-server tool pool。
 - 不可用原因：`Bash=platform_unsupported`，`Agent=agent_definitions_missing`。
 
 当前 ToolSearch 候选策略：

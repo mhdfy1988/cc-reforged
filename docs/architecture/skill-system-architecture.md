@@ -52,6 +52,57 @@ flowchart TD
   Dto --> Desktop
 ```
 
+## 2.1 Skill 状态术语
+
+Skill 系统必须使用统一术语描述状态，避免管理页、SkillTool、slash command 和上下文注入各自解释。
+
+| 中文主称呼 | 字段 / 对象 | 含义 | 唯一责任层 |
+| --- | --- | --- | --- |
+| 安装记录 | `InstalledSkillRecord` | 用户安装了某个 managed Skill，并保存 manifest、packageDir、enabled、invocation 默认值 | `managementStore.ts` / 安装事务 |
+| 包检查状态 | `InstalledPackageInspection.status` | installed package 当前是否完整、漂移、缺失、无 owner marker 或无 lock | `installedPackageInspection.ts` |
+| 启用状态 | `enabled` | 用户是否允许该 installed Skill 参与运行时候选 | 管理服务只写，activation policy 只读 |
+| 模型调用面 | `modelInvocable` | 模型是否允许通过 SkillTool 主动调用 | `skillActivationPolicy.ts` / runtime adapter |
+| 用户调用面 | `userInvocable` | 用户是否允许通过 slash command 或用户入口调用 | `skillActivationPolicy.ts` / command adapter |
+| 运行时可见 | `runtimeVisible` | 该 Skill 是否能进入 runtime catalog 候选；由 enabled、检查状态、调用面共同决定 | `skillActivationPolicy.ts` + `skillRuntimeCatalog.ts` |
+| 上下文注入 | `skill_listing` / `skill_discovery` | 本轮是否把 Skill 名称、描述或推荐候选放进模型上下文 | 后续 `SkillContextInjectionPolicy` |
+| 动态发现命中 | discovery hit | 当前任务文本检索到了某个 Skill，不代表已调用 | 后续 `SkillDiscoveryIndex` |
+
+不变式：
+
+- `enabled=false` 表示 Skill 禁用；`modelInvocable=false` 只表示模型调用面关闭，不能在 UI 或诊断里显示成 Skill 禁用。
+- installed record 存在不代表 runtime visible；package missing / drifted / invalid 必须让 runtime visible 为 false。
+- runtime visible 不代表本轮上下文已经注入；上下文注入必须有独立策略和 hidden reason。
+- `userInvocable=false` 的 Skill 不能出现在 slash command 入口，但仍可在 `modelInvocable=true` 时被 SkillTool 调用。
+- `modelInvocable=false` 的 Skill 不能出现在模型静态列表或动态发现候选里，但可在 `userInvocable=true` 时作为用户入口存在。
+
+## 2.2 安装目录、运行时目录与上下文路径
+
+Skill 从“用户安装”到“模型能唤醒”会经过三层，不允许互相替代：
+
+```text
+安装目录
+  -> installed.json / lock.json / packages
+  -> 说明 CCR 管理了哪些 managed Skill package
+
+运行时目录
+  -> SkillRuntimeCatalog / prompt Command
+  -> 说明当前 cwd / configHome / session 下哪些 Skill 能成为候选
+
+上下文注入
+  -> skill_listing / skill_discovery
+  -> 说明本轮哪些 Skill 名称和描述已经进入模型上下文
+```
+
+当前不变式：
+
+- 管理页和上下文注入都必须从当前 request 的 runtime catalog 读取，不再用 installed record 猜运行时能力。
+- `skill_listing` 只放少量高置信 Skill；`skill_discovery` 按当前任务召回，并在返回前通过 `SkillVisibilityLedger` 过滤已 visible / loaded / discovered 的 Skill。
+- catalog 查询仍保留完整清单语义，任务查询的自动 discovery 只提醒最相关的一个 Skill，避免弱相关命中污染后续发现。
+- `DiscoverSkills` 和静态 listing 使用同一套 canonical Skill capability ID，能回到管理目录定位同一个能力。
+- SkillTool 仍是最终调用入口；被 listing 或 discovery 提到不代表已经展开 `SKILL.md`。
+- `SkillRuntimeRequestContext` 是模型上下文链路的当前请求事实来源；`skill_listing`、`skill_discovery`、`DiscoverSkills` 和 `SkillTool` 不应自行回默认 home。
+- 有 canonical capability id 时，discovery 去重只按 capability id 判断；name fallback 只保留给没有 capability id 的 legacy entry。
+
 ## 3. 模块职责
 
 当前代码落点：

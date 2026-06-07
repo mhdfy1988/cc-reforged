@@ -40,7 +40,7 @@ import { getLoggingSafeMcpBaseUrl } from './utils.js';
 const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const fetchMcpSkillsForClient = feature('MCP_SKILLS')
-    ? require('../../skills/mcpSkills.js').fetchMcpSkillsForClient
+    ? require('../../skills/mcpSkills.js').fetchMcpSkillsForClientSafely
     : null;
 function getComputerUseMCPToolOverridesOrThrow(toolName) {
     const overrides = computerUseWrapper?.()?.getComputerUseMCPToolOverrides;
@@ -1030,6 +1030,9 @@ export const fetchToolsForClient = memoizeWithLRU(async (client) => {
             // can override builtins by name. mcpInfo is used for permission checking.
             name: skipPrefix ? tool.name : fullyQualifiedName,
             mcpInfo: { serverName: client.name, toolName: tool.name },
+            ...(client.config.pluginSource
+                ? { pluginId: client.config.pluginSource }
+                : {}),
             isMcp: true,
             // Collapse whitespace: _meta is open to external MCP servers, and
             // a newline here would inject orphan lines into the deferred-tool

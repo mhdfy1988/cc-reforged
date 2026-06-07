@@ -50,7 +50,7 @@ export async function fetchSystemPromptParts({ tools, mainLoopModel, additionalW
  * know about (coordinator mode, memory-mechanics prompt). That's acceptable —
  * the alternative is returning null and failing the side question entirely.
  */
-export async function buildSideQuestionFallbackParams({ tools, commands, mcpClients, messages, readFileState, getAppState, setAppState, customSystemPrompt, appendSystemPrompt, thinkingConfig, agents, }) {
+export async function buildSideQuestionFallbackParams({ cwd, tools, commands, mcpClients, messages, readFileState, getAppState, setAppState, customSystemPrompt, appendSystemPrompt, thinkingConfig, agents, }) {
     const mainLoopModel = getMainLoopModel();
     const appState = getAppState();
     const { defaultSystemPrompt, userContext, systemContext } = await fetchSystemPromptParts({
@@ -75,6 +75,7 @@ export async function buildSideQuestionFallbackParams({ tools, commands, mcpClie
     const toolUseContext = {
         options: {
             commands,
+            cwd,
             debug: false,
             mainLoopModel,
             tools,

@@ -158,6 +158,10 @@ export type CompactProgressEvent =
 export type ToolUseContext = {
   options: {
     commands: Command[]
+    /** Request-scoped workspace used by Skill and tool runtime loaders. */
+    cwd: string
+    /** Request-scoped CCR home used by Skill runtime loaders. */
+    configHomeDir?: string
     debug: boolean
     mainLoopModel: string
     tools: Tools
@@ -221,8 +225,18 @@ export type ToolUseContext = {
    */
   loadedNestedMemoryPaths?: Set<string>
   dynamicSkillDirTriggers?: Set<string>
+  /** Skill names already visible in the transcript via skill_listing. */
+  visibleSkillNames?: Set<string>
+  /** Stable capability ids already visible in the transcript via skill_listing. */
+  visibleSkillCapabilityIds?: Set<string>
+  /** Skill names whose full prompt content has already been loaded. */
+  loadedSkillNames?: Set<string>
+  /** Stable capability ids whose full prompt content has already been loaded. */
+  loadedSkillCapabilityIds?: Set<string>
   /** Skill names surfaced via skill_discovery this session. Telemetry only (feeds was_discovered). */
   discoveredSkillNames?: Set<string>
+  /** Stable capability ids surfaced via skill discovery this session. */
+  discoveredSkillCapabilityIds?: Set<string>
   userModified?: boolean
   setInProgressToolUseIDs: (f: (prev: Set<string>) => Set<string>) => void
   /** Only wired in interactive (REPL) contexts; SDK/QueryEngine don't set this. */
@@ -463,6 +477,8 @@ export type Tool<
    * or unprefixed (CLAUDE_AGENT_SDK_MCP_NO_PREFIX mode).
    */
   mcpInfo?: { serverName: string; toolName: string }
+  /** Stable parent Plugin identity for plugin-contributed tools. */
+  pluginId?: string
   readonly name: string
   /**
    * Maximum size in characters for tool result before it gets persisted to disk.

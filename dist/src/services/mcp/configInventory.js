@@ -1,5 +1,5 @@
 import { existsSync } from 'fs';
-import { dirname, join, parse } from 'path';
+import { dirname, join, parse, resolve } from 'path';
 import { getCurrentProjectConfig, getGlobalConfig, } from '../../utils/config.js';
 import { getCwd } from '../../utils/cwd.js';
 import { getGlobalClaudeFile } from '../../utils/env.js';
@@ -19,8 +19,7 @@ const SOURCE_PRECEDENCE = {
     dynamic: 60,
     enterprise: 100,
 };
-export function getCcrMcpInstallPaths() {
-    const configHomeDir = getClaudeConfigHomeDir();
+export function getCcrMcpInstallPaths(configHomeDir = getClaudeConfigHomeDir()) {
     return {
         packageRootDir: join(configHomeDir, 'mcp', 'packages'),
         installedManifestPath: join(configHomeDir, 'mcp', 'installed.json'),
@@ -37,15 +36,19 @@ export function getCcrMcpProjectConfigReadPaths(cwd = getCwd()) {
     }
     return dirs.reverse().map(dir => join(dir, '.mcp.json'));
 }
-export function collectCcrMcpConfigInventory() {
-    const projectCwd = getCwd();
-    const configHomeDir = getClaudeConfigHomeDir();
-    const globalConfigPath = getGlobalClaudeFile();
+export function collectCcrMcpConfigInventory(options = {}) {
+    const projectCwd = resolve(options.cwd ?? getCwd());
+    const configHomeDir = resolve(options.configHomeDir ?? getClaudeConfigHomeDir());
+    const usesProcessConfigHome = configHomeDir === resolve(getClaudeConfigHomeDir());
+    const usesProcessProjectState = usesProcessConfigHome && projectCwd === resolve(getCwd());
+    const globalConfigPath = usesProcessConfigHome
+        ? getGlobalClaudeFile()
+        : getRequestScopedGlobalConfigPath(configHomeDir);
     const enterpriseExclusive = doesEnterpriseMcpConfigExist();
     const pluginOnly = isRestrictedToPluginOnly('mcp');
     const projectReadPaths = getCcrMcpProjectConfigReadPaths(projectCwd);
     const enterprisePath = getEnterpriseMcpFilePath();
-    const userPath = getUserMcpFilePath();
+    const userPath = getUserMcpFilePath(configHomeDir);
     const sourceDefinitions = [
         {
             id: 'enterprise',
@@ -185,14 +188,16 @@ export function collectCcrMcpConfigInventory() {
         candidates,
         sourceErrors,
     });
-    collectUserLegacyCandidates({
-        globalConfigPath,
-        sourceEnabled: isSettingSourceEnabled('userSettings') &&
-            !enterpriseExclusive &&
-            !pluginOnly,
-        candidates,
-        sourceErrors,
-    });
+    if (usesProcessConfigHome) {
+        collectUserLegacyCandidates({
+            globalConfigPath,
+            sourceEnabled: isSettingSourceEnabled('userSettings') &&
+                !enterpriseExclusive &&
+                !pluginOnly,
+            candidates,
+            sourceErrors,
+        });
+    }
     collectFileCandidates({
         sourceId: 'user-file',
         scope: 'user',
@@ -219,14 +224,16 @@ export function collectCcrMcpConfigInventory() {
             sourceErrors,
         });
     }
-    collectLocalCandidates({
-        globalConfigPath,
-        sourceEnabled: isSettingSourceEnabled('localSettings') &&
-            !enterpriseExclusive &&
-            !pluginOnly,
-        candidates,
-        sourceErrors,
-    });
+    if (usesProcessProjectState) {
+        collectLocalCandidates({
+            globalConfigPath,
+            sourceEnabled: isSettingSourceEnabled('localSettings') &&
+                !enterpriseExclusive &&
+                !pluginOnly,
+            candidates,
+            sourceErrors,
+        });
+    }
     const sources = sourceDefinitions.map(source => ({
         ...source,
         serverCount: candidates.filter(candidate => candidate.sourceId === source.id)
@@ -239,9 +246,11 @@ export function collectCcrMcpConfigInventory() {
         globalConfigPath,
         enterpriseExclusive,
         pluginOnly,
-        installPaths: getCcrMcpInstallPaths(),
+        installPaths: getCcrMcpInstallPaths(configHomeDir),
         sources,
-        servers: buildServerInventory(candidates, enterpriseExclusive),
+        servers: buildServerInventory(candidates, enterpriseExclusive, {
+            useProcessState: usesProcessProjectState,
+        }),
     };
 }
 export function summarizeCcrMcpConfigInventory(inventory = collectCcrMcpConfigInventory()) {
@@ -344,10 +353,10 @@ function collectLocalCandidates(params) {
         });
     }
 }
-function buildServerInventory(candidates, enterpriseExclusive) {
+function buildServerInventory(candidates, enterpriseExclusive, options) {
     const activeByName = new Map();
     for (const candidate of candidates) {
-        if (getSuppressionReason(candidate, enterpriseExclusive)) {
+        if (getSuppressionReason(candidate, enterpriseExclusive, options)) {
             continue;
         }
         const current = activeByName.get(candidate.name);
@@ -358,7 +367,7 @@ function buildServerInventory(candidates, enterpriseExclusive) {
     return candidates
         .map(candidate => {
         const active = activeByName.get(candidate.name) === candidate;
-        const suppressionReason = getSuppressionReason(candidate, enterpriseExclusive) ??
+        const suppressionReason = getSuppressionReason(candidate, enterpriseExclusive, options) ??
             (active ? null : `shadowed_by_${activeByName.get(candidate.name)?.sourceId ?? 'none'}`);
         return {
             name: candidate.name,
@@ -371,15 +380,23 @@ function buildServerInventory(candidates, enterpriseExclusive) {
             }),
             configPath: candidate.configPath,
             writePath: candidate.writePath,
-            enabled: !isMcpServerDisabled(candidate.name),
+            enabled: !options.useProcessState || !isMcpServerDisabled(candidate.name),
             readOnly: candidate.readOnly,
             active,
             suppressed: !active,
             suppressionReason,
             projectStatus: candidate.scope === 'project'
-                ? getProjectMcpServerStatus(candidate.name)
+                ? options.useProcessState
+                    ? getProjectMcpServerStatus(candidate.name)
+                    : 'approved'
                 : undefined,
             pluginSource: candidate.config.pluginSource,
+            type: candidate.config.type,
+            command: 'command' in candidate.config
+                ? candidate.config.command
+                : undefined,
+            url: 'url' in candidate.config ? candidate.config.url : undefined,
+            args: 'args' in candidate.config ? candidate.config.args : undefined,
         };
     })
         .sort((a, b) => {
@@ -389,29 +406,39 @@ function buildServerInventory(candidates, enterpriseExclusive) {
         return a.sourceId.localeCompare(b.sourceId);
     });
 }
-function getSuppressionReason(candidate, enterpriseExclusive) {
+function getSuppressionReason(candidate, enterpriseExclusive, options) {
     if (enterpriseExclusive && candidate.scope !== 'enterprise') {
         return 'enterprise_exclusive';
     }
     if (!candidate.sourceEnabled) {
         return 'source_disabled';
     }
-    if (isMcpServerDisabled(candidate.name)) {
+    if (options.useProcessState && isMcpServerDisabled(candidate.name)) {
         return 'disabled';
     }
-    const { blocked } = filterMcpServersByPolicy({
-        [candidate.name]: candidate.config,
-    });
-    if (blocked.includes(candidate.name)) {
-        return 'policy_blocked';
+    if (options.useProcessState) {
+        const { blocked } = filterMcpServersByPolicy({
+            [candidate.name]: candidate.config,
+        });
+        if (blocked.includes(candidate.name)) {
+            return 'policy_blocked';
+        }
     }
     if (candidate.scope === 'project') {
-        const status = getProjectMcpServerStatus(candidate.name);
+        const status = options.useProcessState
+            ? getProjectMcpServerStatus(candidate.name)
+            : 'approved';
         if (status !== 'approved') {
             return `project_${status}`;
         }
     }
     return null;
+}
+function getRequestScopedGlobalConfigPath(configHomeDir) {
+    const legacyPath = join(configHomeDir, '.config.json');
+    return existsSync(legacyPath)
+        ? legacyPath
+        : join(configHomeDir, '.ccr.json');
 }
 function pushErrors(target, sourceId, errors) {
     const messages = errors

@@ -6,30 +6,25 @@ import { query } from '../query.js'
 import { shouldUseBuiltinLlmRuntime } from '../services/llm/claudeApiAdapter.js'
 import { loadLlmConfig } from '../services/llm/llmConfig.js'
 import { getLlmRuntimeAuthStatus } from '../services/llm/runtimeStatus.js'
-import { getMcpToolsCommandsAndResources } from '../services/mcp/client.js'
 import type {
-  MCPServerConnection,
-  ServerResource,
-} from '../services/mcp/types.js'
+  CcrMcpRuntimeSnapshot,
+} from '../services/mcp/runtimeSnapshot.js'
+import { loadCcrMcpRuntimeSnapshot } from '../services/mcp/runtimeSnapshot.js'
 import {
-  enableAppServerPlatformToolDefaults,
-  filterAppServerPlatformTools,
-} from '../services/tools/appServerToolFilters.js'
+  buildAppServerToolPool,
+} from '../services/tools/appServerToolPool.js'
 import { getDefaultAppState, type AppState } from '../state/AppStateStore.js'
-import type { Command } from '../commands.js'
 import type {
   CompactProgressEvent,
   Tool,
   ToolPermissionContext,
   ToolUseContext,
 } from '../Tool.js'
-import { assembleToolPool } from '../tools.js'
 import type { AttributionState } from '../utils/commitAttribution.js'
-import { errorMessage } from '../utils/errors.js'
 import type { FileStateCache } from '../utils/fileStateCache.js'
 import type { FileHistoryState } from '../utils/fileHistory.js'
-import { logMCPError } from '../utils/log.js'
 import { createUserMessage } from '../utils/messages.js'
+import { getClaudeConfigHomeDir } from '../utils/envUtils.js'
 import {
   initialPermissionModeFromCLI,
   initializeToolPermissionContext,
@@ -86,13 +81,11 @@ export type CoreQueryRuntimeState = {
   loadedNestedMemoryPaths: Set<string>
   dynamicSkillDirTriggers: Set<string>
   discoveredSkillNames: Set<string>
+  discoveredSkillCapabilityIds: Set<string>
   contentReplacementState?: ContentReplacementState
 }
 
-export type CoreMcpRuntimeState = Pick<
-  AppState['mcp'],
-  'clients' | 'tools' | 'commands' | 'resources'
->
+export type CoreMcpRuntimeState = CcrMcpRuntimeSnapshot
 
 export const runCoreQueryTurn: CoreQueryTurnRunner = async input => {
   const {
@@ -127,10 +120,11 @@ export const runCoreQueryTurn: CoreQueryTurnRunner = async input => {
 
   const runtime = createCoreQueryRuntime({
     turn,
+    cwd: workspace.path,
     messages: messagesForQuery,
     readFileState: input.readFileState,
     runtimeState: input.runtimeState,
-    mcpRuntime: await loadAppServerMcpRuntimeState(),
+    mcpRuntime: await loadCcrMcpRuntimeSnapshot('app-server-runtime'),
     toolPermissionContext: await createAppServerToolPermissionContext(),
   })
   wireContextCompactionProgress({
@@ -416,6 +410,7 @@ function getNumber(value: unknown): number | undefined {
 
 export function createCoreQueryRuntime(input: {
   turn: CoreTurn
+  cwd: string
   messages: readonly Message[]
   readFileState: FileStateCache
   runtimeState?: CoreQueryRuntimeState
@@ -425,7 +420,6 @@ export function createCoreQueryRuntime(input: {
   toolUseContext: ToolUseContext
   getAppState: () => AppState
 } {
-  enableAppServerPlatformToolDefaults()
   const defaultAppState = getDefaultAppState()
   let appState: AppState = {
     ...defaultAppState,
@@ -446,16 +440,32 @@ export function createCoreQueryRuntime(input: {
 
   let inProgressToolUseIDs = new Set<string>()
   let responseLength = 0
-  const computeTools = () =>
-    filterAppServerPlatformTools(
-      assembleToolPool(appState.toolPermissionContext, appState.mcp.tools),
-      { activeAgentCount: appState.agentDefinitions.activeAgents.length },
+  const computeTools = () => {
+    const mcpServerStatuses = Object.fromEntries(
+      appState.mcp.clients.map(client => [
+        client.name,
+        client.type === 'failed'
+          ? { state: client.type, error: client.error }
+          : client.type,
+      ]),
     )
+    return buildAppServerToolPool({
+      permissionContext: appState.toolPermissionContext,
+      mcpTools: appState.mcp.tools,
+      activeAgentCount: appState.agentDefinitions.activeAgents.length,
+      connectedMcpServerNames: appState.mcp.clients
+        .filter(client => client.type === 'connected')
+        .map(client => client.name),
+      mcpServerStatuses,
+    })
+  }
 
   const toolUseContext: ToolUseContext = {
     abortController: new AbortController(),
     options: {
       commands: appState.mcp.commands,
+      cwd: input.cwd,
+      configHomeDir: getClaudeConfigHomeDir(),
       tools: computeTools(),
       debug: false,
       verbose: false,
@@ -479,6 +489,8 @@ export function createCoreQueryRuntime(input: {
     loadedNestedMemoryPaths: input.runtimeState?.loadedNestedMemoryPaths,
     dynamicSkillDirTriggers: input.runtimeState?.dynamicSkillDirTriggers,
     discoveredSkillNames: input.runtimeState?.discoveredSkillNames,
+    discoveredSkillCapabilityIds:
+      input.runtimeState?.discoveredSkillCapabilityIds,
     contentReplacementState: input.runtimeState?.contentReplacementState,
     setInProgressToolUseIDs: updater => {
       inProgressToolUseIDs = updater(inProgressToolUseIDs)
@@ -501,36 +513,6 @@ export function createCoreQueryRuntime(input: {
   }
 
   return { toolUseContext, getAppState }
-}
-
-async function loadAppServerMcpRuntimeState(): Promise<CoreMcpRuntimeState> {
-  const clients: MCPServerConnection[] = []
-  const tools: Tool[] = []
-  const commands: Command[] = []
-  const resources: Record<string, ServerResource[]> = {}
-
-  try {
-    await getMcpToolsCommandsAndResources(result => {
-      clients.push(result.client)
-      tools.push(...result.tools)
-      commands.push(...result.commands)
-      if (result.resources?.length) {
-        resources[result.client.name] = result.resources
-      }
-    })
-  } catch (error) {
-    logMCPError(
-      'app-server-runtime',
-      `Failed to load MCP runtime tools: ${errorMessage(error)}`,
-    )
-  }
-
-  return {
-    clients,
-    tools,
-    commands,
-    resources,
-  }
 }
 
 async function createAppServerToolPermissionContext(): Promise<ToolPermissionContext> {

@@ -1,4 +1,4 @@
 export function isSkillSearchFeatureEnabled() {
-    return process.env.USER_TYPE === 'ant';
+    return true;
 }
 //# sourceMappingURL=featureCheck.js.map

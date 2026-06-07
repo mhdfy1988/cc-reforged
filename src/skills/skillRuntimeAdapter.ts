@@ -29,17 +29,21 @@ export function createManagedSkillCommandFromInstalledEntry(
     entry.package.name,
     'Skill',
   )
+  const command = toPromptCommand(entry.package, {
+    source,
+    loadedFrom: 'managed',
+    createSkillCommand: options.createSkillCommand,
+    hasUserSpecifiedDescription: parsed.hasUserSpecifiedDescription,
+    hooks: parsed.hooks,
+    paths: parseSkillPaths(rawFrontmatter),
+    shell: parsed.shell,
+    version: parsed.version,
+  })
   return {
-    skill: toPromptCommand(entry.package, {
-      source,
-      loadedFrom: 'managed',
-      createSkillCommand: options.createSkillCommand,
-      hasUserSpecifiedDescription: parsed.hasUserSpecifiedDescription,
-      hooks: parsed.hooks,
-      paths: parseSkillPaths(rawFrontmatter),
-      shell: parsed.shell,
-      version: parsed.version,
-    }),
+    skill: {
+      ...command,
+      installedSkillRef: entry.inspection.lockKey,
+    },
     filePath: entry.inspection.installedRecord.skillFilePath,
   }
 }

@@ -240,6 +240,7 @@ function inferSource(tool: Tool, metadata?: ToolMetadata): CcrToolSource {
           }
         : {}),
       ...(mcpIdentity.toolName ? { toolName: mcpIdentity.toolName } : {}),
+      ...(tool.pluginId ? { pluginId: tool.pluginId } : {}),
     }
   }
 

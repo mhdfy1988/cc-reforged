@@ -55,6 +55,7 @@ export async function fetchCommandsForClient(params) {
         const promptsToProcess = recursivelySanitizeUnicode(result.prompts);
         return toMcpPromptCommands({
             clientName: client.name,
+            pluginId: client.config.pluginSource,
             prompts: promptsToProcess,
             runPrompt: async (promptName, args) => {
                 const connectedClient = await params.ensureConnectedClient(client);

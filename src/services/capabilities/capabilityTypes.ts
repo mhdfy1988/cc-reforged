@@ -2,9 +2,12 @@ export type ExtensionCapabilityKind =
   | 'skill'
   | 'mcp-server'
   | 'mcp-tool'
+  | 'mcp-resource'
+  | 'mcp-prompt'
   | 'tool'
   | 'command'
   | 'plugin'
+  | 'app'
 
 export type ExtensionCapabilitySourceKind =
   | 'managed-skill'
@@ -15,6 +18,7 @@ export type ExtensionCapabilitySourceKind =
   | 'dynamic'
   | 'mcp'
   | 'provider'
+  | 'app'
   | 'builtin'
   | 'legacy'
   | 'unknown'
@@ -49,20 +53,47 @@ export type ExtensionCapabilityDiagnostic = {
   code?: string
 }
 
+export type ExtensionCapabilityHiddenReason =
+  | 'disabled'
+  | 'model-invocation-disabled'
+  | 'user-invocation-disabled'
+  | 'no-invocation-surface'
+  | 'tool-denied'
+  | 'missing-package'
+  | 'missing-skill-md'
+  | 'missing-owner-marker'
+  | 'missing-lock'
+  | 'drifted'
+  | 'invalid'
+  | 'conflict-loser'
+  | 'unsupported-kind'
+  | 'source-unavailable'
+  | 'plugin-disabled'
+  | 'plugin-missing'
+  | 'app-disabled'
+  | 'app-needs-auth'
+  | 'app-missing'
+  | 'app-ambiguous'
+  | 'mcp-server-unavailable'
+
 export type ExtensionCapabilitySource = {
   kind: ExtensionCapabilitySourceKind
   label: string
   ref?: string
   pluginId?: string
   mcpServerName?: string
+  appId?: string
 }
 
 export type ExtensionCapabilityState = {
   installed: boolean
+  configured?: boolean
   enabled: boolean
   available: boolean
+  runtimeConnected?: boolean
   runtimeVisible: boolean
   status: ExtensionCapabilityStatus
+  hiddenReasons?: ExtensionCapabilityHiddenReason[]
 }
 
 export type ExtensionCapabilityInvocation = {
@@ -74,6 +105,7 @@ export type ExtensionCapabilityInvocation = {
 export type ExtensionCapabilityRelations = {
   parentPluginId?: string
   parentMcpServerName?: string
+  parentAppId?: string
   installedRef?: string
   runtimeRef?: string
 }

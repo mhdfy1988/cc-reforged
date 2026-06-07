@@ -62,6 +62,50 @@ YYYY-MM-DD-p<阶段号>-<简短主题>.md
   - [B4 SkillCapabilityProvider 抽出](./2026-06-05-skill-internal-b4-capability-provider.md)
   - [B5 SkillRuntimeAdapter 抽出](./2026-06-05-skill-internal-b5-runtime-adapter.md)
   - [B6 Skill 模块边界和 smoke 收口](./2026-06-05-skill-internal-b6-boundary-closeout.md)
+- [2026-06-05 Codex 对齐的扩展能力发现与注入重构序列](./2026-06-05-codex-aligned-extension-discovery-refactor-series.md)
+- [2026-06-06 扩展能力运行时与上下文重构序列](./2026-06-06-extension-runtime-context-refactor-series.md)
+  - [R0 流程冻结与证据文档](./2026-06-06-extension-runtime-r0-flow-freeze-evidence.md)（已完成）
+  - [R1 能力事实模型收敛](./2026-06-06-extension-runtime-r1-capability-facts.md)（已完成）
+  - [R2 运行时可见性 Resolver](./2026-06-06-extension-runtime-r2-runtime-visibility.md)（已完成）
+  - [R3 上下文注入计划抽出](./2026-06-06-extension-runtime-r3-context-injection-planner.md)（已完成）
+  - [R4 动态发现闭环](./2026-06-06-extension-runtime-r4-discovery-loop.md)（已完成）
+  - [R5 MCP Skill 与 MCP Tool 边界闭环](./2026-06-06-extension-runtime-r5-mcp-skill-tool-boundary.md)（已完成）
+  - [R6 Plugin 能力合集关系贯穿](./2026-06-06-extension-runtime-r6-plugin-bundle-relations.md)（已完成）
+  - [R7 管理页切到统一读模型](./2026-06-06-extension-runtime-r7-management-unified-read-model.md)（已完成）
+  - [R8 旧过滤逻辑收口](./2026-06-06-extension-runtime-r8-legacy-filter-closeout.md)（已完成）
+- [2026-06-06 R9-R12 能力目录一致性修复](./2026-06-06-extension-runtime-r9-r12-consistency-repair-series.md)
+  - R9 MCP runtime 子能力接入 Capability Catalog（已完成）
+  - R10 Skill installedRef 精确身份关联（已完成）
+  - R11 slash Skill 入口收口（已完成）
+  - R12 Desktop Skill 管理页改用管理投影（已完成）
+- [2026-06-06 R13-R16 能力管理动作、连接器与工具搜索闭环](./2026-06-06-extension-runtime-r13-r16-management-action-connector-toolsearch-closeout-series.md)
+  - R13 统一管理动作契约与执行入口（已完成）
+  - R14 App / Connector 来源与鉴权状态接入（已完成：该阶段先定型 DTO；G3 已补齐会话级 registry，无真实注册来源仍不展示）
+  - R15 ToolSearch / Tool Registry 与 Capability Catalog 对齐（已完成）
+  - R16 端到端 smoke、release gate 与文档收口（已完成）
+- [2026-06-07 R17-R24 审查问题修复与统一能力目录深化](./2026-06-07-extension-runtime-r17-r24-audit-followup-refactor-series.md)
+  - R17 统一能力模型与 ID 契约（已完成）
+  - R18 MCP 管理动作边界收口（已完成）
+  - R19 Tool 能力目录接真实工具池（已完成）
+  - R20 Skill 安装事务与 repair 收口（已完成）
+  - R21 Skill 运行时目录同源（已完成）
+  - R22 Skill 上下文注入与动态发现收口（已完成）
+  - R23 App / Plugin 外部扩展关系契约（已完成）
+  - R24 测试、文档与发布闸门（已完成）
+- [2026-06-07 R25-R27 上下文同源、发现去重与确认令牌收口](./2026-06-07-extension-runtime-r25-r27-context-discovery-confirmation-closeout-series.md)
+  - R25 Skill request context 贯穿到注入与 SkillTool（已完成）
+  - R26 Skill visibility ledger 与 canonical 去重（已完成）
+  - R27 能力管理确认 token 状态绑定（已完成）
+- [2026-06-07 R28-R30 外部扩展复审收口](./2026-06-07-extension-runtime-r28-r30-audit-followup-closeout-series.md)
+  - R28 Skill 静态 listing 接 SkillRuntimeCatalog（已完成）
+  - R29 管理动作确认 token 消费语义定型（已完成）
+  - R30 外部扩展矩阵纳入发布闸门（已完成）
+- [2026-06-07 G1-G4 外部扩展根因重构](./2026-06-07-extension-capability-g1-g4-root-refactor-series.md)
+  - G1 统一能力运行环境快照（已完成）
+  - G2 统一 capability identity 与父子关系图（已完成）
+  - G3 闭合 App / Connector 生命周期（已完成）
+  - G4 反例驱动验收与发布收口（已完成）
+  - 后续转入 Plugin manifest、样例 Plugin、Plugin / App 管理页和发布拆分等产品化 goal。
 - [2026-05-31 ThreadDisplay 残留入口与文档收口](./2026-05-31-thread-display-closeout.md)
 - [2026-05-31 ThreadDisplay 全事件 Ordered Display Reducer 深化](./2026-05-31-thread-display-full-ordered-reducer-next.md)
   - [2-1 输入来源矩阵与 unsupported 边界](./2026-05-31-thread-display-full-ordered-reducer-01-input-source-matrix.md)（已完成）

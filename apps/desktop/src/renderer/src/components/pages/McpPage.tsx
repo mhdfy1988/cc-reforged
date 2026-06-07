@@ -7,6 +7,8 @@ import {
   type CcrMcpManifestTemplate,
 } from '../../../../../../../src/services/mcp/installManifestBuilder.js'
 import type {
+  CapabilityManagementItem,
+  CapabilityManagementState,
   McpInstallCandidate,
   McpInstallListState,
   McpInstallPlanViewState,
@@ -71,6 +73,7 @@ export function McpPage(props: {
   installPlan: McpInstallPlanViewState | null
   installSearch: McpInstallSearchState | null
   installs: McpInstallListState | null
+  management: CapabilityManagementState | null
   mcp: McpListState | null
   message: string | null
   testByName: Record<string, McpTestState>
@@ -105,6 +108,24 @@ export function McpPage(props: {
   const selectedServer =
     servers.find(server => server.name === selectedName) ?? servers[0]
   const selectedTest = selectedServer ? props.testByName[selectedServer.name] : null
+  const selectedServerCapability = useMemo(
+    () =>
+      selectedServer
+        ? getMcpServerManagementCapability(props.management, selectedServer.name)
+        : null,
+    [props.management, selectedServer],
+  )
+  const selectedCapabilities = useMemo(
+    () =>
+      selectedServer
+        ? (props.management?.capabilities ?? []).filter(
+            capability =>
+              capability.relations.parentMcpServerName === selectedServer.name &&
+              capability.kind !== 'mcp-server',
+          )
+        : [],
+    [props.management?.capabilities, selectedServer],
+  )
   const installedCount = props.installs?.installed?.length ?? 0
   const needsRepairCount = (props.installs?.installed ?? []).filter(
     record => record.configStatus?.needsRepair,
@@ -187,6 +208,15 @@ export function McpPage(props: {
             {servers.length > 0 ? (
               servers.map(server => {
                 const serverEnabled = server.enabled !== false
+                const capability = getMcpServerManagementCapability(
+                  props.management,
+                  server.name,
+                )
+                const toggleAction = serverEnabled ? 'disable' : 'enable'
+                const canToggle = hasMcpManagementAction(
+                  capability,
+                  toggleAction,
+                )
                 return (
                   <div
                     className={
@@ -214,19 +244,21 @@ export function McpPage(props: {
                             'manual'}
                         </small>
                       </div>
-                      <label className="mcp-list-toggle">
-                        <input
-                          checked={serverEnabled}
-                          disabled={props.busy}
-                          type="checkbox"
-                          onChange={event =>
-                            event.target.checked
-                              ? props.onEnable(server.name)
-                              : props.onDisable(server.name)
-                          }
-                        />
-                        <i aria-hidden="true" />
-                      </label>
+                      {canToggle ? (
+                        <label className="mcp-list-toggle">
+                          <input
+                            checked={serverEnabled}
+                            disabled={props.busy}
+                            type="checkbox"
+                            onChange={event =>
+                              event.target.checked
+                                ? props.onEnable(server.name)
+                                : props.onDisable(server.name)
+                            }
+                          />
+                          <i aria-hidden="true" />
+                        </label>
+                      ) : null}
                     </div>
                   </div>
                 )
@@ -241,6 +273,8 @@ export function McpPage(props: {
           {selectedServer ? (
             <McpServerDetail
               busy={props.busy}
+              capability={selectedServerCapability}
+              capabilities={selectedCapabilities}
               server={selectedServer}
               test={selectedTest ?? null}
               onAdopt={props.onAdopt}
@@ -387,6 +421,8 @@ export function McpPage(props: {
 
 function McpServerDetail(props: {
   busy: boolean
+  capability: CapabilityManagementItem | null
+  capabilities: CapabilityManagementItem[]
   server: McpServerView
   test: McpTestState | null
   onAdopt: (name: string) => void
@@ -398,6 +434,11 @@ function McpServerDetail(props: {
   const server = props.server
   const tools = props.test?.tools ?? server.tools ?? []
   const canAdopt = isMcpServerAdoptable(server)
+  const canTest = hasMcpManagementAction(props.capability, 'test')
+  const canRestart = hasMcpManagementAction(props.capability, 'restart')
+  const canRepair =
+    hasMcpManagementAction(props.capability, 'repair') && Boolean(server.installed)
+  const canUninstall = hasMcpManagementAction(props.capability, 'uninstall')
   const [activeTab, setActiveTab] = useState<McpDetailTab>('overview')
 
   useEffect(() => {
@@ -418,18 +459,22 @@ function McpServerDetail(props: {
             </div>
           </div>
           <div className="models-actions">
-            <IconActionButton
-              disabled={props.busy}
-              icon="activity"
-              label="检测"
-              onClick={() => props.onTest(server.name)}
-            />
-            <IconActionButton
-              disabled={props.busy}
-              icon="rotate"
-              label="重启"
-              onClick={() => props.onRestart(server.name)}
-            />
+            {canTest ? (
+              <IconActionButton
+                disabled={props.busy}
+                icon="activity"
+                label="检测"
+                onClick={() => props.onTest(server.name)}
+              />
+            ) : null}
+            {canRestart ? (
+              <IconActionButton
+                disabled={props.busy}
+                icon="rotate"
+                label="重启"
+                onClick={() => props.onRestart(server.name)}
+              />
+            ) : null}
             {canAdopt ? (
               <button
                 className="ghost-action"
@@ -440,7 +485,7 @@ function McpServerDetail(props: {
                 接管
               </button>
             ) : null}
-            {server.installed?.configStatus?.needsRepair ? (
+            {canRepair ? (
               <IconActionButton
                 disabled={props.busy}
                 icon="wrench"
@@ -448,13 +493,13 @@ function McpServerDetail(props: {
                 onClick={() => props.onRepair(server.installed!)}
               />
             ) : null}
-            {server.installed?.name ? (
+            {canUninstall ? (
               <IconActionButton
                 danger
                 disabled={props.busy}
                 icon="trash"
                 label="卸载"
-                onClick={() => props.onUninstall(server.installed!.name!)}
+                onClick={() => props.onUninstall(server.name)}
               />
             ) : null}
           </div>
@@ -497,10 +542,31 @@ function McpServerDetail(props: {
             <div className="models-section-head">
               <div>
                 <h3>工具与资源</h3>
-                <span>{tools.length} 个工具</span>
+                <span>
+                  {props.capabilities.length > 0
+                    ? `${props.capabilities.length} 个子能力`
+                    : `${tools.length} 个工具`}
+                </span>
               </div>
             </div>
-            {tools.length > 0 ? (
+            {props.capabilities.length > 0 ? (
+              <div className="mcp-tool-list">
+                {props.capabilities.map(capability => (
+                  <div
+                    className="mcp-tool-item"
+                    key={capability.capabilityId}
+                  >
+                    <strong>{capability.displayName}</strong>
+                    <span>
+                      {formatCapabilityKind(capability.kind)} ·{' '}
+                      {capability.state.runtimeVisible
+                        ? '运行时可见'
+                        : formatCapabilityHiddenReason(capability)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : tools.length > 0 ? (
               <div className="mcp-tool-list">
                 {tools.map(tool => (
                   <div className="mcp-tool-item" key={tool.name ?? JSON.stringify(tool)}>
@@ -538,6 +604,47 @@ function McpServerDetail(props: {
       </div>
     </>
   )
+}
+
+function formatCapabilityKind(kind: CapabilityManagementItem['kind']): string {
+  const labels: Record<CapabilityManagementItem['kind'], string> = {
+    skill: 'Skill',
+    'mcp-server': 'Server',
+    'mcp-tool': 'Tool',
+    'mcp-resource': 'Resource',
+    'mcp-prompt': 'Prompt',
+    tool: 'Tool',
+    command: 'Command',
+    plugin: 'Plugin',
+    app: 'App',
+  }
+  return labels[kind]
+}
+
+function getMcpServerManagementCapability(
+  management: CapabilityManagementState | null,
+  name: string,
+): CapabilityManagementItem | null {
+  return (
+    (management?.mcp ?? []).find(
+      capability => capability.kind === 'mcp-server' && capability.name === name,
+    ) ?? null
+  )
+}
+
+function hasMcpManagementAction(
+  capability: CapabilityManagementItem | null,
+  action: CapabilityManagementItem['allowedActions'][number],
+): boolean {
+  return capability?.allowedActions.includes(action) ?? false
+}
+
+function formatCapabilityHiddenReason(
+  capability: CapabilityManagementItem,
+): string {
+  return capability.hiddenReasons.length > 0
+    ? capability.hiddenReasons.join('、')
+    : capability.state.status
 }
 
 function McpCreateManifestDialog(props: {

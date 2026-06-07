@@ -39,6 +39,8 @@ export function toMcpPromptCommands(params) {
             },
             argNames,
             source: 'mcp',
+            ...(params.pluginId ? { pluginId: params.pluginId } : {}),
+            mcpServerName: params.clientName,
             async getPromptForCommand(args) {
                 try {
                     return await params.runPrompt(prompt.name, zipObject(argNames, args.split(' ')));

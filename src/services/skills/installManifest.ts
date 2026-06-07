@@ -275,7 +275,11 @@ export function parseCcrSkillInstalledRecord(
 export function parseCcrSkillInstalledIndex(
   input: CcrSkillInstalledIndexInput,
 ): CcrSkillInstalledIndex {
-  return CcrSkillInstalledIndexSchema().parse(input)
+  const parsed = CcrSkillInstalledIndexSchema().parse(input)
+  return {
+    ...parsed,
+    installed: { ...parsed.installed },
+  }
 }
 
 export function parseCcrSkillLockRecord(
@@ -287,7 +291,11 @@ export function parseCcrSkillLockRecord(
 export function parseCcrSkillLockIndex(
   input: CcrSkillLockIndexInput,
 ): CcrSkillLockIndex {
-  return CcrSkillLockIndexSchema().parse(input)
+  const parsed = CcrSkillLockIndexSchema().parse(input)
+  return {
+    ...parsed,
+    locks: { ...parsed.locks },
+  }
 }
 
 export function parseSkillInstallResult(

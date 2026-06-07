@@ -122,6 +122,10 @@ const WorkflowTool = feature('WORKFLOW_SCRIPTS')
         return require('./tools/WorkflowTool/WorkflowTool.js').WorkflowTool;
     })()
     : null;
+const DiscoverSkillsTool = feature('EXPERIMENTAL_SKILL_SEARCH')
+    ? require('./tools/DiscoverSkillsTool/DiscoverSkillsTool.js')
+        .DiscoverSkillsTool
+    : null;
 import { getDenyRuleForTool } from './utils/permissions/permissions.js';
 import { hasEmbeddedSearchTools } from './utils/embeddedTools.js';
 import { isEnvTruthy } from './utils/envUtils.js';
@@ -210,6 +214,7 @@ export function getAllBaseTools() {
         ...(VerifyPlanExecutionTool ? [VerifyPlanExecutionTool] : []),
         ...(process.env.USER_TYPE === 'ant' && REPLTool ? [REPLTool] : []),
         ...(WorkflowTool ? [WorkflowTool] : []),
+        ...(DiscoverSkillsTool ? [DiscoverSkillsTool] : []),
         ...(SleepTool ? [SleepTool] : []),
         ...cronTools,
         ...(RemoteTriggerTool ? [RemoteTriggerTool] : []),

@@ -466,6 +466,7 @@ Result:
   "capabilities": {
     "config": true,
     "auth": true,
+    "capabilityApps": true,
     "models": true,
     "mcp": true,
     "workspace": true,
@@ -923,6 +924,43 @@ Result:
 - 不自动信任任意路径。
 - 不执行项目内脚本。
 - 不加载项目未确认 hooks。
+
+---
+
+## 10.10 能力目录与 App / Connector 注册
+
+当前能力管理协议包括：
+
+- `capabilities/list`：读取统一 Capability Catalog。
+- `capabilities/management/list`：读取管理投影。
+- `capabilities/management/action/plan`：基于当前投影生成动作计划。
+- `capabilities/management/action/apply`：重新读取当前投影并执行动作。
+- `capabilities/apps/register`：向当前 Core / App Server 会话注册或更新 App / Connector 快照。
+
+`capabilities/apps/register` 参数：
+
+```json
+{
+  "mode": "upsert",
+  "apps": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "enabled": true,
+      "authStatus": "connected",
+      "providedToolIds": ["tool:..."]
+    }
+  ]
+}
+```
+
+`mode=replace` 替换当前会话完整 App 快照，`mode=upsert` 按 App ID
+更新。返回值包含单调递增的 `revision` 和当前 `apps`。同一会话后续的
+list、management list、plan 和 apply 都读取该 registry；新 App Server
+会话不会继承旧会话 registry。
+
+兼容边界：`capabilities/list` 和 `capabilities/management/list` 仍接受
+`apps` 参数，但该参数会先写入同一 registry，不再只作为本次查询的临时 DTO。
 
 ---
 

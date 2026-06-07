@@ -14,8 +14,20 @@ export class StdioAppServerClient {
     getConfig(options) {
         return this.rpc.request('config/get', {}, options);
     }
+    registerCapabilityApps(params, options) {
+        return this.rpc.request('capabilities/apps/register', params, options);
+    }
     listCapabilities(params = {}, options) {
         return this.rpc.request('capabilities/list', params, options);
+    }
+    listCapabilityManagement(params = {}, options) {
+        return this.rpc.request('capabilities/management/list', params, options);
+    }
+    planCapabilityManagementAction(params, options) {
+        return this.rpc.request('capabilities/management/action/plan', params, options);
+    }
+    applyCapabilityManagementAction(params, options) {
+        return this.rpc.request('capabilities/management/action/apply', params, options);
     }
     getAuthStatus(params = {}, options) {
         return this.rpc.request('auth/status', params, options);

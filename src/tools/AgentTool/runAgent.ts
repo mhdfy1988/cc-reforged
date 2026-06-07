@@ -668,6 +668,7 @@ export async function* runAgent({
 
   // Build agent-specific options
   const agentOptions: ToolUseContext['options'] = {
+    cwd: toolUseContext.options.cwd,
     isNonInteractiveSession: useExactTools
       ? toolUseContext.options.isNonInteractiveSession
       : isAsync

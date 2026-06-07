@@ -263,6 +263,7 @@ export function createSubagentContext(parentContext, overrides) {
         dynamicSkillDirTriggers: new Set(),
         // Per-subagent: tracks skills surfaced by discovery for was_discovered telemetry (SkillTool.ts:116)
         discoveredSkillNames: new Set(),
+        discoveredSkillCapabilityIds: new Set(),
         toolDecisions: undefined,
         // Budget decisions: override > clone of parent > undefined (feature off).
         //

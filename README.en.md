@@ -38,6 +38,8 @@ The repository may contain unreleased work after the latest tagged version. See 
 
 The `0.6.2` line focuses on Skill / Plugin and external capability package governance, building on the MCP management baseline with a unified capability catalog, Skill internal layering, installation reliability, runtime activation, audit, and management flows.
 
+After `0.6.2`, `main` has completed the G1-G4 external capability root refactor: capability queries now use a request-scoped runtime snapshot, Skill / MCP / Tool / Plugin / App entries use source-aware identities and relation graphs, App / Connector snapshots have a session-level registry plus management lifecycle, and the external extension counterexample matrix has 85 cases. This means the underlying capability model has reached the current code target; real Plugin manifest / App registration entrypoints, sample packages, management UI productization, and release packaging remain next-stage work.
+
 ## Install
 
 Install the CLI package from npm:

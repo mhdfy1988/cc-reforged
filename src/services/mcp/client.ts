@@ -95,7 +95,7 @@ const require = createRequire(import.meta.url)
 const fetchMcpSkillsForClient = feature('MCP_SKILLS')
   ? (
       require('../../skills/mcpSkills.js') as typeof import('../../skills/mcpSkills.js')
-    ).fetchMcpSkillsForClient
+    ).fetchMcpSkillsForClientSafely
   : null
 
 type MCPProgress = ToolProgressData & {
@@ -1428,6 +1428,9 @@ export const fetchToolsForClient = memoizeWithLRU(
             // can override builtins by name. mcpInfo is used for permission checking.
             name: skipPrefix ? tool.name : fullyQualifiedName,
             mcpInfo: { serverName: client.name, toolName: tool.name },
+            ...(client.config.pluginSource
+              ? { pluginId: client.config.pluginSource }
+              : {}),
             isMcp: true,
             // Collapse whitespace: _meta is open to external MCP servers, and
             // a newline here would inject orphan lines into the deferred-tool

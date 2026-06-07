@@ -6,7 +6,48 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-- 描述未发布的改动
+### Added
+
+- 新增统一动态 Skill 发现闭环，turn-zero、inter-turn 和 `DiscoverSkills` 共用 stable capability identity、来源和可解释匹配结果。
+- 新增实验性 MCP Skill 资源适配，按 Draft SEP-2640 读取 `skill://index.json` 与 `skill:///.../SKILL.md`，并保持 Tool、Resource、Prompt、Skill 四类调用边界。
+- 新增 `capabilities/management/list` 统一只读管理投影；Desktop Skill、MCP 和 Plugin 页面可展示 runtime-only 能力、父子来源、隐藏原因和 Plugin 影响面。
+- 新增 app-server 最终工具池 builder，Capability Catalog 的 Tool 能力目录与 turn runner 实际工具集合共用同一份 app-server tool pool。
+- 新增 Skill discovery feature gate smoke、app-server tool pool / capability catalog 对齐 smoke，以及 App / Plugin 外部关系 schema smoke。
+- 新增 Skill request context、Skill visibility ledger 和能力管理确认 token smoke，覆盖 configHome 同源、canonical 去重、状态摘要、过期和重复使用边界。
+- 新增请求级 `CapabilityRuntimeEnvironment`，统一能力查询使用的 workspace、config home、MCP、Plugin、App 和真实 Tool pool 快照。
+- 新增 Core 会话级 `AppCapabilityRegistry` 与 App Server `capabilities/apps/register`，支持 App / Connector 快照替换、更新和管理生命周期连续性。
+- 新增 capability identity / relation、App registry lifecycle 和跨 home runtime environment smoke；外部扩展反例矩阵扩展到 85 项。
+
+### Changed
+
+- Plugin identity 与 Plugin -> MCP Server -> child capability 关系贯穿 Capability Catalog，父 Plugin 或 MCP Server 不可用时统一传播结构化隐藏原因。
+- Skill 模型可调用性收敛到统一运行时可见性 adapter；listing、discovery、SkillTool 和 runtime catalog 不再各自维护启用与模型调用判断。
+- Skill 动态发现默认启用，不再限制 `USER_TYPE=ant`；仍可通过 `CC_REFORGED_DISABLE_FEATURES=EXPERIMENTAL_SKILL_SEARCH` 显式关闭。
+- `DiscoverSkills` 和自动 `skill_discovery` 会过滤已 visible、loaded 或 discovered 的 Skill；catalog 查询仍返回完整 Skill 清单。
+- 自动 Skill discovery 对普通任务只提醒最相关 Skill，并收紧中文检索 token，避免单字弱命中污染后续发现。
+- Skill listing、dynamic discovery、`DiscoverSkills` 和 `SkillTool` 现在使用同一份 request-scoped `cwd/configHomeDir`；`visible`、`discovered`、`loaded` 账本优先按 canonical capability id 去重。
+- 能力管理危险动作的确认 token 改为短期 opaque token，绑定 plan state digest、过期时间和当前 `cwd/configHomeDir`，apply 时重新计算投影后校验。
+- App Server capabilities schema 的 `apps` 入参支持 `authStatus`、`parentPluginId`、`providedToolIds`、`providedMcpServerNames` 和 `providedSkillIds`。
+- `smoke:skill-release` 与 `smoke:skill-internal-refactor` 补入 R17-R24 的关键边界门禁。
+- Skill、MCP、Tool、Plugin 和 App capability 使用来源感知 canonical id，Catalog 统一传播 Plugin / App / MCP 父节点状态；真实调用名继续保留在 `runtimeRef`。
+- MCP、Skill、Plugin、Tool 和 App provider 改为只读统一环境快照，不再在投影阶段自行读取进程全局或触发完整 loader。
+
+### Fixed
+
+- 修复普通 MCP Prompt 可能因共用 `Command` 类型进入 Skill runtime catalog 的边界问题。
+- 修复手工 MCP 配置在统一管理投影中可能被误判为 installer-owned、进而错误开放卸载动作的问题。
+- 修复缺失父 Plugin 被当成 `plugin-disabled` 隐藏子能力的问题；缺失父 Plugin 现在只产生 diagnostic。
+- 修复 runtime-only / plugin-owned MCP 被错误开放 enable / disable / restart / test 等本地写配置动作的问题。
+- 修复 Skill runtime catalog 在指定 `configHomeDir` 时仍可能读取默认全局 home 的问题。
+- 修复 Skill discovery name-only 去重可能误过滤同名不同来源 Skill 的问题。
+- 修复能力管理 repair / uninstall 确认 token 可预测、无过期且可复用的问题。
+- 修复 `DiscoverSkillsTool` / `prefetch` 在 Skill search 默认启用后产生顶层模块循环依赖的问题。
+- 修复指定 `cwd/configHomeDir` 的能力查询仍可能混入当前进程 MCP / Plugin 状态的问题。
+- 修复 Windows 下当前 `configHomeDir` 仅因路径大小写不同就被误判为外部 home、进而丢失当前 MCP / Plugin runtime 快照的问题。
+- 修复同名不同 MCP server Tool 的 capability id 冲突，以及 App / Plugin 根节点自指父关系的问题。
+- 修复 App 只在 list 参数中短暂存在、导致 management plan / apply 重建投影后丢失的问题。
+- 修复多个 App 同时认领同一子能力时后写者静默覆盖的问题；现在会显式诊断并隐藏歧义能力。
+- 修复 Skill discovery smoke fixture 依赖全局 project root、掩盖 request-scoped `cwd/configHomeDir` 契约的问题。
 
 ## [0.6.2] - 2026-06-05
 

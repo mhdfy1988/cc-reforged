@@ -34,6 +34,7 @@ import { asSessionId, asAgentId } from '../types/ids.js';
 import { logForDebugging } from '../utils/debug.js';
 import { QueryGuard } from '../utils/QueryGuard.js';
 import { isEnvTruthy } from '../utils/envUtils.js';
+import { getCwd } from '../utils/cwd.js';
 import { formatTokens, truncateToWidth } from '../utils/format.js';
 import { consumeEarlyInput } from '../utils/earlyInput.js';
 import { setMemberActive } from '../utils/swarm/teamHelpers.js';
@@ -2358,6 +2359,7 @@ export function REPL({ commands: initialCommands, debug, initialTools, initialMe
             abortController,
             options: {
                 commands,
+                cwd: getCwd(),
                 tools: computeTools(),
                 debug,
                 verbose: s.verbose,

@@ -1,31 +1,28 @@
-import { getCcrToolAvailability, } from './toolAvailability.js';
-import { buildCcrToolRegistry, } from './toolRegistry.js';
+import {} from './toolAvailability.js';
+import { createCcrToolCapabilitySnapshot } from './toolCapabilitySnapshot.js';
 export function isCcrToolSearchCandidate(entry, context = {}) {
-    if (entry.exposure !== 'deferred')
-        return false;
-    return getCcrToolAvailability(entry, context).available;
+    return createCcrToolCapabilitySnapshot([entry.tool], context).entries[0]
+        ?.searchable === true;
 }
 export function getCcrToolSearchCandidates(tools, context = {}) {
-    const registry = buildCcrToolRegistry(tools);
-    return registry.entries
-        .filter(entry => isCcrToolSearchCandidate(entry, context))
-        .map(entry => entry.tool);
+    return createCcrToolCapabilitySnapshot(tools, context).entries
+        .filter(entry => entry.searchable)
+        .map(entry => entry.entry.tool);
 }
 export function summarizeCcrToolSearchCandidates(tools, context = {}) {
-    const registry = buildCcrToolRegistry(tools);
+    const snapshot = createCcrToolCapabilitySnapshot(tools, context);
     const names = [];
     const excluded = [];
-    for (const entry of registry.entries) {
-        const availability = getCcrToolAvailability(entry, context);
-        if (entry.exposure === 'deferred' && availability.available) {
-            names.push(entry.name);
+    for (const item of snapshot.entries) {
+        if (item.searchable) {
+            names.push(item.entry.name);
             continue;
         }
         excluded.push({
-            name: entry.name,
-            exposure: entry.exposure,
-            available: availability.available,
-            ...(availability.reason ? { reason: availability.reason } : {}),
+            name: item.entry.name,
+            exposure: item.entry.exposure,
+            available: item.availability.available,
+            ...(item.availability.reason ? { reason: item.availability.reason } : {}),
         });
     }
     names.sort();

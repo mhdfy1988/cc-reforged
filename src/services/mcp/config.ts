@@ -70,8 +70,10 @@ export function getEnterpriseMcpFilePath(): string {
 /**
  * Get the path to CCR user-level MCP configuration.
  */
-export function getUserMcpFilePath(): string {
-  return join(getClaudeConfigHomeDir(), 'mcp.json')
+export function getUserMcpFilePath(
+  configHomeDir = getClaudeConfigHomeDir(),
+): string {
+  return join(configHomeDir, 'mcp.json')
 }
 
 /**

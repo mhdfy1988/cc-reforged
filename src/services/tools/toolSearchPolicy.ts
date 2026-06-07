@@ -1,12 +1,9 @@
 import type { Tool, Tools } from '../../Tool.js'
 import {
-  getCcrToolAvailability,
   type CcrToolAvailabilityContext,
 } from './toolAvailability.js'
-import {
-  buildCcrToolRegistry,
-  type CcrToolRegistryEntry,
-} from './toolRegistry.js'
+import type { CcrToolRegistryEntry } from './toolRegistry.js'
+import { createCcrToolCapabilitySnapshot } from './toolCapabilitySnapshot.js'
 
 export type CcrToolSearchCandidateSnapshot = {
   total: number
@@ -23,39 +20,37 @@ export function isCcrToolSearchCandidate(
   entry: CcrToolRegistryEntry,
   context: CcrToolAvailabilityContext = {},
 ): boolean {
-  if (entry.exposure !== 'deferred') return false
-  return getCcrToolAvailability(entry, context).available
+  return createCcrToolCapabilitySnapshot([entry.tool], context).entries[0]
+    ?.searchable === true
 }
 
 export function getCcrToolSearchCandidates(
   tools: Tools,
   context: CcrToolAvailabilityContext = {},
 ): Tools {
-  const registry = buildCcrToolRegistry(tools)
-  return registry.entries
-    .filter(entry => isCcrToolSearchCandidate(entry, context))
-    .map(entry => entry.tool)
+  return createCcrToolCapabilitySnapshot(tools, context).entries
+    .filter(entry => entry.searchable)
+    .map(entry => entry.entry.tool)
 }
 
 export function summarizeCcrToolSearchCandidates(
   tools: readonly Tool[],
   context: CcrToolAvailabilityContext = {},
 ): CcrToolSearchCandidateSnapshot {
-  const registry = buildCcrToolRegistry(tools as Tools)
+  const snapshot = createCcrToolCapabilitySnapshot(tools as Tools, context)
   const names: string[] = []
   const excluded: CcrToolSearchCandidateSnapshot['excluded'] = []
 
-  for (const entry of registry.entries) {
-    const availability = getCcrToolAvailability(entry, context)
-    if (entry.exposure === 'deferred' && availability.available) {
-      names.push(entry.name)
+  for (const item of snapshot.entries) {
+    if (item.searchable) {
+      names.push(item.entry.name)
       continue
     }
     excluded.push({
-      name: entry.name,
-      exposure: entry.exposure,
-      available: availability.available,
-      ...(availability.reason ? { reason: availability.reason } : {}),
+      name: item.entry.name,
+      exposure: item.entry.exposure,
+      available: item.availability.available,
+      ...(item.availability.reason ? { reason: item.availability.reason } : {}),
     })
   }
 

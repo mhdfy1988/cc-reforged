@@ -69,6 +69,8 @@
 - `ccr mcp list/get` 和 TUI 默认 MCP 启动链路都会读取 `~/.ccr/mcp.json`。
 - 旧 settings 中的 user MCP 只作为迁移期只读兼容来源，新写入不再进入旧配置文件。
 - MCP server / MCP tool 已接入统一能力目录；需要跨 Skill / MCP / Tool 查看来源和运行时可见性时，可使用 `capabilities/list` 或 CLI `capabilities list`。
+- MCP server 管理动作已接入统一 capability action plan / apply：Desktop 只按管理投影的 `allowedActions/actionRef` 展示启用、禁用、检测、重启、修复和卸载；真正执行时由 App Server `capabilities/management/action/plan|apply` 预检后再分发到 MCP 领域服务。
+- `configured`、`installed`、`runtimeConnected`、`available` 已拆开表达：手工配置是 configured，不等于 CCR installer-owned；runtime-only server 只能 inspect，不能通过管理动作写本地配置；plugin-owned MCP 由父 Plugin 管理，不开放本地 enable / disable / restart / uninstall 写入动作。
 
 ## 使用入口
 
@@ -137,6 +139,7 @@ ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
 - `~/.ccr/mcp.json` 是用户全局 MCP 主配置，适合“所有项目都能用”的浏览器、搜索、文档类工具。
 - 项目根目录 `.mcp.json` 适合团队共享的项目级 MCP，但不要提交 token、cookie、私有路径或个人浏览器 profile。
 - `~/.ccr/mcp/installed.json` 和 `~/.ccr/mcp/lock.json` 只记录 CCR 受控安装，不代表所有手写 MCP。
+- 统一能力目录里的 `configured=true` 只表示存在配置来源；`installed=true` 只用于 CCR installer-owned 项；`runtimeConnected=true` 表示当前 runtime client 已连接；这三个字段不能互相冒充。
 - `~/.ccr/mcp/manifests/` 保存用户常用 MCP 安装配置；它们只让候选出现在安装区，不代表已经启用。
 - `~/.ccr/mcp/packages/` 由 owner marker 保护，卸载时只清理 CCR 确认归属的目录。
 - `npx` 来源首次运行可能访问 npm 网络并启动本地 stdio 进程；这也是安装确认里会提示 `requires_user_confirmation`、`starts_local_process` 和 `may_access_network` 的原因。

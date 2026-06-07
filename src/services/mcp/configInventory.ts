@@ -1,5 +1,5 @@
 import { existsSync } from 'fs'
-import { dirname, join, parse } from 'path'
+import { dirname, join, parse, resolve } from 'path'
 import {
   getCurrentProjectConfig,
   getGlobalConfig,
@@ -79,6 +79,10 @@ export type CcrMcpServerConfigInventory = {
   suppressionReason: string | null
   projectStatus?: 'approved' | 'rejected' | 'pending'
   pluginSource?: string
+  type?: string
+  command?: string
+  url?: string
+  args?: string[]
 }
 
 export type CcrMcpConfigInventory = {
@@ -120,8 +124,14 @@ const SOURCE_PRECEDENCE: Record<CcrMcpConfigSourceId, number> = {
   enterprise: 100,
 }
 
-export function getCcrMcpInstallPaths(): CcrMcpInstallPaths {
-  const configHomeDir = getClaudeConfigHomeDir()
+export type CcrMcpConfigInventoryOptions = {
+  cwd?: string
+  configHomeDir?: string
+}
+
+export function getCcrMcpInstallPaths(
+  configHomeDir = getClaudeConfigHomeDir(),
+): CcrMcpInstallPaths {
   return {
     packageRootDir: join(configHomeDir, 'mcp', 'packages'),
     installedManifestPath: join(configHomeDir, 'mcp', 'installed.json'),
@@ -142,15 +152,25 @@ export function getCcrMcpProjectConfigReadPaths(cwd = getCwd()): string[] {
   return dirs.reverse().map(dir => join(dir, '.mcp.json'))
 }
 
-export function collectCcrMcpConfigInventory(): CcrMcpConfigInventory {
-  const projectCwd = getCwd()
-  const configHomeDir = getClaudeConfigHomeDir()
-  const globalConfigPath = getGlobalClaudeFile()
+export function collectCcrMcpConfigInventory(
+  options: CcrMcpConfigInventoryOptions = {},
+): CcrMcpConfigInventory {
+  const projectCwd = resolve(options.cwd ?? getCwd())
+  const configHomeDir = resolve(
+    options.configHomeDir ?? getClaudeConfigHomeDir(),
+  )
+  const usesProcessConfigHome =
+    configHomeDir === resolve(getClaudeConfigHomeDir())
+  const usesProcessProjectState =
+    usesProcessConfigHome && projectCwd === resolve(getCwd())
+  const globalConfigPath = usesProcessConfigHome
+    ? getGlobalClaudeFile()
+    : getRequestScopedGlobalConfigPath(configHomeDir)
   const enterpriseExclusive = doesEnterpriseMcpConfigExist()
   const pluginOnly = isRestrictedToPluginOnly('mcp')
   const projectReadPaths = getCcrMcpProjectConfigReadPaths(projectCwd)
   const enterprisePath = getEnterpriseMcpFilePath()
-  const userPath = getUserMcpFilePath()
+  const userPath = getUserMcpFilePath(configHomeDir)
 
   const sourceDefinitions: SourceDefinition[] = [
     {
@@ -300,15 +320,17 @@ export function collectCcrMcpConfigInventory(): CcrMcpConfigInventory {
     sourceErrors,
   })
 
-  collectUserLegacyCandidates({
-    globalConfigPath,
-    sourceEnabled:
-      isSettingSourceEnabled('userSettings') &&
-      !enterpriseExclusive &&
-      !pluginOnly,
-    candidates,
-    sourceErrors,
-  })
+  if (usesProcessConfigHome) {
+    collectUserLegacyCandidates({
+      globalConfigPath,
+      sourceEnabled:
+        isSettingSourceEnabled('userSettings') &&
+        !enterpriseExclusive &&
+        !pluginOnly,
+      candidates,
+      sourceErrors,
+    })
+  }
 
   collectFileCandidates({
     sourceId: 'user-file',
@@ -340,15 +362,17 @@ export function collectCcrMcpConfigInventory(): CcrMcpConfigInventory {
     })
   }
 
-  collectLocalCandidates({
-    globalConfigPath,
-    sourceEnabled:
-      isSettingSourceEnabled('localSettings') &&
-      !enterpriseExclusive &&
-      !pluginOnly,
-    candidates,
-    sourceErrors,
-  })
+  if (usesProcessProjectState) {
+    collectLocalCandidates({
+      globalConfigPath,
+      sourceEnabled:
+        isSettingSourceEnabled('localSettings') &&
+        !enterpriseExclusive &&
+        !pluginOnly,
+      candidates,
+      sourceErrors,
+    })
+  }
 
   const sources = sourceDefinitions.map(source => ({
     ...source,
@@ -363,9 +387,11 @@ export function collectCcrMcpConfigInventory(): CcrMcpConfigInventory {
     globalConfigPath,
     enterpriseExclusive,
     pluginOnly,
-    installPaths: getCcrMcpInstallPaths(),
+    installPaths: getCcrMcpInstallPaths(configHomeDir),
     sources,
-    servers: buildServerInventory(candidates, enterpriseExclusive),
+    servers: buildServerInventory(candidates, enterpriseExclusive, {
+      useProcessState: usesProcessProjectState,
+    }),
   }
 }
 
@@ -528,11 +554,14 @@ function collectLocalCandidates(params: {
 function buildServerInventory(
   candidates: ServerCandidate[],
   enterpriseExclusive: boolean,
+  options: { useProcessState: boolean },
 ): CcrMcpServerConfigInventory[] {
   const activeByName = new Map<string, ServerCandidate>()
 
   for (const candidate of candidates) {
-    if (getSuppressionReason(candidate, enterpriseExclusive)) {
+    if (
+      getSuppressionReason(candidate, enterpriseExclusive, options)
+    ) {
       continue
     }
 
@@ -546,7 +575,7 @@ function buildServerInventory(
     .map(candidate => {
       const active = activeByName.get(candidate.name) === candidate
       const suppressionReason =
-        getSuppressionReason(candidate, enterpriseExclusive) ??
+        getSuppressionReason(candidate, enterpriseExclusive, options) ??
         (active ? null : `shadowed_by_${activeByName.get(candidate.name)?.sourceId ?? 'none'}`)
 
       return {
@@ -560,16 +589,26 @@ function buildServerInventory(
         }),
         configPath: candidate.configPath,
         writePath: candidate.writePath,
-        enabled: !isMcpServerDisabled(candidate.name),
+        enabled:
+          !options.useProcessState || !isMcpServerDisabled(candidate.name),
         readOnly: candidate.readOnly,
         active,
         suppressed: !active,
         suppressionReason,
         projectStatus:
           candidate.scope === 'project'
-            ? getProjectMcpServerStatus(candidate.name)
+            ? options.useProcessState
+              ? getProjectMcpServerStatus(candidate.name)
+              : 'approved'
             : undefined,
         pluginSource: candidate.config.pluginSource,
+        type: candidate.config.type,
+        command:
+          'command' in candidate.config
+            ? candidate.config.command
+            : undefined,
+        url: 'url' in candidate.config ? candidate.config.url : undefined,
+        args: 'args' in candidate.config ? candidate.config.args : undefined,
       }
     })
     .sort((a, b) => {
@@ -582,6 +621,7 @@ function buildServerInventory(
 function getSuppressionReason(
   candidate: ServerCandidate,
   enterpriseExclusive: boolean,
+  options: { useProcessState: boolean },
 ): string | null {
   if (enterpriseExclusive && candidate.scope !== 'enterprise') {
     return 'enterprise_exclusive'
@@ -591,25 +631,36 @@ function getSuppressionReason(
     return 'source_disabled'
   }
 
-  if (isMcpServerDisabled(candidate.name)) {
+  if (options.useProcessState && isMcpServerDisabled(candidate.name)) {
     return 'disabled'
   }
 
-  const { blocked } = filterMcpServersByPolicy({
-    [candidate.name]: candidate.config,
-  })
-  if (blocked.includes(candidate.name)) {
-    return 'policy_blocked'
+  if (options.useProcessState) {
+    const { blocked } = filterMcpServersByPolicy({
+      [candidate.name]: candidate.config,
+    })
+    if (blocked.includes(candidate.name)) {
+      return 'policy_blocked'
+    }
   }
 
   if (candidate.scope === 'project') {
-    const status = getProjectMcpServerStatus(candidate.name)
+    const status = options.useProcessState
+      ? getProjectMcpServerStatus(candidate.name)
+      : 'approved'
     if (status !== 'approved') {
       return `project_${status}`
     }
   }
 
   return null
+}
+
+function getRequestScopedGlobalConfigPath(configHomeDir: string): string {
+  const legacyPath = join(configHomeDir, '.config.json')
+  return existsSync(legacyPath)
+    ? legacyPath
+    : join(configHomeDir, '.ccr.json')
 }
 
 function pushErrors(

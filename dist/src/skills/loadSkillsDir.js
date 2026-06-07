@@ -192,9 +192,11 @@ function ccrSkillSourceForSettingSource(source, loadedFrom) {
             return 'bundled';
     }
 }
-async function loadInstalledManagedSkills() {
+async function loadInstalledManagedSkills(options = {}) {
     try {
-        const result = await loadInstalledSkillRuntimePackages();
+        const result = await loadInstalledSkillRuntimePackages({
+            configHomeDir: options.configHomeDir,
+        });
         if (result.diagnostics.length > 0) {
             logForDebugging(`[skills] installed runtime diagnostics: ${result.diagnostics.length}`);
         }
@@ -405,8 +407,9 @@ async function loadSkillsFromCommandsDir(cwd) {
  *
  * @param cwd Current working directory for project directory traversal
  */
-export const getSkillDirCommands = memoize(async (cwd) => {
-    const userSkillsDir = join(getClaudeConfigHomeDir(), 'skills');
+export const getSkillDirCommands = memoize(async (cwd, options = {}) => {
+    const configHomeDir = options.configHomeDir ?? getClaudeConfigHomeDir();
+    const userSkillsDir = join(configHomeDir, 'skills');
     const managedSkillsDir = join(getManagedFilePath(), '.claude', 'skills');
     const projectSkillsDirs = getProjectDirsUpToHome('skills', cwd);
     logForDebugging(`Loading skills from: managed=${managedSkillsDir}, user=${userSkillsDir}, project=[${projectSkillsDirs.join(', ')}]`);
@@ -434,7 +437,7 @@ export const getSkillDirCommands = memoize(async (cwd) => {
             ? Promise.resolve([])
             : loadSkillsFromSkillsDir(managedSkillsDir, 'policySettings'),
         isSettingSourceEnabled('userSettings') && !skillsLocked
-            ? loadInstalledManagedSkills()
+            ? loadInstalledManagedSkills({ configHomeDir })
             : Promise.resolve([]),
         isSettingSourceEnabled('userSettings') && !skillsLocked
             ? loadSkillsFromSkillsDir(userSkillsDir, 'userSettings')
@@ -513,7 +516,7 @@ export const getSkillDirCommands = memoize(async (cwd) => {
     }
     logForDebugging(`Loaded ${deduplicatedSkills.length} unique skills (${unconditionalSkills.length} unconditional, ${newConditionalSkills.length} conditional, policy managed: ${managedSkills.length}, installed managed: ${installedManagedSkills.length}, user: ${userSkills.length}, project: ${projectSkillsNested.flat().length}, additional: ${additionalSkillsNested.flat().length}, legacy commands: ${legacyCommands.length})`);
     return unconditionalSkills;
-});
+}, (cwd, options) => `${cwd}\0${options?.configHomeDir ?? ''}`);
 export function clearSkillCaches() {
     getSkillDirCommands.cache?.clear?.();
     loadMarkdownFilesForSubdir.cache?.clear?.();

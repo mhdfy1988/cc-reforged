@@ -3,8 +3,16 @@ import type {
   AuthStatusResult,
   AuthLoginParams,
   AuthLoginResult,
+  CapabilitiesAppsRegisterParams,
+  CapabilitiesAppsRegisterResult,
   CapabilitiesListParams,
   CapabilitiesListResult,
+  CapabilitiesManagementActionApplyParams,
+  CapabilitiesManagementActionApplyResult,
+  CapabilitiesManagementActionPlanParams,
+  CapabilitiesManagementActionPlanResult,
+  CapabilitiesManagementListParams,
+  CapabilitiesManagementListResult,
   CompactRunParams,
   CompactRunResult,
   CompactStatusResult,
@@ -158,11 +166,47 @@ export class StdioAppServerClient {
     return this.rpc.request('config/get', {}, options)
   }
 
+  registerCapabilityApps(
+    params: CapabilitiesAppsRegisterParams,
+    options?: RequestOptions,
+  ): Promise<CapabilitiesAppsRegisterResult> {
+    return this.rpc.request('capabilities/apps/register', params, options)
+  }
+
   listCapabilities(
     params: CapabilitiesListParams = {},
     options?: RequestOptions,
   ): Promise<CapabilitiesListResult> {
     return this.rpc.request('capabilities/list', params, options)
+  }
+
+  listCapabilityManagement(
+    params: CapabilitiesManagementListParams = {},
+    options?: RequestOptions,
+  ): Promise<CapabilitiesManagementListResult> {
+    return this.rpc.request('capabilities/management/list', params, options)
+  }
+
+  planCapabilityManagementAction(
+    params: CapabilitiesManagementActionPlanParams,
+    options?: RequestOptions,
+  ): Promise<CapabilitiesManagementActionPlanResult> {
+    return this.rpc.request(
+      'capabilities/management/action/plan',
+      params,
+      options,
+    )
+  }
+
+  applyCapabilityManagementAction(
+    params: CapabilitiesManagementActionApplyParams,
+    options?: RequestOptions,
+  ): Promise<CapabilitiesManagementActionApplyResult> {
+    return this.rpc.request(
+      'capabilities/management/action/apply',
+      params,
+      options,
+    )
   }
 
   getAuthStatus(

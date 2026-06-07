@@ -80,14 +80,17 @@ import {
   getDefaultOpusModel,
 } from './model/model.js'
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js'
-import { getSkillToolCommands, getMcpSkillCommands } from '../commands.js'
-import type { Command } from '../types/command.js'
-import uniqBy from 'lodash-es/uniqBy.js'
-import { getProjectRoot } from '../bootstrap/state.js'
+import { planSkillContextInjection } from '../skills/skillContextInjectionPlanner.js'
+import { loadModelInvocableSkillRuntimeCatalog } from '../skills/skillRuntimeCatalogLoader.js'
+import {
+  recordVisibleSkillCommand,
+  toSkillVisibilityEntry,
+} from '../skills/skillVisibilityLedger.js'
 import { formatCommandsWithinBudget } from '../tools/SkillTool/prompt.js'
 import { resolveRuntimeContextBudget } from '../services/llm/contextBudget.js'
 import { loadLlmConfig } from '../services/llm/llmConfig.js'
 import type { DiscoverySignal } from '../services/skillSearch/signals.js'
+import type { Command } from '../types/command.js'
 
 const require = createRequire(import.meta.url)
 
@@ -538,7 +541,14 @@ export type Attachment =
     }
   | {
       type: 'skill_discovery'
-      skills: { name: string; description: string; shortId?: string }[]
+      skills: {
+        capabilityId?: string
+        name: string
+        description: string
+        shortId?: string
+        sourceKind?: string
+        reason?: string
+      }[]
       signal: DiscoverySignal
       source: 'native' | 'aki' | 'both'
     }
@@ -2594,14 +2604,16 @@ async function getDynamicSkillAttachments(
 // Track which skills have been sent to avoid re-sending. Keyed by agentId
 // (empty string = main thread) so subagents get their own turn-0 listing —
 // without per-agent scoping, the main thread populating this Set would cause
-// every subagent's filterToBundledAndMcp result to dedup to empty.
+// every subagent's static listing plan to dedup to empty.
 const sentSkillNames = new Map<string, Set<string>>()
+const sentSkillCapabilityIds = new Map<string, Set<string>>()
 
 // Called when the skill set genuinely changes (plugin reload, skill file
 // change on disk) so new skills get announced. NOT called on compact —
 // post-compact re-injection costs ~4K tokens/event for marginal benefit.
 export function resetSentSkillNames(): void {
   sentSkillNames.clear()
+  sentSkillCapabilityIds.clear()
   suppressNext = false
 }
 
@@ -2626,28 +2638,10 @@ export function suppressNextSkillListing(): void {
 }
 let suppressNext = false
 
-// When skill-search is enabled and the filtered (bundled + MCP) listing exceeds
-// this count, fall back to bundled-only. Protects MCP-heavy users (100+ servers)
-// from truncation while keeping the turn-0 guarantee for typical setups.
+// When skill-search is enabled and the filtered static listing exceeds this
+// count, fall back to bundled + managed. Protects MCP-heavy users (100+
+// servers) from truncation while keeping user-installed skills visible.
 const FILTERED_LISTING_MAX = 30
-
-/**
- * Filter skills to bundled (Anthropic-curated) + MCP (user-connected) only.
- * Used when skill-search is enabled to resolve the turn-0 gap for subagents:
- * these sources are small, intent-signaled, and won't hit the truncation budget.
- * User/project/plugin skills (the long tail — 200+) go through discovery instead.
- *
- * Falls back to bundled-only if bundled+mcp exceeds FILTERED_LISTING_MAX.
- */
-export function filterToBundledAndMcp(commands: Command[]): Command[] {
-  const filtered = commands.filter(
-    cmd => cmd.loadedFrom === 'bundled' || cmd.loadedFrom === 'mcp',
-  )
-  if (filtered.length > FILTERED_LISTING_MAX) {
-    return filtered.filter(cmd => cmd.loadedFrom === 'bundled')
-  }
-  return filtered
-}
 
 async function getSkillListingAttachments(
   toolUseContext: ToolUseContext,
@@ -2663,29 +2657,9 @@ async function getSkillListingAttachments(
     return []
   }
 
-  const cwd = getProjectRoot()
-  const localCommands = await getSkillToolCommands(cwd)
-  const mcpSkills = getMcpSkillCommands(
-    toolUseContext.getAppState().mcp.commands,
-  )
-  let allCommands =
-    mcpSkills.length > 0
-      ? uniqBy([...localCommands, ...mcpSkills], 'name')
-      : localCommands
-
-  // When skill search is active, filter to bundled + MCP instead of full
-  // suppression. Resolves the turn-0 gap: main thread gets turn-0 discovery
-  // via getTurnZeroSkillDiscovery (blocking), but subagents use the async
-  // subagent_spawn signal (collected post-tools, visible turn 1). Bundled +
-  // MCP are small and intent-signaled; user/project/plugin skills go through
-  // discovery. feature() first for DCE — the property-access string leaks
-  // otherwise even with ?. on null.
-  if (
-    feature('EXPERIMENTAL_SKILL_SEARCH') &&
-    skillSearchModules?.featureCheck.isSkillSearchFeatureEnabled()
-  ) {
-    allCommands = filterToBundledAndMcp(allCommands)
-  }
+  const runtimeSkillCatalog =
+    await loadModelInvocableSkillRuntimeCatalog(toolUseContext)
+  const allCommands = runtimeSkillCatalog.catalog.commands
 
   const agentKey = toolUseContext.agentId ?? ''
   let sent = sentSkillNames.get(agentKey)
@@ -2693,20 +2667,41 @@ async function getSkillListingAttachments(
     sent = new Set()
     sentSkillNames.set(agentKey, sent)
   }
+  let sentCapabilityIds = sentSkillCapabilityIds.get(agentKey)
+  if (!sentCapabilityIds) {
+    sentCapabilityIds = new Set()
+    sentSkillCapabilityIds.set(agentKey, sentCapabilityIds)
+  }
+
+  // feature() first for DCE — the property-access string leaks otherwise even
+  // with ?. on null.
+  const skillSearchEnabled =
+    feature('EXPERIMENTAL_SKILL_SEARCH') &&
+    skillSearchModules?.featureCheck.isSkillSearchFeatureEnabled() === true
+  const plan = planSkillContextInjection(allCommands, {
+    skillSearchEnabled,
+    filteredListingMax: FILTERED_LISTING_MAX,
+    sentSkillNames: sent,
+    sentSkillCapabilityIds: sentCapabilityIds,
+  })
+  recordVisibleSkillListing(toolUseContext, plan.staticSkillListing, sent)
 
   // Resume path: prior process already injected a listing; it's in the
   // transcript. Mark everything current as sent so only post-resume deltas
   // (skills loaded later via /reload-plugins etc) get announced.
   if (suppressNext) {
     suppressNext = false
-    for (const cmd of allCommands) {
+    for (const cmd of plan.staticSkillListing) {
       sent.add(cmd.name)
+      const entry = toSkillVisibilityEntry(cmd)
+      if (entry?.capabilityId) sentCapabilityIds.add(entry.capabilityId)
     }
+    recordVisibleSkillListing(toolUseContext, plan.staticSkillListing, sent)
     return []
   }
 
   // Find skills we haven't sent yet
-  const newSkills = allCommands.filter(cmd => !sent.has(cmd.name))
+  const newSkills = plan.newStaticSkillListing
 
   if (newSkills.length === 0) {
     return []
@@ -2718,7 +2713,10 @@ async function getSkillListingAttachments(
   // Mark as sent
   for (const cmd of newSkills) {
     sent.add(cmd.name)
+    const entry = toSkillVisibilityEntry(cmd)
+    if (entry?.capabilityId) sentCapabilityIds.add(entry.capabilityId)
   }
+  recordVisibleSkillListing(toolUseContext, plan.staticSkillListing, sent)
 
   logForDebugging(
     `Sending ${newSkills.length} skills via attachment (${isInitial ? 'initial' : 'dynamic'}, ${sent.size} total sent)`,
@@ -2740,6 +2738,18 @@ async function getSkillListingAttachments(
       isInitial,
     },
   ]
+}
+
+function recordVisibleSkillListing(
+  toolUseContext: ToolUseContext,
+  commands: readonly Command[],
+  skillNames: ReadonlySet<string>,
+): void {
+  for (const command of commands) {
+    if (skillNames.has(command.name)) {
+      recordVisibleSkillCommand(toolUseContext, command)
+    }
+  }
 }
 
 // getSkillDiscoveryAttachment moved to skillSearch/prefetch.ts as

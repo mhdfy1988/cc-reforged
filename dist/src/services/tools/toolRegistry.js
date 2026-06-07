@@ -159,6 +159,7 @@ function inferSource(tool, metadata) {
                 }
                 : {}),
             ...(mcpIdentity.toolName ? { toolName: mcpIdentity.toolName } : {}),
+            ...(tool.pluginId ? { pluginId: tool.pluginId } : {}),
         };
     }
     return {

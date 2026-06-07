@@ -22,6 +22,7 @@ export async function listSkillManagementState(options = {}) {
     const normalizedInstalled = installed.installed.map(addInspectionDigest);
     const capabilityCatalog = await createSkillManagementCapabilityCatalog({
         cwd: options.cwd ?? process.cwd(),
+        configHomeDir: options.configHomeDir,
         installed: normalizedInstalled,
     });
     const problemCount = normalizedInstalled.filter(item => isProblemInspectionStatus(String(item.status))).length;

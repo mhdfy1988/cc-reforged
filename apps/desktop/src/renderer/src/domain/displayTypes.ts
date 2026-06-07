@@ -1,4 +1,5 @@
 import type {
+  CapabilitiesManagementListResult,
   ThreadDisplayCounts as AppServerThreadDisplayCounts,
   ThreadDisplayIdentity as AppServerThreadDisplayIdentity,
   ThreadDisplayItem as AppServerThreadDisplayItem,
@@ -7,6 +8,10 @@ import type {
   ThreadDisplayPatchOperation as AppServerThreadDisplayPatchOperation,
   ThreadDisplaySnapshot as AppServerThreadDisplaySnapshot,
 } from '../../../../../../src/app-server/protocol.js'
+
+export type CapabilityManagementState = CapabilitiesManagementListResult
+export type CapabilityManagementItem =
+  CapabilitiesManagementListResult['capabilities'][number]
 
 export type McpWritableScope = 'user' | 'project' | 'local'
 

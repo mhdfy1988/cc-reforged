@@ -12,6 +12,11 @@ import {
   collectCcrMcpConfigInventory,
   summarizeCcrMcpConfigInventory,
 } from '../services/mcp/configInventory.js'
+import type {
+  CapabilityMcpConfigServer,
+  CapabilityMcpConfigSnapshot,
+  CapabilityPluginSnapshot,
+} from '../services/capabilities/capabilityRuntimeEnvironment.js'
 import {
   getCcrMcpInstallTransport,
   inferCcrMcpInstallKindFromConfig,
@@ -43,12 +48,24 @@ import { getPluginErrorMessage, type PluginError } from '../types/plugin.js'
 import { CoreError } from './errors.js'
 import { redactRecord, redactUrl } from './redaction.js'
 import { errorMessage } from '../utils/errors.js'
+import { getPluginMcpServers } from '../utils/plugins/mcpPluginIntegration.js'
 
 type WritableMcpScope = Extract<ConfigScope, 'user' | 'project' | 'local'>
 
 export async function listCoreMcpServers(options: {
   includeDisabled?: boolean
-} = {}): Promise<Record<string, unknown>> {
+  cwd?: string
+  configHomeDir?: string
+  pluginSnapshot?: CapabilityPluginSnapshot
+} = {}): Promise<CapabilityMcpConfigSnapshot> {
+  if (
+    options.cwd !== undefined ||
+    options.configHomeDir !== undefined ||
+    options.pluginSnapshot !== undefined
+  ) {
+    return listRequestScopedCoreMcpServers(options)
+  }
+
   const { servers, errors } = await getClaudeCodeMcpConfigs()
   const inventory = collectCcrMcpConfigInventory()
   const installKindByName = new Map(
@@ -65,8 +82,74 @@ export async function listCoreMcpServers(options: {
   return {
     configPath: getUserMcpFilePath(),
     inventory: summarizeCcrMcpConfigInventory(inventory),
-    servers: summaries,
+    servers: summaries as CapabilityMcpConfigServer[],
     errors: errors.map(summarizePluginError),
+  }
+}
+
+async function listRequestScopedCoreMcpServers(options: {
+  includeDisabled?: boolean
+  cwd?: string
+  configHomeDir?: string
+  pluginSnapshot?: CapabilityPluginSnapshot
+}): Promise<CapabilityMcpConfigSnapshot> {
+  const inventory = collectCcrMcpConfigInventory({
+    ...(options.cwd ? { cwd: options.cwd } : {}),
+    ...(options.configHomeDir
+      ? { configHomeDir: options.configHomeDir }
+      : {}),
+  })
+  const configuredServers: CapabilityMcpConfigServer[] = inventory.servers
+    .filter(server => server.active)
+    .map(server => ({
+      name: server.name,
+      enabled: server.enabled,
+      scope: server.scope,
+      type: server.type,
+      transport: server.transport,
+      source: server.pluginSource ? 'plugin' : server.sourceId,
+      installKind: server.installKind,
+      ...(server.pluginSource
+        ? { pluginSource: server.pluginSource }
+        : {}),
+      ...(server.command ? { command: server.command } : {}),
+      ...(server.url ? { url: server.url } : {}),
+      ...(server.args ? { args: server.args } : {}),
+    }))
+
+  const pluginErrors: PluginError[] = []
+  const pluginServers = await Promise.all(
+    (options.pluginSnapshot?.plugins ?? [])
+      .filter(plugin => plugin.enabled !== false)
+      .map(plugin => getPluginMcpServers(plugin, pluginErrors)),
+  )
+  const configuredNames = new Set(configuredServers.map(server => server.name))
+  for (const servers of pluginServers) {
+    for (const [name, config] of Object.entries(servers ?? {})) {
+      if (configuredNames.has(name)) continue
+      configuredServers.push(
+        summarizeMcpServer(name, config) as CapabilityMcpConfigServer,
+      )
+      configuredNames.add(name)
+    }
+  }
+
+  return {
+    configPath: getUserMcpFilePath(inventory.configHomeDir),
+    inventory: summarizeCcrMcpConfigInventory(inventory),
+    servers: configuredServers.filter(
+      server => options.includeDisabled || server.enabled !== false,
+    ),
+    errors: [
+      ...inventory.sources.flatMap(source =>
+        source.errors.map(message => ({
+          type: 'config-error',
+          source: source.id,
+          message,
+        })),
+      ),
+      ...pluginErrors.map(summarizePluginError),
+    ],
   }
 }
 
@@ -326,6 +409,7 @@ function summarizeMcpServer(
     type,
     enabled,
     source: config.pluginSource ? 'plugin' : config.scope,
+    ...(config.pluginSource ? { pluginSource: config.pluginSource } : {}),
     installKind,
     transport: getCcrMcpInstallTransport(config),
   }

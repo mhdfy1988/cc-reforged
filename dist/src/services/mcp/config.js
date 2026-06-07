@@ -38,8 +38,8 @@ export function getEnterpriseMcpFilePath() {
 /**
  * Get the path to CCR user-level MCP configuration.
  */
-export function getUserMcpFilePath() {
-    return join(getClaudeConfigHomeDir(), 'mcp.json');
+export function getUserMcpFilePath(configHomeDir = getClaudeConfigHomeDir()) {
+    return join(configHomeDir, 'mcp.json');
 }
 /**
  * Internal utility: Add scope to server configs

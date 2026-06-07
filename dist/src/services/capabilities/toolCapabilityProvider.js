@@ -1,6 +1,8 @@
-import { getAllBaseTools } from '../../tools.js';
-import { getCcrToolAvailability, } from '../tools/toolAvailability.js';
-import { buildCcrToolRegistry, } from '../tools/toolRegistry.js';
+import {} from '../tools/toolAvailability.js';
+import {} from '../tools/toolRegistry.js';
+import { createCcrToolCapabilitySnapshot } from '../tools/toolCapabilitySnapshot.js';
+import { normalizePluginId } from './pluginIdentityResolver.js';
+import { createExtensionCapabilityId } from './capabilityIdentity.js';
 export function createToolCapabilityProvider(options = {}) {
     return {
         id: 'tools',
@@ -13,12 +15,13 @@ export function createToolCapabilityProvider(options = {}) {
     };
 }
 export function listToolCapabilities(context = {}) {
-    const tools = (context.tools ?? getAllBaseTools());
-    const registry = buildCcrToolRegistry(tools);
-    return registry.entries.map(entry => toExtensionCapability(entry, context));
+    const tools = (context.capabilityEnvironment?.tools ??
+        context.tools ??
+        []);
+    const snapshot = createCcrToolCapabilitySnapshot(tools, context);
+    return snapshot.entries.map(item => toExtensionCapability(item.entry, item.availability));
 }
-function toExtensionCapability(entry, context) {
-    const availability = getCcrToolAvailability(entry, context);
+function toExtensionCapability(entry, availability) {
     const status = mapAvailabilityStatus(availability.reason);
     const sourceKind = mapToolSourceKind(entry.source.kind);
     const diagnostics = availability.available
@@ -32,9 +35,19 @@ function toExtensionCapability(entry, context) {
             },
         ];
     const serverName = entry.source.serverName ?? entry.source.serverId;
+    const pluginId = normalizePluginId(entry.source.pluginId);
     return {
         schemaVersion: 1,
-        id: `${entry.tool.isMcp === true ? 'mcp-tool' : 'tool'}:${entry.name}`,
+        id: createExtensionCapabilityId({
+            kind: entry.tool.isMcp === true ? 'mcp-tool' : 'tool',
+            sourceKind,
+            name: entry.name,
+            sourceRef: entry.source.toolName ??
+                entry.source.providerId ??
+                entry.source.kind,
+            pluginId,
+            mcpServerName: serverName,
+        }),
         name: entry.name,
         displayName: entry.displayName,
         description: getToolDescription(entry),
@@ -43,7 +56,7 @@ function toExtensionCapability(entry, context) {
             kind: sourceKind,
             label: toSourceLabel(entry),
             ...(entry.source.providerId ? { ref: entry.source.providerId } : {}),
-            ...(entry.source.pluginId ? { pluginId: entry.source.pluginId } : {}),
+            ...(pluginId ? { pluginId } : {}),
             ...(serverName ? { mcpServerName: serverName } : {}),
         },
         state: {
@@ -59,7 +72,7 @@ function toExtensionCapability(entry, context) {
             toolInvocable: availability.available,
         },
         relations: {
-            ...(entry.source.pluginId ? { parentPluginId: entry.source.pluginId } : {}),
+            ...(pluginId ? { parentPluginId: pluginId } : {}),
             ...(serverName ? { parentMcpServerName: serverName } : {}),
             runtimeRef: `tool:${entry.name}`,
         },

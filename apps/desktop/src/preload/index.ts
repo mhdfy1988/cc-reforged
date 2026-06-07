@@ -258,6 +258,30 @@ type SkillInstallSaveManifestInput = {
   overwrite?: boolean
 }
 
+type CapabilityManagementAction =
+  | 'enable'
+  | 'disable'
+  | 'set-model-invocation'
+  | 'set-user-invocation'
+  | 'inspect'
+  | 'test'
+  | 'restart'
+  | 'repair'
+  | 'uninstall'
+
+type CapabilityManagementActionPlanInput = {
+  capabilityId: string
+  action: CapabilityManagementAction
+  actionRef?: string
+  params?: Record<string, unknown>
+}
+
+type CapabilityManagementActionApplyInput =
+  CapabilityManagementActionPlanInput & {
+    confirmed?: boolean
+    confirmationToken?: string
+  }
+
 type DesktopPathPickerInput = {
   mode: 'file' | 'directory'
   title?: string
@@ -453,6 +477,14 @@ const api = {
   applyMcpAdopt: (input: McpInstallAdoptApplyInput) =>
     ipcRenderer.invoke('ccr:mcp-install-adopt-apply', input),
   listMcpInstalls: () => ipcRenderer.invoke('ccr:mcp-install-list'),
+  listCapabilityManagement: () =>
+    ipcRenderer.invoke('ccr:capabilities-management-list'),
+  planCapabilityManagementAction: (
+    input: CapabilityManagementActionPlanInput,
+  ) => ipcRenderer.invoke('ccr:capabilities-management-action-plan', input),
+  applyCapabilityManagementAction: (
+    input: CapabilityManagementActionApplyInput,
+  ) => ipcRenderer.invoke('ccr:capabilities-management-action-apply', input),
   uninstallMcp: (input: McpInstallUninstallInput) =>
     ipcRenderer.invoke('ccr:mcp-install-uninstall', input),
   repairMcp: (input: McpInstallRepairInput) =>

@@ -188,6 +188,7 @@ export class JsonRpcClient {
 
 - 给上层提供类型化方法。
 - 把 `initialize / config/get / auth/status / model/list / mcp/list / workspace/open / thread/start / turn/start / permission/respond` 封装成稳定 API。
+- 能力管理提供 `registerCapabilityApps`、`listCapabilities`、`listCapabilityManagement`、`planCapabilityManagementAction` 和 `applyCapabilityManagementAction`，并保持同一 App Server 会话的 App registry 连续。
 - 统一订阅 App Server notification。
 - 把底层 JSON-RPC 错误转换成上层错误类型。
 

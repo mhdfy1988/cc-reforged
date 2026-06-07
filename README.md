@@ -12,6 +12,8 @@ CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留
 
 当前 `0.6.2` 版本线聚焦 Skill / Plugin 和外部能力包治理，在 MCP 基础管理面之上补齐统一能力目录、Skill 内部分层、安装可靠性、运行时启用、审计和管理入口。
 
+`0.6.2` 之后的主分支已完成外部扩展能力 G1-G4 根因重构：能力查询统一到请求级快照，Skill / MCP / Tool / Plugin / App 使用来源感知身份和关系图，App / Connector 拥有会话级注册表和管理生命周期，外部扩展反例矩阵扩展到 85 项。它表示底层 capability model 已达到本轮代码要求；真实 Plugin manifest / App 注册入口、样例包、管理页产品化和正式发布仍属于下一阶段。
+
 ![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
 
 ## 一眼看懂
@@ -25,6 +27,7 @@ CCR 的目标不是简单“换一个模型接口”，而是把一个本地编�
 | LLM Runtime | 管理 provider、Profile、凭据、模型目录、协议适配、能力声明和每轮元数据 |
 | 多模态协议 | 统一文本、图片、文件、工具结果、生成图片和历史恢复的内部内容块 |
 | 工具治理 | 让模型只看到当前真实可用的工具，并把 MCP 工具、安装、启停和诊断纳入统一管理 |
+| 扩展能力目录 | 统一 Skill、MCP、Tool、Plugin、App 的来源、状态、关系、诊断和管理动作 |
 | 项目隔离 | 使用 `.ccr` 项目配置，避免污染 Claude Code、Codex、OpenClaw 等其它工具 |
 
 你可以把它理解成三层组合：
@@ -66,6 +69,7 @@ CCR 当前更像一个本地 Agent 工作台，而不是单纯的 CLI 包：
 - 在 Windows Desktop 中管理工作区、历史会话、权限、模型连接和自动更新。
 - 使用内置 LLM Runtime 管理多个 provider、多个 Profile、不同协议和每轮实际模型元数据。
 - 在同一套生成物协议下展示模型生成图片、工具图片、远程图片 URL、本地附件和历史恢复结果。
+- 通过统一能力目录审计 Skill、MCP、Tool、Plugin、App 的来源、启用状态、运行时可见性和父子关系。
 - 把项目级设置放进 `.ccr/settings*.json`，避免和 Claude Code、Codex、OpenClaw 等工具互相污染。
 
 典型使用路径：

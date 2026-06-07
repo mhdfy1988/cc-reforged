@@ -71,13 +71,79 @@ export const InitializeParamsSchema = z
     .default({});
 export const ShutdownParamsSchema = z.object({}).strict().default({});
 export const ConfigGetParamsSchema = z.object({}).strict().default({});
+export const AppConnectorCapabilityInputSchema = z
+    .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    connected: z.boolean().optional(),
+    enabled: z.boolean().optional(),
+    authStatus: z
+        .enum(['connected', 'needs-auth', 'disabled', 'unknown'])
+        .optional(),
+    sourceLabel: z.string().optional(),
+    pluginId: z.string().optional(),
+    parentPluginId: z.string().optional(),
+    providedToolIds: z.array(z.string().min(1)).optional(),
+    providedMcpServerNames: z.array(z.string().min(1)).optional(),
+    providedSkillIds: z.array(z.string().min(1)).optional(),
+    metadata: JsonRpcParamsSchema.optional(),
+})
+    .strict();
+const AppConnectorCapabilityListSchema = z
+    .array(AppConnectorCapabilityInputSchema)
+    .superRefine((apps, context) => {
+    const ids = new Set();
+    for (const app of apps) {
+        if (ids.has(app.id)) {
+            context.addIssue({
+                code: 'custom',
+                message: `Duplicate app connector id: ${app.id}`,
+            });
+        }
+        ids.add(app.id);
+    }
+});
 export const CapabilitiesListParamsSchema = z
     .object({
     cwd: z.string().min(1).optional(),
     configHomeDir: z.string().min(1).optional(),
+    apps: AppConnectorCapabilityListSchema.optional(),
 })
     .strict()
     .default({});
+export const CapabilitiesManagementListParamsSchema = CapabilitiesListParamsSchema;
+export const CapabilitiesAppsRegisterParamsSchema = z
+    .object({
+    apps: AppConnectorCapabilityListSchema,
+    mode: z.enum(['replace', 'upsert']).optional(),
+})
+    .strict();
+export const CapabilityManagementActionSchema = z.enum([
+    'enable',
+    'disable',
+    'set-model-invocation',
+    'set-user-invocation',
+    'inspect',
+    'test',
+    'restart',
+    'repair',
+    'uninstall',
+]);
+export const CapabilitiesManagementActionPlanParamsSchema = z
+    .object({
+    cwd: z.string().min(1).optional(),
+    configHomeDir: z.string().min(1).optional(),
+    capabilityId: z.string().min(1),
+    action: CapabilityManagementActionSchema,
+    actionRef: z.string().min(1).optional(),
+    params: JsonRpcParamsSchema.optional(),
+})
+    .strict();
+export const CapabilitiesManagementActionApplyParamsSchema = CapabilitiesManagementActionPlanParamsSchema.extend({
+    confirmed: z.boolean().optional(),
+    confirmationToken: z.string().min(1).optional(),
+}).strict();
 export const AuthStatusParamsSchema = z
     .object({
     provider: z.string().min(1).optional(),
@@ -549,6 +615,7 @@ export const CompactRunParamsSchema = z
 export const DEFAULT_SERVER_CAPABILITIES = {
     config: true,
     auth: true,
+    capabilityApps: true,
     models: true,
     mcp: true,
     skills: true,

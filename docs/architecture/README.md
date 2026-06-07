@@ -11,7 +11,15 @@
 - [CCR 项目级 Settings 隔离设计](./ccr-project-settings-isolation-design.md)
 - [CCR 用户目录与安装布局](./ccr-home-layout.md)
 - [CCR 扩展能力体系总览](./extension-capability-system.md)
+- [CCR 扩展能力运行时与上下文重构路线](./extension-runtime-context-refactor-roadmap.md)
 - [CCR Skill 系统整体架构](./skill-system-architecture.md)
+- [Codex 扩展能力体系学习笔记](./codex-extension-capability-study.md)
+
+扩展能力相关问题优先按这个顺序阅读：
+
+1. 先读 [CCR 扩展能力体系总览](./extension-capability-system.md)，确认 Skill、MCP、Tool、Plugin、App 的统一事实模型、身份、关系和非目标。
+2. 再读 [CCR 扩展能力运行时与上下文重构路线](./extension-runtime-context-refactor-roadmap.md) 的 R0-R30 与 G1-G4，确认已经完成的底层重构和下一阶段边界。
+3. 只有问题落到具体领域时，再进入 [CCR Skill 系统整体架构](./skill-system-architecture.md)、[CCR 工具注册目录](./tool-registry-catalog.md) 或 MCP 专项文档。
 
 ## 工程兼容与迁移
 

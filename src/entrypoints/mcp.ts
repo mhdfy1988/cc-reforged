@@ -113,6 +113,7 @@ export async function startMCPServer(
         abortController: createAbortController(),
         options: {
           commands: MCP_COMMANDS,
+          cwd,
           tools,
           mainLoopModel: getMainLoopModel(),
           thinkingConfig: { type: 'disabled' },

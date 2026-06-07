@@ -43,6 +43,12 @@ const {
   getCcrToolSearchCandidates,
   summarizeCcrToolSearchCandidates,
 } = await import('../dist/src/services/tools/toolSearchPolicy.js')
+const {
+  createCcrToolCapabilitySnapshot,
+} = await import('../dist/src/services/tools/toolCapabilitySnapshot.js')
+const {
+  listToolCapabilities,
+} = await import('../dist/src/services/capabilities/toolCapabilityProvider.js')
 const { getDefaultAppState } = await import(
   '../dist/src/state/AppStateStore.js'
 )
@@ -357,6 +363,41 @@ assert.equal(
   }).available,
   true,
 )
+const connectedMcpContext = {
+  mcpServerStatuses: { demo: 'connected' },
+}
+const toolCapabilitySnapshot = createCcrToolCapabilitySnapshot(
+  mcpRegistry.entries.map(entry => entry.tool),
+  connectedMcpContext,
+)
+const mcpSnapshotEntry = toolCapabilitySnapshot.entries.find(
+  item => item.entry.name === 'mcp__demo__search',
+)
+assert.equal(mcpSnapshotEntry?.entry.source.serverName, 'demo')
+assert.equal(mcpSnapshotEntry?.entry.source.toolName, 'search')
+assert.equal(mcpSnapshotEntry?.entry.exposure, 'deferred')
+assert.equal(mcpSnapshotEntry?.availability.available, true)
+assert.equal(mcpSnapshotEntry?.searchable, true)
+const alignedToolSearchCandidates = getCcrToolSearchCandidates(
+  mcpRegistry.entries.map(entry => entry.tool),
+  connectedMcpContext,
+)
+assert.deepEqual(
+  alignedToolSearchCandidates.map(tool => tool.name),
+  ['mcp__demo__search'],
+)
+const alignedCapabilities = listToolCapabilities({
+  tools: mcpRegistry.entries.map(entry => entry.tool),
+  ...connectedMcpContext,
+})
+const alignedMcpCapability = alignedCapabilities.find(
+  capability => capability.name === 'mcp__demo__search',
+)
+assert.equal(alignedMcpCapability?.metadata.exposure, 'deferred')
+assert.equal(alignedMcpCapability?.state.status, 'available')
+assert.equal(alignedMcpCapability?.state.runtimeVisible, true)
+assert.equal(alignedMcpCapability?.source.mcpServerName, 'demo')
+assert.equal(alignedMcpCapability?.metadata.source.toolName, 'search')
 
 const fallbackMcpRegistry = buildCcrToolRegistry([
   {
@@ -510,6 +551,7 @@ console.log(
         'mcp_install_manifest_kinds_and_inference',
         'tool_search_candidate_policy',
         'tool_search_tool_uses_candidate_policy',
+        'tool_capability_snapshot_aligns_toolsearch_and_catalog',
         'mcp_tool_identity_from_mcp_info_and_name_fallback',
         'mcp_availability_status_reasons',
         'tool_search_mcp_match_details_and_unavailable_server_reasons',

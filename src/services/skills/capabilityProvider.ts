@@ -2,6 +2,7 @@ import { createSkillRuntimeCapabilityCatalog } from '../../skills/skillRuntimeCa
 
 export async function createSkillManagementCapabilityCatalog(input: {
   cwd: string
+  configHomeDir?: string
   installed: Array<{
     name: string
     lockKey: string
@@ -15,7 +16,9 @@ export async function createSkillManagementCapabilityCatalog(input: {
   }>
 }): Promise<ReturnType<typeof createSkillRuntimeCapabilityCatalog>> {
   const { getSkillRuntimeCatalogForCwd } = await import('../../commands.js')
-  const runtime = await getSkillRuntimeCatalogForCwd(input.cwd)
+  const runtime = await getSkillRuntimeCatalogForCwd(input.cwd, {
+    configHomeDir: input.configHomeDir,
+  })
   return createSkillRuntimeCapabilityCatalog({
     commands: runtime.sourceCommands,
     installed: input.installed,

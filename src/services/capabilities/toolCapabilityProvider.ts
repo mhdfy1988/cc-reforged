@@ -1,13 +1,12 @@
 import type { Tool, Tools } from '../../Tool.js'
-import { getAllBaseTools } from '../../tools.js'
 import {
-  getCcrToolAvailability,
   type CcrToolAvailabilityContext,
 } from '../tools/toolAvailability.js'
+import type { CcrToolAvailability } from '../tools/toolAvailability.js'
 import {
-  buildCcrToolRegistry,
   type CcrToolRegistryEntry,
 } from '../tools/toolRegistry.js'
+import { createCcrToolCapabilitySnapshot } from '../tools/toolCapabilitySnapshot.js'
 import type {
   ExtensionCapability,
   ExtensionCapabilityDiagnostic,
@@ -18,10 +17,14 @@ import type {
   ExtensionCapabilityProvider,
   ExtensionCapabilityProviderContext,
 } from './capabilityCatalog.js'
+import { normalizePluginId } from './pluginIdentityResolver.js'
+import type { CapabilityRuntimeEnvironment } from './capabilityRuntimeEnvironment.js'
+import { createExtensionCapabilityId } from './capabilityIdentity.js'
 
 export type ToolCapabilityProviderContext =
   ExtensionCapabilityProviderContext &
     CcrToolAvailabilityContext & {
+      capabilityEnvironment?: CapabilityRuntimeEnvironment
       tools?: readonly Tool[]
     }
 
@@ -44,16 +47,21 @@ export function createToolCapabilityProvider(
 export function listToolCapabilities(
   context: ToolCapabilityProviderContext = {},
 ): ExtensionCapability[] {
-  const tools = (context.tools ?? getAllBaseTools()) as Tools
-  const registry = buildCcrToolRegistry(tools)
-  return registry.entries.map(entry => toExtensionCapability(entry, context))
+  const tools = (
+    context.capabilityEnvironment?.tools ??
+    context.tools ??
+    []
+  ) as Tools
+  const snapshot = createCcrToolCapabilitySnapshot(tools, context)
+  return snapshot.entries.map(item =>
+    toExtensionCapability(item.entry, item.availability),
+  )
 }
 
 function toExtensionCapability(
   entry: CcrToolRegistryEntry,
-  context: CcrToolAvailabilityContext,
+  availability: CcrToolAvailability,
 ): ExtensionCapability {
-  const availability = getCcrToolAvailability(entry, context)
   const status = mapAvailabilityStatus(availability.reason)
   const sourceKind = mapToolSourceKind(entry.source.kind)
   const diagnostics = availability.available
@@ -67,9 +75,20 @@ function toExtensionCapability(
         } satisfies ExtensionCapabilityDiagnostic,
       ]
   const serverName = entry.source.serverName ?? entry.source.serverId
+  const pluginId = normalizePluginId(entry.source.pluginId)
   return {
     schemaVersion: 1,
-    id: `${entry.tool.isMcp === true ? 'mcp-tool' : 'tool'}:${entry.name}`,
+    id: createExtensionCapabilityId({
+      kind: entry.tool.isMcp === true ? 'mcp-tool' : 'tool',
+      sourceKind,
+      name: entry.name,
+      sourceRef:
+        entry.source.toolName ??
+        entry.source.providerId ??
+        entry.source.kind,
+      pluginId,
+      mcpServerName: serverName,
+    }),
     name: entry.name,
     displayName: entry.displayName,
     description: getToolDescription(entry),
@@ -78,7 +97,7 @@ function toExtensionCapability(
       kind: sourceKind,
       label: toSourceLabel(entry),
       ...(entry.source.providerId ? { ref: entry.source.providerId } : {}),
-      ...(entry.source.pluginId ? { pluginId: entry.source.pluginId } : {}),
+      ...(pluginId ? { pluginId } : {}),
       ...(serverName ? { mcpServerName: serverName } : {}),
     },
     state: {
@@ -94,7 +113,7 @@ function toExtensionCapability(
       toolInvocable: availability.available,
     },
     relations: {
-      ...(entry.source.pluginId ? { parentPluginId: entry.source.pluginId } : {}),
+      ...(pluginId ? { parentPluginId: pluginId } : {}),
       ...(serverName ? { parentMcpServerName: serverName } : {}),
       runtimeRef: `tool:${entry.name}`,
     },
@@ -129,7 +148,7 @@ function mapToolSourceKind(
 }
 
 function mapAvailabilityStatus(
-  reason: ReturnType<typeof getCcrToolAvailability>['reason'],
+  reason: CcrToolAvailability['reason'],
 ): ExtensionCapabilityStatus {
   switch (reason) {
     case undefined:

@@ -7,7 +7,7 @@ import { clearServerCache, fetchCommandsForClient, fetchResourcesForClient, fetc
 const require = createRequire(import.meta.url);
 /* eslint-disable @typescript-eslint/no-require-imports */
 const fetchMcpSkillsForClient = feature('MCP_SKILLS')
-    ? require('../../skills/mcpSkills.js').fetchMcpSkillsForClient
+    ? require('../../skills/mcpSkills.js').fetchMcpSkillsForClientSafely
     : null;
 const clearSkillIndexCache = feature('EXPERIMENTAL_SKILL_SEARCH')
     ? require('../skillSearch/localSearch.js').clearSkillIndexCache

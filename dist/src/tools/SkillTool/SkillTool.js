@@ -2,8 +2,10 @@ import { feature } from 'bun:bundle';
 import { createRequire } from 'node:module';
 import { dirname } from 'path';
 import { getProjectRoot } from 'src/bootstrap/state.js';
-import { builtInCommandNames, findCommand, getCommands, getMcpSkillCommands, } from 'src/commands.js';
-import { createSkillRuntimeCatalog } from 'src/skills/skillRuntimeCatalog.js';
+import { builtInCommandNames, findCommand, } from 'src/commands.js';
+import { getSkillCommandModelInvocationBlocker } from 'src/skills/skillCommandRuntimeVisibility.js';
+import { loadModelInvocableSkillRuntimeCatalog } from 'src/skills/skillRuntimeCatalogLoader.js';
+import { recordLoadedSkill, recordLoadedSkillCommand, } from 'src/skills/skillVisibilityLedger.js';
 import { buildTool } from 'src/Tool.js';
 import { logForDebugging } from 'src/utils/debug.js';
 import { getRuleByContentsForToolName, } from 'src/utils/permissions/permissions.js';
@@ -27,27 +29,12 @@ import { getToolUseIDFromParentMessage, tagMessagesWithToolUseID, } from '../uti
 import { SKILL_TOOL_NAME } from './constants.js';
 import { getPrompt } from './prompt.js';
 import { renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessage, renderToolUseProgressMessage, renderToolUseRejectedMessage, } from './UI.js';
-/**
- * Gets all commands including MCP skills/prompts from AppState.
- * SkillTool needs this because getCommands() only returns local/bundled skills.
- */
 async function getAllCommands(context) {
-    // Only include MCP skills (loadedFrom === 'mcp'), not plain MCP prompts.
-    // Before this filter, the model could invoke MCP prompts via SkillTool
-    // if it guessed the mcp__server__prompt name — they weren't discoverable
-    // but were technically reachable.
-    const localCommands = await getCommands(getProjectRoot());
-    const mcpSkills = getMcpSkillCommands(context.getAppState().mcp.commands);
-    if (mcpSkills.length === 0)
-        return localCommands;
-    const runtimeSkillCatalog = createSkillRuntimeCatalog([
-        ...localCommands,
-        ...mcpSkills,
-    ]);
-    if (runtimeSkillCatalog.diagnostics.length > 0) {
-        logForDebugging(`SkillTool runtime catalog diagnostics: ${runtimeSkillCatalog.diagnostics.length}`);
+    const runtimeSkillCatalog = await loadModelInvocableSkillRuntimeCatalog(context);
+    if (runtimeSkillCatalog.catalog.diagnostics.length > 0) {
+        logForDebugging(`SkillTool runtime catalog diagnostics: ${runtimeSkillCatalog.catalog.diagnostics.length}`);
     }
-    return runtimeSkillCatalog.commands;
+    return runtimeSkillCatalog.catalog.commands;
 }
 const require = createRequire(import.meta.url);
 // Conditional require for remote skill modules — static imports here would
@@ -181,6 +168,7 @@ async function executeForkedSkill(command, commandName, args, context, canUseToo
         agentMessages.length = 0;
         const durationMs = Date.now() - startTime;
         logForDebugging(`SkillTool forked skill ${commandName} completed in ${durationMs}ms`);
+        recordLoadedSkillCommand(context, command);
         return {
             data: {
                 success: true,
@@ -293,20 +281,20 @@ export const SkillTool = buildTool({
                 errorCode: 2,
             };
         }
-        // Check if command has model invocation disabled
-        if (foundCommand.disableModelInvocation) {
-            return {
-                result: false,
-                message: `Skill ${normalizedCommandName} cannot be used with ${SKILL_TOOL_NAME} tool due to disable-model-invocation`,
-                errorCode: 4,
-            };
-        }
         // Check if command is a prompt-based command
         if (foundCommand.type !== 'prompt') {
             return {
                 result: false,
                 message: `Skill ${normalizedCommandName} is not a prompt-based skill`,
                 errorCode: 5,
+            };
+        }
+        const invocationBlocker = getSkillCommandModelInvocationBlocker(foundCommand, SKILL_TOOL_NAME);
+        if (invocationBlocker) {
+            return {
+                result: false,
+                message: invocationBlocker.message,
+                errorCode: invocationBlocker.errorCode,
             };
         }
         return { result: true };
@@ -469,6 +457,9 @@ export const SkillTool = buildTool({
         commands, context);
         if (!processedCommand.shouldQuery) {
             throw new Error('Command processing failed');
+        }
+        if (command?.type === 'prompt') {
+            recordLoadedSkillCommand(context, command);
         }
         // Extract metadata from the command
         const allowedTools = processedCommand.allowedTools || [];
@@ -680,6 +671,10 @@ const SAFE_SKILL_PROPERTIES = new Set([
     'disableModelInvocation',
     'userInvocable',
     'loadedFrom',
+    'mcpServerName',
+    'pluginId',
+    'mcpSkillUri',
+    'mcpSkillVersion',
     'immediate',
     'userFacingName',
 ]);
@@ -822,6 +817,7 @@ async function executeRemoteSkill(slug, commandName, parentMessage, context) {
     // ${CLAUDE_SKILL_DIR} substitutions survive compaction — matches how local
     // skills store their already-transformed content via processSlashCommand.
     addInvokedSkill(commandName, skillPath, finalContent, getAgentContext()?.agentId ?? null);
+    recordLoadedSkill(context, { name: commandName });
     // Direct injection — wrap SKILL.md content in a meta user message. Matches
     // the shape of what processPromptSlashCommand produces for simple skills.
     const toolUseID = getToolUseIDFromParentMessage(parentMessage, SKILL_TOOL_NAME);

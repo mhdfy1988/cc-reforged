@@ -64,6 +64,54 @@ assert.equal(capabilitiesByName.get('drifted-cap').runtimeVisible, false)
 assert.equal(capabilitiesByName.get('drifted-cap').hiddenReason, 'inspection:drifted')
 assert.equal(capabilityCatalog.diagnostics.length, 1)
 
+const identityCatalog = createSkillRuntimeCapabilityCatalog({
+  commands: [
+    promptCommand('shared-name', 'userSettings', 'skills'),
+    promptCommand('managed-runtime', 'userSettings', 'managed', {
+      installedSkillRef: 'user:managed-runtime',
+    }),
+    promptCommand('shadowed-name', 'userSettings', 'skills'),
+    promptCommand('shadowed-name', 'userSettings', 'managed', {
+      installedSkillRef: 'user:shadowed-name',
+    }),
+  ],
+  installed: [
+    installedInspection('shared-name', 'user:shared-name'),
+    installedInspection('managed-runtime', 'user:managed-runtime'),
+    installedInspection('shadowed-name', 'user:shadowed-name'),
+  ],
+})
+const identityCapabilitiesByName = groupByName(identityCatalog.capabilities)
+const sharedNameCapabilities = identityCapabilitiesByName.get('shared-name')
+assert.equal(sharedNameCapabilities.length, 2)
+assert.equal(
+  sharedNameCapabilities.find(capability => capability.sourceKind === 'user')
+    .installedRef,
+  null,
+)
+assert.equal(
+  sharedNameCapabilities.find(
+    capability => capability.sourceKind === 'managed-installed',
+  ).installedRef,
+  'user:shared-name',
+)
+const managedRuntimeCapabilities =
+  identityCapabilitiesByName.get('managed-runtime')
+assert.equal(managedRuntimeCapabilities.length, 1)
+assert.equal(managedRuntimeCapabilities[0].installedRef, 'user:managed-runtime')
+const shadowedNameCapabilities = identityCapabilitiesByName.get('shadowed-name')
+assert.equal(
+  shadowedNameCapabilities.find(capability => capability.sourceKind === 'user')
+    .installedRef,
+  null,
+)
+const shadowedManaged = shadowedNameCapabilities.find(
+  capability => capability.sourceKind === 'managed-installed',
+)
+assert.equal(shadowedManaged.installedRef, 'user:shadowed-name')
+assert.equal(shadowedManaged.runtimeVisible, false)
+assert.equal(shadowedManaged.hiddenReason, 'duplicate-name')
+
 createSkillRuntimeCatalog([
   promptCommand('stale-diagnostic', 'mcp', 'mcp'),
   promptCommand('stale-diagnostic', 'bundled', 'bundled'),
@@ -101,7 +149,31 @@ try {
   await env.cleanup()
 }
 
-function promptCommand(name, source, loadedFrom) {
+function groupByName(capabilities) {
+  const grouped = new Map()
+  for (const capability of capabilities) {
+    const group = grouped.get(capability.name) ?? []
+    group.push(capability)
+    grouped.set(capability.name, group)
+  }
+  return grouped
+}
+
+function installedInspection(name, lockKey) {
+  return {
+    name,
+    lockKey,
+    status: 'installed',
+    statusMessage: `Skill is installed: ${name}`,
+    installedRecord: {
+      enabled: true,
+      modelInvocable: true,
+      userInvocable: true,
+    },
+  }
+}
+
+function promptCommand(name, source, loadedFrom, extra = {}) {
   return {
     type: 'prompt',
     name,
@@ -113,6 +185,7 @@ function promptCommand(name, source, loadedFrom) {
     async getPromptForCommand() {
       return []
     },
+    ...extra,
   }
 }
 

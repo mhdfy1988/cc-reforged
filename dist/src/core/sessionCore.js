@@ -303,6 +303,7 @@ export class CoreSessionService {
                 loadedNestedMemoryPathCount: runtimeState.loadedNestedMemoryPaths.size,
                 dynamicSkillTriggerCount: runtimeState.dynamicSkillDirTriggers.size,
                 discoveredSkillCount: runtimeState.discoveredSkillNames.size,
+                discoveredSkillCapabilityCount: runtimeState.discoveredSkillCapabilityIds.size,
             },
         });
     }
@@ -397,6 +398,7 @@ export class CoreSessionService {
         const runtimeState = this.getThreadRuntimeState(thread.threadId);
         const runtime = createCoreQueryRuntime({
             turn: this.createSyntheticTurn(thread),
+            cwd: thread.workspacePath,
             messages,
             readFileState,
             runtimeState,
@@ -441,6 +443,7 @@ export class CoreSessionService {
         const runtimeState = this.getThreadRuntimeState(thread.threadId);
         const runtime = createCoreQueryRuntime({
             turn: this.createSyntheticTurn(thread),
+            cwd: thread.workspacePath,
             messages,
             readFileState,
             runtimeState,
@@ -986,6 +989,7 @@ function createThreadRuntimeState(messages) {
         loadedNestedMemoryPaths: new Set(),
         dynamicSkillDirTriggers: new Set(),
         discoveredSkillNames: new Set(),
+        discoveredSkillCapabilityIds: new Set(),
         contentReplacementState: provisionContentReplacementState(messages),
     };
 }

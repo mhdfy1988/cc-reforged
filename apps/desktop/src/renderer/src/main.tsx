@@ -41,6 +41,8 @@ import {
   type DisplayEvent,
 } from './domain/displayEvents.js'
 import type {
+  CapabilityManagementItem,
+  CapabilityManagementState,
   DesktopStatus,
   JsonObject,
   LlmModelAvailability,
@@ -66,7 +68,6 @@ import type {
   PermissionSettingsUpdateInput,
   SkillImportPlanState,
   SkillImportPlanViewState,
-  SkillInstalledInspection,
   SkillInstallCandidate,
   SkillInstallListState,
   SkillInstallPlanState,
@@ -96,6 +97,68 @@ type ConfirmDialogState = {
   tone?: DesktopConfirmTone
   onConfirm: () => void
   onCancel?: () => void
+}
+
+type CapabilityManagementActionName =
+  CapabilityManagementItem['allowedActions'][number]
+
+type CapabilityManagementActionApplyInput = {
+  capabilityId: string
+  action: CapabilityManagementActionName
+  actionRef?: string
+  params?: Record<string, unknown>
+  confirmed?: boolean
+  confirmationToken?: string
+}
+
+type CapabilityManagementActionApplyResult = {
+  schemaVersion?: 1
+  applied?: boolean
+  plan?: {
+    confirmation?: {
+      token?: string
+    }
+  }
+  result?: Record<string, unknown>
+  management?: CapabilityManagementState
+}
+
+type CapabilityManagementActionPlanResult = {
+  schemaVersion?: 1
+  allowed?: boolean
+  blockedReason?: string
+  requiresConfirmation?: boolean
+  confirmation?: {
+    token?: string
+    message?: string
+  }
+}
+
+type SkillManagementActionInput = {
+  capabilityId: string
+  action: 'repair' | 'uninstall'
+  actionRef: string
+  title: string
+}
+
+type SkillManagementSetEnabledInput = {
+  capabilityId: string
+  actionRef: string
+  enabled: boolean
+}
+
+type SkillManagementSetInvocationInput = {
+  capabilityId: string
+  action: 'set-model-invocation' | 'set-user-invocation'
+  actionRef: string
+  patch: { modelInvocable?: boolean; userInvocable?: boolean }
+}
+
+type McpManagementConfirmedActionInput = {
+  name: string
+  action: 'repair' | 'uninstall'
+  title: string
+  params?: Record<string, unknown>
 }
 
 const BOOT_MIN_VISIBLE_MS = 1400
@@ -173,6 +236,8 @@ function App({ initialStatus = null }: AppProps) {
     useState<SkillImportPlanViewState | null>(null)
   const [skillPageError, setSkillPageError] = useState<string | null>(null)
   const [skillPageMessage, setSkillPageMessage] = useState<string | null>(null)
+  const [capabilityManagement, setCapabilityManagement] =
+    useState<CapabilityManagementState | null>(null)
   const [threadHistory, setThreadHistory] = useState<ThreadHistoryState>({
     status: 'closed',
     scope: 'allProjects',
@@ -263,6 +328,13 @@ function App({ initialStatus = null }: AppProps) {
       return
     }
     void refreshSkillManagement().catch(() => undefined)
+  }, [page])
+
+  useEffect(() => {
+    if (page !== 'plugins') {
+      return
+    }
+    void refreshCapabilityManagement().catch(() => undefined)
   }, [page])
 
   useEffect(() => {
@@ -864,13 +936,15 @@ function App({ initialStatus = null }: AppProps) {
     try {
       setMcpPageError(null)
       await runAction(async () => {
-        const [, installs, search] = await Promise.all([
+        const [, installs, search, management] = await Promise.all([
           window.ccr.refreshMcp(),
           window.ccr.listMcpInstalls(),
           window.ccr.searchMcpInstalls({ query }),
+          window.ccr.listCapabilityManagement(),
         ])
         setMcpInstalls(installs as McpInstallListState)
         setMcpInstallSearch(search as McpInstallSearchState)
+        setCapabilityManagement(management as CapabilityManagementState)
       })
     } catch (error) {
       setMcpPageError(error instanceof Error ? error.message : String(error))
@@ -1045,7 +1119,12 @@ function App({ initialStatus = null }: AppProps) {
     try {
       setMcpPageError(null)
       await runAction(async () => {
-        await window.ccr.enableMcp({ name })
+        const target = getMcpCapabilityActionTarget(name, 'enable')
+        await applyCapabilityManagementAction({
+          capabilityId: target.capabilityId,
+          action: 'enable',
+          actionRef: target.actionRef,
+        })
         setMcpPageMessage(`已启用 MCP：${name}`)
       })
     } catch (error) {
@@ -1057,7 +1136,12 @@ function App({ initialStatus = null }: AppProps) {
     try {
       setMcpPageError(null)
       await runAction(async () => {
-        await window.ccr.disableMcp({ name })
+        const target = getMcpCapabilityActionTarget(name, 'disable')
+        await applyCapabilityManagementAction({
+          capabilityId: target.capabilityId,
+          action: 'disable',
+          actionRef: target.actionRef,
+        })
         setMcpPageMessage(`已禁用 MCP：${name}`)
       })
     } catch (error) {
@@ -1069,7 +1153,12 @@ function App({ initialStatus = null }: AppProps) {
     try {
       setMcpPageError(null)
       await runAction(async () => {
-        await window.ccr.restartMcp({ name })
+        const target = getMcpCapabilityActionTarget(name, 'restart')
+        await applyCapabilityManagementAction({
+          capabilityId: target.capabilityId,
+          action: 'restart',
+          actionRef: target.actionRef,
+        })
         setMcpPageMessage(`已提交 MCP 重启请求：${name}`)
       })
     } catch (error) {
@@ -1080,7 +1169,13 @@ function App({ initialStatus = null }: AppProps) {
   async function testMcpServer(name: string): Promise<void> {
     try {
       setMcpPageError(null)
-      const result = (await window.ccr.testMcp({ name })) as McpTestState
+      const target = getMcpCapabilityActionTarget(name, 'test')
+      const actionResult = await applyCapabilityManagementAction({
+        capabilityId: target.capabilityId,
+        action: 'test',
+        actionRef: target.actionRef,
+      })
+      const result = actionResult.result as McpTestState
       setMcpTestByName(current => ({ ...current, [name]: result }))
       setMcpPageMessage(`已检测 MCP：${name}`)
     } catch (error) {
@@ -1155,28 +1250,32 @@ function App({ initialStatus = null }: AppProps) {
   }
 
   function uninstallMcpServer(name: string): void {
-    showConfirmDialog({
-      title: '卸载 MCP',
-      message: `卸载 CCR 安装的 MCP：${name}？`,
-      detail:
-        '会移除 CCR 管理的安装记录和配置；手动配置或非 CCR 归属目录不会被这里删除。',
-      confirmLabel: '卸载',
-      tone: 'danger',
-      onConfirm: () => {
-        void performMcpUninstall(name)
-      },
+    void prepareMcpConfirmedAction({
+      name,
+      action: 'uninstall',
+      title: name,
     })
   }
 
-  async function performMcpUninstall(name: string): Promise<void> {
+  async function performMcpUninstall(
+    input: McpManagementConfirmedActionInput,
+    confirmationToken: string,
+  ): Promise<void> {
     try {
       setMcpPageError(null)
       await runAction(async () => {
-        await window.ccr.uninstallMcp({ name, confirmed: true })
+        const target = getMcpCapabilityActionTarget(input.name, 'uninstall')
+        await applyCapabilityManagementAction({
+          capabilityId: target.capabilityId,
+          action: 'uninstall',
+          actionRef: target.actionRef,
+          confirmed: true,
+          confirmationToken,
+        })
         const installs =
           (await window.ccr.listMcpInstalls()) as McpInstallListState
         setMcpInstalls(installs)
-        setMcpPageMessage(`已卸载 MCP：${name}`)
+        setMcpPageMessage(`已卸载 MCP：${input.name}`)
       })
     } catch (error) {
       setMcpPageError(error instanceof Error ? error.message : String(error))
@@ -1189,35 +1288,87 @@ function App({ initialStatus = null }: AppProps) {
       setMcpPageError('安装记录缺少名称，无法修复。')
       return
     }
-    showConfirmDialog({
-      title: '修复 MCP',
-      message: `修复 CCR 安装的 MCP：${name}？`,
-      detail:
-        '确认后会按内置 preset 重新写入 MCP 配置。不会修改其他未关联的 MCP 配置。',
-      confirmLabel: '修复',
-      tone: 'warning',
-      onConfirm: () => {
-        void performMcpRepair(record)
-      },
+    void prepareMcpConfirmedAction({
+      name,
+      action: 'repair',
+      title: name,
+      params: { scope: normalizeMcpScope(record.scope) },
     })
   }
 
-  async function performMcpRepair(record: McpInstallRecord): Promise<void> {
-    if (!record.name) {
-      return
-    }
+  async function performMcpRepair(
+    input: McpManagementConfirmedActionInput,
+    confirmationToken: string,
+  ): Promise<void> {
     try {
       setMcpPageError(null)
       await runAction(async () => {
-        await window.ccr.repairMcp({
-          name: record.name!,
-          scope: normalizeMcpScope(record.scope),
+        const target = getMcpCapabilityActionTarget(input.name, 'repair')
+        await applyCapabilityManagementAction({
+          capabilityId: target.capabilityId,
+          action: 'repair',
+          actionRef: target.actionRef,
+          params: input.params,
           confirmed: true,
+          confirmationToken,
         })
         const installs =
           (await window.ccr.listMcpInstalls()) as McpInstallListState
         setMcpInstalls(installs)
-        setMcpPageMessage(`已修复 MCP：${record.name}`)
+        setMcpPageMessage(`已修复 MCP：${input.name}`)
+      })
+    } catch (error) {
+      setMcpPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function prepareMcpConfirmedAction(
+    input: McpManagementConfirmedActionInput,
+  ): Promise<void> {
+    try {
+      setMcpPageError(null)
+      await runAction(async () => {
+        const target = getMcpCapabilityActionTarget(input.name, input.action)
+        const plan = (await window.ccr.planCapabilityManagementAction({
+          capabilityId: target.capabilityId,
+          action: input.action,
+          actionRef: target.actionRef,
+          params: input.params,
+        })) as CapabilityManagementActionPlanResult
+        if (plan.allowed === false) {
+          setMcpPageError(plan.blockedReason ?? '该 MCP 动作当前不可执行。')
+          return
+        }
+        const token = plan.confirmation?.token
+        if (!token) {
+          setMcpPageError('该 MCP 动作缺少确认 token。')
+          return
+        }
+        if (input.action === 'uninstall') {
+          showConfirmDialog({
+            title: '卸载 MCP',
+            message: `卸载 CCR 安装的 MCP：${input.title}？`,
+            detail:
+              '会移除 CCR 管理的安装记录和配置；手动配置或非 CCR 归属目录不会被这里删除。',
+            confirmLabel: '卸载',
+            tone: 'danger',
+            onConfirm: () => {
+              void performMcpUninstall(input, token)
+            },
+          })
+        } else {
+          showConfirmDialog({
+            title: '修复 MCP',
+            message: `修复 CCR 安装的 MCP：${input.title}？`,
+            detail:
+              '确认后会按内置 preset 重新写入 MCP 配置。不会修改其他未关联的 MCP 配置。',
+            confirmLabel: '修复',
+            tone: 'warning',
+            onConfirm: () => {
+              void performMcpRepair(input, token)
+            },
+          })
+        }
       })
     } catch (error) {
       setMcpPageError(error instanceof Error ? error.message : String(error))
@@ -1228,15 +1379,82 @@ function App({ initialStatus = null }: AppProps) {
     try {
       setSkillPageError(null)
       await runAction(async () => {
-        const [installs, search] = await Promise.all([
+        const [installs, search, management] = await Promise.all([
           window.ccr.listSkillInstalls(),
           window.ccr.searchSkillInstalls({ query }),
+          window.ccr.listCapabilityManagement(),
         ])
         setSkillInstalls(installs as SkillInstallListState)
         setSkillInstallSearch(search as SkillInstallSearchState)
+        setCapabilityManagement(management as CapabilityManagementState)
       })
     } catch (error) {
       setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function refreshCapabilityManagement(): Promise<void> {
+    await runAction(async () => {
+      const management =
+        (await window.ccr.listCapabilityManagement()) as CapabilityManagementState
+      setCapabilityManagement(management)
+    })
+  }
+
+  async function refreshSkillManagementAfterMutation(input: {
+    refreshSearch?: boolean
+  } = {}): Promise<void> {
+    const requests: [
+      Promise<unknown>,
+      Promise<unknown>,
+      Promise<unknown | null>,
+    ] = [
+      window.ccr.listSkillInstalls(),
+      window.ccr.listCapabilityManagement(),
+      input.refreshSearch
+        ? window.ccr.searchSkillInstalls({})
+        : Promise.resolve(null),
+    ]
+    const [installs, management, search] = await Promise.all(requests)
+    setSkillInstalls(installs as SkillInstallListState)
+    setCapabilityManagement(management as CapabilityManagementState)
+    if (search) {
+      setSkillInstallSearch(search as SkillInstallSearchState)
+    }
+  }
+
+  async function applyCapabilityManagementAction(
+    input: CapabilityManagementActionApplyInput,
+  ): Promise<CapabilityManagementActionApplyResult> {
+    const result = (await window.ccr.applyCapabilityManagementAction(
+      input,
+    )) as CapabilityManagementActionApplyResult
+    if (result.management) {
+      setCapabilityManagement(result.management)
+    }
+    return result
+  }
+
+  function getMcpCapabilityActionTarget(
+    name: string,
+    action: CapabilityManagementActionName,
+  ): { capabilityId: string; actionRef: string } {
+    const capability = capabilityManagement?.capabilities.find(
+      item => item.kind === 'mcp-server' && item.name === name,
+    )
+    if (!capability) {
+      throw new Error(`MCP 管理投影中没有找到 server：${name}`)
+    }
+    if (!capability.allowedActions.includes(action)) {
+      throw new Error(`MCP server ${name} 当前不允许执行 ${action}`)
+    }
+    const actionRef = capability.actionRef ?? capability.name
+    if (!actionRef) {
+      throw new Error(`MCP server ${name} 缺少动作引用。`)
+    }
+    return {
+      capabilityId: capability.capabilityId,
+      actionRef,
     }
   }
 
@@ -1332,12 +1550,7 @@ function App({ initialStatus = null }: AppProps) {
             overwrite: true,
           })
         }
-        const [installs, search] = await Promise.all([
-          window.ccr.listSkillInstalls(),
-          window.ccr.searchSkillInstalls({}),
-        ])
-        setSkillInstalls(installs as SkillInstallListState)
-        setSkillInstallSearch(search as SkillInstallSearchState)
+        await refreshSkillManagementAfterMutation({ refreshSearch: true })
         setSkillInstallPlan(null)
         setSkillPageMessage(
           planView.saveToCandidates
@@ -1390,12 +1603,7 @@ function App({ initialStatus = null }: AppProps) {
           confirmed: true,
           confirmationToken: token,
         })
-        const [installs, search] = await Promise.all([
-          window.ccr.listSkillInstalls(),
-          window.ccr.searchSkillInstalls({}),
-        ])
-        setSkillInstalls(installs as SkillInstallListState)
-        setSkillInstallSearch(search as SkillInstallSearchState)
+        await refreshSkillManagementAfterMutation({ refreshSearch: true })
         setSkillImportPlan(null)
         setSkillPageMessage(`已导入 Skill：${planView.plan.name ?? '未命名'}`)
       })
@@ -1405,17 +1613,22 @@ function App({ initialStatus = null }: AppProps) {
   }
 
   async function setSkillEnabled(
-    skillRef: string,
-    enabled: boolean,
+    input: SkillManagementSetEnabledInput,
   ): Promise<void> {
     try {
       setSkillPageError(null)
       await runAction(async () => {
-        await window.ccr.setSkillEnabled({ skillRef, enabled })
-        const installs =
-          (await window.ccr.listSkillInstalls()) as SkillInstallListState
-        setSkillInstalls(installs)
-        setSkillPageMessage(`${enabled ? '已启用' : '已禁用'} Skill：${skillRef}`)
+        const result = await applyCapabilityManagementAction({
+          capabilityId: input.capabilityId,
+          action: input.enabled ? 'enable' : 'disable',
+          actionRef: input.actionRef,
+        })
+        if (!result.management) {
+          await refreshSkillManagementAfterMutation()
+        }
+        setSkillPageMessage(
+          `${input.enabled ? '已启用' : '已禁用'} Skill：${input.actionRef}`,
+        )
       })
     } catch (error) {
       setSkillPageError(error instanceof Error ? error.message : String(error))
@@ -1423,80 +1636,124 @@ function App({ initialStatus = null }: AppProps) {
   }
 
   async function setSkillInvocation(
-    skillRef: string,
-    patch: { modelInvocable?: boolean; userInvocable?: boolean },
+    input: SkillManagementSetInvocationInput,
   ): Promise<void> {
     try {
       setSkillPageError(null)
       await runAction(async () => {
-        await window.ccr.setSkillInvocation({ skillRef, ...patch })
-        const installs =
-          (await window.ccr.listSkillInstalls()) as SkillInstallListState
-        setSkillInstalls(installs)
-        setSkillPageMessage(`已更新 Skill 调用开关：${skillRef}`)
+        const result = await applyCapabilityManagementAction({
+          capabilityId: input.capabilityId,
+          action: input.action,
+          actionRef: input.actionRef,
+          params: input.patch,
+        })
+        if (!result.management) {
+          await refreshSkillManagementAfterMutation()
+        }
+        setSkillPageMessage(`已更新 Skill 调用开关：${input.actionRef}`)
       })
     } catch (error) {
       setSkillPageError(error instanceof Error ? error.message : String(error))
     }
   }
 
-  function uninstallSkill(skill: SkillInstalledInspection): void {
-    const skillRef = getInstalledSkillRef(skill)
-    showConfirmDialog({
-      title: '卸载 Skill',
-      message: `卸载应用管理的 Skill：${getInstalledSkillTitle(skill)}？`,
-      detail:
-        '会移除受管理 package、installed record 和 lock record；不会删除 imported 或 manifest 候选。',
-      confirmLabel: '卸载',
-      tone: 'danger',
-      onConfirm: () => {
-        void performSkillUninstall(skillRef)
-      },
-    })
+  function uninstallSkill(input: SkillManagementActionInput): void {
+    void prepareSkillConfirmedAction(input)
   }
 
-  async function performSkillUninstall(skillRef: string): Promise<void> {
+  async function performSkillUninstall(
+    input: SkillManagementActionInput,
+    confirmationToken: string,
+  ): Promise<void> {
     try {
       setSkillPageError(null)
       await runAction(async () => {
-        await window.ccr.uninstallSkill({ skillRef, confirmed: true })
-        const [installs, search] = await Promise.all([
-          window.ccr.listSkillInstalls(),
-          window.ccr.searchSkillInstalls({}),
-        ])
-        setSkillInstalls(installs as SkillInstallListState)
-        setSkillInstallSearch(search as SkillInstallSearchState)
-        setSkillPageMessage(`已卸载 Skill：${skillRef}`)
+        await applyCapabilityManagementAction({
+          capabilityId: input.capabilityId,
+          action: 'uninstall',
+          actionRef: input.actionRef,
+          confirmed: true,
+          confirmationToken,
+        })
+        await refreshSkillManagementAfterMutation({ refreshSearch: true })
+        setSkillPageMessage(`已卸载 Skill：${input.actionRef}`)
       })
     } catch (error) {
       setSkillPageError(error instanceof Error ? error.message : String(error))
     }
   }
 
-  function repairSkill(skill: SkillInstalledInspection): void {
-    const skillRef = getInstalledSkillRef(skill)
-    showConfirmDialog({
-      title: '修复 Skill',
-      message: `修复应用管理的 Skill：${getInstalledSkillTitle(skill)}？`,
-      detail:
-        '确认后会从安装记录的来源重新复制 package，并刷新 installed record 与 lock record。',
-      confirmLabel: '修复',
-      tone: 'warning',
-      onConfirm: () => {
-        void performSkillRepair(skillRef)
-      },
-    })
+  function repairSkill(input: SkillManagementActionInput): void {
+    void prepareSkillConfirmedAction(input)
   }
 
-  async function performSkillRepair(skillRef: string): Promise<void> {
+  async function performSkillRepair(
+    input: SkillManagementActionInput,
+    confirmationToken: string,
+  ): Promise<void> {
     try {
       setSkillPageError(null)
       await runAction(async () => {
-        await window.ccr.repairSkill({ skillRef, confirmed: true })
-        const installs =
-          (await window.ccr.listSkillInstalls()) as SkillInstallListState
-        setSkillInstalls(installs)
-        setSkillPageMessage(`已修复 Skill：${skillRef}`)
+        await applyCapabilityManagementAction({
+          capabilityId: input.capabilityId,
+          action: 'repair',
+          actionRef: input.actionRef,
+          confirmed: true,
+          confirmationToken,
+        })
+        await refreshSkillManagementAfterMutation()
+        setSkillPageMessage(`已修复 Skill：${input.actionRef}`)
+      })
+    } catch (error) {
+      setSkillPageError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function prepareSkillConfirmedAction(
+    input: SkillManagementActionInput,
+  ): Promise<void> {
+    try {
+      setSkillPageError(null)
+      await runAction(async () => {
+        const plan = (await window.ccr.planCapabilityManagementAction({
+          capabilityId: input.capabilityId,
+          action: input.action,
+          actionRef: input.actionRef,
+        })) as CapabilityManagementActionPlanResult
+        if (plan.allowed === false) {
+          setSkillPageError(plan.blockedReason ?? '该 Skill 动作当前不可执行。')
+          return
+        }
+        const token = plan.confirmation?.token
+        if (!token) {
+          setSkillPageError('该 Skill 动作缺少确认 token。')
+          return
+        }
+        if (input.action === 'uninstall') {
+          showConfirmDialog({
+            title: '卸载 Skill',
+            message: `卸载应用管理的 Skill：${input.title}？`,
+            detail:
+              '会移除受管理 package、installed record 和 lock record；不会删除 imported 或 manifest 候选。',
+            confirmLabel: '卸载',
+            tone: 'danger',
+            onConfirm: () => {
+              void performSkillUninstall(input, token)
+            },
+          })
+        } else {
+          showConfirmDialog({
+            title: '修复 Skill',
+            message: `修复应用管理的 Skill：${input.title}？`,
+            detail:
+              '确认后会从安装记录的来源重新复制 package，并刷新 installed record 与 lock record。',
+            confirmLabel: '修复',
+            tone: 'warning',
+            onConfirm: () => {
+              void performSkillRepair(input, token)
+            },
+          })
+        }
       })
     } catch (error) {
       setSkillPageError(error instanceof Error ? error.message : String(error))
@@ -1893,6 +2150,7 @@ function App({ initialStatus = null }: AppProps) {
                 installPlan={mcpInstallPlan}
                 installSearch={mcpInstallSearch}
                 installs={mcpInstalls}
+                management={capabilityManagement}
                 message={mcpPageMessage}
                 mcp={status?.mcp ?? { servers: [], errors: [] }}
                 testByName={mcpTestByName}
@@ -1985,6 +2243,7 @@ function App({ initialStatus = null }: AppProps) {
                 installPlan={skillInstallPlan}
                 installSearch={skillInstallSearch}
                 installs={skillInstalls}
+                management={capabilityManagement}
                 message={skillPageMessage}
                 onApplyImport={planView => void applySkillImportPlan(planView)}
                 onApplyInstall={planView => void applySkillInstallPlan(planView)}
@@ -2001,17 +2260,19 @@ function App({ initialStatus = null }: AppProps) {
                 onSearchInstalls={query =>
                   void searchSkillInstallCandidates(query)
                 }
-                onSetEnabled={(skillRef, enabled) =>
-                  void setSkillEnabled(skillRef, enabled)
-                }
-                onSetInvocation={(skillRef, patch) =>
-                  void setSkillInvocation(skillRef, patch)
-                }
+                onSetEnabled={input => void setSkillEnabled(input)}
+                onSetInvocation={input => void setSkillInvocation(input)}
                 onUninstall={skill => void uninstallSkill(skill)}
               />
             ) : null}
 
-            {page === 'plugins' ? <PluginsPage /> : null}
+            {page === 'plugins' ? (
+              <PluginsPage
+                busy={busy}
+                management={capabilityManagement}
+                onRefresh={() => void refreshCapabilityManagement()}
+              />
+            ) : null}
 
             {page === 'logs' ? (
               <LogsPage
@@ -2073,19 +2334,6 @@ function getSkillImportPlanBlockedMessage(plan: SkillImportPlanState): string {
   return (
     plan.conflicts?.map(conflict => conflict.message).filter(Boolean).join('；') ||
     '该 Skill 当前不可导入。'
-  )
-}
-
-function getInstalledSkillRef(skill: SkillInstalledInspection): string {
-  return skill.lockKey ?? skill.installedRecord?.lockKey ?? skill.name ?? ''
-}
-
-function getInstalledSkillTitle(skill: SkillInstalledInspection): string {
-  return (
-    skill.package?.displayName ??
-    skill.installedRecord?.manifest?.displayName ??
-    skill.name ??
-    '未命名 Skill'
   )
 }
 

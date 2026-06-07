@@ -111,9 +111,10 @@ export async function installSkillFromSource(input) {
 export function skillMarkdown(name, options = {}) {
   const userInvocable = options.userInvocable ?? true
   const disableModelInvocation = options.disableModelInvocation ?? false
+  const description = options.description ?? `${name} runtime smoke skill.`
   const body = options.body ?? `Runtime smoke body for ${name}.`
   const extraFrontmatter = options.frontmatter
     ? `${options.frontmatter.trim()}\n`
     : ''
-  return `---\nname: ${name}\ndescription: ${name} runtime smoke skill.\nuser-invocable: ${userInvocable}\ndisable-model-invocation: ${disableModelInvocation}\n${extraFrontmatter}---\n\n${body}\n`
+  return `---\nname: ${name}\ndescription: ${description}\nuser-invocable: ${userInvocable}\ndisable-model-invocation: ${disableModelInvocation}\n${extraFrontmatter}---\n\n${body}\n`
 }

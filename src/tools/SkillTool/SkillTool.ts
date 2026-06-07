@@ -6,11 +6,14 @@ import { getProjectRoot } from 'src/bootstrap/state.js'
 import {
   builtInCommandNames,
   findCommand,
-  getCommands,
-  getMcpSkillCommands,
   type PromptCommand,
 } from 'src/commands.js'
-import { createSkillRuntimeCatalog } from 'src/skills/skillRuntimeCatalog.js'
+import { getSkillCommandModelInvocationBlocker } from 'src/skills/skillCommandRuntimeVisibility.js'
+import { loadModelInvocableSkillRuntimeCatalog } from 'src/skills/skillRuntimeCatalogLoader.js'
+import {
+  recordLoadedSkill,
+  recordLoadedSkillCommand,
+} from 'src/skills/skillVisibilityLedger.js'
 import type {
   Tool,
   ToolCallProgress,
@@ -78,28 +81,15 @@ import {
   renderToolUseRejectedMessage,
 } from './UI.js'
 
-/**
- * Gets all commands including MCP skills/prompts from AppState.
- * SkillTool needs this because getCommands() only returns local/bundled skills.
- */
 async function getAllCommands(context: ToolUseContext): Promise<Command[]> {
-  // Only include MCP skills (loadedFrom === 'mcp'), not plain MCP prompts.
-  // Before this filter, the model could invoke MCP prompts via SkillTool
-  // if it guessed the mcp__server__prompt name — they weren't discoverable
-  // but were technically reachable.
-  const localCommands = await getCommands(getProjectRoot())
-  const mcpSkills = getMcpSkillCommands(context.getAppState().mcp.commands)
-  if (mcpSkills.length === 0) return localCommands
-  const runtimeSkillCatalog = createSkillRuntimeCatalog([
-    ...localCommands,
-    ...mcpSkills,
-  ])
-  if (runtimeSkillCatalog.diagnostics.length > 0) {
+  const runtimeSkillCatalog =
+    await loadModelInvocableSkillRuntimeCatalog(context)
+  if (runtimeSkillCatalog.catalog.diagnostics.length > 0) {
     logForDebugging(
-      `SkillTool runtime catalog diagnostics: ${runtimeSkillCatalog.diagnostics.length}`,
+      `SkillTool runtime catalog diagnostics: ${runtimeSkillCatalog.catalog.diagnostics.length}`,
     )
   }
-  return runtimeSkillCatalog.commands
+  return runtimeSkillCatalog.catalog.commands
 }
 
 // Re-export Progress from centralized types to break import cycles
@@ -284,6 +274,8 @@ async function executeForkedSkill(
       `SkillTool forked skill ${commandName} completed in ${durationMs}ms`,
     )
 
+    recordLoadedSkillCommand(context, command)
+
     return {
       data: {
         success: true,
@@ -419,21 +411,24 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
       }
     }
 
-    // Check if command has model invocation disabled
-    if (foundCommand.disableModelInvocation) {
-      return {
-        result: false,
-        message: `Skill ${normalizedCommandName} cannot be used with ${SKILL_TOOL_NAME} tool due to disable-model-invocation`,
-        errorCode: 4,
-      }
-    }
-
     // Check if command is a prompt-based command
     if (foundCommand.type !== 'prompt') {
       return {
         result: false,
         message: `Skill ${normalizedCommandName} is not a prompt-based skill`,
         errorCode: 5,
+      }
+    }
+
+    const invocationBlocker = getSkillCommandModelInvocationBlocker(
+      foundCommand,
+      SKILL_TOOL_NAME,
+    )
+    if (invocationBlocker) {
+      return {
+        result: false,
+        message: invocationBlocker.message,
+        errorCode: invocationBlocker.errorCode,
       }
     }
 
@@ -655,6 +650,9 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
 
     if (!processedCommand.shouldQuery) {
       throw new Error('Command processing failed')
+    }
+    if (command?.type === 'prompt') {
+      recordLoadedSkillCommand(context, command)
     }
 
     // Extract metadata from the command
@@ -914,6 +912,10 @@ const SAFE_SKILL_PROPERTIES = new Set([
   'disableModelInvocation',
   'userInvocable',
   'loadedFrom',
+  'mcpServerName',
+  'pluginId',
+  'mcpSkillUri',
+  'mcpSkillVersion',
   'immediate',
   'userFacingName',
 ])
@@ -1102,6 +1104,7 @@ async function executeRemoteSkill(
     finalContent,
     getAgentContext()?.agentId ?? null,
   )
+  recordLoadedSkill(context, { name: commandName })
 
   // Direct injection — wrap SKILL.md content in a meta user message. Matches
   // the shape of what processPromptSlashCommand produces for simple skills.

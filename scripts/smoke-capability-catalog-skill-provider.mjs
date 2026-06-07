@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 import {
   createRuntimeSmokeEnv,
   importDist,
@@ -19,6 +20,14 @@ try {
     configHome: env.configHome,
   })
 
+  const otherConfigHome = join(env.root, 'other-ccr-home')
+  const otherSourceDir = await writeSourceSkill(env.root, 'other-home-skill')
+  await installSkillFromSource({
+    name: 'other-home-skill',
+    sourceDir: otherSourceDir,
+    configHome: otherConfigHome,
+  })
+
   const capabilities = await listSkillCapabilities({
     configHomeDir: env.configHome,
     cwd: env.root,
@@ -30,6 +39,23 @@ try {
   assert.equal(skill.state.installed, true)
   assert.equal(skill.invocation.modelInvocable, true)
   assert.equal(skill.relations.installedRef, 'user:unified-skill-cap')
+  assert.equal(
+    capabilities.some(capability => capability.name === 'other-home-skill'),
+    false,
+  )
+
+  const otherCapabilities = await listSkillCapabilities({
+    configHomeDir: otherConfigHome,
+    cwd: env.root,
+  })
+  assert.equal(
+    otherCapabilities.some(capability => capability.name === 'other-home-skill'),
+    true,
+  )
+  assert.equal(
+    otherCapabilities.some(capability => capability.name === 'unified-skill-cap'),
+    false,
+  )
 } finally {
   await env.cleanup()
 }

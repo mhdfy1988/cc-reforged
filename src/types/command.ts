@@ -196,6 +196,16 @@ export type CommandBase = {
     | 'bundled'
     | 'dynamic'
     | 'mcp' // Where the command was loaded from
+  /** MCP server that contributed this command. Set only on MCP-backed commands. */
+  mcpServerName?: string
+  /** Stable parent Plugin identity for plugin-contributed commands. */
+  pluginId?: string
+  /** Stable installed package identity for managed Skill commands. */
+  installedSkillRef?: string
+  /** Canonical skill:// URI for an MCP Skill. */
+  mcpSkillUri?: string
+  /** Server-advertised MCP Skill version, when available. */
+  mcpSkillVersion?: string
   kind?: 'workflow' // Distinguishes workflow-backed commands (badged in autocomplete)
   immediate?: boolean // If true, command executes immediately without waiting for a stop point (bypasses queue)
   isSensitive?: boolean // If true, args are redacted from the conversation history

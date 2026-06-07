@@ -19,7 +19,7 @@ import { SYNTHETIC_OUTPUT_TOOL_NAME } from './tools/SyntheticOutputTool/Syntheti
 import { createAbortController } from './utils/abortController.js';
 import { getGlobalConfig } from './utils/config.js';
 import { getCwd } from './utils/cwd.js';
-import { isBareMode, isEnvTruthy } from './utils/envUtils.js';
+import { getClaudeConfigHomeDir, isBareMode, isEnvTruthy, } from './utils/envUtils.js';
 import { getFastModeState } from './utils/fastMode.js';
 import { fileHistoryEnabled, fileHistoryMakeSnapshot, } from './utils/fileHistory.js';
 import { cloneFileStateCache, } from './utils/fileStateCache.js';
@@ -277,6 +277,7 @@ export class QueryEngine {
     // at the start of each submitMessage to avoid unbounded growth across
     // many turns in SDK mode.
     discoveredSkillNames = new Set();
+    discoveredSkillCapabilityIds = new Set();
     loadedNestedMemoryPaths = new Set();
     constructor(config) {
         this.config = config;
@@ -289,7 +290,9 @@ export class QueryEngine {
     async *submitMessage(prompt, options) {
         const { cwd, commands, tools, mcpClients, verbose = false, thinkingConfig, maxTurns, maxBudgetUsd, taskBudget, canUseTool, customSystemPrompt, appendSystemPrompt, userSpecifiedModel, fallbackModel, jsonSchema, getAppState, setAppState, replayUserMessages = false, includePartialMessages = false, agents = [], setSDKStatus, orphanedPermission, } = this.config;
         this.discoveredSkillNames.clear();
+        this.discoveredSkillCapabilityIds.clear();
         setCwd(cwd);
+        const configHomeDir = getClaudeConfigHomeDir();
         const persistSession = !isSessionPersistenceDisabled();
         const startTime = Date.now();
         // Wrap canUseTool to track permission denials
@@ -364,7 +367,9 @@ export class QueryEngine {
             handleElicitation: this.config.handleElicitation,
             options: {
                 commands,
+                cwd,
                 debug: false, // we use stdout, so don't want to clobber it
+                configHomeDir,
                 tools,
                 verbose,
                 mainLoopModel: initialMainLoopModel,
@@ -387,6 +392,7 @@ export class QueryEngine {
             loadedNestedMemoryPaths: this.loadedNestedMemoryPaths,
             dynamicSkillDirTriggers: new Set(),
             discoveredSkillNames: this.discoveredSkillNames,
+            discoveredSkillCapabilityIds: this.discoveredSkillCapabilityIds,
             setInProgressToolUseIDs: () => { },
             setResponseLength: () => { },
             updateFileHistoryState: (updater) => {
@@ -486,7 +492,9 @@ export class QueryEngine {
             handleElicitation: this.config.handleElicitation,
             options: {
                 commands,
+                cwd,
                 debug: false,
+                configHomeDir,
                 tools,
                 verbose,
                 mainLoopModel,
@@ -509,6 +517,7 @@ export class QueryEngine {
             loadedNestedMemoryPaths: this.loadedNestedMemoryPaths,
             dynamicSkillDirTriggers: new Set(),
             discoveredSkillNames: this.discoveredSkillNames,
+            discoveredSkillCapabilityIds: this.discoveredSkillCapabilityIds,
             setInProgressToolUseIDs: () => { },
             setResponseLength: () => { },
             updateFileHistoryState: processUserInputContext.updateFileHistoryState,

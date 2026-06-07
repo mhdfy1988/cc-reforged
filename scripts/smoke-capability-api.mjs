@@ -30,11 +30,46 @@ try {
     params: {
       cwd: root,
       configHomeDir: configHome,
+      apps: [
+        {
+          id: 'github',
+          name: 'GitHub',
+          description: 'Repository connector.',
+          connected: true,
+          enabled: true,
+          pluginId: 'github@openai',
+        },
+      ],
     },
   })
   assert.equal(response.error, undefined)
   assert.equal(response.result.schemaVersion, 1)
   assert.equal(response.result.summary.byKind.tool > 0, true)
+  assert.equal(response.result.summary.byKind.app, 1)
+  assert.equal(
+    response.result.capabilities.some(
+      capability =>
+        capability.kind === 'app' &&
+        capability.source.appId === 'github' &&
+        capability.relations.parentAppId === undefined &&
+        capability.relations.parentPluginId === 'github@openai',
+    ),
+    true,
+  )
+
+  const managementResponse = await handleJsonRpcMessage(context, {
+    jsonrpc: '2.0',
+    id: 3,
+    method: 'capabilities/management/list',
+    params: {
+      cwd: root,
+      configHomeDir: configHome,
+    },
+  })
+  assert.equal(managementResponse.error, undefined)
+  assert.equal(managementResponse.result.schemaVersion, 1)
+  assert.equal(Array.isArray(managementResponse.result.capabilities), true)
+  assert.equal(managementResponse.result.summary.total > 0, true)
 } finally {
   await rm(root, { recursive: true, force: true })
 }

@@ -140,13 +140,21 @@ export function parseCcrSkillInstalledRecord(input) {
     return CcrSkillInstalledRecordSchema().parse(input);
 }
 export function parseCcrSkillInstalledIndex(input) {
-    return CcrSkillInstalledIndexSchema().parse(input);
+    const parsed = CcrSkillInstalledIndexSchema().parse(input);
+    return {
+        ...parsed,
+        installed: { ...parsed.installed },
+    };
 }
 export function parseCcrSkillLockRecord(input) {
     return CcrSkillLockRecordSchema().parse(input);
 }
 export function parseCcrSkillLockIndex(input) {
-    return CcrSkillLockIndexSchema().parse(input);
+    const parsed = CcrSkillLockIndexSchema().parse(input);
+    return {
+        ...parsed,
+        locks: { ...parsed.locks },
+    };
 }
 export function parseSkillInstallResult(input) {
     return SkillInstallResultSchema().parse(input);

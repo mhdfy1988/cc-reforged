@@ -440,16 +440,15 @@ async function* queryLoop(
       turnCount,
     } = state
 
-    // Skill discovery prefetch — per-iteration (uses findWritePivot guard
-    // that returns early on non-write iterations). Discovery runs while the
-    // model streams and tools execute; awaited post-tools alongside the
-    // memory prefetch consume. Replaces the blocking assistant_turn path
-    // that ran inside getAttachmentMessages (97% of those calls found
-    // nothing in prod). Turn-0 user-input discovery still blocks in
-    // userInputAttachments — that's the one signal where there's no prior
-    // work to hide under.
+    // Turn-zero discovery is injected from the original user input. Follow-up
+    // iterations only search when the previous tool batch produced a real text
+    // result; retries and empty iterations do not perform discovery.
+    const skillDiscoverySignal =
+      turnCount > 1
+        ? skillPrefetch?.getInterTurnSkillDiscoverySignal(messages) ?? null
+        : null
     const pendingSkillPrefetch = skillPrefetch?.startSkillDiscoveryPrefetch(
-      null,
+      skillDiscoverySignal,
       messages,
       toolUseContext,
     )
@@ -1730,9 +1729,7 @@ async function* queryLoop(
     }
 
 
-    // Inject prefetched skill discovery. collectSkillDiscoveryPrefetch emits
-    // hidden_by_main_turn — true when the prefetch resolved before this point
-    // (should be >98% at AKI@250ms / Haiku@573ms vs turn durations of 2-30s).
+    // Inject discovery results produced from the explicit inter-turn signal.
     if (skillPrefetch && pendingSkillPrefetch) {
       try {
         const skillAttachments =

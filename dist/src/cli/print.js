@@ -2997,6 +2997,7 @@ function runHeadlessStreaming(structuredIO, mcpClients, commands, tools, initial
                                     },
                                 }
                                 : await buildSideQuestionFallbackParams({
+                                    cwd: getCwd(),
                                     tools: buildAllTools(getAppState()),
                                     commands: currentCommands,
                                     mcpClients: [

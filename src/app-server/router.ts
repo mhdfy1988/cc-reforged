@@ -12,7 +12,13 @@ import {
   handleContextStatus,
   handleMemorySessionStatus,
 } from './handlers/contextHandlers.js'
-import { handleCapabilitiesList } from './handlers/capabilityHandlers.js'
+import {
+  handleCapabilitiesAppsRegister,
+  handleCapabilitiesList,
+  handleCapabilityManagementActionApply,
+  handleCapabilityManagementActionPlan,
+  handleCapabilitiesManagementList,
+} from './handlers/capabilityHandlers.js'
 import {
   handleAuthLogin,
   handleAuthStatus,
@@ -164,10 +170,30 @@ export async function handleJsonRpcMessage(
         return successResponse(request.id, shutdown(context, request.params))
       case 'config/get':
         return successResponse(request.id, handleConfigGet(context, request.params))
+      case 'capabilities/apps/register':
+        return successResponse(
+          request.id,
+          handleCapabilitiesAppsRegister(context, request.params),
+        )
       case 'capabilities/list':
         return successResponse(
           request.id,
           await handleCapabilitiesList(context, request.params),
+        )
+      case 'capabilities/management/list':
+        return successResponse(
+          request.id,
+          await handleCapabilitiesManagementList(context, request.params),
+        )
+      case 'capabilities/management/action/plan':
+        return successResponse(
+          request.id,
+          await handleCapabilityManagementActionPlan(context, request.params),
+        )
+      case 'capabilities/management/action/apply':
+        return successResponse(
+          request.id,
+          await handleCapabilityManagementActionApply(context, request.params),
         )
       case 'auth/status':
         return successResponse(
@@ -520,6 +546,7 @@ function shutdown(
 ): Record<string, unknown> {
   ShutdownParamsSchema.parse(params ?? {})
   context.shutdownRequested = true
+  context.core.capabilities.apps.clear()
   process.exitCode = 0
 
   return {

@@ -3,15 +3,21 @@ import { DetailTabs, type DetailTabOption } from '../common/DetailTabs.js'
 import { IconActionButton } from '../common/IconActionButton.js'
 import { PageStatusNotice } from '../common/PageStatusNotice.js'
 import { RawDataBlock } from '../common/RawDataBlock.js'
+import {
+  createSkillManagementViewItems,
+  getSkillManagementActionRef,
+  getSkillManagementToggleEnabledTarget,
+  hasSkillManagementAction,
+  type SkillManagementViewItem,
+} from '../../../../../../../src/services/capabilities/skillManagementViewProjection.js'
 import type {
+  CapabilityManagementState,
   SkillImportPlanViewState,
   SkillInstallCandidate,
   SkillInstalledInspection,
-  SkillInstallRecord,
   SkillInstallListState,
   SkillInstallPlanViewState,
   SkillInstallSearchState,
-  SkillPackageSummary,
   SkillSecurityDigest,
 } from '../../domain/displayTypes.js'
 
@@ -45,6 +51,26 @@ type SkillImportPathField = 'path' | 'openaiYamlPath'
 
 type SkillDetailTab = 'overview' | 'security' | 'resources' | 'body'
 
+type SkillManagementActionInput = {
+  capabilityId: string
+  action: 'repair' | 'uninstall'
+  actionRef: string
+  title: string
+}
+
+type SkillManagementSetEnabledInput = {
+  capabilityId: string
+  actionRef: string
+  enabled: boolean
+}
+
+type SkillManagementSetInvocationInput = {
+  capabilityId: string
+  action: 'set-model-invocation' | 'set-user-invocation'
+  actionRef: string
+  patch: { modelInvocable?: boolean; userInvocable?: boolean }
+}
+
 const SKILL_DETAIL_TABS: Array<DetailTabOption<SkillDetailTab>> = [
   { id: 'overview', label: '概览' },
   { id: 'security', label: '安全' },
@@ -58,6 +84,8 @@ const DEFAULT_IMPORT_DRAFT: SkillImportDraft = {
   openaiYamlPath: '',
 }
 
+const EMPTY_SKILL_INSPECTIONS: SkillInstalledInspection[] = []
+
 export function SkillsPage(props: {
   busy: boolean
   error: string | null
@@ -65,6 +93,7 @@ export function SkillsPage(props: {
   installPlan: SkillInstallPlanViewState | null
   installSearch: SkillInstallSearchState | null
   installs: SkillInstallListState | null
+  management: CapabilityManagementState | null
   message: string | null
   onApplyImport: (planView: SkillImportPlanViewState) => void
   onApplyInstall: (planView: SkillInstallPlanViewState) => void
@@ -75,46 +104,50 @@ export function SkillsPage(props: {
   onPlanImport: (source: Record<string, unknown>) => void
   onPlanInstall: (candidate: SkillInstallCandidate) => void
   onRefresh: () => void
-  onRepair: (skill: SkillInstalledInspection) => void
+  onRepair: (input: SkillManagementActionInput) => void
   onSearchInstalls: (query: string) => void
-  onSetEnabled: (skillRef: string, enabled: boolean) => void
-  onSetInvocation: (
-    skillRef: string,
-    patch: { modelInvocable?: boolean; userInvocable?: boolean },
-  ) => void
-  onUninstall: (skill: SkillInstalledInspection) => void
+  onSetEnabled: (input: SkillManagementSetEnabledInput) => void
+  onSetInvocation: (input: SkillManagementSetInvocationInput) => void
+  onUninstall: (input: SkillManagementActionInput) => void
 }) {
   const [selectedRef, setSelectedRef] = useState('')
   const [installQuery, setInstallQuery] = useState('')
   const [importOpen, setImportOpen] = useState(false)
   const [importDraft, setImportDraft] = useState(DEFAULT_IMPORT_DRAFT)
   const [formError, setFormError] = useState<string | null>(null)
-  const installed = useMemo(
-    () => sortInstalledSkills(props.installs?.installed ?? []),
-    [props.installs?.installed],
+  const installed = props.installs?.installed ?? EMPTY_SKILL_INSPECTIONS
+  const skills = useMemo(
+    () =>
+      createSkillManagementViewItems<SkillInstalledInspection>({
+        management: props.management,
+        installed,
+      }),
+    [installed, props.management],
   )
   const candidates = useMemo(
     () => sortSkillInstallCandidates(props.installSearch?.candidates ?? []),
     [props.installSearch?.candidates],
   )
+  const skillCapabilityCount = skills.length
   const selectedSkill =
-    installed.find(skill => getSkillRef(skill) === selectedRef) ?? installed[0]
-  const enabledCount = installed.filter(
-    skill => skill.installedRecord?.enabled !== false,
-  ).length
-  const needsAttentionCount = installed.filter(skill =>
-    isProblemStatus(skill.status),
+    skills.find(skill => skill.capability.capabilityId === selectedRef) ??
+    skills[0]
+  const installedCount = skills.filter(skill => skill.capability.state.installed)
+    .length
+  const enabledCount = skills.filter(skill => skill.capability.state.enabled).length
+  const needsAttentionCount = skills.filter(skill =>
+    isSkillManagementViewItemProblem(skill),
   ).length
 
   useEffect(() => {
-    if (installed.length === 0) {
+    if (skills.length === 0) {
       setSelectedRef('')
       return
     }
-    if (!installed.some(skill => getSkillRef(skill) === selectedRef)) {
-      setSelectedRef(getSkillRef(installed[0]!))
+    if (!skills.some(skill => skill.capability.capabilityId === selectedRef)) {
+      setSelectedRef(skills[0]!.capability.capabilityId)
     }
-  }, [installed, selectedRef])
+  }, [selectedRef, skills])
 
   async function chooseImportPath(field: SkillImportPathField): Promise<void> {
     try {
@@ -136,7 +169,7 @@ export function SkillsPage(props: {
         <div>
           <h2>Skill 管理</h2>
           <span>
-            {installed.length} 个已安装 · {enabledCount} 个启用 · {candidates.length} 个候选
+            {skillCapabilityCount} 个能力 · {installedCount} 个已安装 · {enabledCount} 个启用 · {candidates.length} 个候选
             {needsAttentionCount > 0 ? ` · ${needsAttentionCount} 个需处理` : ''}
           </span>
         </div>
@@ -172,57 +205,26 @@ export function SkillsPage(props: {
       <div className="mcp-workspace">
         <aside className="mcp-server-column" aria-label="已安装 Skill">
           <div className="models-column-head">
-            <strong>已安装</strong>
-            <span>{installed.length}</span>
+            <strong>Skill</strong>
+            <span>{skillCapabilityCount}</span>
           </div>
           <div className="mcp-server-list">
-            {installed.length > 0 ? (
-              installed.map(skill => {
-                const ref = getSkillRef(skill)
-                const skillEnabled = skill.installedRecord?.enabled !== false
-                return (
-                  <div
-                    className={
-                      ref === getSkillRef(selectedSkill)
-                        ? 'mcp-server-item active'
-                        : 'mcp-server-item'
-                    }
-                    key={ref}
-                  >
-                    <button
-                      className="mcp-server-main"
-                      type="button"
-                      onClick={() => setSelectedRef(ref)}
-                    >
-                      <span>
-                        <strong>{getSkillTitle(skill)}</strong>
-                        <em>{formatInstalledSkillSubtitle(skill)}</em>
-                      </span>
-                    </button>
-                    <div className="mcp-server-item-foot">
-                      <div className="mcp-tags">
-                        <small className={getSeverityTone(skill.securityDigest)}>
-                          {formatSeverity(skill.securityDigest)}
-                        </small>
-                      </div>
-                      <label className="skill-list-toggle">
-                        <input
-                          checked={skillEnabled}
-                          disabled={props.busy}
-                          type="checkbox"
-                          onChange={event =>
-                            props.onSetEnabled(ref, event.target.checked)
-                          }
-                        />
-                        <i aria-hidden="true" />
-                      </label>
-                    </div>
-                  </div>
-                )
-              })
-            ) : (
-              <div className="models-empty">暂无已安装 Skill。</div>
-            )}
+            {skills.map(skill => (
+              <SkillManagementListItem
+                active={
+                  skill.capability.capabilityId ===
+                  selectedSkill?.capability.capabilityId
+                }
+                busy={props.busy}
+                key={skill.capability.capabilityId}
+                skill={skill}
+                onSelect={() => setSelectedRef(skill.capability.capabilityId)}
+                onSetEnabled={props.onSetEnabled}
+              />
+            ))}
+            {skills.length === 0 ? (
+              <div className="models-empty">暂无 Skill。</div>
+            ) : null}
           </div>
         </aside>
 
@@ -232,7 +234,6 @@ export function SkillsPage(props: {
               busy={props.busy}
               skill={selectedSkill}
               onRepair={props.onRepair}
-              onSetEnabled={props.onSetEnabled}
               onSetInvocation={props.onSetInvocation}
               onUninstall={props.onUninstall}
             />
@@ -366,53 +367,154 @@ export function SkillsPage(props: {
   )
 }
 
+function SkillManagementListItem(props: {
+  active: boolean
+  busy: boolean
+  skill: SkillManagementViewItem<SkillInstalledInspection>
+  onSelect: () => void
+  onSetEnabled: (input: SkillManagementSetEnabledInput) => void
+}) {
+  const skill = props.skill
+  const capability = skill.capability
+  const toggle = getSkillManagementToggleEnabledTarget(skill)
+  return (
+    <div className={props.active ? 'mcp-server-item active' : 'mcp-server-item'}>
+      <button
+        className="mcp-server-main"
+        type="button"
+        onClick={props.onSelect}
+      >
+        <span>
+          <strong>{capability.displayName}</strong>
+          <em>{formatSkillManagementSubtitle(skill)}</em>
+        </span>
+      </button>
+      <div className="mcp-server-item-foot">
+        <div className="mcp-tags">
+          {skill.inspection?.securityDigest ? (
+            <small className={getSeverityTone(skill.inspection.securityDigest)}>
+              {formatSeverity(skill.inspection.securityDigest)}
+            </small>
+          ) : null}
+          <small className={getSkillRuntimeVisibilityTone(capability)}>
+            {formatSkillRuntimeVisibility(capability)}
+          </small>
+        </div>
+        {toggle ? (
+          <label className="skill-list-toggle">
+            <input
+              checked={capability.state.enabled}
+              disabled={props.busy}
+              type="checkbox"
+              onChange={event =>
+                props.onSetEnabled({
+                  capabilityId: capability.capabilityId,
+                  actionRef: toggle.skillRef,
+                  enabled: event.target.checked,
+                })
+              }
+            />
+            <i aria-hidden="true" />
+          </label>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function formatSkillManagementSubtitle(
+  skill: SkillManagementViewItem<SkillInstalledInspection>,
+): string {
+  const capability = skill.capability
+  const parent =
+    capability.relations.parentMcpServerName ??
+    capability.relations.parentPluginId
+  return [
+    formatSkillManagementOwnership(capability.managementOwnership),
+    formatCapabilitySource(capability),
+    parent ? `来自 ${parent}` : null,
+    formatSkillInvocation(
+      capability.invocation.modelInvocable,
+      capability.invocation.userInvocable,
+    ),
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
 function SkillDetail(props: {
   busy: boolean
-  skill: SkillInstalledInspection
-  onRepair: (skill: SkillInstalledInspection) => void
-  onSetEnabled: (skillRef: string, enabled: boolean) => void
-  onSetInvocation: (
-    skillRef: string,
-    patch: { modelInvocable?: boolean; userInvocable?: boolean },
-  ) => void
-  onUninstall: (skill: SkillInstalledInspection) => void
+  skill: SkillManagementViewItem<SkillInstalledInspection>
+  onRepair: (input: SkillManagementActionInput) => void
+  onSetInvocation: (input: SkillManagementSetInvocationInput) => void
+  onUninstall: (input: SkillManagementActionInput) => void
 }) {
-  const record = props.skill.installedRecord
-  const skillRef = getSkillRef(props.skill)
-  const enabled = record?.enabled !== false
-  const modelInvocable = record?.modelInvocable !== false
-  const userInvocable = record?.userInvocable !== false
-  const skillPackage = props.skill.package
+  const capability = props.skill.capability
+  const inspection = props.skill.inspection
+  const record = inspection?.installedRecord
+  const skillRef = props.skill.actionRef
+  const enabled = capability.state.enabled
+  const modelInvocable = capability.invocation.modelInvocable
+  const userInvocable = capability.invocation.userInvocable
+  const skillPackage = inspection?.package
   const resources = skillPackage?.resources ?? {}
+  const repairRef = getSkillManagementActionRef(props.skill, 'repair')
+  const uninstallRef = getSkillManagementActionRef(props.skill, 'uninstall')
+  const canSetModelInvocation =
+    Boolean(skillRef) &&
+    hasSkillManagementAction(props.skill, 'set-model-invocation')
+  const canSetUserInvocation =
+    Boolean(skillRef) &&
+    hasSkillManagementAction(props.skill, 'set-user-invocation')
   const [activeTab, setActiveTab] = useState<SkillDetailTab>('overview')
 
   useEffect(() => {
     setActiveTab('overview')
-  }, [skillRef])
+  }, [capability.capabilityId])
 
   return (
     <>
       <div className="detail-fixed">
         <div className="models-detail-head">
           <div>
-            <h3>{getSkillTitle(props.skill)}</h3>
-            <span>{skillPackage?.description ?? record?.manifest?.description ?? props.skill.statusMessage ?? '无说明'}</span>
+            <h3>{capability.displayName}</h3>
+            <span>{capability.description || skillPackage?.description || inspection?.statusMessage || '无说明'}</span>
           </div>
-          <div className="models-actions">
-            <IconActionButton
-              disabled={props.busy}
-              icon="wrench"
-              label="修复"
-              onClick={() => props.onRepair(props.skill)}
-            />
-            <IconActionButton
-              danger
-              disabled={props.busy}
-              icon="trash"
-              label="卸载"
-              onClick={() => props.onUninstall(props.skill)}
-            />
-          </div>
+          {repairRef || uninstallRef ? (
+            <div className="models-actions">
+              {repairRef ? (
+                <IconActionButton
+                  disabled={props.busy}
+                  icon="wrench"
+                  label="修复"
+                  onClick={() =>
+                    props.onRepair({
+                      capabilityId: capability.capabilityId,
+                      action: 'repair',
+                      actionRef: repairRef,
+                      title: capability.displayName,
+                    })
+                  }
+                />
+              ) : null}
+              {uninstallRef ? (
+                <IconActionButton
+                  danger
+                  disabled={props.busy}
+                  icon="trash"
+                  label="卸载"
+                  onClick={() =>
+                    props.onUninstall({
+                      capabilityId: capability.capabilityId,
+                      action: 'uninstall',
+                      actionRef: uninstallRef,
+                      title: capability.displayName,
+                    })
+                  }
+                />
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <DetailTabs<SkillDetailTab>
@@ -433,59 +535,81 @@ function SkillDetail(props: {
             </div>
             <dl className="models-facts compact">
               <SkillFact label="范围" value={formatSkillScope(record?.scope)} />
-              <SkillFact label="安装状态" value={props.skill.statusMessage ?? formatSkillStatus(props.skill.status)} />
-              <SkillFact label="来源" value={formatSkillOrigin(record, skillPackage)} />
+              <SkillFact label="状态" value={inspection?.statusMessage ?? formatCapabilityStatus(capability)} />
+              <SkillFact label="来源" value={formatCapabilitySource(capability)} />
+              <SkillFact label="归属" value={formatSkillManagementOwnership(capability.managementOwnership)} />
+              <SkillFact label="可见性" value={formatSkillRuntimeVisibility(capability)} />
               <SkillFact label="调用" value={formatSkillInvocation(modelInvocable, userInvocable)} />
-              <SkillFact label="风险" value={formatSeverity(props.skill.securityDigest)} />
-              <SkillFact label="校验" value={props.skill.checksum?.drifted ? '已漂移' : '一致'} />
+              <SkillFact label="风险" value={formatSeverity(inspection?.securityDigest)} />
+              <SkillFact label="校验" value={inspection?.checksum?.drifted ? '已漂移' : '一致'} />
             </dl>
-            <div className="skill-toggle-panel">
-              <div className="skill-toggle-panel-head">
-                <strong>调用设置</strong>
-                <span>{enabled ? formatSkillInvocation(modelInvocable, userInvocable) : '已禁用'}</span>
+            {canSetModelInvocation || canSetUserInvocation ? (
+              <div className="skill-toggle-panel">
+                <div className="skill-toggle-panel-head">
+                  <strong>调用设置</strong>
+                  <span>{enabled ? formatSkillInvocation(modelInvocable, userInvocable) : '已禁用'}</span>
+                </div>
+                <div className="skill-toggle-row">
+                  {canSetModelInvocation ? (
+                    <label>
+                      <input
+                        checked={modelInvocable}
+                        disabled={props.busy || !skillRef}
+                        type="checkbox"
+                        onChange={event =>
+                          skillRef
+                            ? props.onSetInvocation({
+                                capabilityId: capability.capabilityId,
+                                action: 'set-model-invocation',
+                                actionRef: skillRef,
+                                patch: {
+                                  modelInvocable: event.target.checked,
+                                },
+                              })
+                            : undefined
+                        }
+                      />
+                      <span>
+                        <strong>模型调用</strong>
+                        <em>{modelInvocable ? '已允许' : '已关闭'}</em>
+                      </span>
+                      <i aria-hidden="true" />
+                    </label>
+                  ) : null}
+                  {canSetUserInvocation ? (
+                    <label>
+                      <input
+                        checked={userInvocable}
+                        disabled={props.busy || !skillRef}
+                        type="checkbox"
+                        onChange={event =>
+                          skillRef
+                            ? props.onSetInvocation({
+                                capabilityId: capability.capabilityId,
+                                action: 'set-user-invocation',
+                                actionRef: skillRef,
+                                patch: {
+                                  userInvocable: event.target.checked,
+                                },
+                              })
+                            : undefined
+                        }
+                      />
+                      <span>
+                        <strong>用户调用</strong>
+                        <em>{userInvocable ? '已允许' : '已关闭'}</em>
+                      </span>
+                      <i aria-hidden="true" />
+                    </label>
+                  ) : null}
+                </div>
               </div>
-              <div className="skill-toggle-row">
-                <label>
-                  <input
-                    checked={modelInvocable}
-                    disabled={props.busy}
-                    type="checkbox"
-                    onChange={event =>
-                      props.onSetInvocation(skillRef, {
-                        modelInvocable: event.target.checked,
-                      })
-                    }
-                  />
-                  <span>
-                    <strong>模型调用</strong>
-                    <em>{modelInvocable ? '已允许' : '已关闭'}</em>
-                  </span>
-                  <i aria-hidden="true" />
-                </label>
-                <label>
-                  <input
-                    checked={userInvocable}
-                    disabled={props.busy}
-                    type="checkbox"
-                    onChange={event =>
-                      props.onSetInvocation(skillRef, {
-                        userInvocable: event.target.checked,
-                      })
-                    }
-                  />
-                  <span>
-                    <strong>用户调用</strong>
-                    <em>{userInvocable ? '已允许' : '已关闭'}</em>
-                  </span>
-                  <i aria-hidden="true" />
-                </label>
-              </div>
-            </div>
+            ) : null}
           </section>
         ) : null}
 
         {activeTab === 'security' ? (
-          <SkillSecuritySection digest={props.skill.securityDigest} />
+          <SkillSecuritySection digest={inspection?.securityDigest} />
         ) : null}
 
         {activeTab === 'resources' ? (
@@ -1004,16 +1128,6 @@ function getSkillImportPathPlaceholder(kind: SkillImportDraft['kind']): string {
   }
 }
 
-function sortInstalledSkills(
-  skills: SkillInstalledInspection[],
-): SkillInstalledInspection[] {
-  return skills.slice().sort((a, b) => {
-    const statusDiff = getStatusRank(a.status) - getStatusRank(b.status)
-    if (statusDiff !== 0) return statusDiff
-    return getSkillTitle(a).localeCompare(getSkillTitle(b))
-  })
-}
-
 function sortSkillInstallCandidates(
   candidates: SkillInstallCandidate[],
 ): SkillInstallCandidate[] {
@@ -1024,28 +1138,6 @@ function sortSkillInstallCandidates(
       b.displayName ?? b.manifest?.name ?? '',
     )
   })
-}
-
-function getSkillRef(skill?: SkillInstalledInspection): string {
-  return skill?.lockKey ?? skill?.installedRecord?.lockKey ?? skill?.name ?? ''
-}
-
-function getSkillTitle(skill?: SkillInstalledInspection): string {
-  return (
-    skill?.package?.displayName ??
-    skill?.installedRecord?.manifest?.displayName ??
-    skill?.name ??
-    '未命名 Skill'
-  )
-}
-
-function formatInstalledSkillSubtitle(skill: SkillInstalledInspection): string {
-  const record = skill.installedRecord
-  return [
-    formatSkillScope(record?.scope),
-    record?.modelInvocable === false ? '模型不可调用' : '模型可调用',
-    record?.userInvocable === false ? '用户不可调用' : '用户可调用',
-  ].join(' · ')
 }
 
 function formatCandidateSummary(candidate: SkillInstallCandidate): string {
@@ -1110,11 +1202,22 @@ function getCandidateKey(candidate: SkillInstallCandidate): string {
 
 function formatSkillStatus(status?: string): string {
   switch (status) {
+    case 'available':
+      return '可用'
+    case 'enabled':
+      return '已启用'
     case 'installed':
       return '已安装'
     case 'disabled':
       return '已禁用'
+    case 'unavailable':
+      return '不可用'
+    case 'needs-auth':
+      return '需要认证'
+    case 'failed':
+      return '失败'
     case 'missing-package':
+    case 'missing':
       return '缺少目录'
     case 'missing-skill-md':
       return '缺少 SKILL.md'
@@ -1126,9 +1229,17 @@ function formatSkillStatus(status?: string): string {
       return '已漂移'
     case 'invalid':
       return '无效'
+    case 'hidden-by-conflict':
+      return '被冲突隐藏'
     default:
       return status ?? '未知'
   }
+}
+
+function formatCapabilityStatus(
+  capability: SkillManagementViewItem['capability'],
+): string {
+  return formatSkillStatus(capability.state.status)
 }
 
 function formatSkillScope(scope?: string): string {
@@ -1137,50 +1248,119 @@ function formatSkillScope(scope?: string): string {
   return scope ?? '未知'
 }
 
-function formatSkillOrigin(
-  record?: SkillInstallRecord,
-  skillPackage?: SkillPackageSummary | null,
+function formatCapabilitySource(
+  capability: SkillManagementViewItem['capability'],
 ): string {
-  const compatibility = record?.manifest?.compatibility
-  const compatibilityVendor =
-    compatibility && typeof compatibility.vendor === 'string'
-      ? compatibility.vendor
-      : null
+  const source = formatCapabilitySourceKind(capability.source.kind)
+  if (!capability.source.label || capability.source.label === capability.source.kind) {
+    return source
+  }
+  return `${source} · ${capability.source.label}`
+}
+
+function formatCapabilitySourceKind(sourceKind?: string): string {
+  switch (sourceKind) {
+    case 'managed-skill':
+      return '受管理 Skill'
+    case 'user-skill':
+      return '用户 Skill'
+    case 'project-skill':
+      return '项目 Skill'
+    case 'plugin':
+      return '插件'
+    case 'mcp':
+      return 'MCP'
+    case 'dynamic':
+      return '动态发现'
+    case 'bundled':
+      return '内置'
+    case 'builtin':
+      return '系统内置'
+    case 'legacy':
+      return '旧命令'
+    default:
+      return sourceKind ?? '未知来源'
+  }
+}
+
+function formatSkillManagementOwnership(ownership?: string): string {
+  switch (ownership) {
+    case 'installer-owned':
+      return '安装器管理'
+    case 'manual-config':
+      return '手工配置'
+    case 'plugin-owned':
+      return '插件提供'
+    case 'runtime-only':
+      return '运行时提供'
+    default:
+      return ownership ?? '未知归属'
+  }
+}
+
+function formatSkillRuntimeVisibility(
+  capability: SkillManagementViewItem['capability'],
+): string {
+  if (capability.state.runtimeVisible) return '运行时可见'
+  const reasons = capability.hiddenReasons.map(formatSkillHiddenReason)
+  return reasons.length > 0 ? `隐藏：${reasons.join('、')}` : '运行时隐藏'
+}
+
+function getSkillRuntimeVisibilityTone(
+  capability: SkillManagementViewItem['capability'],
+): string {
+  if (capability.diagnostics.some(diagnostic => diagnostic.severity === 'error')) {
+    return 'danger'
+  }
+  if (capability.state.runtimeVisible) return 'success'
+  return 'warning'
+}
+
+function formatSkillHiddenReason(reason: string): string {
+  switch (reason) {
+    case 'disabled':
+      return '已禁用'
+    case 'model-invocation-disabled':
+      return '模型调用关闭'
+    case 'user-invocation-disabled':
+      return '用户调用关闭'
+    case 'no-invocation-surface':
+      return '无调用入口'
+    case 'missing-package':
+      return '缺少目录'
+    case 'missing-skill-md':
+      return '缺少 SKILL.md'
+    case 'missing-owner-marker':
+      return '缺少归属标记'
+    case 'missing-lock':
+      return '缺少锁定记录'
+    case 'drifted':
+      return '已漂移'
+    case 'invalid':
+      return '无效'
+    case 'conflict-loser':
+      return '被同名能力覆盖'
+    case 'plugin-disabled':
+      return '插件已禁用'
+    case 'mcp-server-unavailable':
+      return 'MCP 不可用'
+    default:
+      return reason
+  }
+}
+
+function isSkillManagementViewItemProblem(
+  skill: SkillManagementViewItem<SkillInstalledInspection>,
+): boolean {
   return (
-    compatibilityVendor ??
-    record?.manifest?.originVendor ??
-    skillPackage?.origin?.vendor ??
-    'unknown'
+    skill.capability.diagnostics.some(
+      diagnostic => diagnostic.severity !== 'info',
+    ) ||
+    Boolean(
+      skill.inspection?.status &&
+        !['installed', 'disabled'].includes(skill.inspection.status),
+    )
   )
-}
-
-function getSkillStatusTone(status?: string): string {
-  if (status === 'installed') return 'success'
-  if (status === 'disabled' || status === 'missing-lock' || status === 'drifted') return 'warning'
-  if (isProblemStatus(status)) return 'danger'
-  return ''
-}
-
-function isProblemStatus(status?: string): boolean {
-  return [
-    'missing-package',
-    'missing-skill-md',
-    'missing-owner-marker',
-    'missing-lock',
-    'drifted',
-    'invalid',
-  ].includes(status ?? '')
-}
-
-function getStatusRank(status?: string): number {
-  if (status === 'installed') return 0
-  if (status === 'disabled') return 1
-  if (status === 'drifted') return 2
-  if (status === 'missing-lock') return 3
-  if (status === 'missing-owner-marker') return 4
-  if (status === 'missing-skill-md') return 5
-  if (status === 'missing-package') return 6
-  return 7
 }
 
 function getCandidateStateRank(state?: string): number {

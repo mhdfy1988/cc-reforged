@@ -1,5 +1,9 @@
 import { getCoreAuthStatus, loginCoreAuth } from './authCore.js'
-import { listCoreCapabilities } from './capabilityCore.js'
+import {
+  listCoreCapabilities,
+  listCoreCapabilityManagement,
+  type CoreCapabilityListParams,
+} from './capabilityCore.js'
 import { getCoreConfigSnapshot } from './configCore.js'
 import {
   addCoreMcpServer,
@@ -50,6 +54,7 @@ import {
 } from './skillCore.js'
 import type { CoreEventEmitter } from './types.js'
 import { CoreWorkspaceService } from './workspaceCore.js'
+import { AppCapabilityRegistry } from '../services/capabilities/appCapabilityRegistry.js'
 
 export type CcrCore = ReturnType<typeof createCcrCore>
 
@@ -65,6 +70,18 @@ export function createCcrCore(options: {
     cancelPermissionsForTurn: input => permission.cancelForTurn(input),
     createCanUseTool: input => permission.createCanUseTool(input),
   })
+  const appCapabilityRegistry = new AppCapabilityRegistry()
+  const withRegisteredApps = (
+    params: CoreCapabilityListParams = {},
+  ): CoreCapabilityListParams => {
+    if (params.apps !== undefined) {
+      appCapabilityRegistry.replace(params.apps)
+    }
+    return {
+      ...params,
+      apps: appCapabilityRegistry.getSnapshot().apps,
+    }
+  }
 
   return {
     config: {
@@ -75,7 +92,16 @@ export function createCcrCore(options: {
       login: loginCoreAuth,
     },
     capabilities: {
-      list: listCoreCapabilities,
+      list: (params: CoreCapabilityListParams = {}) =>
+        listCoreCapabilities(withRegisteredApps(params)),
+      listManagement: (params: CoreCapabilityListParams = {}) =>
+        listCoreCapabilityManagement(withRegisteredApps(params)),
+      apps: {
+        register: appCapabilityRegistry.register.bind(appCapabilityRegistry),
+        getSnapshot:
+          appCapabilityRegistry.getSnapshot.bind(appCapabilityRegistry),
+        clear: appCapabilityRegistry.clear.bind(appCapabilityRegistry),
+      },
     },
     model: {
       getAvailability: getCoreModelAvailability,

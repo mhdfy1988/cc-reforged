@@ -87,9 +87,6 @@ const workflowsCmd = feature('WORKFLOW_SCRIPTS')
 const webCmd = feature('CCR_REMOTE_SETUP')
     ? require('./commands/remote-setup/index.js').default
     : null;
-const clearSkillIndexCache = feature('EXPERIMENTAL_SKILL_SEARCH')
-    ? require('./services/skillSearch/localSearch.js').clearSkillIndexCache
-    : null;
 const subscribePr = feature('KAIROS_GITHUB_WEBHOOKS')
     ? require('./commands/subscribe-pr.js').default
     : null;
@@ -137,7 +134,8 @@ import { logError } from './utils/log.js';
 import { toError } from './utils/errors.js';
 import { logForDebugging } from './utils/debug.js';
 import { getSkillDirCommands, clearSkillCaches, getDynamicSkills, getDynamicSkillsVersion, } from './skills/loadSkillsDir.js';
-import { createSkillRuntimeCatalog } from './skills/skillRuntimeCatalog.js';
+import { createSkillRuntimeCatalog, listUserInvocableSkillCommands, } from './skills/skillRuntimeCatalog.js';
+import { getSkillCommandAdapterKind, isSkillToolCommandCandidate, resolveSkillCommandRuntimeEligibility, } from './skills/skillCommandRuntimeVisibility.js';
 import { getBundledSkills } from './skills/bundledSkills.js';
 import { getBuiltinPluginSkillCommands } from './plugins/builtinPlugins.js';
 import { getPluginCommands, clearPluginCommandCache, getPluginSkills, clearPluginSkillsCache, } from './utils/plugins/loadPluginCommands.js';
@@ -301,10 +299,12 @@ const COMMANDS = memoize(() => [
         : []),
 ]);
 export const builtInCommandNames = memoize(() => new Set(COMMANDS().flatMap(_ => [_.name, ...(_.aliases ?? [])])));
-async function getSkills(cwd) {
+async function getSkills(cwd, options = {}) {
     try {
         const [skillDirCommands, pluginSkills] = await Promise.all([
-            getSkillDirCommands(cwd).catch(err => {
+            getSkillDirCommands(cwd, {
+                configHomeDir: options.configHomeDir,
+            }).catch(err => {
                 logError(toError(err));
                 logForDebugging('Skill directory commands failed to load, continuing without them');
                 return [];
@@ -408,8 +408,10 @@ const loadAllCommands = memoize(async (cwd, dynamicSkillsVersion) => {
         ...COMMANDS(),
     ];
 }, (cwd, dynamicSkillsVersion) => `${cwd}\0${dynamicSkillsVersion}`);
-export async function getSkillRuntimeCatalogForCwd(cwd) {
-    const { skillDirCommands, pluginSkills, bundledSkills, builtinPluginSkills } = await getSkills(cwd);
+export async function getSkillRuntimeCatalogForCwd(cwd, options = {}) {
+    const { skillDirCommands, pluginSkills, bundledSkills, builtinPluginSkills } = await getSkills(cwd, {
+        configHomeDir: options.configHomeDir,
+    });
     const sourceCommands = [
         ...skillDirCommands,
         ...pluginSkills,
@@ -421,6 +423,24 @@ export async function getSkillRuntimeCatalogForCwd(cwd) {
         sourceCommands,
         catalog: createSkillRuntimeCatalog(sourceCommands),
     };
+}
+async function getCommandsForSkillRuntimeContext(cwd, options = {}) {
+    if (!options.configHomeDir) {
+        return getCommands(cwd);
+    }
+    const [{ catalog }, pluginCommands, workflowCommands] = await Promise.all([
+        getSkillRuntimeCatalogForCwd(cwd, {
+            configHomeDir: options.configHomeDir,
+        }),
+        getPluginCommands(),
+        getWorkflowCommands ? getWorkflowCommands(cwd) : Promise.resolve([]),
+    ]);
+    return [
+        ...catalog.commands,
+        ...workflowCommands,
+        ...pluginCommands,
+        ...COMMANDS(),
+    ].filter(_ => meetsAvailabilityRequirement(_) && isCommandEnabled(_));
 }
 /**
  * Returns commands available to the current user. The expensive loading is
@@ -439,11 +459,11 @@ export function clearCommandMemoizationCaches() {
     loadAllCommands.cache?.clear?.();
     getSkillToolCommands.cache?.clear?.();
     getSlashCommandToolSkills.cache?.clear?.();
-    // getSkillIndex in skillSearch/localSearch.ts is a separate memoization layer
-    // built ON TOP of getSkillToolCommands/getCommands. Clearing only the inner
-    // caches is a no-op for the outer — lodash memoize returns the cached result
-    // without ever reaching the cleared inners. Must clear it explicitly.
-    clearSkillIndexCache?.();
+    // Keep the compatibility cache hook for callers that still import
+    // skillSearch/localSearch.ts; the current local adapter is cache-free.
+    if (feature('EXPERIMENTAL_SKILL_SEARCH')) {
+        require('./services/skillSearch/localSearch.js').clearSkillIndexCache();
+    }
 }
 export function clearCommandsCache() {
     clearCommandMemoizationCaches();
@@ -459,54 +479,26 @@ export function clearCommandsCache() {
  */
 export function getMcpSkillCommands(mcpCommands) {
     if (feature('MCP_SKILLS')) {
-        return mcpCommands.filter(cmd => cmd.type === 'prompt' &&
-            cmd.loadedFrom === 'mcp' &&
-            !cmd.disableModelInvocation);
+        return mcpCommands.filter(cmd => {
+            if (getSkillCommandAdapterKind(cmd) !== 'mcp-skill')
+                return false;
+            return resolveSkillCommandRuntimeEligibility(cmd).eligible;
+        });
     }
     return [];
 }
 // SkillTool shows ALL prompt-based commands that the model can invoke
 // This includes both skills (from /skills/) and commands (from /commands/)
-export const getSkillToolCommands = memoize(async (cwd) => {
-    const allCommands = await getCommands(cwd);
-    return allCommands.filter(cmd => cmd.type === 'prompt' &&
-        !cmd.disableModelInvocation &&
-        cmd.source !== 'builtin' &&
-        // Always include skills from /skills/ dirs, bundled skills, and legacy /commands/ entries
-        // (they all get an auto-derived description from the first line if frontmatter is missing).
-        // Plugin/MCP commands still require an explicit description to appear in the listing.
-        (cmd.loadedFrom === 'bundled' ||
-            cmd.loadedFrom === 'managed' ||
-            cmd.loadedFrom === 'dynamic' ||
-            cmd.loadedFrom === 'skills' ||
-            cmd.loadedFrom === 'commands_DEPRECATED' ||
-            cmd.hasUserSpecifiedDescription ||
-            cmd.whenToUse));
-});
-// Filters commands to include only skills. Skills are commands that provide
-// specialized capabilities for the model to use. They are identified by
-// loadedFrom being 'skills', 'plugin', or 'bundled', or having disableModelInvocation set.
+export const getSkillToolCommands = memoize(async (cwd, options = {}) => {
+    const allCommands = await getCommandsForSkillRuntimeContext(cwd, options);
+    return createSkillRuntimeCatalog(allCommands).commands.filter(isSkillToolCommandCandidate);
+}, (cwd, options = {}) => `${cwd}\0${options.configHomeDir ?? ''}`);
+// Filters commands to user-invocable Skill entries using the same adapter
+// boundary as SkillTool/runtime catalog. Model invocation and user invocation
+// are intentionally separate surfaces.
 export const getSlashCommandToolSkills = memoize(async (cwd) => {
-    try {
-        const allCommands = await getCommands(cwd);
-        return allCommands.filter(cmd => cmd.type === 'prompt' &&
-            cmd.source !== 'builtin' &&
-            cmd.userInvocable !== false &&
-            (cmd.hasUserSpecifiedDescription || cmd.whenToUse) &&
-            (cmd.loadedFrom === 'managed' ||
-                cmd.loadedFrom === 'skills' ||
-                cmd.loadedFrom === 'dynamic' ||
-                cmd.loadedFrom === 'plugin' ||
-                cmd.loadedFrom === 'bundled' ||
-                cmd.disableModelInvocation));
-    }
-    catch (error) {
-        logError(toError(error));
-        // Return empty array rather than throwing - skills are non-critical
-        // This prevents skill loading failures from breaking the entire system
-        logForDebugging('Returning empty skills array due to load failure');
-        return [];
-    }
+    const allCommands = await getCommands(cwd);
+    return listUserInvocableSkillCommands(allCommands);
 });
 /**
  * Commands that are safe to use in remote mode (--remote).

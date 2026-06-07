@@ -26,6 +26,11 @@ import type {
   AuthStatusResult,
   AuthLoginParams,
   AuthLoginResult,
+  CapabilitiesManagementActionApplyParams,
+  CapabilitiesManagementActionApplyResult,
+  CapabilitiesManagementActionPlanParams,
+  CapabilitiesManagementActionPlanResult,
+  CapabilitiesManagementListResult,
   CompactStatusResult,
   ConfigGetResult,
   ContextStatusResult,
@@ -1655,6 +1660,44 @@ async function applyMcpAdopt(
 async function listMcpInstalls(): Promise<McpInstallListResult> {
   const client = await getAppServerClient()
   return client.listMcpInstalls()
+}
+
+async function listCapabilityManagement(): Promise<CapabilitiesManagementListResult> {
+  const client = await getAppServerClient()
+  return client.listCapabilityManagement({
+    cwd: status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function planCapabilityManagementAction(
+  params: CapabilitiesManagementActionPlanParams,
+): Promise<CapabilitiesManagementActionPlanResult> {
+  const client = await getAppServerClient()
+  return client.planCapabilityManagementAction({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function applyCapabilityManagementAction(
+  params: CapabilitiesManagementActionApplyParams,
+): Promise<CapabilitiesManagementActionApplyResult> {
+  const client = await getAppServerClient()
+  const result = await client.applyCapabilityManagementAction({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+  })
+  if (result.plan.target?.kind === 'mcp-server') {
+    await refreshMcpSnapshot()
+  }
+  broadcast('state', {
+    message: 'capability management action applied',
+    capabilityId: params.capabilityId,
+    action: params.action,
+    result,
+    mcp: status.mcp,
+  })
+  return result
 }
 
 async function uninstallMcp(
@@ -3290,6 +3333,24 @@ ipcMain.handle(
 ipcMain.handle('ccr:mcp-install-list', async () => {
   return listMcpInstalls()
 })
+
+ipcMain.handle('ccr:capabilities-management-list', async () => {
+  return listCapabilityManagement()
+})
+
+ipcMain.handle(
+  'ccr:capabilities-management-action-plan',
+  async (_event, params: CapabilitiesManagementActionPlanParams) => {
+    return planCapabilityManagementAction(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:capabilities-management-action-apply',
+  async (_event, params: CapabilitiesManagementActionApplyParams) => {
+    return applyCapabilityManagementAction(params)
+  },
+)
 
 ipcMain.handle(
   'ccr:mcp-install-uninstall',

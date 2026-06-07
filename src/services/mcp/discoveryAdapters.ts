@@ -39,6 +39,7 @@ export function toServerResources(params: {
 
 export function toMcpPromptCommands(params: {
   clientName: string
+  pluginId?: string
   prompts: Prompt[]
   runPrompt: (
     promptName: string,
@@ -63,6 +64,8 @@ export function toMcpPromptCommands(params: {
       },
       argNames,
       source: 'mcp',
+      ...(params.pluginId ? { pluginId: params.pluginId } : {}),
+      mcpServerName: params.clientName,
       async getPromptForCommand(args: string) {
         try {
           return await params.runPrompt(

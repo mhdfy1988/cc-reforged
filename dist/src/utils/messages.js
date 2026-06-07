@@ -2736,7 +2736,13 @@ Read the team config to discover your teammates' names. Check the task list peri
         if (attachment.type === 'skill_discovery') {
             if (attachment.skills.length === 0)
                 return [];
-            const lines = attachment.skills.map(s => `- ${s.name}: ${s.description}`);
+            const lines = attachment.skills.map(s => {
+                const details = [
+                    s.sourceKind ? `source: ${s.sourceKind}` : null,
+                    s.reason ? `match: ${s.reason}` : null,
+                ].filter(Boolean);
+                return `- ${s.name}: ${s.description}${details.length > 0 ? ` (${details.join(', ')})` : ''}`;
+            });
             return wrapMessagesInSystemReminder([
                 createUserMessage({
                     content: `Skills relevant to your task:\n\n${lines.join('\n')}\n\n` +

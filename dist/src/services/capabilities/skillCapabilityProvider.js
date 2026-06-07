@@ -1,6 +1,7 @@
 import { getSkillRuntimeCatalogForCwd } from '../../commands.js';
 import { createSkillRuntimeCapabilityCatalog, } from '../../skills/skillRuntimeCatalog.js';
 import { listInstalledSkillPackageInspections } from '../skills/installedPackageInspection.js';
+import { createSkillCapabilityId } from './capabilityIdentity.js';
 export function createSkillCapabilityProvider() {
     return {
         id: 'skills',
@@ -10,17 +11,23 @@ export function createSkillCapabilityProvider() {
     };
 }
 export async function listSkillCapabilities(context = {}) {
-    const cwd = typeof context.cwd === 'string' ? context.cwd : process.cwd();
+    const request = context.capabilityEnvironment?.request;
+    const cwd = request?.cwd ?? (typeof context.cwd === 'string' ? context.cwd : undefined);
+    if (!cwd) {
+        throw new Error('Skill capability provider requires request-scoped cwd.');
+    }
+    const configHomeDir = request?.configHomeDir ??
+        (typeof context.configHomeDir === 'string'
+            ? context.configHomeDir
+            : undefined);
     const [runtime, installedInspections] = await Promise.all([
-        getSkillRuntimeCatalogForCwd(cwd),
+        getSkillRuntimeCatalogForCwd(cwd, { configHomeDir }),
         listInstalledSkillPackageInspections({
-            configHomeDir: typeof context.configHomeDir === 'string'
-                ? context.configHomeDir
-                : undefined,
+            configHomeDir,
         }),
     ]);
     const catalog = createSkillRuntimeCapabilityCatalog({
-        commands: runtime.sourceCommands,
+        commands: [...runtime.sourceCommands, ...getMcpSkillCommands(context)],
         installed: installedInspections.installed,
     });
     return catalog.capabilities.map(toExtensionCapability);
@@ -31,7 +38,14 @@ function toExtensionCapability(capability) {
     const pluginId = getPluginId(capability);
     return {
         schemaVersion: 1,
-        id: `skill:${sourceKind}:${capability.name}:${capability.loadedFrom}:${capability.installedRef ?? ''}`,
+        id: createSkillCapabilityId({
+            sourceKind,
+            name: capability.name,
+            loadedFrom: capability.loadedFrom,
+            pluginId,
+            mcpServerName: capability.parentMcpServerName,
+            installedRef: capability.installedRef,
+        }),
         name: capability.name,
         displayName: capability.displayName,
         description: capability.description,
@@ -41,6 +55,9 @@ function toExtensionCapability(capability) {
             label: capability.sourceLabel,
             ref: capability.loadedFrom,
             ...(pluginId ? { pluginId } : {}),
+            ...(capability.parentMcpServerName
+                ? { mcpServerName: capability.parentMcpServerName }
+                : {}),
         },
         state: {
             installed: capability.installedRef !== null,
@@ -56,6 +73,9 @@ function toExtensionCapability(capability) {
         },
         relations: {
             ...(pluginId ? { parentPluginId: pluginId } : {}),
+            ...(capability.parentMcpServerName
+                ? { parentMcpServerName: capability.parentMcpServerName }
+                : {}),
             ...(capability.installedRef ? { installedRef: capability.installedRef } : {}),
             runtimeRef: `skill:${capability.name}`,
         },
@@ -63,8 +83,16 @@ function toExtensionCapability(capability) {
         metadata: {
             hiddenReason: capability.hiddenReason,
             sourceKind: capability.sourceKind,
+            parentPluginId: capability.parentPluginId,
+            parentMcpServerName: capability.parentMcpServerName,
         },
     };
+}
+function getMcpSkillCommands(context) {
+    return (context.capabilityEnvironment?.mcpRuntime.commands ??
+        context.mcpCommands ??
+        context.mcp?.commands ??
+        []).filter(command => command.type === 'prompt' && command.loadedFrom === 'mcp');
 }
 function mapSkillSourceKind(sourceKind) {
     switch (sourceKind) {
@@ -121,7 +149,6 @@ function getPluginId(capability) {
         capability.sourceKind !== 'builtin-plugin') {
         return undefined;
     }
-    const parts = capability.sourceLabel.split('/');
-    return parts[0] && parts[0] !== 'plugin' ? parts[0] : undefined;
+    return capability.parentPluginId ?? undefined;
 }
 //# sourceMappingURL=skillCapabilityProvider.js.map

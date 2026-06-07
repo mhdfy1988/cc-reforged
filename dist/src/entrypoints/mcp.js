@@ -76,6 +76,7 @@ export async function startMCPServer(cwd, debug, verbose) {
             abortController: createAbortController(),
             options: {
                 commands: MCP_COMMANDS,
+                cwd,
                 tools,
                 mainLoopModel: getMainLoopModel(),
                 thinkingConfig: { type: 'disabled' },

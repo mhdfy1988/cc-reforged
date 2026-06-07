@@ -7,6 +7,11 @@ import type {
   CcrTextContentBlock,
 } from '../types/contentBlocks.js'
 import type { ThreadDisplayProjection } from '../display/threadDisplayProjection.js'
+import type {
+  CapabilityManagementActionPlan,
+} from '../services/capabilities/managementActionService.js'
+import type { CapabilityManagementProjection } from '../services/capabilities/managementProjectionService.js'
+import type { AppCapabilityRegistrySnapshot } from '../services/capabilities/appCapabilityRegistry.js'
 
 export const APP_SERVER_PROTOCOL_VERSION = '0.1'
 export const APP_SERVER_CONFIG_SCHEMA_VERSION = '0.1'
@@ -93,13 +98,88 @@ export const ShutdownParamsSchema = z.object({}).strict().default({})
 
 export const ConfigGetParamsSchema = z.object({}).strict().default({})
 
+export const AppConnectorCapabilityInputSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    connected: z.boolean().optional(),
+    enabled: z.boolean().optional(),
+    authStatus: z
+      .enum(['connected', 'needs-auth', 'disabled', 'unknown'])
+      .optional(),
+    sourceLabel: z.string().optional(),
+    pluginId: z.string().optional(),
+    parentPluginId: z.string().optional(),
+    providedToolIds: z.array(z.string().min(1)).optional(),
+    providedMcpServerNames: z.array(z.string().min(1)).optional(),
+    providedSkillIds: z.array(z.string().min(1)).optional(),
+    metadata: JsonRpcParamsSchema.optional(),
+  })
+  .strict()
+
+const AppConnectorCapabilityListSchema = z
+  .array(AppConnectorCapabilityInputSchema)
+  .superRefine((apps, context) => {
+    const ids = new Set<string>()
+    for (const app of apps) {
+      if (ids.has(app.id)) {
+        context.addIssue({
+          code: 'custom',
+          message: `Duplicate app connector id: ${app.id}`,
+        })
+      }
+      ids.add(app.id)
+    }
+  })
+
 export const CapabilitiesListParamsSchema = z
   .object({
     cwd: z.string().min(1).optional(),
     configHomeDir: z.string().min(1).optional(),
+    apps: AppConnectorCapabilityListSchema.optional(),
   })
   .strict()
   .default({})
+
+export const CapabilitiesManagementListParamsSchema =
+  CapabilitiesListParamsSchema
+
+export const CapabilitiesAppsRegisterParamsSchema = z
+  .object({
+    apps: AppConnectorCapabilityListSchema,
+    mode: z.enum(['replace', 'upsert']).optional(),
+  })
+  .strict()
+
+export const CapabilityManagementActionSchema = z.enum([
+  'enable',
+  'disable',
+  'set-model-invocation',
+  'set-user-invocation',
+  'inspect',
+  'test',
+  'restart',
+  'repair',
+  'uninstall',
+])
+
+export const CapabilitiesManagementActionPlanParamsSchema = z
+  .object({
+    cwd: z.string().min(1).optional(),
+    configHomeDir: z.string().min(1).optional(),
+    capabilityId: z.string().min(1),
+    action: CapabilityManagementActionSchema,
+    actionRef: z.string().min(1).optional(),
+    params: JsonRpcParamsSchema.optional(),
+  })
+  .strict()
+
+export const CapabilitiesManagementActionApplyParamsSchema =
+  CapabilitiesManagementActionPlanParamsSchema.extend({
+    confirmed: z.boolean().optional(),
+    confirmationToken: z.string().min(1).optional(),
+  }).strict()
 
 export const AuthStatusParamsSchema = z
   .object({
@@ -653,6 +733,18 @@ export type InitializeParams = z.infer<typeof InitializeParamsSchema>
 export type CapabilitiesListParams = z.infer<
   typeof CapabilitiesListParamsSchema
 >
+export type CapabilitiesManagementListParams = z.infer<
+  typeof CapabilitiesManagementListParamsSchema
+>
+export type CapabilitiesAppsRegisterParams = z.infer<
+  typeof CapabilitiesAppsRegisterParamsSchema
+>
+export type CapabilitiesManagementActionPlanParams = z.infer<
+  typeof CapabilitiesManagementActionPlanParamsSchema
+>
+export type CapabilitiesManagementActionApplyParams = z.infer<
+  typeof CapabilitiesManagementActionApplyParamsSchema
+>
 export type AuthStatusParams = z.infer<typeof AuthStatusParamsSchema>
 export type AuthLoginParams = z.infer<typeof AuthLoginParamsSchema>
 export type ModelListParams = z.infer<typeof ModelListParamsSchema>
@@ -777,6 +869,7 @@ export type CompactRunParams = z.infer<typeof CompactRunParamsSchema>
 export type ServerCapabilities = {
   config: boolean
   auth: boolean
+  capabilityApps: boolean
   models: boolean
   mcp: boolean
   skills: boolean
@@ -850,6 +943,17 @@ export type ShutdownResult = {
 export type ConfigGetResult = Record<string, unknown>
 
 export type CapabilitiesListResult = Record<string, unknown>
+export type CapabilitiesManagementListResult = CapabilityManagementProjection
+export type CapabilitiesAppsRegisterResult = AppCapabilityRegistrySnapshot
+export type CapabilitiesManagementActionPlanResult =
+  CapabilityManagementActionPlan
+export type CapabilitiesManagementActionApplyResult = {
+  schemaVersion: 1
+  applied: true
+  plan: CapabilityManagementActionPlan
+  result: Record<string, unknown>
+  management: CapabilityManagementProjection
+}
 
 export type AuthStatusResult = Record<string, unknown>
 
@@ -1233,6 +1337,7 @@ export type MemorySessionStatusResult = Record<string, unknown>
 export const DEFAULT_SERVER_CAPABILITIES: ServerCapabilities = {
   config: true,
   auth: true,
+  capabilityApps: true,
   models: true,
   mcp: true,
   skills: true,

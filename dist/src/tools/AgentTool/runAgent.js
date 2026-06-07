@@ -378,6 +378,7 @@ export async function* runAgent({ agentDefinition, promptMessages, toolUseContex
         : resolvedTools;
     // Build agent-specific options
     const agentOptions = {
+        cwd: toolUseContext.options.cwd,
         isNonInteractiveSession: useExactTools
             ? toolUseContext.options.isNonInteractiveSession
             : isAsync

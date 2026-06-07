@@ -86,6 +86,7 @@ export async function fetchSystemPromptParts({
  * the alternative is returning null and failing the side question entirely.
  */
 export async function buildSideQuestionFallbackParams({
+  cwd,
   tools,
   commands,
   mcpClients,
@@ -98,6 +99,7 @@ export async function buildSideQuestionFallbackParams({
   thinkingConfig,
   agents,
 }: {
+  cwd: string
   tools: Tools
   commands: Command[]
   mcpClients: MCPServerConnection[]
@@ -142,6 +144,7 @@ export async function buildSideQuestionFallbackParams({
   const toolUseContext: ToolUseContext = {
     options: {
       commands,
+      cwd,
       debug: false,
       mainLoopModel,
       tools,
