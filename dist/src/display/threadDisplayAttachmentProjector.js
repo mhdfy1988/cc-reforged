@@ -80,12 +80,15 @@ export function formatAttachmentContentBlock(block) {
     return `${getAttachmentTypeText(type)}：${getAttachmentNameResolution(block, undefined, 0).name}`;
 }
 const GENERATED_OUTPUT_IMAGE_PATH_PATTERN = /[A-Za-z]:\\[^\r\n`"<>|]*?\.ccr\\generated_outputs\\[^\r\n`"<>|]*?\.(?:png|jpe?g|webp|gif)/gi;
-function collectAttachmentBlocks(blocks) {
+function collectAttachmentBlocks(blocks, options = {}) {
     const collected = [];
     for (const block of blocks) {
         const type = getString(block, ['type']) ?? '';
         if (type === 'image' || type === 'file' || type === 'audio' || type === 'video') {
-            collected.push(block);
+            if (!options.requireAttachmentIdentity ||
+                hasExplicitAttachmentIdentity(block)) {
+                collected.push(block);
+            }
             continue;
         }
         if (type === 'attachment') {
@@ -96,25 +99,52 @@ function collectAttachmentBlocks(blocks) {
             continue;
         }
         if (type === 'tool_result' && Array.isArray(block.content)) {
-            collected.push(...collectAttachmentBlocks(block.content.filter(isJsonObject)));
+            collected.push(...collectAttachmentBlocks(block.content.filter(isJsonObject), { requireAttachmentIdentity: true }));
         }
         if (type === 'tool_result') {
             const result = getJsonObject(block.result);
             if (Array.isArray(result?.output)) {
-                collected.push(...collectAttachmentBlocks(result.output.filter(isJsonObject)));
+                collected.push(...collectAttachmentBlocks(result.output.filter(isJsonObject), { requireAttachmentIdentity: true }));
             }
         }
         if (type === 'tool_use' && Array.isArray(block.result)) {
-            collected.push(...collectAttachmentBlocks(block.result.filter(isJsonObject)));
+            collected.push(...collectAttachmentBlocks(block.result.filter(isJsonObject), { requireAttachmentIdentity: true }));
         }
         if (type === 'tool_use') {
             const result = getJsonObject(block.result);
             if (Array.isArray(result?.output)) {
-                collected.push(...collectAttachmentBlocks(result.output.filter(isJsonObject)));
+                collected.push(...collectAttachmentBlocks(result.output.filter(isJsonObject), { requireAttachmentIdentity: true }));
             }
         }
     }
     return collected;
+}
+function hasExplicitAttachmentIdentity(block) {
+    const generatedArtifact = getGeneratedArtifactSnapshotFromBlock(block);
+    const nestedFile = getJsonObject(block.file);
+    return Boolean(getString(block, [
+        'attachmentId',
+        'attachment_id',
+        'outputId',
+        'output_id',
+        'displayPath',
+        'displayName',
+        'display_name',
+        'name',
+        'filename',
+        'fileName',
+    ]) ??
+        getString(nestedFile, [
+            'displayPath',
+            'displayName',
+            'name',
+            'filename',
+            'fileName',
+            'filePath',
+            'path',
+        ]) ??
+        getAttachmentPath(block, generatedArtifact) ??
+        generatedArtifact?.id);
 }
 function extractGeneratedOutputImagePaths(text) {
     return Array.from(text.matchAll(GENERATED_OUTPUT_IMAGE_PATH_PATTERN), match => match[0].trim());

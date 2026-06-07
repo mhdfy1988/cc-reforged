@@ -34,6 +34,10 @@ const threadDisplayProjectionSource = readFileSync(
   new URL('../src/display/threadDisplayProjection.ts', import.meta.url),
   'utf8',
 )
+const coreQueryTurnRunnerSource = readFileSync(
+  new URL('../src/core/coreQueryTurnRunner.ts', import.meta.url),
+  'utf8',
+)
 const removedLegacyReducerNames = [
   'snapshotItems',
   'toolItemIndexes',
@@ -79,6 +83,13 @@ assert.equal(
   threadDisplaySource.includes('resolveThreadDisplayFacts'),
   true,
   'ThreadDisplayReducer should resolve DisplayFact before state transitions',
+)
+assert.equal(
+  coreQueryTurnRunnerSource.includes(
+    "item.kind === 'tool_progress' ? 'running' : 'completed'",
+  ),
+  true,
+  'tool progress core events should stay running rather than rendering as completed tool calls',
 )
 assert.equal(
   threadDisplaySource.includes('acceptRealtimeInputEvent'),
@@ -862,6 +873,78 @@ assert.equal(
   'tool progress should update the existing tool item without replacing its file fact',
 )
 
+const parentMappedProgressEvent = {
+  type: 'item_delta',
+  threadId,
+  turnId: 'turn-live-1',
+  itemId: 'live-tool-item',
+  delta: {
+    type: 'progress',
+    toolUseId: 'progress-event-id',
+    parentToolUseId: 'live-tool-use',
+    data: { message: '继续读取', percent: 75 },
+    timestamp: '2026-05-28T00:01:00.600Z',
+  },
+  timestamp: '2026-05-28T00:01:00.600Z',
+}
+const parentMappedProgressInputEvent =
+  coreTurnEventToDisplayReducerInputEvent(parentMappedProgressEvent)
+assert.equal(parentMappedProgressInputEvent.sourceIdentity.kind, 'tool')
+assert.equal(parentMappedProgressInputEvent.sourceIdentity.toolUseId, 'live-tool-use')
+const parentMappedProgressFacts = resolveThreadDisplayFacts(
+  parentMappedProgressInputEvent,
+)
+assert.equal(parentMappedProgressFacts.length, 1)
+assert.equal(parentMappedProgressFacts[0].lifecycleKind, 'tool_progress')
+assert.equal(parentMappedProgressFacts[0].toolUseId, 'live-tool-use')
+assert.equal(parentMappedProgressFacts[0].parentToolUseId, 'live-tool-use')
+const parentMappedProgressOperations = liveReducer
+  .acceptOne(parentMappedProgressInputEvent)
+  .consumePatchOperations()
+assert.equal(parentMappedProgressOperations.length, 1)
+assert.equal(parentMappedProgressOperations[0].op, 'update_item')
+assert.equal(parentMappedProgressOperations[0].itemId, 'tool:live-tool-use')
+assert.deepEqual(
+  parentMappedProgressOperations[0].item.metadata.toolLifecycle.progressBlock.data,
+  { message: '继续读取', percent: 75 },
+)
+
+const orphanProgressEvent = {
+  type: 'item_delta',
+  threadId,
+  turnId: 'turn-live-1',
+  itemId: 'orphan-progress-item',
+  delta: {
+    type: 'progress',
+    tool_use_id: 'missing-tool-use',
+    data: { message: '孤立进度', percent: 10 },
+  },
+  timestamp: '2026-05-28T00:01:00.700Z',
+}
+const orphanProgressOperations = liveReducer
+  .acceptOne(coreTurnEventToDisplayReducerInputEvent(orphanProgressEvent))
+  .consumePatchOperations()
+assert.equal(
+  orphanProgressOperations.length,
+  1,
+  'orphan tool progress should remain visible as a diagnostic notice',
+)
+assert.equal(orphanProgressOperations[0].op, 'append_item')
+assert.equal(orphanProgressOperations[0].item.type, 'system_notice')
+assert.equal(orphanProgressOperations[0].item.status, 'warning')
+assert.equal(
+  orphanProgressOperations[0].item.sourceKind,
+  'tool_progress_diagnostic',
+)
+assert.equal(
+  orphanProgressOperations[0].item.metadata.toolLifecycle.diagnostic.code,
+  'orphan_tool_progress',
+)
+assert.equal(
+  orphanProgressOperations[0].item.projection.event.type,
+  'system_notice',
+)
+
 const duplicateCompletedToolUseEvent = {
   type: 'item_completed',
   threadId,
@@ -897,7 +980,7 @@ assert.equal(reducerCompletedOperations[0].itemId, completedPatch.operations[0].
 assert.equal(reducerCompletedOperations[0].status, 'completed')
 assert.equal(
   reducerCompletedOperations[0].item.metadata.toolLifecycle.progressBlock.data.percent,
-  50,
+  75,
   'ThreadDisplayReducer should preserve tool progress state across realtime events',
 )
 assert.equal(
@@ -905,16 +988,25 @@ assert.equal(
   completedPatch.operations[0].item.projection.event.toolSnapshot.identity.toolUseId,
 )
 const liveSnapshotItems = liveReducer.toSnapshotItems()
-assert.equal(liveSnapshotItems.length, 1)
-assert.equal(liveSnapshotItems[0].id, 'tool:live-tool-use')
-assert.equal(liveSnapshotItems[0].status, 'completed')
-assert.equal(liveSnapshotItems[0].metadata.displayFact.factType, 'file')
-assert.equal(liveSnapshotItems[0].metadata.displayFact.fileOperation, 'read')
+assert.equal(liveSnapshotItems.length, 2)
+const liveToolSnapshotItem = liveSnapshotItems.find(
+  item => item.id === 'tool:live-tool-use',
+)
+assert(liveToolSnapshotItem)
+assert.equal(liveToolSnapshotItem.status, 'completed')
+assert.equal(liveToolSnapshotItem.metadata.displayFact.factType, 'file')
+assert.equal(liveToolSnapshotItem.metadata.displayFact.fileOperation, 'read')
 assert.equal(
-  liveSnapshotItems[0].projection.event.fileToolSnapshot.path,
+  liveToolSnapshotItem.projection.event.fileToolSnapshot.path,
   'src/index.ts',
 )
-assert.equal(liveSnapshotItems[0].metadata.toolLifecycle.progressBlock.data.percent, 50)
+assert.equal(liveToolSnapshotItem.metadata.toolLifecycle.progressBlock.data.percent, 75)
+const orphanProgressSnapshotItem = liveSnapshotItems.find(
+  item => item.sourceKind === 'tool_progress_diagnostic',
+)
+assert(orphanProgressSnapshotItem)
+assert.equal(orphanProgressSnapshotItem.type, 'system_notice')
+assert.equal(orphanProgressSnapshotItem.projection.event.type, 'system_notice')
 
 const failedToolReducer = createThreadDisplayReducer({ threadId })
 failedToolReducer.acceptOne(

@@ -177,7 +177,7 @@ export function extractAttachmentSnapshotsFromContentBlocks(input: {
   source: AttachmentSnapshot['source']
   identity?: DisplayEventIdentity
 }): AttachmentSnapshot[] {
-  const attachmentBlocks = collectAttachmentBlocks(input.blocks)
+  const attachmentBlocks = collectTopLevelAttachmentBlocks(input.blocks)
   return attachmentBlocks.map((block, index) =>
     createAttachmentSnapshotFromBlock({
       block,
@@ -301,7 +301,9 @@ export function extractFileDisplaySnapshotsFromToolSnapshot(
   }
 }
 
-function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
+function collectTopLevelAttachmentBlocks(
+  blocks: readonly JsonObject[],
+): JsonObject[] {
   const collected: JsonObject[] = []
   for (const block of blocks) {
     const type = typeof block.type === 'string' ? block.type : ''
@@ -316,56 +318,6 @@ function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
         collected.push(attachment)
       }
       continue
-    }
-
-    if (type === 'tool_result' && Array.isArray(block.content)) {
-      collected.push(
-        ...collectAttachmentBlocks(
-          block.content.filter(
-            (item): item is JsonObject =>
-              !!item && typeof item === 'object' && !Array.isArray(item),
-          ),
-        ),
-      )
-    }
-
-    if (type === 'tool_result') {
-      const result = getJsonObject(block.result)
-      if (Array.isArray(result?.output)) {
-        collected.push(
-          ...collectAttachmentBlocks(
-            result.output.filter(
-              (item): item is JsonObject =>
-                !!item && typeof item === 'object' && !Array.isArray(item),
-            ),
-          ),
-        )
-      }
-    }
-
-    if (type === 'tool_use' && Array.isArray(block.result)) {
-      collected.push(
-        ...collectAttachmentBlocks(
-          block.result.filter(
-            (item): item is JsonObject =>
-              !!item && typeof item === 'object' && !Array.isArray(item),
-          ),
-        ),
-      )
-    }
-
-    if (type === 'tool_use') {
-      const result = getJsonObject(block.result)
-      if (Array.isArray(result?.output)) {
-        collected.push(
-          ...collectAttachmentBlocks(
-            result.output.filter(
-              (item): item is JsonObject =>
-                !!item && typeof item === 'object' && !Array.isArray(item),
-            ),
-          ),
-        )
-      }
     }
   }
   return collected

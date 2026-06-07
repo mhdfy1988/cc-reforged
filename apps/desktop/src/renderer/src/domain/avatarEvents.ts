@@ -165,6 +165,15 @@ function resolveToolCategoryAvatar(
   snapshot: ToolSnapshot,
   event: DisplayEvent,
 ): MessageAvatarDescriptor {
+  if (snapshot.name === 'DiscoverSkills') {
+    return {
+      icon: 'search',
+      label: '技',
+      tone: 'agent',
+      title: snapshot.displayName ?? '发现技能',
+    }
+  }
+
   if (category === 'file') {
     return resolveFileOperationAvatar(
       event.fileToolSnapshot?.operation,

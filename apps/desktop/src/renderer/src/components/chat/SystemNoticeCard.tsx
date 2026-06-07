@@ -7,18 +7,12 @@ import type {
 
 export function SystemNoticeCard(props: {
   event: DisplayEvent
-  compactCarryover?: boolean
 }) {
   if (props.event.sourceKind === 'context_compaction') {
     return <ContextCompactionNotice event={props.event} />
   }
 
-  return (
-    <MessageFrame
-      compactCarryover={props.compactCarryover}
-      event={props.event}
-    />
-  )
+  return <MessageFrame event={props.event} />
 }
 
 function ContextCompactionNotice(props: { event: DisplayEvent }) {

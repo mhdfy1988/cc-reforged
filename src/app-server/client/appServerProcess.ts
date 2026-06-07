@@ -29,6 +29,7 @@ export function startAppServerProcess(
     stdin: 'pipe',
     stdout: 'pipe',
     stderr: 'pipe',
+    buffer: false,
     cleanup: true,
     reject: false,
   })
@@ -81,6 +82,9 @@ export function startAppServerProcess(
         code: result.exitCode ?? null,
         signal: (result.signal as NodeJS.Signals | undefined) ?? null,
         stderr,
+        failed: result.failed,
+        isMaxBuffer: result.isMaxBuffer,
+        ...(result.failed ? { error: result } : {}),
       })
     },
     error => {

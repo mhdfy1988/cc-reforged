@@ -1839,6 +1839,7 @@ h1 {
 }
 
 .mcp-server-item {
+  cursor: pointer;
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -1850,7 +1851,7 @@ h1 {
   background: transparent;
   padding: 0;
   text-align: left;
-  cursor: pointer;
+  cursor: inherit;
 }
 
 .mcp-server-item-foot {
@@ -4442,8 +4443,15 @@ h1 {
   display: grid;
   grid-template-columns: minmax(360px, 1.4fr) minmax(280px, 0.8fr);
   gap: 12px;
+  height: clamp(360px, 62vh, 640px);
+  max-height: 640px;
   min-height: 360px;
   min-width: 0;
+}
+
+.usage-events-panel,
+.usage-event-detail {
+  min-height: 0;
 }
 
 .usage-panel {
@@ -5214,9 +5222,24 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .usage-report-grid {
+    height: auto;
+    max-height: none;
+  }
+
   .usage-panel,
   .usage-call-list,
   .usage-detail-list {
     overflow: visible;
+  }
+
+  .usage-report-grid .usage-panel {
+    max-height: min(520px, 70vh);
+    overflow: hidden;
+  }
+
+  .usage-report-grid .usage-call-list,
+  .usage-report-grid .usage-detail-list {
+    overflow: auto;
   }
 }

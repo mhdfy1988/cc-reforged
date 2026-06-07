@@ -468,7 +468,7 @@ function getPrimaryToolSourceIdentityFromBlocks(blocks, context) {
             blockType !== 'progress') {
             continue;
         }
-        const toolUseId = getStringFromObject(block, ['id', 'toolUseId', 'toolUseID']) ??
+        const blockToolUseId = getStringFromObject(block, ['id', 'toolUseId', 'toolUseID']) ??
             getStringFromObject(block, ['tool_use_id']);
         const toolCallId = getStringFromObject(block, ['toolCallId', 'tool_call_id']);
         const parentToolUseId = getStringFromObject(block, [
@@ -477,6 +477,7 @@ function getPrimaryToolSourceIdentityFromBlocks(blocks, context) {
             'parent_tool_use_id',
             'tool_use_id',
         ]);
+        const toolUseId = blockType === 'progress' ? parentToolUseId ?? blockToolUseId : blockToolUseId;
         const sourceId = toolUseId ?? toolCallId ?? `${context.itemId ?? context.messageUuid ?? 'tool'}`;
         return {
             kind: 'tool',

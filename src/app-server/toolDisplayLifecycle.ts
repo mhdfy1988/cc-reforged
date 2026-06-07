@@ -56,6 +56,17 @@ const TOOL_RESULT_SOURCE_ID_KEYS = [
   'tool_call_id',
 ]
 
+const TOOL_PROGRESS_SOURCE_ID_KEYS = [
+  'parentToolUseId',
+  'parentToolUseID',
+  'parent_tool_use_id',
+  'tool_use_id',
+  'toolUseId',
+  'toolUseID',
+  'toolCallId',
+  'tool_call_id',
+]
+
 export function createToolDisplayLifecycleReducer(): ToolDisplayLifecycleReducer {
   return new ToolDisplayLifecycleReducer()
 }
@@ -119,7 +130,7 @@ export class ToolDisplayLifecycleReducer {
     block: Record<string, unknown>,
     source: ToolDisplayLifecycleSource,
   ): ToolDisplayLifecycleItem {
-    const toolUseId = normalizeToolResultSourceIdFromBlock(block)
+    const toolUseId = normalizeToolProgressSourceIdFromBlock(block)
     if (!toolUseId) {
       return this.createDiagnosticItem({
         source,
@@ -220,6 +231,12 @@ export function normalizeToolResultSourceIdFromBlock(
   block: Record<string, unknown>,
 ): string | undefined {
   return getStringField(block, TOOL_RESULT_SOURCE_ID_KEYS)
+}
+
+export function normalizeToolProgressSourceIdFromBlock(
+  block: Record<string, unknown>,
+): string | undefined {
+  return getStringField(block, TOOL_PROGRESS_SOURCE_ID_KEYS)
 }
 
 function getToolResultStatus(

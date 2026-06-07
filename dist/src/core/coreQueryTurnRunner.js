@@ -500,11 +500,12 @@ function emitMessageItem(emit, turn, message) {
 function emitCompletedItem(emit, item) {
     const startedAt = new Date().toISOString();
     const completedAt = startedAt;
+    const status = item.kind === 'tool_progress' ? 'running' : 'completed';
     emit({
         type: 'item_started',
         item: {
             ...item,
-            status: 'completed',
+            status,
             startedAt,
             completedAt,
             durationMs: 0,
@@ -516,7 +517,7 @@ function emitCompletedItem(emit, item) {
         turnId: item.turnId,
         itemId: item.itemId,
         kind: item.kind,
-        status: 'completed',
+        status,
         content: item.content,
         startedAt,
         completedAt,

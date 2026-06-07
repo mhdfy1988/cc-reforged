@@ -225,11 +225,11 @@ export function McpPage(props: {
                         : 'mcp-server-item'
                     }
                     key={server.name}
+                    onClick={() => setSelectedName(server.name)}
                   >
                     <button
                       className="mcp-server-main"
                       type="button"
-                      onClick={() => setSelectedName(server.name)}
                     >
                       <span>
                         <strong>{server.name}</strong>
@@ -245,7 +245,10 @@ export function McpPage(props: {
                         </small>
                       </div>
                       {canToggle ? (
-                        <label className="mcp-list-toggle">
+                        <label
+                          className="mcp-list-toggle"
+                          onClick={event => event.stopPropagation()}
+                        >
                           <input
                             checked={serverEnabled}
                             disabled={props.busy}

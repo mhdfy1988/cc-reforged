@@ -132,12 +132,20 @@ export function formatAttachmentContentBlock(block: JsonObject): string {
 const GENERATED_OUTPUT_IMAGE_PATH_PATTERN =
   /[A-Za-z]:\\[^\r\n`"<>|]*?\.ccr\\generated_outputs\\[^\r\n`"<>|]*?\.(?:png|jpe?g|webp|gif)/gi
 
-function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
+function collectAttachmentBlocks(
+  blocks: readonly JsonObject[],
+  options: { requireAttachmentIdentity?: boolean } = {},
+): JsonObject[] {
   const collected: JsonObject[] = []
   for (const block of blocks) {
     const type = getString(block, ['type']) ?? ''
     if (type === 'image' || type === 'file' || type === 'audio' || type === 'video') {
-      collected.push(block)
+      if (
+        !options.requireAttachmentIdentity ||
+        hasExplicitAttachmentIdentity(block)
+      ) {
+        collected.push(block)
+      }
       continue
     }
     if (type === 'attachment') {
@@ -151,6 +159,7 @@ function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
       collected.push(
         ...collectAttachmentBlocks(
           block.content.filter(isJsonObject),
+          { requireAttachmentIdentity: true },
         ),
       )
     }
@@ -158,25 +167,64 @@ function collectAttachmentBlocks(blocks: readonly JsonObject[]): JsonObject[] {
       const result = getJsonObject(block.result)
       if (Array.isArray(result?.output)) {
         collected.push(
-          ...collectAttachmentBlocks(result.output.filter(isJsonObject)),
+          ...collectAttachmentBlocks(
+            result.output.filter(isJsonObject),
+            { requireAttachmentIdentity: true },
+          ),
         )
       }
     }
     if (type === 'tool_use' && Array.isArray(block.result)) {
       collected.push(
-        ...collectAttachmentBlocks(block.result.filter(isJsonObject)),
+        ...collectAttachmentBlocks(
+          block.result.filter(isJsonObject),
+          { requireAttachmentIdentity: true },
+        ),
       )
     }
     if (type === 'tool_use') {
       const result = getJsonObject(block.result)
       if (Array.isArray(result?.output)) {
         collected.push(
-          ...collectAttachmentBlocks(result.output.filter(isJsonObject)),
+          ...collectAttachmentBlocks(
+            result.output.filter(isJsonObject),
+            { requireAttachmentIdentity: true },
+          ),
         )
       }
     }
   }
   return collected
+}
+
+function hasExplicitAttachmentIdentity(block: JsonObject): boolean {
+  const generatedArtifact = getGeneratedArtifactSnapshotFromBlock(block)
+  const nestedFile = getJsonObject(block.file)
+  return Boolean(
+    getString(block, [
+      'attachmentId',
+      'attachment_id',
+      'outputId',
+      'output_id',
+      'displayPath',
+      'displayName',
+      'display_name',
+      'name',
+      'filename',
+      'fileName',
+    ]) ??
+      getString(nestedFile, [
+        'displayPath',
+        'displayName',
+        'name',
+        'filename',
+        'fileName',
+        'filePath',
+        'path',
+      ]) ??
+      getAttachmentPath(block, generatedArtifact) ??
+      generatedArtifact?.id,
+  )
 }
 
 function extractGeneratedOutputImagePaths(text: string): string[] {

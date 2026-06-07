@@ -118,6 +118,12 @@
 1. 内置 Skill preset 默认写成跨项目通用能力，不要把 CCR 当作唯一适用项目；CCR 专用路径、smoke、文档清单只能放在明确标注“目标项目是 CCR 时使用”的参考资料里。
 2. 为兼容已安装记录和 lock 记录，已有 preset id / Skill name 不要随手重命名；优先调整 `displayName`、`description`、正文和 UI 文案。确需重命名时，必须先确认没有现存安装记录，或同时设计 alias / 迁移。
 
+## 11.2 长驻协议子进程护栏
+
+1. App Server、MCP bridge 等长驻协议子进程使用 `execa` 时，stdout/stderr 必须按流消费并显式设置 `buffer: false`；不得依赖默认的 100 MB 累积缓冲，否则长会话会触发 `maxBuffer`、断开管道并产生 `EPIPE`。
+2. 子进程退出事件必须保留 `failed`、`isMaxBuffer`、退出码和信号等诊断；不得只记录最终退出码后丢失真正的流关闭原因。
+3. 当前 App Server 异常退出时，Desktop 必须同步把服务状态和活动 turn 收口为失败；不得让界面继续保持“正在处理”。
+
 ## 12. Desktop / Electron 视觉验证护栏
 
 1. 验证 CCR Desktop / Electron 界面时，不得使用 `PrintWindow` 截图结果作为布局判断依据；该方式在 Electron 窗口上可能出现裁切、错位或只截到标题栏。
@@ -140,7 +146,9 @@
 7. `canonicalLeafUuid` 只是兼容字段，语义等同 `currentContextTailUuid`，不得再解释为 parent graph leaf。新增恢复能力必须从 ordered transcript / classified events / current context tail 语义出发。
 8. `sessionStorage.ts` / `buildConversationChain(...)` 是原生读侧 helper，不是 CCR 恢复主路径。不得再向其中新增 ordered/rawIndex、display replay、currentContextTail、UI 计数或 compact 展示裁剪职责；第 3 层 `conversationMaterialization.ts` 才是恢复物化主入口。
 9. 原始共享层不是绝对冻结，但每次修改 `sessionStorage.ts`、`messages.ts`、`query.ts`、`QueryEngine.ts`、`compact.ts` 前必须先说明属于共享正确性还是 CCR 物化语义迁出。只有 provider/API/SDK/UUID/tool pairing/compact metadata/transcript 持久化一致性这类共享正确性可以留在共享层。
-10. 详细恢复语义以 [docs/architecture/session-resume-transcript-semantics.md](D:/agent_project/claude-code-reforged/docs/architecture/session-resume-transcript-semantics.md)、[docs/architecture/session-context-materialization-repair.md](D:/agent_project/claude-code-reforged/docs/architecture/session-context-materialization-repair.md)、[docs/architecture/realtime-history-display-contract.md](D:/agent_project/claude-code-reforged/docs/architecture/realtime-history-display-contract.md) 和 [docs/architecture/session-semantics-codex-migration.md](D:/agent_project/claude-code-reforged/docs/architecture/session-semantics-codex-migration.md) 为准；修改 `thread/resume`、sessionStorage、Desktop replay、AgentTool、branch/fork、工具展示投影前必须先阅读这些文档。
+10. 上下文压缩相关记录可以参与恢复和诊断，但 Desktop 时间线默认只显示简洁的 `context_compaction` 状态提示；原始 `Conversation compacted` 边界、compact summary、transcript-only 记录和压缩恢复附件不得独立展示。未经用户明确要求，不得再次增加这类内部记录的可见化。
+11. 工具结果附件由 App Server 的 ThreadDisplay projection 统一识别和标准化；Desktop / Renderer 只能消费 projection 中的 `attachmentSnapshots`，不得再次递归解析原始 `tool_result` / `tool_use.result` 猜测附件。用户发送前的本地附件预览和顶层模型输出转换可以保留独立入口，但不得承担工具结果投影职责。
+12. 详细恢复语义以 [docs/architecture/session-resume-transcript-semantics.md](D:/agent_project/claude-code-reforged/docs/architecture/session-resume-transcript-semantics.md)、[docs/architecture/session-context-materialization-repair.md](D:/agent_project/claude-code-reforged/docs/architecture/session-context-materialization-repair.md)、[docs/architecture/realtime-history-display-contract.md](D:/agent_project/claude-code-reforged/docs/architecture/realtime-history-display-contract.md) 和 [docs/architecture/session-semantics-codex-migration.md](D:/agent_project/claude-code-reforged/docs/architecture/session-semantics-codex-migration.md) 为准；修改 `thread/resume`、sessionStorage、Desktop replay、AgentTool、branch/fork、工具展示投影前必须先阅读这些文档。
 
 ## 14. 原始 Claude Code 基线保护护栏
 

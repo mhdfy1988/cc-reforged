@@ -952,8 +952,8 @@ async function runThreadDisplayAttachmentProjectionSmoke() {
   const snapshot = buildThreadDisplaySnapshot({
     threadId: 'thread-attachment-projection',
     source: 'history',
-    rawTranscriptEvents: 2,
-    coreContextMessages: 2,
+    rawTranscriptEvents: 4,
+    coreContextMessages: 4,
     messages: [
       {
         id: 'user-image-upload',
@@ -995,6 +995,93 @@ async function runThreadDisplayAttachmentProjectionSmoke() {
           },
         ],
       },
+      {
+        id: 'assistant-inline-media-tools',
+        role: 'assistant',
+        text: 'inline media tools',
+        status: 'completed',
+        kind: 'assistant_message',
+        content: [
+          {
+            type: 'tool_use',
+            id: 'playwright-screenshot-inline-image',
+            name: 'mcp__playwright__browser_take_screenshot',
+            input: { type: 'png', fullPage: true },
+          },
+          {
+            type: 'tool_use',
+            id: 'read-inline-image',
+            name: 'Read',
+            input: {
+              file_path:
+                'D:\\learn_code\\chinese-chess\\.playwright-mcp\\page.png',
+            },
+          },
+          {
+            type: 'tool_use',
+            id: 'tool-explicit-attachment',
+            name: 'Export',
+            input: {},
+          },
+        ],
+      },
+      {
+        id: 'user-inline-media-results',
+        role: 'user',
+        text: 'inline media results',
+        status: 'completed',
+        kind: 'tool_result',
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'playwright-screenshot-inline-image',
+            content: [
+              {
+                type: 'text',
+                text: 'Screenshot saved to .playwright-mcp\\page.png',
+              },
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: 'image/png',
+                  data: 'playwright-image-data',
+                },
+              },
+            ],
+          },
+          {
+            type: 'tool_result',
+            tool_use_id: 'read-inline-image',
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: 'image/png',
+                  data: 'read-image-data',
+                },
+              },
+            ],
+          },
+          {
+            type: 'tool_result',
+            tool_use_id: 'tool-explicit-attachment',
+            content: [
+              {
+                type: 'attachment',
+                attachment: {
+                  type: 'image',
+                  attachmentId: 'tool-file-1',
+                  displayName: 'report.png',
+                  mimeType: 'image/png',
+                  path: 'C:\\temp\\report.png',
+                },
+              },
+            ],
+          },
+        ],
+      },
     ],
   });
   const userImageItem = snapshot.items.find(item => item.id === 'user-image-upload');
@@ -1022,6 +1109,31 @@ async function runThreadDisplayAttachmentProjectionSmoke() {
     generatedImageItem?.projection?.event?.text.includes(generatedPath),
     false,
     'generated image local path should be removed from message text when attachment projection exists',
+  );
+  const playwrightScreenshotItem = snapshot.items.find(
+    item => item.id === 'tool:playwright-screenshot-inline-image',
+  );
+  assert.equal(
+    playwrightScreenshotItem?.projection?.event?.attachmentSnapshots,
+    undefined,
+    'Playwright inline screenshot media should stay in the tool result instead of becoming an attachment card',
+  );
+  const readInlineImageItem = snapshot.items.find(
+    item => item.id === 'tool:read-inline-image',
+  );
+  assert.equal(
+    readInlineImageItem?.projection?.event?.attachmentSnapshots,
+    undefined,
+    'Read inline image media should stay in the tool result instead of becoming an attachment card',
+  );
+  const explicitToolAttachmentItem = snapshot.items.find(
+    item => item.id === 'tool:tool-explicit-attachment',
+  );
+  assert.equal(
+    explicitToolAttachmentItem?.projection?.event?.attachmentSnapshots?.[0]
+      ?.name,
+    'report.png',
+    'explicit tool attachments should still be projected',
   );
 
   const patch = coreEventToThreadDisplayPatch({

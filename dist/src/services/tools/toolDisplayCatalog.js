@@ -115,6 +115,12 @@ export const CORE_TOOL_DISPLAY_CATALOG = {
         summaryKeys: ['skill'],
         detailKeys: ['skill'],
     },
+    DiscoverSkills: {
+        displayName: '发现技能',
+        category: 'agent',
+        summaryKeys: ['query', 'task', 'intent'],
+        detailKeys: ['query', 'task', 'intent', 'limit'],
+    },
     Config: {
         displayName: '配置',
         category: 'control',

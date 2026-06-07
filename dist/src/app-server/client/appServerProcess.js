@@ -8,6 +8,7 @@ export function startAppServerProcess(options = {}) {
         stdin: 'pipe',
         stdout: 'pipe',
         stderr: 'pipe',
+        buffer: false,
         cleanup: true,
         reject: false,
     });
@@ -53,6 +54,9 @@ export function startAppServerProcess(options = {}) {
             code: result.exitCode ?? null,
             signal: result.signal ?? null,
             stderr,
+            failed: result.failed,
+            isMaxBuffer: result.isMaxBuffer,
+            ...(result.failed ? { error: result } : {}),
         });
     }, error => {
         emitClose({

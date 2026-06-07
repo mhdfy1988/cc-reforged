@@ -503,9 +503,11 @@ async function assertToolErrorClassifications() {
       import assert from 'node:assert/strict'
       import { readFile } from 'node:fs/promises'
       import { createDisplayEventFromCompletedItem, createErrorDisplayEvent } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts'
-      import { isGlobPatternPath } from '../../apps/desktop/src/renderer/src/domain/fileEvents.ts'
+      import { resolveMessageAvatar } from '../../apps/desktop/src/renderer/src/domain/avatarEvents.ts'
+      import { extractAttachmentSnapshotsFromContentBlocks, isGlobPatternPath } from '../../apps/desktop/src/renderer/src/domain/fileEvents.ts'
       import { routeDesktopEvent } from '../../apps/desktop/src/renderer/src/app/notificationRouter.ts'
       import { getAttachmentActionPath, getAttachmentImagePreviewSrc } from '../../apps/desktop/src/renderer/src/components/chat/AttachmentImagePreview.tsx'
+      import { getVisibleTimelineEvents } from '../../apps/desktop/src/renderer/src/components/chat/ChatTimeline.tsx'
       import { getConfirmDialogToneClass } from '../../apps/desktop/src/renderer/src/components/common/ConfirmDialog.tsx'
       import { createToolDetailBlocks, getToolMetaItems } from '../../apps/desktop/src/renderer/src/components/chat/ToolCard.tsx'
       import { createErrorDiagnostics, getErrorActionViewModels, getPolicyBoundaryHint, getPolicyBoundaryLabel, getQuotaHint, getRateLimitHint } from '../../apps/desktop/src/renderer/src/components/chat/ErrorCard.tsx'
@@ -522,6 +524,42 @@ async function assertToolErrorClassifications() {
 
       assert.equal(getConfirmDialogToneClass('warning'), 'confirm-dialog--warning')
       assert.equal(getConfirmDialogToneClass('danger'), 'confirm-dialog--danger')
+
+      const compactTimelineEvents = getVisibleTimelineEvents([
+        {
+          id: 'compact-status',
+          type: 'system_notice',
+          text: '上下文已压缩。',
+          sourceKind: 'context_compaction',
+        },
+        {
+          id: 'raw-compact-boundary',
+          type: 'system_notice',
+          text: 'Conversation compacted',
+        },
+        {
+          id: 'compact-attachment-index',
+          type: 'system_notice',
+          text: '附件：index.html',
+          attachmentSnapshots: [{ id: 'index-html', name: 'index.html' }],
+        },
+        {
+          id: 'compact-attachment-style',
+          type: 'system_notice',
+          text: 'Attachment: css\\\\style.css',
+          attachmentSnapshots: [{ id: 'style-css', name: 'css\\\\style.css' }],
+        },
+        {
+          id: 'next-message',
+          type: 'assistant_message',
+          text: '继续处理。',
+        },
+      ])
+      assert.deepEqual(
+        compactTimelineEvents.map(event => event.id),
+        ['compact-status', 'next-message'],
+        'compact timeline should keep only the compact status and later conversation',
+      )
 
       const namedTodoReminderEvent = createDisplayEventFromCompletedItem(
         'fixture-named-todo-reminder',
@@ -542,6 +580,125 @@ async function assertToolErrorClassifications() {
         namedTodoReminderEvent,
         null,
         'named todo_reminder attachment must not render as a visible assistant message',
+      )
+
+      const discoverSkillsEvent = createDisplayEventFromCompletedItem(
+        'fixture-discover-skills',
+        'tool_call',
+        [
+          {
+            type: 'tool_use',
+            name: 'DiscoverSkills',
+            id: 'toolu_discover_skills',
+            input: {
+              query: 'documentation',
+            },
+          },
+        ],
+        'completed',
+      )
+      assert.equal(
+        discoverSkillsEvent?.toolSnapshot?.displayName,
+        '发现技能',
+        'DiscoverSkills should use localized display name',
+      )
+      assert.equal(
+        discoverSkillsEvent?.toolSnapshot?.category,
+        'agent',
+        'DiscoverSkills should be classified as an agent skill discovery tool',
+      )
+      const discoverSkillsAvatar = resolveMessageAvatar(discoverSkillsEvent)
+      assert.equal(
+        discoverSkillsAvatar.icon,
+        'search',
+        'DiscoverSkills avatar should use a discovery/search icon instead of fallback help',
+      )
+      assert.equal(discoverSkillsAvatar.label, '技')
+      assert.equal(discoverSkillsAvatar.title, '发现技能')
+
+      for (const attachment of [
+        {
+          type: 'skill_listing',
+          content: 'docs-update-helper - update docs',
+          skillCount: 1,
+          isInitial: false,
+        },
+        {
+          type: 'skill_discovery',
+          skills: [{ name: 'docs-update-helper', description: 'update docs' }],
+          signal: 'task',
+          source: 'native',
+        },
+        {
+          type: 'dynamic_skill',
+          skillDir: 'D:/repo/.claude/skills',
+          skillNames: ['docs-update-helper'],
+          displayPath: '.claude/skills',
+        },
+      ]) {
+        const skillContextAttachments = extractAttachmentSnapshotsFromContentBlocks({
+          eventId: 'fixture-skill-context-attachment',
+          blocks: [{ type: 'attachment', attachment }],
+          source: 'ToolResult',
+        })
+        assert.deepEqual(
+          skillContextAttachments,
+          [],
+          String(attachment.type) + ' context attachment must not render as a file attachment',
+        )
+      }
+
+      for (const type of ['image', 'file', 'audio', 'video']) {
+        const inlineToolMediaAttachments = extractAttachmentSnapshotsFromContentBlocks({
+          eventId: 'fixture-inline-tool-media-' + type,
+          blocks: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_inline_media',
+              content: [
+                {
+                  type,
+                  source: {
+                    type: 'base64',
+                    media_type:
+                      type === 'image' ? 'image/png' : 'application/octet-stream',
+                    data: 'inline-media-data',
+                  },
+                },
+              ],
+            },
+          ],
+          source: 'ToolResult',
+        })
+        assert.deepEqual(
+          inlineToolMediaAttachments,
+          [],
+          type + ' inline tool media must be supplied by ThreadDisplay projection instead of renderer inference',
+        )
+      }
+
+      const skillListingProjection = projectThreadDisplayItem({
+        id: 'fixture-skill-listing-projection',
+        type: 'assistant_message',
+        sourceKind: 'assistant_message',
+        status: 'completed',
+        text: '',
+        contentBlocks: [
+          {
+            type: 'attachment',
+            attachment: {
+              type: 'skill_listing',
+              content: 'docs-update-helper - update docs',
+              skillCount: 1,
+              isInitial: false,
+            },
+          },
+        ],
+      })
+      assert.equal(
+        skillListingProjection,
+        undefined,
+        'projected skill_listing attachment must not render as a visible attachment card',
       )
 
       const namedTodoReminderProjection = projectThreadDisplayItem({
@@ -2011,10 +2168,11 @@ async function assertToolErrorClassifications() {
           toolUseId: 'toolu_generate_image',
         },
       )
-      assert.equal(codexOauthToolEvent?.attachmentSnapshots?.[0]?.source, 'ModelOutput')
-      assert.equal(codexOauthToolEvent?.attachmentSnapshots?.[0]?.previewKind, 'image')
-      assert.equal(codexOauthToolEvent?.attachmentSnapshots?.[0]?.provider, 'codex-oauth')
-      assert.equal(codexOauthToolEvent?.attachmentSnapshots?.[0]?.savedPath, persistedArtifact.savedPath)
+      assert.equal(
+        codexOauthToolEvent?.attachmentSnapshots,
+        undefined,
+        'renderer raw tool fallback must not infer generated attachments without ThreadDisplay projection',
+      )
 
       const liveGenerateToolUseId = 'toolu_live_generate_image'
       const liveGenerateStartedPatch = coreEventToThreadDisplayPatchNotification({

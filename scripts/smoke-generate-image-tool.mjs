@@ -178,8 +178,8 @@ try {
   writeFileSync(
     entryPath,
     `
-      import { createDisplayEventFromCompletedItem } from '../../apps/desktop/src/renderer/src/domain/displayEvents.ts';
-      export { createDisplayEventFromCompletedItem };
+      import { projectThreadDisplayItem } from '../../src/display/threadDisplayProjection.ts';
+      export { projectThreadDisplayItem };
     `,
     'utf8',
   )
@@ -194,36 +194,51 @@ try {
     logLevel: 'silent',
   })
 
-  const { createDisplayEventFromCompletedItem } = await import(
+  const { projectThreadDisplayItem } = await import(
     pathToFileURL(outputPath).href
   )
-  const displayEvent = createDisplayEventFromCompletedItem(
-    'item_generate_image_tool_result',
-    'tool_result',
-    [
-      {
-        ...mapped,
-        result: toolOutput,
-      },
-    ],
-    'completed',
-    {
-      itemId: 'item_generate_image_tool_result',
+  const projection = projectThreadDisplayItem({
+    id: 'tool:toolu_generate_image_smoke',
+    type: 'tool_call',
+    text: '',
+    status: 'completed',
+    sourceKind: 'tool_result',
+    identity: {
+      itemId: 'tool:toolu_generate_image_smoke',
       threadId: 'thread_generate_image_smoke',
       turnId: 'turn_generate_image_smoke',
       toolUseId: 'toolu_generate_image_smoke',
     },
-  )
+    content: [
+      {
+        type: 'tool_use',
+        id: 'toolu_generate_image_smoke',
+        name: 'GenerateImage',
+        input: {
+          prompt: generatedArtifact.prompt,
+        },
+        status: 'completed',
+        result: [
+          {
+            type: 'text',
+            text: mapped.content,
+          },
+          imageBlock,
+        ],
+      },
+    ],
+  })
 
-  assert.equal(displayEvent?.type, 'tool_result')
-  assert.equal(displayEvent?.attachmentSnapshots?.length, 1)
-  assert.equal(displayEvent?.attachmentSnapshots?.[0]?.source, 'ModelOutput')
-  assert.equal(displayEvent?.attachmentSnapshots?.[0]?.status, 'generated')
-  assert.equal(displayEvent?.attachmentSnapshots?.[0]?.previewKind, 'image')
-  assert.equal(displayEvent?.attachmentSnapshots?.[0]?.provider, 'glm-api')
-  assert.equal(displayEvent?.attachmentSnapshots?.[0]?.model, 'glm-image')
+  const projectedEvent = projection?.event
+  assert.equal(projectedEvent?.type, 'tool_call')
+  assert.equal(projectedEvent?.attachmentSnapshots?.length, 1)
+  assert.equal(projectedEvent?.attachmentSnapshots?.[0]?.source, 'ModelOutput')
+  assert.equal(projectedEvent?.attachmentSnapshots?.[0]?.status, 'generated')
+  assert.equal(projectedEvent?.attachmentSnapshots?.[0]?.previewKind, 'image')
+  assert.equal(projectedEvent?.attachmentSnapshots?.[0]?.provider, 'glm-api')
+  assert.equal(projectedEvent?.attachmentSnapshots?.[0]?.model, 'glm-image')
   assert.equal(
-    displayEvent?.attachmentSnapshots?.[0]?.savedPath,
+    projectedEvent?.attachmentSnapshots?.[0]?.savedPath,
     generatedArtifact.savedPath,
   )
 
@@ -236,7 +251,7 @@ try {
           'unsupported_provider_returns_friendly_validation',
           'download_url_outputs_are_persisted_for_preview',
           'generate_image_tool_result_text_only_for_model',
-          'desktop_extracts_generated_image_from_tool_result_data',
+          'thread_display_projects_generated_image_from_tool_result_data',
         ],
       },
       null,

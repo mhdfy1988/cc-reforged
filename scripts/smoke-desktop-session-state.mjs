@@ -474,6 +474,12 @@ await writeFile(
         desktopMainSource.includes('if (workspaceChanged)'),
       'opening the same workspace should not unconditionally clear the active thread display',
     )
+    assert.ok(
+      desktopMainSource.includes('handleUnexpectedAppServerClose(launchedClient, event)') &&
+        desktopMainSource.includes("message: 'app server exited'") &&
+        desktopMainSource.includes("updateTurnFinishedState({ threadId, turnId, error }, 'failed', error)"),
+      'Desktop main must fail the active turn when the current App Server process exits unexpectedly',
+    )
 
     const runningTool = {
       id: 'tool-running',

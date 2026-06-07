@@ -378,11 +378,13 @@ function SkillManagementListItem(props: {
   const capability = skill.capability
   const toggle = getSkillManagementToggleEnabledTarget(skill)
   return (
-    <div className={props.active ? 'mcp-server-item active' : 'mcp-server-item'}>
+    <div
+      className={props.active ? 'mcp-server-item active' : 'mcp-server-item'}
+      onClick={props.onSelect}
+    >
       <button
         className="mcp-server-main"
         type="button"
-        onClick={props.onSelect}
       >
         <span>
           <strong>{capability.displayName}</strong>
@@ -401,7 +403,10 @@ function SkillManagementListItem(props: {
           </small>
         </div>
         {toggle ? (
-          <label className="skill-list-toggle">
+          <label
+            className="skill-list-toggle"
+            onClick={event => event.stopPropagation()}
+          >
             <input
               checked={capability.state.enabled}
               disabled={props.busy}

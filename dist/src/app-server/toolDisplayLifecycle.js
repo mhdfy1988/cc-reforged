@@ -6,6 +6,16 @@ const TOOL_RESULT_SOURCE_ID_KEYS = [
     'toolCallId',
     'tool_call_id',
 ];
+const TOOL_PROGRESS_SOURCE_ID_KEYS = [
+    'parentToolUseId',
+    'parentToolUseID',
+    'parent_tool_use_id',
+    'tool_use_id',
+    'toolUseId',
+    'toolUseID',
+    'toolCallId',
+    'tool_call_id',
+];
 export function createToolDisplayLifecycleReducer() {
     return new ToolDisplayLifecycleReducer();
 }
@@ -54,7 +64,7 @@ export class ToolDisplayLifecycleReducer {
         return toPublicItem(item);
     }
     acceptToolProgress(block, source) {
-        const toolUseId = normalizeToolResultSourceIdFromBlock(block);
+        const toolUseId = normalizeToolProgressSourceIdFromBlock(block);
         if (!toolUseId) {
             return this.createDiagnosticItem({
                 source,
@@ -133,6 +143,9 @@ export function normalizeToolUseIdFromBlock(block) {
 }
 export function normalizeToolResultSourceIdFromBlock(block) {
     return getStringField(block, TOOL_RESULT_SOURCE_ID_KEYS);
+}
+export function normalizeToolProgressSourceIdFromBlock(block) {
+    return getStringField(block, TOOL_PROGRESS_SOURCE_ID_KEYS);
 }
 function getToolResultStatus(block) {
     if (block.is_error === true ||

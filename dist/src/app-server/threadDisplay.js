@@ -381,12 +381,15 @@ export class ThreadDisplayReducer {
                     return [];
                 }
                 {
-                    const toolOperations = facts
-                        .filter(isThreadDisplayToolLikeFact)
+                    const toolFacts = facts.filter(isThreadDisplayToolLikeFact);
+                    const toolOperations = toolFacts
                         .map(fact => this.acceptDisplayFact(fact, inputEvent))
                         .filter((operation) => operation !== null);
                     if (toolOperations.length > 0) {
                         return toolOperations;
+                    }
+                    if (toolFacts.some(fact => fact.lifecycleKind === 'tool_progress')) {
+                        return [];
                     }
                 }
                 {
@@ -637,16 +640,22 @@ function createToolLifecycleDisplayItem(message, state, fallbackSourceIndex, exi
     const itemId = existingItem?.id ?? state.itemId;
     const startedAt = state.firstSeen.createdAt ?? existingItem?.createdAt ?? message.createdAt;
     const lifecycleMetadata = createToolLifecycleTimingMetadata(state, startedAt, extraMetadata);
+    const displayMetadata = isDiagnostic
+        ? stripProjectionContentMetadata(lifecycleMetadata)
+        : lifecycleMetadata;
+    const diagnosticPresentation = getToolLifecycleDiagnosticPresentation(state.diagnostic?.code);
     return createProjectedDisplayItem({
         base: existingItem,
         id: itemId,
         type: isDiagnostic
-            ? 'error'
+            ? diagnosticPresentation.type
             : getSpecificThreadDisplayItemTypeFromUnknownContent(content) ??
                 'tool_call',
         text: state.diagnostic?.message ?? extractDisplayText(content),
-        status: state.status,
-        sourceKind: state.diagnostic ? 'tool_result_diagnostic' : 'tool_lifecycle',
+        status: isDiagnostic ? diagnosticPresentation.status : state.status,
+        sourceKind: state.diagnostic
+            ? diagnosticPresentation.sourceKind
+            : 'tool_lifecycle',
         ...(startedAt ? { createdAt: startedAt } : {}),
         identity: {
             ...(existingItem?.identity ?? {}),
@@ -680,11 +689,32 @@ function createToolLifecycleDisplayItem(message, state, fallbackSourceIndex, exi
             ...(existingItem?.metadata ?? {}),
             role: message.role,
             sourceType: message.sourceType,
-            ...lifecycleMetadata,
+            ...displayMetadata,
             toolLifecycle: state,
             ...(!isDiagnostic && primaryBlock ? { primaryBlock } : {}),
         },
     });
+}
+function stripProjectionContentMetadata(metadata) {
+    const result = { ...metadata };
+    delete result.primaryBlock;
+    delete result.attachmentBlocks;
+    return result;
+}
+function getToolLifecycleDiagnosticPresentation(code) {
+    if (code === 'orphan_tool_progress' ||
+        code === 'missing_tool_progress_source_id') {
+        return {
+            type: 'system_notice',
+            status: 'warning',
+            sourceKind: 'tool_progress_diagnostic',
+        };
+    }
+    return {
+        type: 'error',
+        status: 'diagnostic',
+        sourceKind: 'tool_result_diagnostic',
+    };
 }
 function createToolLifecycleTimingMetadata(state, startedAt, extraMetadata) {
     const metadata = { ...(extraMetadata ?? {}) };

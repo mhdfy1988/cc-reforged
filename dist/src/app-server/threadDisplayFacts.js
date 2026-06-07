@@ -1,4 +1,4 @@
-import { normalizeToolResultSourceIdFromBlock, normalizeToolUseIdFromBlock, } from './toolDisplayLifecycle.js';
+import { normalizeToolProgressSourceIdFromBlock, normalizeToolResultSourceIdFromBlock, normalizeToolUseIdFromBlock, } from './toolDisplayLifecycle.js';
 export function resolveThreadDisplayFacts(inputEvent) {
     return inputEvent.source === 'history'
         ? resolveHistoryDisplayFacts(inputEvent)
@@ -272,7 +272,9 @@ function createToolLikeFact(inputEvent, message, block, contentIndex, realtimeEv
     const toolName = getStringField(block, ['name']);
     const toolUseId = lifecycleKind === 'tool_use'
         ? normalizeToolUseIdFromBlock(block)
-        : normalizeToolResultSourceIdFromBlock(block);
+        : lifecycleKind === 'tool_progress'
+            ? normalizeToolProgressSourceIdFromBlock(block)
+            : normalizeToolResultSourceIdFromBlock(block);
     const fileOperation = getFileOperation(toolName);
     const base = {
         ...createBaseFact(inputEvent, {
@@ -288,7 +290,9 @@ function createToolLikeFact(inputEvent, message, block, contentIndex, realtimeEv
         toolName,
         toolUseId,
         parentToolUseId: lifecycleKind === 'tool_result' || lifecycleKind === 'tool_progress'
-            ? normalizeToolResultSourceIdFromBlock(block)
+            ? lifecycleKind === 'tool_progress'
+                ? normalizeToolProgressSourceIdFromBlock(block)
+                : normalizeToolResultSourceIdFromBlock(block)
             : undefined,
         ...(realtimeEvent &&
             'completedAt' in realtimeEvent &&

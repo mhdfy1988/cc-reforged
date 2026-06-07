@@ -2,6 +2,7 @@ import type { CoreJsonObject, CoreTurnEvent } from '../core/types.js'
 import type { AppServerThreadMessage } from './protocol.js'
 import type { ToolDisplayLifecycleSource } from './toolDisplayLifecycle.js'
 import {
+  normalizeToolProgressSourceIdFromBlock,
   normalizeToolResultSourceIdFromBlock,
   normalizeToolUseIdFromBlock,
 } from './toolDisplayLifecycle.js'
@@ -520,7 +521,9 @@ function createToolLikeFact(
   const toolUseId =
     lifecycleKind === 'tool_use'
       ? normalizeToolUseIdFromBlock(block)
-      : normalizeToolResultSourceIdFromBlock(block)
+      : lifecycleKind === 'tool_progress'
+        ? normalizeToolProgressSourceIdFromBlock(block)
+        : normalizeToolResultSourceIdFromBlock(block)
   const fileOperation = getFileOperation(toolName)
   const base = {
     ...createBaseFact(inputEvent, {
@@ -537,7 +540,9 @@ function createToolLikeFact(
     toolUseId,
     parentToolUseId:
       lifecycleKind === 'tool_result' || lifecycleKind === 'tool_progress'
-        ? normalizeToolResultSourceIdFromBlock(block)
+        ? lifecycleKind === 'tool_progress'
+          ? normalizeToolProgressSourceIdFromBlock(block)
+          : normalizeToolResultSourceIdFromBlock(block)
         : undefined,
     ...(realtimeEvent &&
     'completedAt' in realtimeEvent &&

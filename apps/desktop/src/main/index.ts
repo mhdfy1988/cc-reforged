@@ -812,7 +812,7 @@ async function bootstrapAppServer(): Promise<void> {
     await closeManagedClient()
   }
 
-  managedClient = startManagedStdioAppServerClient({
+  const launchedClient = startManagedStdioAppServerClient({
     defaultTimeoutMs: 30_000,
     process: {
       command: runtime.command,
@@ -821,32 +821,36 @@ async function bootstrapAppServer(): Promise<void> {
       env: runtime.env,
     },
   })
+  managedClient = launchedClient
 
-  managedClient.process.onStderr(chunk => {
+  launchedClient.process.onStderr(chunk => {
     void appendDesktopLog('app-server.stderr.log', {
-      pid: managedClient?.process.pid,
+      pid: launchedClient.process.pid,
       chunk,
     })
   })
 
-  managedClient.process.onClose(event => {
+  launchedClient.process.onClose(event => {
     void appendDesktopLog('app-server.stderr.log', {
-      pid: managedClient?.process.pid,
+      pid: launchedClient.process.pid,
       event: {
         code: event.code,
         signal: event.signal,
         stderr: event.stderr,
         error: event.error instanceof Error ? event.error.message : event.error,
+        failed: event.failed,
+        isMaxBuffer: event.isMaxBuffer,
       },
     })
+    handleUnexpectedAppServerClose(launchedClient, event)
   })
 
-  managedClient.client.onNotification(notification => {
+  launchedClient.client.onNotification(notification => {
     handleNotification(notification)
     broadcast('notification', notification)
   })
 
-  managedClient.client.onError(error => {
+  launchedClient.client.onError(error => {
     status.lastError = `${error.kind}: ${error.message}`
     void appendDesktopLog('client-error.log', {
       kind: error.kind,
@@ -861,7 +865,7 @@ async function bootstrapAppServer(): Promise<void> {
   })
 
   try {
-    status.initialized = await managedClient.client.initialize({
+    status.initialized = await launchedClient.client.initialize({
       clientInfo: {
         name: 'ccr',
         title: 'CCR',
@@ -880,12 +884,15 @@ async function bootstrapAppServer(): Promise<void> {
     if (!status.protocolCompatibility.compatible) {
       throw new Error(status.protocolCompatibility.reason)
     }
-    status.config = await managedClient.client.getConfig()
-    status.permissionSettings = await managedClient.client.getPermissionSettings()
+    status.config = await launchedClient.client.getConfig()
+    status.permissionSettings = await launchedClient.client.getPermissionSettings()
     await refreshPendingPermissionsSnapshot()
-    status.auth = await managedClient.client.getAuthStatus()
-    status.mcp = await managedClient.client.listMcp({ includeDisabled: true })
+    status.auth = await launchedClient.client.getAuthStatus()
+    status.mcp = await launchedClient.client.listMcp({ includeDisabled: true })
     await refreshRuntimeSnapshots()
+    if (managedClient !== launchedClient) {
+      throw new Error('App Server process exited during initialization.')
+    }
     status.appServer = 'ready'
     broadcast('state', { message: 'app server ready' })
   } catch (error) {
@@ -894,6 +901,48 @@ async function bootstrapAppServer(): Promise<void> {
     broadcast('state', { message: 'app server failed', error: status.lastError })
     throw error
   }
+}
+
+function handleUnexpectedAppServerClose(
+  closedClient: ManagedStdioAppServerClient,
+  event: {
+    code: number | null
+    signal: NodeJS.Signals | null
+    error?: unknown
+    isMaxBuffer?: boolean
+  },
+): void {
+  if (managedClient !== closedClient) {
+    return
+  }
+
+  managedClient = null
+  status.appServer = 'failed'
+  const message = event.isMaxBuffer
+    ? 'App Server output exceeded the process buffer limit.'
+    : `App Server process exited unexpectedly (code ${String(event.code)}).`
+  status.lastError = message
+
+  const threadId = status.thread?.threadId
+  const turnId = status.thread?.activeTurnId
+  if (threadId && turnId) {
+    const error = {
+      kind: 'app_server_exited',
+      message,
+      code: event.code,
+      signal: event.signal,
+      isMaxBuffer: event.isMaxBuffer === true,
+    }
+    updateTurnFinishedState({ threadId, turnId, error }, 'failed', error)
+  }
+
+  broadcast('state', {
+    message: 'app server exited',
+    error: message,
+    code: event.code,
+    signal: event.signal,
+    isMaxBuffer: event.isMaxBuffer === true,
+  })
 }
 
 function handleNotification(notification: JsonRpcNotification): void {

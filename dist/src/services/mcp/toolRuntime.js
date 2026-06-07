@@ -1,5 +1,5 @@
 import { TelemetrySafeError_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../utils/errors.js';
-const DEFAULT_MCP_TOOL_TIMEOUT_MS = 100_000_000;
+const DEFAULT_MCP_TOOL_TIMEOUT_MS = 60_000;
 export function getMcpToolTimeoutMs(envValue = process.env.MCP_TOOL_TIMEOUT) {
     return parseInt(envValue || '', 10) || DEFAULT_MCP_TOOL_TIMEOUT_MS;
 }

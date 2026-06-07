@@ -16,9 +16,9 @@ const {
   isMcpConnectionClosedOnHttp,
 } = toolRuntime
 
-assert.equal(getMcpToolTimeoutMs(undefined), 100_000_000)
+assert.equal(getMcpToolTimeoutMs(undefined), 60_000)
 assert.equal(getMcpToolTimeoutMs('2500'), 2500)
-assert.equal(getMcpToolTimeoutMs('not-a-number'), 100_000_000)
+assert.equal(getMcpToolTimeoutMs('not-a-number'), 60_000)
 
 const timeoutError = createMcpToolTimeoutError({
   serverName: 'playwright',

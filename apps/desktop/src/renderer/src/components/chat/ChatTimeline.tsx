@@ -44,10 +44,9 @@ export function ChatTimeline(props: {
   const shouldAutoFollowRef = useRef(true)
   const lastScrollTopRef = useRef<number | null>(null)
   const [hasNewContentBelow, setHasNewContentBelow] = useState(false)
-  const visibleEvents = props.events.filter(event => !event.timelineHidden)
-  const compactCarryoverEventIds = useMemo(
-    () => getCompactCarryoverEventIds(visibleEvents),
-    [visibleEvents],
+  const visibleEvents = useMemo(
+    () => getVisibleTimelineEvents(props.events),
+    [props.events],
   )
   const inlinePermissionIds = getInlinePermissionIds(
     visibleEvents,
@@ -148,7 +147,6 @@ export function ChatTimeline(props: {
                 event={event}
                 avatarRuntime={props.avatarRuntime}
                 key={event.id}
-                compactCarryover={compactCarryoverEventIds.has(event.id)}
                 permission={getInlinePermissionForEvent(
                   event,
                   props.permissions,
@@ -211,7 +209,6 @@ function TimelineEvent(props: {
   avatarRuntime?: MessageAvatarRuntime
   onOpenLogs?: () => void
   onOpenModels?: () => void
-  compactCarryover?: boolean
   permission?: PermissionCard
   onRespondPermission: (
     permissionRequestId: string,
@@ -270,12 +267,7 @@ function TimelineEvent(props: {
     return <FileCard event={event} />
   }
 
-  return (
-    <SystemNoticeCard
-      compactCarryover={props.compactCarryover}
-      event={event}
-    />
-  )
+  return <SystemNoticeCard event={event} />
 }
 
 function getInlinePermissionIds(
@@ -506,27 +498,36 @@ function isInlinePlanApprovalPermission(permission: PermissionCard): boolean {
   )
 }
 
-function getCompactCarryoverEventIds(events: DisplayEvent[]): Set<string> {
-  const ids = new Set<string>()
+export function getVisibleTimelineEvents(events: DisplayEvent[]): DisplayEvent[] {
+  const timelineEvents = events.filter(event => !event.timelineHidden)
+  const hiddenEventIds = getHiddenCompactRecoveryEventIds(timelineEvents)
+  return timelineEvents.filter(event => !hiddenEventIds.has(event.id))
+}
+
+function getHiddenCompactRecoveryEventIds(
+  events: DisplayEvent[],
+): Set<string> {
+  const hiddenIds = new Set<string>()
   for (let index = 0; index < events.length; index += 1) {
     const event = events[index]
-    if (!isCompactBoundaryNotice(event)) {
+    if (!isRawCompactBoundaryNotice(event)) {
       continue
     }
+    hiddenIds.add(event.id)
 
     for (let nextIndex = index + 1; nextIndex < events.length; nextIndex += 1) {
       const nextEvent = events[nextIndex]
-      if (isCompactCarryoverAttachmentEvent(nextEvent)) {
-        ids.add(nextEvent.id)
+      if (isCompactRecoveryAttachmentEvent(nextEvent)) {
+        hiddenIds.add(nextEvent.id)
         continue
       }
       break
     }
   }
-  return ids
+  return hiddenIds
 }
 
-function isCompactBoundaryNotice(event: DisplayEvent): boolean {
+function isRawCompactBoundaryNotice(event: DisplayEvent): boolean {
   if (event.type !== 'system_notice') {
     return false
   }
@@ -534,7 +535,7 @@ function isCompactBoundaryNotice(event: DisplayEvent): boolean {
   return text === 'conversation compacted'
 }
 
-function isCompactCarryoverAttachmentEvent(event: DisplayEvent): boolean {
+function isCompactRecoveryAttachmentEvent(event: DisplayEvent): boolean {
   if (event.type !== 'system_notice') {
     return false
   }

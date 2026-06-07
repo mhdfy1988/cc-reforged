@@ -232,12 +232,6 @@ export function createDisplayEventFromCompletedItem(
   if (toolSnapshot) {
     const fileDisplaySnapshots =
       extractFileDisplaySnapshotsFromToolSnapshot(toolSnapshot)
-    const attachmentSnapshots = extractAttachmentSnapshotsFromContentBlocks({
-      eventId: itemId,
-      blocks,
-      source: 'ToolResult',
-      identity,
-    })
     return {
       id: itemId,
       type: toolSnapshot.kind === 'call' ? 'tool_call' : 'tool_result',
@@ -248,8 +242,6 @@ export function createDisplayEventFromCompletedItem(
       identity,
       toolSnapshot,
       ...fileDisplaySnapshots,
-      attachmentSnapshots:
-        attachmentSnapshots.length > 0 ? attachmentSnapshots : undefined,
       contentBlocks,
       errorSnapshot: toolSnapshot.errorMessage
         ? createCcrErrorSnapshot({

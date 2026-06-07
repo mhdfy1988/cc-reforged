@@ -16,18 +16,11 @@ export function MessageFrame(props: {
   label?: string
   event: DisplayEvent
   avatarRuntime?: MessageAvatarRuntime
-  compactCarryover?: boolean
   children?: ReactNode
 }) {
   const message = displayEventToChatMessage(props.event)
-  const hideCompactAttachmentNoticeText =
-    Boolean(props.compactCarryover) &&
-    isAttachmentNoticeText(message.text) &&
-    Boolean(props.event.attachmentSnapshots?.length)
   const hideEmptyAttachmentText =
     !message.text.trim() && Boolean(props.event.attachmentSnapshots?.length)
-  const hideMessageText =
-    hideCompactAttachmentNoticeText || hideEmptyAttachmentText
 
   return (
     <div className={`message ${message.role} ${message.kind ?? ''}`}>
@@ -39,11 +32,8 @@ export function MessageFrame(props: {
         <MessageAvatar event={props.event} runtime={props.avatarRuntime} />
       )}
       <div className="message-body">
-        {hideMessageText ? null : <MessageContent message={message} />}
-        <MessageAttachmentStrip
-          attachments={props.event.attachmentSnapshots}
-          compactCarryover={props.compactCarryover}
-        />
+        {hideEmptyAttachmentText ? null : <MessageContent message={message} />}
+        <MessageAttachmentStrip attachments={props.event.attachmentSnapshots} />
         {props.children}
       </div>
     </div>
@@ -52,7 +42,6 @@ export function MessageFrame(props: {
 
 export function MessageAttachmentStrip(props: {
   attachments?: readonly AttachmentSnapshot[]
-  compactCarryover?: boolean
 }) {
   const [actionState, setActionState] = useState<{
     id: string
@@ -127,12 +116,6 @@ export function MessageAttachmentStrip(props: {
   return (
     <>
       <div className="message-attachments">
-        {props.compactCarryover ? (
-          <div className="message-attachment-context">
-            <strong>压缩恢复附件</strong>
-            <span>这些文件由系统在会话压缩后自动保留，用于延续上下文。</span>
-          </div>
-        ) : null}
         {props.attachments.map(snapshot => {
           const path = getAttachmentDisplayPath(snapshot)
           const actionPath = getAttachmentActionPath(snapshot)
@@ -278,11 +261,6 @@ function getActionButtonLabel(
   fallback: string,
 ): string {
   return state?.id === id && state.action === action ? state.label : fallback
-}
-
-function isAttachmentNoticeText(value: string): boolean {
-  const normalized = value.trim()
-  return normalized.startsWith('附件：') || normalized.startsWith('Attachment:')
 }
 
 function getAttachmentDisplayName(snapshot: AttachmentSnapshot): string {

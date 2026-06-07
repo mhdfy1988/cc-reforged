@@ -12,6 +12,8 @@ export type TransportCloseEvent = {
   signal: NodeJS.Signals | null
   stderr?: string
   error?: unknown
+  failed?: boolean
+  isMaxBuffer?: boolean
 }
 
 export type JsonRpcLineTransport = {

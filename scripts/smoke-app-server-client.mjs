@@ -12,7 +12,17 @@ try {
   const clientModule = await import(
     pathToFileURL(join(repoRoot, 'dist/src/app-server/client/index.js')).href
   );
+  const appServerProcessSource = readFileSync(
+    join(repoRoot, 'src', 'app-server', 'client', 'appServerProcess.ts'),
+    'utf8',
+  );
+  assert.match(
+    appServerProcessSource,
+    /stdout:\s*'pipe',[\s\S]*?stderr:\s*'pipe',[\s\S]*?buffer:\s*false,/,
+    'long-lived app-server protocol output must be streamed instead of buffered by execa',
+  );
   await smokeLateResponseAfterTimeout(clientModule.JsonRpcClient);
+  await smokeProcessExitDiagnostics(clientModule.startAppServerProcess);
 
   const managed = clientModule.startManagedStdioAppServerClient({
     defaultTimeoutMs: 15_000,
@@ -734,6 +744,8 @@ try {
           ok: true,
           checked: [
             'client_spawn',
+            'client_process_output_streaming',
+            'client_process_exit_diagnostics',
             'initialize',
             'config/get',
             'auth/status',
@@ -1072,6 +1084,22 @@ async function smokeLateResponseAfterTimeout(JsonRpcClient) {
   assert.equal(errors.length, 1);
   assert.equal(errors[0].kind, 'protocol_error');
   client.close();
+}
+
+async function smokeProcessExitDiagnostics(startAppServerProcess) {
+  const childProcess = startAppServerProcess({
+    command: process.execPath,
+    args: [
+      '-e',
+      'process.stderr.write("intentional smoke failure"); process.exit(7)',
+    ],
+  });
+  const exit = await childProcess.waitForExit();
+  assert.equal(exit.code, 7);
+  assert.equal(exit.failed, true);
+  assert.equal(exit.isMaxBuffer, false);
+  assert.ok(exit.error instanceof Error);
+  assert.match(exit.stderr ?? '', /intentional smoke failure/);
 }
 
 function createFakeTransport() {
