@@ -4,9 +4,10 @@ import { buildAppServerToolPool } from '../services/tools/appServerToolPool.js';
 import { getEmptyToolPermissionContext } from '../Tool.js';
 import { getClaudeConfigHomeDir } from '../utils/envUtils.js';
 import { pathsEqual } from '../utils/file.js';
-import { loadAllPluginsCacheOnly } from '../utils/plugins/pluginLoader.js';
 import { listCoreMcpServers } from './mcpCore.js';
 import { resolve } from 'node:path';
+import { createPluginDomainSession } from '../services/plugins/pluginDomainSession.js';
+import { PluginInspector } from '../services/plugins/pluginInspector.js';
 export async function listCoreCapabilities(params = {}) {
     return listExtensionCapabilities(await createCapabilityProviderContext(params));
 }
@@ -45,13 +46,25 @@ async function createCapabilityProviderContext(params) {
 }
 async function createCapabilityRuntimeEnvironment(params) {
     const cwd = resolve(params.cwd ?? process.cwd());
+    const workspaceRoot = resolve(params.workspaceRoot ?? cwd);
     const configHomeDir = resolve(params.configHomeDir ?? getClaudeConfigHomeDir());
     const activeConfigHomeDir = resolve(getClaudeConfigHomeDir());
     const usesActiveConfigHome = pathsEqual(configHomeDir, activeConfigHomeDir);
+    const pluginCatalog = params.pluginSnapshot === undefined
+        ? await new PluginInspector().listCatalog(createPluginDomainSession({
+            workspaceRoot,
+            currentCwd: cwd,
+            configHomeDir,
+            runtimeInstanceId: params.runtimeInstanceId ?? 'app-server',
+            ...(params.requestId ? { requestId: params.requestId } : {}),
+            environment: process.env,
+        }))
+        : undefined;
     const pluginSnapshot = params.pluginSnapshot ??
-        (usesActiveConfigHome
-            ? await loadCapabilityPluginSnapshot()
-            : createForeignHomePluginSnapshot(configHomeDir));
+        {
+            plugins: pluginCatalog?.loadedPlugins ?? [],
+            errors: [],
+        };
     const mcpRuntime = params.mcpRuntime ??
         (usesActiveConfigHome
             ? await loadCcrMcpRuntimeSnapshot('capability-catalog')
@@ -90,45 +103,13 @@ async function createCapabilityRuntimeEnvironment(params) {
         mcpConfig,
         mcpRuntime,
         plugins: pluginSnapshot,
+        ...(pluginCatalog ? { pluginCatalog } : {}),
         apps: params.apps ?? [],
         tools,
         activeAgentCount,
         ...(params.platform ? { platform: params.platform } : {}),
         connectedMcpServerNames,
         mcpServerStatuses,
-    };
-}
-async function loadCapabilityPluginSnapshot() {
-    try {
-        const result = await loadAllPluginsCacheOnly();
-        return {
-            plugins: [...result.enabled, ...result.disabled],
-            errors: result.errors,
-        };
-    }
-    catch (error) {
-        return {
-            plugins: [],
-            errors: [
-                {
-                    type: 'generic-error',
-                    source: 'capability-runtime-environment',
-                    error: error instanceof Error ? error.message : String(error),
-                },
-            ],
-        };
-    }
-}
-function createForeignHomePluginSnapshot(configHomeDir) {
-    return {
-        plugins: [],
-        errors: [
-            {
-                type: 'generic-error',
-                source: 'capability-runtime-environment',
-                error: `Plugin snapshot for non-active config home is unavailable: ${configHomeDir}`,
-            },
-        ],
     };
 }
 function createEmptyMcpRuntimeSnapshot() {

@@ -47,7 +47,7 @@ try {
   })
   assert.equal(installedResult.name, 'high-risk-apply')
   assert.equal(
-    installedResult.warnings.some(warning => warning.includes('override')),
+    installedResult.warnings.some(warning => warning.includes('已确认高风险安装')),
     true,
   )
 

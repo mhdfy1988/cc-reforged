@@ -11,6 +11,9 @@
 - [CCR 项目级 Settings 隔离设计](./ccr-project-settings-isolation-design.md)
 - [CCR 用户目录与安装布局](./ccr-home-layout.md)
 - [CCR 扩展能力体系总览](./extension-capability-system.md)
+- [CCR Plugin 接入与产品化设计（P0-P12 已完成）](./plugin-system-product-design.md)
+- [Plugin 兼容迁移、回滚与发布收口](./plugin-system-compatibility-and-release.md)
+- [Plugin 系统源码证据索引](../references/plugin-system-source-evidence.md)
 - [CCR 扩展能力运行时与上下文重构路线](./extension-runtime-context-refactor-roadmap.md)
 - [CCR Skill 系统整体架构](./skill-system-architecture.md)
 - [Codex 扩展能力体系学习笔记](./codex-extension-capability-study.md)
@@ -19,7 +22,14 @@
 
 1. 先读 [CCR 扩展能力体系总览](./extension-capability-system.md)，确认 Skill、MCP、Tool、Plugin、App 的统一事实模型、身份、关系和非目标。
 2. 再读 [CCR 扩展能力运行时与上下文重构路线](./extension-runtime-context-refactor-roadmap.md) 的 R0-R30 与 G1-G4，确认已经完成的底层重构和下一阶段边界。
-3. 只有问题落到具体领域时，再进入 [CCR Skill 系统整体架构](./skill-system-architecture.md)、[CCR 工具注册目录](./tool-registry-catalog.md) 或 MCP 专项文档。
+3. 如果问题落到 Plugin 产品化、manifest、本地包导入、安装生命周期或 Desktop 插件页，先读 [CCR Plugin 接入与产品化设计](./plugin-system-product-design.md)；涉及兼容迁移、回滚或发布门禁时再读 [Plugin 兼容迁移、回滚与发布收口](./plugin-system-compatibility-and-release.md)，最后用 [Plugin 系统源码证据索引](../references/plugin-system-source-evidence.md) 核对实现边界。
+4. 只有问题落到具体领域时，再进入 [CCR Skill 系统整体架构](./skill-system-architecture.md)、[CCR 工具注册目录](./tool-registry-catalog.md) 或 MCP 专项文档。
+
+当前产品口径：
+
+- `插件` 是本地 Plugin 包管理页，不作为远程插件市场浏览页。
+- `能力` 是独立能力目录页，读取 Skill、MCP、Tool、Plugin、App 的统一事实，不负责安装动作。
+- Plugin 本地导入支持文件夹和 zip，默认用户全局作用域；用户分发包推荐根目录 `plugin.json`，内部缓存继续使用 `.claude-plugin/plugin.json`。
 
 ## 工程兼容与迁移
 

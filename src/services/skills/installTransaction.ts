@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, rename, rm, writeFile } from 'fs/promises'
 import { existsSync } from 'fs'
 import { dirname, join } from 'path'
+import { setTimeout as sleep } from 'timers/promises'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
   createCcrSkillInstallManifest,
@@ -167,17 +168,17 @@ async function stageAndReplacePackageDir(input: {
   })
 
   if (!existsSync(input.packageDir)) {
-    await rename(stagingDir, input.packageDir)
+    await renameWithRetry(stagingDir, input.packageDir)
     return
   }
 
   await assertExistingPackageIsInstallerOwned(input.packageDir, input.expectedOwner)
-  await rename(input.packageDir, backupDir)
+  await renameWithRetry(input.packageDir, backupDir)
   try {
-    await rename(stagingDir, input.packageDir)
+    await renameWithRetry(stagingDir, input.packageDir)
   } catch (error) {
     if (!existsSync(input.packageDir) && existsSync(backupDir)) {
-      await rename(backupDir, input.packageDir)
+      await renameWithRetry(backupDir, input.packageDir)
     }
     throw error
   }
@@ -208,4 +209,32 @@ function getErrorCode(error: unknown): unknown {
   return typeof error === 'object' && error != null && 'code' in error
     ? (error as { code?: unknown }).code
     : undefined
+}
+
+async function renameWithRetry(from: string, to: string): Promise<void> {
+  const delaysMs = [25, 50, 100, 200, 400, 800]
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rename(from, to)
+      return
+    } catch (error) {
+      if (
+        attempt >= delaysMs.length ||
+        !isRetryableRenameError(error)
+      ) {
+        throw error
+      }
+      await sleep(delaysMs[attempt]!)
+    }
+  }
+}
+
+function isRetryableRenameError(error: unknown): boolean {
+  const code = getErrorCode(error)
+  return (
+    code === 'EPERM' ||
+    code === 'EACCES' ||
+    code === 'EBUSY' ||
+    code === 'ENOTEMPTY'
+  )
 }

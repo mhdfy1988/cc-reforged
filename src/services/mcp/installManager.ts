@@ -7,7 +7,9 @@ import { getPlatform } from '../../utils/platform.js'
 import {
   addMcpConfig,
   getMcpConfigByName,
+  isMcpServerDisabled,
   removeMcpConfig,
+  setMcpServerEnabled,
   updateMcpConfig,
 } from './config.js'
 import {
@@ -32,7 +34,9 @@ import {
   type McpServerConfig,
 } from './types.js'
 
-export const CcrMcpWritableScopeSchema = z.enum(['user', 'project', 'local'])
+// CCR-managed MCP installs are user-global. Project `.mcp.json` remains a
+// discovery/approval source, not a Desktop installer target.
+export const CcrMcpWritableScopeSchema = z.literal('user')
 export type CcrMcpWritableScope = z.infer<typeof CcrMcpWritableScopeSchema>
 
 export const CcrMcpInstallPlanInputSchema = z.object({
@@ -414,7 +418,10 @@ export async function applyCcrMcpInstallPlan(input: {
   const serverConfig = resolveServerConfig(manifest)
   const replacedConfig =
     existing && plan.force ? stripScopedMcpConfig(existing) : null
+  const wasEnabledBeforeApply = !isMcpServerDisabled(plan.name)
+  const shouldEnableAfterApply = !existing
   let wroteConfig = false
+  let updatedEnabledState = false
   try {
     if (existing && plan.force) {
       await updateMcpConfig(plan.name, serverConfig, plan.scope)
@@ -422,6 +429,10 @@ export async function applyCcrMcpInstallPlan(input: {
       await addMcpConfig(plan.name, serverConfig, plan.scope)
     }
     wroteConfig = true
+    if (shouldEnableAfterApply) {
+      setMcpServerEnabled(plan.name, true)
+      updatedEnabledState = !wasEnabledBeforeApply
+    }
 
     const record = await recordInstalledMcp({
       plan,
@@ -447,6 +458,9 @@ export async function applyCcrMcpInstallPlan(input: {
       } else {
         await removeMcpConfig(plan.name, plan.scope).catch(() => {})
       }
+    }
+    if (updatedEnabledState) {
+      setMcpServerEnabled(plan.name, wasEnabledBeforeApply)
     }
     throw error
   }
@@ -624,6 +638,7 @@ export async function uninstallCcrMcpInstalledServer(input: {
     schemaVersion: 1,
     locks: restLocks,
   })
+  setMcpServerEnabled(record.name, true)
 
   return {
     uninstalled: true,
@@ -787,7 +802,7 @@ function summarizeInstallSecurity(params: {
     dataBoundary: params.manifest.dataBoundary,
     scope: params.scope,
     scopeWritable,
-    projectTrustRequired: params.scope === 'project' || params.scope === 'local',
+    projectTrustRequired: false,
     enterpriseExclusive: inventory.enterpriseExclusive,
     pluginOnly: inventory.pluginOnly,
     packageCache: {

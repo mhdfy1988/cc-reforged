@@ -144,13 +144,13 @@ function toExtensionCapability(
   runtimeClient?: MCPServerConnection,
   options: { configured?: boolean } = { configured: true },
 ): ExtensionCapability {
-  const configured = options.configured !== false
+  const configured = options.configured !== false && server.configured !== false
   const availability = getMcpServerAvailability(server, runtimeClient)
   const sourceKind: ExtensionCapabilitySourceKind =
     server.source === 'plugin' ? 'plugin' : 'mcp'
   const pluginId = normalizePluginId(server.pluginSource)
   const diagnostics = createMcpServerDiagnostics(server.name, availability)
-  const installed = configured && server.installKind !== 'manual-config'
+  const installed = Boolean(server.installedRef ?? server.ccrInstalled)
   return {
     schemaVersion: 1,
     id: createExtensionCapabilityId({
@@ -188,6 +188,7 @@ function toExtensionCapability(
     },
     relations: {
       ...(pluginId ? { parentPluginId: pluginId } : {}),
+      ...(server.installedRef ? { installedRef: server.installedRef } : {}),
       runtimeRef: `mcp:${server.name}`,
     },
     diagnostics,
@@ -196,6 +197,9 @@ function toExtensionCapability(
       type: server.type,
       transport: server.transport,
       installKind: server.installKind,
+      ccrInstalled: installed,
+      installedRef: server.installedRef,
+      installedRecordScope: server.installedRecordScope,
       configured,
       pluginSource: server.pluginSource,
       command: server.command,

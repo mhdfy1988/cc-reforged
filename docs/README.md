@@ -11,9 +11,9 @@
 
 ## 当前版本与路线
 
-- 当前公开版本：`0.6.2`，发布于 2026-06-05。
-- 当前版本线：`0.6.2` 聚焦 Skill / Plugin 和外部能力包治理，补齐统一能力目录、Skill 内部分层、安装可靠性、运行时启用、审计和管理入口。
-- 后续主线：继续深化企业 trust policy、能力发现、命名空间、审计和远端 registry 等能力。
+- 当前公开版本：`0.6.3`，发布于 2026-06-12。
+- 当前版本线：`0.6.3` 聚焦外部扩展能力收口，补齐统一能力目录、Plugin 本地包管理、请求级运行时快照、安装可靠性、运行时启用、审计和管理入口。
+- 后续主线：继续深化企业 trust policy、签名与供应链策略、远端 registry、能力发现、命名空间和审计等能力。
 - 路线详情：[CCR 版本路线图](./architecture/version-roadmap.md)。
 - 逐版本变化：[CHANGELOG.md](../CHANGELOG.md)。
 
@@ -66,9 +66,12 @@
 - [CCR Desktop 发布验收 Runbook](./architecture/desktop-release-acceptance-runbook.md)
 - [CCR 升级管理策略](./architecture/upgrade-management-strategy.md)
 
-### MCP、参考与示例
+### 外部扩展、MCP、参考与示例
 
 - [CCR 扩展能力体系总览](./architecture/extension-capability-system.md)
+- [CCR Plugin 接入与产品化设计（P0-P12 已完成）](./architecture/plugin-system-product-design.md)
+- [Plugin 兼容迁移、回滚与发布收口](./architecture/plugin-system-compatibility-and-release.md)
+- [Plugin 系统源码证据索引](./references/plugin-system-source-evidence.md)
 - [MCP 文档入口](./mcp/README.md)
 - [MCP 安装与使用](./mcp/README.md#使用入口)
 - [通用 MCP 接入规范](./mcp/integration-standard.md)
@@ -117,6 +120,8 @@
 ## 快速判断
 
 - 要找“某能力怎么设计、怎么接”：看 `architecture/`。
+- 要找“Skill / MCP / Plugin / Tool / App 的关系”：先看 `architecture/extension-capability-system.md`。
+- 要找“Plugin 本地包导入、manifest、启停、运行时和发布门禁”：看 `architecture/plugin-system-product-design.md`。
 - 要找“某厂商怎么接入”：看 `architecture/provider-integrations/`。
 - 要找“Skill 标准、兼容、安装管理”：看 `skills/`。
 - 要找“现在做到哪、下一步是什么”：看 `stages/`。

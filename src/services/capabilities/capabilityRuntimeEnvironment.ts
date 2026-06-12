@@ -2,6 +2,7 @@ import type { Tool, Tools } from '../../Tool.js'
 import type { LoadedPlugin, PluginError } from '../../types/plugin.js'
 import type { CcrMcpRuntimeSnapshot } from '../mcp/runtimeSnapshot.js'
 import type { AppConnectorCapabilityInput } from './appCapabilityProvider.js'
+import type { PluginCatalogSnapshot } from '../plugins/pluginDomainTypes.js'
 
 export type CapabilityRequestScope = {
   cwd: string
@@ -17,6 +18,10 @@ export type CapabilityMcpConfigServer = {
   source?: string
   installKind?: string
   pluginSource?: string
+  configured?: boolean
+  ccrInstalled?: boolean
+  installedRef?: string
+  installedRecordScope?: string
   command?: string
   url?: string
   args?: string[]
@@ -40,6 +45,7 @@ export type CapabilityRuntimeEnvironment = {
   mcpConfig: CapabilityMcpConfigSnapshot
   mcpRuntime: CcrMcpRuntimeSnapshot
   plugins: CapabilityPluginSnapshot
+  pluginCatalog?: PluginCatalogSnapshot
   apps: readonly AppConnectorCapabilityInput[]
   tools: Tools
   activeAgentCount: number

@@ -1180,6 +1180,16 @@ async function assertToolErrorClassifications() {
                 },
               ],
             },
+            {
+              name: 'aaa_disabled',
+              scope: 'user',
+              transport: 'stdio',
+              source: 'user',
+              enabled: false,
+              command: 'node',
+              args: ['disabled.js'],
+              tools: [],
+            },
           ],
           inventory: {
             servers: [
@@ -1231,9 +1241,15 @@ async function assertToolErrorClassifications() {
         },
       )
       const browserMcpServer = mergedMcpServers.find(server => server.name === 'browser')
+      const disabledMcpServer = mergedMcpServers.find(server => server.name === 'aaa_disabled')
       const shadowedMcpServer = mergedMcpServers.find(server => server.name === 'shadowed')
       assert.ok(browserMcpServer)
+      assert.ok(disabledMcpServer)
       assert.ok(shadowedMcpServer)
+      assert.ok(
+        mergedMcpServers.findIndex(server => server.name === 'browser') <
+          mergedMcpServers.findIndex(server => server.name === 'aaa_disabled'),
+      )
       assert.equal(browserMcpServer?.installed?.packageOwnerMarkerPath, 'C:/tmp/pkg/.ccr-mcp-install.json')
       assert.equal(browserMcpServer?.installKind, 'stdio-npm-package')
       assert.equal(formatMcpScopeLabel('user'), '用户全局')

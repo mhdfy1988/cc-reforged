@@ -18,7 +18,10 @@
  */
 import { getOriginalCwd } from '../../bootstrap/state.js';
 import { reinitializeLspServerManager } from '../../services/lsp/manager.js';
+import { createCurrentProcessPluginDomainSession, } from '../../services/plugins/pluginDomainSession.js';
+import { PluginRuntimeActivator, } from '../../services/plugins/pluginRuntimeActivator.js';
 import { getAgentDefinitionsWithOverrides } from '../../tools/AgentTool/loadAgentsDir.js';
+import { getClaudeConfigHomeDir } from '../envUtils.js';
 import { logForDebugging } from '../debug.js';
 import { errorMessage } from '../errors.js';
 import { logError } from '../log.js';
@@ -42,7 +45,64 @@ import { loadAllPlugins } from './pluginLoader.js';
  * LSP: if plugins now contribute LSP servers, reinitializeLspServerManager()
  * re-reads config. Servers are lazy-started so this is just config parsing.
  */
-export async function refreshActivePlugins(setAppState) {
+export async function refreshActivePlugins(setAppState, options = {}) {
+    const runtimeInstanceId = options.runtimeInstanceId ?? 'current-process-plugin-runtime';
+    const session = createCurrentProcessPluginDomainSession({
+        workspaceRoot: options.workspaceRoot ?? getOriginalCwd(),
+        currentCwd: getOriginalCwd(),
+        configHomeDir: options.configHomeDir ?? getClaudeConfigHomeDir(),
+        runtimeInstanceId,
+    });
+    const activator = new PluginRuntimeActivator();
+    let legacyResult;
+    const runtimeActivation = await activator.activate(session, {
+        runtimeInstanceId,
+        async prepare() {
+            legacyResult = await refreshActivePluginsInCurrentProcess(setAppState);
+            const componentResults = createComponentResults(legacyResult.enabledPlugins, [
+                ...legacyResult.enabledPlugins.flatMap(plugin => pluginComponentErrors(plugin, legacyResult.pluginErrors)),
+                ...(legacyResult.hookLoadFailed
+                    ? legacyResult.enabledPlugins
+                        .filter(plugin => getPluginRuntimeComponents(plugin).includes('hook'))
+                        .map(plugin => ({
+                        pluginId: plugin.source,
+                        component: 'hook',
+                        state: 'failed',
+                        diagnostic: 'Plugin hook refresh failed; previous hooks were retained.',
+                    }))
+                    : []),
+            ]);
+            return {
+                plugins: legacyResult.enabledPlugins.map(plugin => ({
+                    pluginId: plugin.source,
+                    ...(plugin.manifest.version
+                        ? { version: plugin.manifest.version }
+                        : {}),
+                    components: getPluginRuntimeComponents(plugin),
+                })),
+                loadedPlugins: [
+                    ...legacyResult.enabledPlugins,
+                    ...legacyResult.disabledPlugins,
+                ],
+                componentResults,
+                payload: legacyResult,
+            };
+        },
+        async commit() {
+            return [];
+        },
+    });
+    if (!legacyResult) {
+        throw Object.assign(new Error(runtimeActivation.diagnostics[0] ??
+            'Plugin runtime refresh failed before a new snapshot was prepared.'), {
+            code: 'plugin-runtime-refresh-failed',
+            runtimeActivation,
+        });
+    }
+    const { enabledPlugins: _enabled, disabledPlugins: _disabled, pluginErrors: _errors, hookLoadFailed: _hookLoadFailed, ...result } = legacyResult;
+    return { ...result, runtimeActivation };
+}
+async function refreshActivePluginsInCurrentProcess(setAppState) {
     logForDebugging('refreshActivePlugins: clearing all plugin caches');
     clearAllCaches();
     // Orphan exclusions are session-frozen by default, but /reload-plugins is
@@ -141,7 +201,111 @@ export async function refreshActivePlugins(setAppState) {
         error_count: errors.length + (hook_load_failed ? 1 : 0),
         agentDefinitions,
         pluginCommands,
+        enabledPlugins: enabled,
+        disabledPlugins: disabled,
+        pluginErrors: errors,
+        hookLoadFailed: hook_load_failed,
     };
+}
+export function getPluginRuntimeComponents(plugin) {
+    const components = [];
+    if (plugin.commandsPath ||
+        plugin.commandsPaths?.length ||
+        plugin.manifest.commands) {
+        components.push('command');
+    }
+    if (plugin.agentsPath ||
+        plugin.agentsPaths?.length ||
+        plugin.manifest.agents) {
+        components.push('agent');
+    }
+    if (plugin.skillsPath ||
+        plugin.skillsPaths?.length ||
+        plugin.manifest.skills) {
+        components.push('skill');
+    }
+    if (plugin.hooksConfig || plugin.manifest.hooks)
+        components.push('hook');
+    if (plugin.mcpServers || plugin.manifest.mcpServers)
+        components.push('mcp');
+    if (plugin.lspServers || plugin.manifest.lspServers)
+        components.push('lsp');
+    if (plugin.manifest.channels?.length)
+        components.push('channel');
+    if (plugin.outputStylesPath ||
+        plugin.outputStylesPaths?.length ||
+        plugin.manifest.outputStyles) {
+        components.push('output-style');
+    }
+    return components;
+}
+export function createComponentResults(plugins, errors) {
+    const errorByComponent = new Map(errors.map(error => [
+        `${error.pluginId}::${error.component}`,
+        error,
+    ]));
+    return plugins.flatMap(plugin => getPluginRuntimeComponents(plugin).map(component => {
+        const error = errorByComponent.get(`${plugin.source}::${component}`);
+        if (error)
+            return error;
+        if (component === 'channel' || component === 'output-style') {
+            return {
+                pluginId: plugin.source,
+                component,
+                state: 'restart-required',
+                diagnostic: `${component} changes require a new runtime session.`,
+            };
+        }
+        return {
+            pluginId: plugin.source,
+            component,
+            state: 'active',
+        };
+    }));
+}
+export function pluginComponentErrors(plugin, errors) {
+    return errors.flatMap(error => {
+        if ('plugin' in error && error.plugin && error.plugin !== plugin.name) {
+            return [];
+        }
+        const component = pluginErrorComponent(error);
+        return component
+            ? [
+                {
+                    pluginId: plugin.source,
+                    component,
+                    state: 'failed',
+                    diagnostic: error.type === 'generic-error'
+                        ? error.error
+                        : `Plugin component refresh failed: ${error.type}`,
+                },
+            ]
+            : [];
+    });
+}
+function pluginErrorComponent(error) {
+    if (error.type.startsWith('mcp'))
+        return 'mcp';
+    if (error.type.startsWith('lsp'))
+        return 'lsp';
+    if (error.type === 'hook-load-failed')
+        return 'hook';
+    if (error.type === 'component-load-failed' ||
+        error.type === 'path-not-found') {
+        switch (error.component) {
+            case 'commands':
+                return 'command';
+            case 'agents':
+                return 'agent';
+            case 'skills':
+                return 'skill';
+            case 'hooks':
+                return 'hook';
+            case 'output-styles':
+                return 'output-style';
+        }
+    }
+    return null;
 }
 /**
  * Merge fresh plugin-load errors with existing errors, preserving LSP and

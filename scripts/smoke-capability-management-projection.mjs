@@ -26,7 +26,14 @@ const capabilities = [
     kind: 'mcp-server',
     name: 'manual',
     state: { installed: false, configured: true, runtimeVisible: false },
-    metadata: { installKind: 'manual-config' },
+    metadata: { installKind: 'manual-config', scope: 'user' },
+  }),
+  capability({
+    id: 'mcp-server:project-manual',
+    kind: 'mcp-server',
+    name: 'project-manual',
+    state: { installed: false, configured: true, runtimeVisible: false },
+    metadata: { installKind: 'manual-config', scope: 'project' },
   }),
   capability({
     id: 'mcp-server:runtime',
@@ -98,8 +105,19 @@ assert.deepEqual(manualMcp.allowedActions, [
   'inspect',
   'test',
   'restart',
+  'uninstall',
 ])
-assert.equal(manualMcp.allowedActions.includes('uninstall'), false)
+assert.equal(manualMcp.allowedActions.includes('uninstall'), true)
+
+const projectManualMcp = byId.get('mcp-server:project-manual')
+assert.equal(projectManualMcp.managementOwnership, 'manual-config')
+assert.deepEqual(projectManualMcp.allowedActions, [
+  'disable',
+  'inspect',
+  'test',
+  'restart',
+])
+assert.equal(projectManualMcp.allowedActions.includes('uninstall'), false)
 
 const runtimeMcp = byId.get('mcp-server:runtime')
 assert.equal(runtimeMcp.managementOwnership, 'runtime-only')

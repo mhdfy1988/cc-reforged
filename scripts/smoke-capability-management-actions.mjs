@@ -41,8 +41,31 @@ function smokePureActionPlanning() {
         id: 'mcp-server:manual',
         kind: 'mcp-server',
         name: 'manual',
-        metadata: { installKind: 'manual-config' },
+        metadata: { installKind: 'manual-config', scope: 'user' },
         state: { installed: false, configured: true },
+      }),
+      capability({
+        id: 'mcp-server:project-manual',
+        kind: 'mcp-server',
+        name: 'project-manual',
+        metadata: { installKind: 'manual-config', scope: 'project' },
+        state: { installed: false, configured: true },
+      }),
+      capability({
+        id: 'mcp-server:installed-manual-shape',
+        kind: 'mcp-server',
+        name: 'installed-manual-shape',
+        relations: { installedRef: 'installed-manual-shape' },
+        metadata: { installKind: 'manual-config' },
+        state: { installed: true, configured: true },
+      }),
+      capability({
+        id: 'mcp-server:installed-missing-config',
+        kind: 'mcp-server',
+        name: 'installed-missing-config',
+        relations: { installedRef: 'installed-missing-config' },
+        metadata: { installKind: 'manual-config', configured: false },
+        state: { installed: true, configured: false, enabled: false },
       }),
       capability({
         id: 'mcp-server:runtime-only',
@@ -115,7 +138,36 @@ function smokePureActionPlanning() {
     action: 'uninstall',
     actionRef: 'manual',
   })
-  assert.equal(manualUninstall.allowed, false)
+  assert.equal(manualUninstall.allowed, true)
+  assert.equal(manualUninstall.requiresConfirmation, true)
+  assert.ok(manualUninstall.confirmation?.token)
+
+  const projectManualUninstall = createCapabilityManagementActionPlan(projection, {
+    capabilityId: 'mcp-server:project-manual',
+    action: 'uninstall',
+    actionRef: 'project-manual',
+  })
+  assert.equal(projectManualUninstall.allowed, false)
+  assert.match(projectManualUninstall.blockedReason, /not allowed/)
+
+  const installedManualShape = projection.mcp.find(
+    item => item.name === 'installed-manual-shape',
+  )
+  assert.ok(installedManualShape)
+  assert.equal(installedManualShape.managementOwnership, 'installer-owned')
+  assert.ok(installedManualShape.allowedActions.includes('repair'))
+  assert.ok(installedManualShape.allowedActions.includes('uninstall'))
+
+  const installedMissingConfig = projection.mcp.find(
+    item => item.name === 'installed-missing-config',
+  )
+  assert.ok(installedMissingConfig)
+  assert.equal(installedMissingConfig.managementOwnership, 'installer-owned')
+  assert.deepEqual(installedMissingConfig.allowedActions, [
+    'inspect',
+    'repair',
+    'uninstall',
+  ])
 
   const runtimeDisable = createCapabilityManagementActionPlan(projection, {
     capabilityId: 'mcp-server:runtime-only',
@@ -270,8 +322,8 @@ async function smokeAppServerActionApply() {
         scope: 'user',
         config: {
           type: 'stdio',
-          command: process.execPath,
-          args: ['-e', "process.exit(0)"],
+          command: 'manual-action-mcp',
+          args: ['--stdio'],
         },
       })
       const withMcp = await managed.client.listCapabilityManagement({
@@ -281,6 +333,7 @@ async function smokeAppServerActionApply() {
         item => item.kind === 'mcp-server' && item.name === 'action_mcp',
       )
       assert.ok(mcp)
+      assert.equal(mcp.managementOwnership, 'manual-config')
 
       const restarted = await managed.client.applyCapabilityManagementAction({
         cwd: repoRoot,
@@ -300,6 +353,38 @@ async function smokeAppServerActionApply() {
       assert.equal(
         mcpDisabled.management.mcp.find(item => item.name === 'action_mcp')
           ?.state.enabled,
+        false,
+      )
+      const disabledMcpActionView = mcpDisabled.management.mcp.find(
+        item => item.name === 'action_mcp',
+      )
+      assert.ok(disabledMcpActionView)
+      assert.ok(disabledMcpActionView.allowedActions.includes('enable'))
+      assert.ok(disabledMcpActionView.allowedActions.includes('uninstall'))
+      assert.equal(disabledMcpActionView.allowedActions.includes('disable'), false)
+
+      const manualUninstallPlan =
+        await managed.client.planCapabilityManagementAction({
+          cwd: repoRoot,
+          capabilityId: disabledMcpActionView.capabilityId,
+          action: 'uninstall',
+          actionRef: disabledMcpActionView.actionRef,
+        })
+      assert.equal(manualUninstallPlan.allowed, true)
+      assert.equal(manualUninstallPlan.requiresConfirmation, true)
+      const manualRemoved = await managed.client.applyCapabilityManagementAction({
+        cwd: repoRoot,
+        capabilityId: disabledMcpActionView.capabilityId,
+        action: 'uninstall',
+        actionRef: disabledMcpActionView.actionRef,
+        confirmed: true,
+        confirmationToken: manualUninstallPlan.confirmation.token,
+      })
+      assert.equal(manualRemoved.result.removed, true)
+      assert.equal(
+        manualRemoved.management.mcp.some(
+          item => item.kind === 'mcp-server' && item.name === 'action_mcp',
+        ),
         false,
       )
     } finally {

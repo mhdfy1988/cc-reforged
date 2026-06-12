@@ -223,12 +223,13 @@ Provider 只消费该快照，不再自行访问进程全局配置、Plugin load
 
 G1-G4 完成后，本序列不再继续追加新的根因重构项。后续问题应拆到新的产品化或领域 goal 中处理：
 
-- Plugin manifest 与 App 注册入口：定义插件包如何声明 App、Skill、MCP 和 Tool。
-- 样例 Plugin 端到端：覆盖安装、启用、禁用、卸载、App registry 注册和能力目录展示。
-- Desktop Plugin / App 管理页产品化：把统一管理投影做成用户可操作入口。
-- 发布拆分与升级链路：区分随 `cc-reforged` 发布的能力和随 Plugin 包发布的能力。
+- Plugin 产品化后续路线已经在源码深度复审后修正，不再新建 manifest、安装数据库或 Marketplace。
+- 当前权威路线为 [CCR Plugin 接入与产品化设计](../architecture/plugin-system-product-design.md) 中的 P0-P12。
+- 后续先完成请求级 Plugin 领域上下文、完整管理读模型和领域 plan / apply，再推进安装事务、运行时激活、Desktop、样例 Plugin 与发布收口。
 
 这些后续目标可以复用 G1-G4 建立的 `CapabilityRuntimeEnvironment`、canonical capability id、关系图和 `AppCapabilityRegistry`，但不应把 Skill、MCP、Tool 和 App 合并成同一种运行时。
+
+> 历史说明：本 Goal 完成时曾把“Plugin manifest 与 App 注册入口”列为下一步。后续源码核对确认仓库已经存在 `.claude-plugin/plugin.json`、Marketplace、多作用域安装记录和版本缓存，因此该表述已被 P0-P12 路线取代。
 
 ## 5. 执行顺序
 

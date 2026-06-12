@@ -24,6 +24,7 @@ const capabilities = listAppCapabilities([
     description: 'Design connector.',
     connected: false,
     enabled: true,
+    authStatus: 'needs-auth',
   },
   {
     id: 'disabled-app',

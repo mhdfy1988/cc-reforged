@@ -49,6 +49,9 @@ function findInstalledSkillInspection(capability, installedByRef) {
     return installedByRef.get(installedRef) ?? null;
 }
 function compareSkillManagementViewItems(a, b) {
+    const enabledDiff = getSkillManagementEnabledRank(a) - getSkillManagementEnabledRank(b);
+    if (enabledDiff !== 0)
+        return enabledDiff;
     const attentionDiff = getSkillManagementAttentionRank(a) - getSkillManagementAttentionRank(b);
     if (attentionDiff !== 0)
         return attentionDiff;
@@ -57,6 +60,9 @@ function compareSkillManagementViewItems(a, b) {
     if (sourceDiff !== 0)
         return sourceDiff;
     return a.capability.displayName.localeCompare(b.capability.displayName);
+}
+function getSkillManagementEnabledRank(item) {
+    return item.capability.state.enabled ? 0 : 1;
 }
 function getSkillManagementAttentionRank(item) {
     if (item.capability.diagnostics.some(diagnostic => diagnostic.severity === 'error')) {

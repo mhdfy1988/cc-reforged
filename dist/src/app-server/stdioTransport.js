@@ -1,12 +1,14 @@
 import { createInterface } from 'node:readline';
 import { AppServerError, errorResponse } from './errors.js';
 import { createAppServerContext, handleJsonRpcMessage } from './router.js';
+import { createAppServerPluginRuntimeHostAdapter } from './pluginRuntimeHost.js';
 export async function runStdioAppServer(options = {}) {
     const input = options.input ?? process.stdin;
     const output = options.output ?? process.stdout;
     const errorOutput = options.errorOutput ?? process.stderr;
     const context = createAppServerContext({
         emit: notification => writeProtocolMessage(output, notification),
+        pluginRuntimeHostAdapterFactory: createAppServerPluginRuntimeHostAdapter,
     });
     input.setEncoding?.('utf8');
     const lineReader = createInterface({

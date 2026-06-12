@@ -912,9 +912,10 @@ export async function cachePlugin(
   source: PluginSource,
   options?: {
     manifest?: PluginManifest
+    cachePath?: string
   },
 ): Promise<{ path: string; manifest: PluginManifest; gitCommitSha?: string }> {
-  const cachePath = getPluginCachePath()
+  const cachePath = options?.cachePath ?? getPluginCachePath()
 
   await getFsImplementation().mkdir(cachePath)
 
@@ -2035,7 +2036,23 @@ async function loadPluginsFromMarketplaces({
         result = await getPluginByIdCacheOnly(pluginId)
       }
 
+      // installed_plugins.json records what's actually cached on disk
+      // (version for the full loader's first-pass probe, installPath for
+      // the cache-only loader's direct read). Local imports do not have a
+      // marketplace catalog entry, so a recorded installPath is the source of
+      // truth for runtime loading.
+      const installEntry = installedPluginsData.plugins[pluginId]?.[0]
+
       if (!result) {
+        if (installEntry?.installPath) {
+          return loadPluginFromInstalledRecord(
+            pluginId,
+            pluginName!,
+            enabledValue === true,
+            errors,
+            installEntry.installPath,
+          )
+        }
         errors.push({
           type: 'plugin-not-found',
           source: pluginId,
@@ -2045,10 +2062,6 @@ async function loadPluginsFromMarketplaces({
         return null
       }
 
-      // installed_plugins.json records what's actually cached on disk
-      // (version for the full loader's first-pass probe, installPath for
-      // the cache-only loader's direct read).
-      const installEntry = installedPluginsData.plugins[pluginId]?.[0]
       return cacheOnly
         ? loadPluginFromMarketplaceEntryCacheOnly(
             result.entry,
@@ -2086,6 +2099,57 @@ async function loadPluginsFromMarketplaces({
   }
 
   return { plugins, errors }
+}
+
+async function loadPluginFromInstalledRecord(
+  pluginId: string,
+  fallbackName: string,
+  enabled: boolean,
+  errorsOut: PluginError[],
+  installPath: string,
+): Promise<LoadedPlugin | null> {
+  let pluginPath = installPath
+  if (!(await pathExists(pluginPath))) {
+    errorsOut.push({
+      type: 'plugin-cache-miss',
+      source: pluginId,
+      plugin: fallbackName,
+      installPath,
+    })
+    return null
+  }
+
+  if (isPluginZipCacheEnabled() && pluginPath.endsWith('.zip')) {
+    const sessionDir = await getSessionPluginCachePath()
+    const extractDir = join(
+      sessionDir,
+      pluginId.replace(/[^a-zA-Z0-9@\-_]/g, '-'),
+    )
+    try {
+      await extractZipToDirectory(pluginPath, extractDir)
+      pluginPath = extractDir
+    } catch (error) {
+      logForDebugging(`Failed to extract plugin ZIP ${pluginPath}: ${error}`, {
+        level: 'error',
+      })
+      errorsOut.push({
+        type: 'plugin-cache-miss',
+        source: pluginId,
+        plugin: fallbackName,
+        installPath: pluginPath,
+      })
+      return null
+    }
+  }
+
+  const { plugin, errors } = await createPluginFromPath(
+    pluginPath,
+    pluginId,
+    enabled,
+    fallbackName,
+  )
+  errorsOut.push(...errors)
+  return plugin
 }
 
 /**

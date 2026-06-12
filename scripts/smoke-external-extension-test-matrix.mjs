@@ -199,7 +199,7 @@ test('catalog propagates disabled plugin to child Skill', () => {
   assertIncludes(child.state.hiddenReasons, 'plugin-disabled')
 })
 
-test('catalog reports missing parent plugin without hiding child', () => {
+test('catalog hides children when parent plugin is missing', () => {
   const item = onlyCatalogCapability(
     capability({
       id: 'skill:orphan',
@@ -209,8 +209,9 @@ test('catalog reports missing parent plugin without hiding child', () => {
       relations: { parentPluginId: 'missing' },
     }),
   )
-  assert.equal(item.state.runtimeVisible, true)
+  assert.equal(item.state.runtimeVisible, false)
   assertNotIncludes(item.state.hiddenReasons, 'plugin-disabled')
+  assertIncludes(item.state.hiddenReasons, 'plugin-missing')
   assert.equal(
     item.diagnostics.some(diagnostic => diagnostic.code === 'parent-plugin-missing'),
     true,
@@ -456,6 +457,7 @@ test('management projection allows manual MCP lifecycle actions', () => {
       name: 'manual',
       kind: 'mcp-server',
       metadata: { installKind: 'manual-config' },
+      state: { configured: true },
     }),
   )
   assert.equal(item.managementOwnership, 'manual-config')
@@ -996,7 +998,7 @@ test('disabled plugin propagates through app to child tool', () => {
     child,
   ])
   const related = byId(catalog).get(child.id)
-  assertIncludes(related.state.hiddenReasons, 'app-disabled')
+  assertIncludes(related.state.hiddenReasons, 'plugin-disabled')
   assert.equal(related.relations.parentAppId, 'plugin-app')
 })
 

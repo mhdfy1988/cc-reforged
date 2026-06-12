@@ -24,6 +24,7 @@ import type {
   ComposerPreparedAttachment,
   ComposerSubmitInput,
 } from './components/layout/Composer.js'
+import { CapabilitiesPage } from './components/pages/CapabilitiesPage.js'
 import { LogsPage } from './components/pages/LogsPage.js'
 import { McpPage } from './components/pages/McpPage.js'
 import { ModelsPage } from './components/pages/ModelsPage.js'
@@ -79,6 +80,10 @@ import type {
   TurnRuntimeMetadata,
   UsageStatisticsState,
 } from './domain/displayTypes.js'
+import {
+  isSkillInstallPlanHardBlocked,
+  isSkillInstallSecurityOverrideRequired,
+} from './domain/skillInstallViewPolicy.js'
 import type { UpdateActionKind } from './domain/updateDisplay.js'
 import type {
   CcrDesktopEvent,
@@ -331,7 +336,7 @@ function App({ initialStatus = null }: AppProps) {
   }, [page])
 
   useEffect(() => {
-    if (page !== 'plugins') {
+    if (page !== 'capabilities') {
       return
     }
     void refreshCapabilityManagement().catch(() => undefined)
@@ -936,19 +941,23 @@ function App({ initialStatus = null }: AppProps) {
     try {
       setMcpPageError(null)
       await runAction(async () => {
-        const [, installs, search, management] = await Promise.all([
-          window.ccr.refreshMcp(),
-          window.ccr.listMcpInstalls(),
-          window.ccr.searchMcpInstalls({ query }),
-          window.ccr.listCapabilityManagement(),
-        ])
-        setMcpInstalls(installs as McpInstallListState)
-        setMcpInstallSearch(search as McpInstallSearchState)
-        setCapabilityManagement(management as CapabilityManagementState)
+        await reloadMcpManagementState(query)
       })
     } catch (error) {
       setMcpPageError(error instanceof Error ? error.message : String(error))
     }
+  }
+
+  async function reloadMcpManagementState(query = ''): Promise<void> {
+    const [, installs, search, management] = await Promise.all([
+      window.ccr.refreshMcp(),
+      window.ccr.listMcpInstalls(),
+      window.ccr.searchMcpInstalls({ query }),
+      window.ccr.listCapabilityManagement(),
+    ])
+    setMcpInstalls(installs as McpInstallListState)
+    setMcpInstallSearch(search as McpInstallSearchState)
+    setCapabilityManagement(management as CapabilityManagementState)
   }
 
   async function searchMcpInstallCandidates(query: string): Promise<void> {
@@ -1093,16 +1102,7 @@ function App({ initialStatus = null }: AppProps) {
             overwrite: true,
           })
         }
-        const search =
-          planView.saveToCandidates
-            ? ((await window.ccr.searchMcpInstalls({})) as McpInstallSearchState)
-            : null
-        const installs =
-          (await window.ccr.listMcpInstalls()) as McpInstallListState
-        setMcpInstalls(installs)
-        if (search) {
-          setMcpInstallSearch(search)
-        }
+        await reloadMcpManagementState()
         setMcpInstallPlan(null)
         setMcpPageMessage(
           planView.saveToCandidates
@@ -1237,11 +1237,7 @@ function App({ initialStatus = null }: AppProps) {
           confirmed: true,
           confirmationToken,
         })
-        const [, installs] = await Promise.all([
-          window.ccr.refreshMcp(),
-          window.ccr.listMcpInstalls(),
-        ])
-        setMcpInstalls(installs as McpInstallListState)
+        await reloadMcpManagementState()
         setMcpPageMessage(`已接管 MCP：${name}`)
       })
     } catch (error) {
@@ -1272,9 +1268,7 @@ function App({ initialStatus = null }: AppProps) {
           confirmed: true,
           confirmationToken,
         })
-        const installs =
-          (await window.ccr.listMcpInstalls()) as McpInstallListState
-        setMcpInstalls(installs)
+        await reloadMcpManagementState()
         setMcpPageMessage(`已卸载 MCP：${input.name}`)
       })
     } catch (error) {
@@ -1312,9 +1306,7 @@ function App({ initialStatus = null }: AppProps) {
           confirmed: true,
           confirmationToken,
         })
-        const installs =
-          (await window.ccr.listMcpInstalls()) as McpInstallListState
-        setMcpInstalls(installs)
+        await reloadMcpManagementState()
         setMcpPageMessage(`已修复 MCP：${input.name}`)
       })
     } catch (error) {
@@ -1503,9 +1495,11 @@ function App({ initialStatus = null }: AppProps) {
           saveToCandidates: false,
         })
         setSkillPageMessage(
-          plan.installable === false
+          isSkillInstallPlanHardBlocked(plan)
             ? getSkillInstallPlanBlockedMessage(plan)
-            : `已生成 ${plan.name ?? '未命名 Skill'} 的安装计划，请确认。`,
+            : isSkillInstallSecurityOverrideRequired(plan)
+              ? `已生成 ${plan.name ?? '未命名 Skill'} 的高风险安装计划，请确认后继续安装。`
+              : `已生成 ${plan.name ?? '未命名 Skill'} 的安装计划，请确认。`,
         )
       })
       return true
@@ -1519,8 +1513,15 @@ function App({ initialStatus = null }: AppProps) {
   async function applySkillInstallPlan(
     planView: SkillInstallPlanViewState,
   ): Promise<void> {
-    if (planView.plan.installable === false) {
+    if (isSkillInstallPlanHardBlocked(planView.plan)) {
       setSkillPageError(getSkillInstallPlanBlockedMessage(planView.plan))
+      return
+    }
+    if (
+      isSkillInstallSecurityOverrideRequired(planView.plan) &&
+      !planView.securityOverrideAccepted
+    ) {
+      setSkillPageError('需要先确认已了解高风险。')
       return
     }
     const token = planView.plan.confirmation?.token
@@ -2267,7 +2268,11 @@ function App({ initialStatus = null }: AppProps) {
             ) : null}
 
             {page === 'plugins' ? (
-              <PluginsPage
+              <PluginsPage />
+            ) : null}
+
+            {page === 'capabilities' ? (
+              <CapabilitiesPage
                 busy={busy}
                 management={capabilityManagement}
                 onRefresh={() => void refreshCapabilityManagement()}
@@ -2314,8 +2319,8 @@ function getMcpCandidateManifestInput(
   return null
 }
 
-function normalizeMcpScope(value: unknown): McpWritableScope {
-  return value === 'project' || value === 'local' ? value : 'user'
+function normalizeMcpScope(_value: unknown): McpWritableScope {
+  return 'user'
 }
 
 function normalizeSkillScope(value: unknown): 'user' | 'project' {

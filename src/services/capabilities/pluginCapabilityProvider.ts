@@ -7,6 +7,7 @@ import type { LoadedPlugin, PluginError } from '../../types/plugin.js'
 import { resolveLoadedPluginId } from './pluginIdentityResolver.js'
 import type { CapabilityRuntimeEnvironment } from './capabilityRuntimeEnvironment.js'
 import { createExtensionCapabilityId } from './capabilityIdentity.js'
+import type { PluginManagementRecord } from '../plugins/pluginDomainTypes.js'
 
 export type PluginCapabilityProviderInput = {
   plugins?: readonly ExtensionCapability[]
@@ -32,12 +33,130 @@ export function createPluginCapabilityProvider(
         context as PluginCapabilityProviderContext,
         input,
       )
+      const managementRecords = (context as PluginCapabilityProviderContext)
+        .capabilityEnvironment?.pluginCatalog?.plugins
       return [
         ...(explicitCapabilities ?? []),
-        ...listPluginBundleCapabilities(loadedPlugins.plugins),
-        ...pluginLoadErrorsToCapabilities(loadedPlugins.errors),
+        ...(managementRecords
+          ? managementRecords
+              .filter(shouldExposePluginManagementRecordAsCapability)
+              .map(pluginManagementRecordToCapability)
+          : [
+              ...listPluginBundleCapabilities(loadedPlugins.plugins),
+              ...pluginLoadErrorsToCapabilities(loadedPlugins.errors),
+            ]),
       ]
     },
+  }
+}
+
+function shouldExposePluginManagementRecordAsCapability(
+  record: PluginManagementRecord,
+): boolean {
+  if (record.installations.length > 0) return true
+  if (record.runtimeActivations.length > 0) return true
+  if (record.derivedState.installed) return true
+  if (record.derivedState.active) return true
+  return record.candidates.some(candidate => candidate.sourceKind !== 'marketplace')
+}
+
+function pluginManagementRecordToCapability(
+  record: PluginManagementRecord,
+): ExtensionCapability {
+  const candidate = record.candidates[0]
+  const selectedInstallation = record.installations.find(
+    installation =>
+      installation.key === record.effectiveSelection?.installationKey,
+  )
+  const sourceKind = candidate?.sourceKind === 'builtin' ? 'builtin' : 'plugin'
+  const status = toCapabilityStatus(record.derivedState.status)
+  return {
+    schemaVersion: 1,
+    id: createExtensionCapabilityId({
+      kind: 'plugin',
+      sourceKind,
+      name: record.pluginId,
+      sourceRef: candidate?.sourceId ?? record.pluginId,
+      pluginId: record.pluginId,
+    }),
+    name: record.pluginId,
+    displayName: record.displayName,
+    description: record.description,
+    kind: 'plugin',
+    source: {
+      kind: sourceKind,
+      label: candidate?.sourceKind ?? 'plugin',
+      ref: candidate?.sourceId ?? record.pluginId,
+      pluginId: record.pluginId,
+    },
+    state: {
+      installed: record.derivedState.installed,
+      enabled:
+        record.derivedState.enabled || record.derivedState.active,
+      available:
+        status !== 'missing' && status !== 'invalid' && status !== 'failed',
+      runtimeVisible: record.derivedState.active,
+      status,
+    },
+    invocation: {
+      modelInvocable: false,
+      userInvocable: false,
+      toolInvocable: false,
+    },
+    relations: {
+      ...(selectedInstallation
+        ? { installedRef: selectedInstallation.packagePath }
+        : {}),
+      ...(record.derivedState.active
+        ? {
+            runtimeRef:
+              record.runtimeActivations.find(
+                activation => activation.state === 'active',
+              )?.runtimeInstanceId,
+          }
+        : {}),
+    },
+    diagnostics: record.diagnostics.map(diagnostic => ({
+      kind:
+        diagnostic.layer === 'runtime'
+          ? 'runtime'
+          : diagnostic.layer === 'package' ||
+              diagnostic.layer === 'installation'
+            ? 'integrity'
+            : 'plugin',
+      severity: diagnostic.severity,
+      code: diagnostic.code,
+      message: diagnostic.message,
+    })),
+    metadata: {
+      candidates: record.candidates,
+      installations: record.installations,
+      intents: record.intents,
+      effectiveSelection: record.effectiveSelection,
+      runtimeActivations: record.runtimeActivations,
+      appRelations: record.appRelations,
+      derivedState: record.derivedState,
+    },
+  }
+}
+
+function toCapabilityStatus(
+  status: PluginManagementRecord['derivedState']['status'],
+): ExtensionCapability['state']['status'] {
+  switch (status) {
+    case 'installed-disabled':
+      return 'disabled'
+    case 'enabled-pending-activation':
+    case 'active':
+    case 'active-partial':
+    case 'restart-required':
+      return 'enabled'
+    case 'missing':
+    case 'invalid':
+    case 'failed':
+      return status
+    case 'available':
+      return 'available'
   }
 }
 

@@ -8,6 +8,7 @@ import { handleAuthLogin, handleAuthStatus, handleConfigGet, handleModelAvailabi
 import { handleMcpAdd, handleMcpDisable, handleMcpEnable, handleMcpInstallAdoptApply, handleMcpInstallAdoptPlan, handleMcpInstallApply, handleMcpInstallList, handleMcpInstallPlan, handleMcpInstallRepair, handleMcpInstallSaveManifest, handleMcpInstallSearch, handleMcpInstallUninstall, handleMcpInspect, handleMcpList, handleMcpRemove, handleMcpRestart, handleMcpTest, handleMcpUpdate, } from './handlers/mcpHandlers.js';
 import { handlePermissionPendingList, handlePermissionRespond, handlePermissionSettingsGet, handlePermissionSettingsUpdate, } from './handlers/permissionHandlers.js';
 import { handleSkillImportApply, handleSkillImportPlan, handleSkillInspect, handleSkillInstallApply, handleSkillInstallList, handleSkillInstallPlan, handleSkillInstallRepair, handleSkillInstallSaveManifest, handleSkillInstallSearch, handleSkillInstallUninstall, handleSkillSetEnabled, handleSkillSetInvocation, } from './handlers/skillHandlers.js';
+import { handlePluginsActionApply, handlePluginsActionPlan, handlePluginsAppsList, handlePluginsAppsRegister, handlePluginsAppsUnregister, handlePluginsCatalogList, handlePluginsConfigDelete, handlePluginsConfigGet, handlePluginsConfigSave, handlePluginsInspect, handlePluginsLocalImport, handlePluginsMarketplaceAdd, handlePluginsMarketplaceRefresh, handlePluginsMarketplaceRemove, handlePluginsMarketplacesList, handlePluginsOperationCancel, handlePluginsOperationGet, handlePluginsRuntimeActivate, handlePluginsRuntimeGet, } from './handlers/pluginHandlers.js';
 import { handleSessionHistoryList, handleSessionHistoryRename, handleThreadList, handleThreadMessagesList, handleThreadResume, handleThreadStart, handleTurnInterrupt, handleTurnStart, } from './handlers/sessionHandlers.js';
 import { handleWorkspaceOpen } from './handlers/workspaceHandlers.js';
 import { setupAppServerRuntime } from './setup.js';
@@ -25,6 +26,11 @@ export function createAppServerContext(options = {}) {
                 emit(notification);
             }
         },
+        ...(options.pluginRuntimeHostAdapterFactory
+            ? {
+                pluginRuntimeHostAdapterFactory: options.pluginRuntimeHostAdapterFactory,
+            }
+            : {}),
     });
     return {
         initialized: false,
@@ -64,6 +70,44 @@ export async function handleJsonRpcMessage(context, rawMessage) {
                 return successResponse(request.id, await handleCapabilityManagementActionPlan(context, request.params));
             case 'capabilities/management/action/apply':
                 return successResponse(request.id, await handleCapabilityManagementActionApply(context, request.params));
+            case 'plugins/catalog/list':
+                return successResponse(request.id, await handlePluginsCatalogList(context, request.params));
+            case 'plugins/marketplaces/list':
+                return successResponse(request.id, await handlePluginsMarketplacesList(context, request.params));
+            case 'plugins/marketplaces/add':
+                return successResponse(request.id, await handlePluginsMarketplaceAdd(context, request.params));
+            case 'plugins/local/import':
+                return successResponse(request.id, await handlePluginsLocalImport(context, request.params));
+            case 'plugins/marketplaces/remove':
+                return successResponse(request.id, await handlePluginsMarketplaceRemove(context, request.params));
+            case 'plugins/marketplaces/refresh':
+                return successResponse(request.id, await handlePluginsMarketplaceRefresh(context, request.params));
+            case 'plugins/inspect':
+                return successResponse(request.id, await handlePluginsInspect(context, request.params));
+            case 'plugins/action/plan':
+                return successResponse(request.id, await handlePluginsActionPlan(context, request.params));
+            case 'plugins/action/apply':
+                return successResponse(request.id, await handlePluginsActionApply(context, request.params));
+            case 'plugins/operation/get':
+                return successResponse(request.id, await handlePluginsOperationGet(context, request.params));
+            case 'plugins/operation/cancel':
+                return successResponse(request.id, await handlePluginsOperationCancel(context, request.params));
+            case 'plugins/runtime/activate':
+                return successResponse(request.id, await handlePluginsRuntimeActivate(context, request.params));
+            case 'plugins/runtime/get':
+                return successResponse(request.id, await handlePluginsRuntimeGet(context, request.params));
+            case 'plugins/config/get':
+                return successResponse(request.id, await handlePluginsConfigGet(context, request.params));
+            case 'plugins/config/save':
+                return successResponse(request.id, await handlePluginsConfigSave(context, request.params));
+            case 'plugins/config/delete':
+                return successResponse(request.id, await handlePluginsConfigDelete(context, request.params));
+            case 'plugins/apps/register':
+                return successResponse(request.id, await handlePluginsAppsRegister(context, request.params));
+            case 'plugins/apps/unregister':
+                return successResponse(request.id, handlePluginsAppsUnregister(context, request.params));
+            case 'plugins/apps/list':
+                return successResponse(request.id, await handlePluginsAppsList(context, request.params));
             case 'auth/status':
                 return successResponse(request.id, await handleAuthStatus(context, request.params));
             case 'auth/login':

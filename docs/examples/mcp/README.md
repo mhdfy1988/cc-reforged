@@ -15,7 +15,7 @@
 
 日常用户优先使用 Desktop 的 `MCP` 页面安装和检测；本目录示例主要用于源码调试、临时 smoke 或手动配置。
 
-`*-manifest.json` 文件是 CCR 安装清单示例，不是直接启用的 `.mcp.json` 配置。它们需要通过 Desktop 的 `导入 MCP 安装配置` 或安装计划接口确认后，才会写入真实 MCP 配置和 CCR 安装记录。
+`*-manifest.json` 文件是 CCR 安装清单示例，不是直接启用的 `.mcp.json` 配置。它们需要通过 Desktop 的 `导入 MCP 安装配置` 或安装计划接口确认后，才会写入用户全局 MCP 配置和 CCR 安装记录。
 
 如果希望某个 manifest 长期出现在 Desktop 安装候选里，可以在安装确认弹窗勾选 `保存到常用安装配置`，或手动放到：
 
@@ -23,7 +23,7 @@
 ~/.ccr/mcp/manifests/<name>.json
 ```
 
-保存到候选目录只表示“可安装”，不表示已经启用。真正启用仍要写入 `~/.ccr/mcp.json` 或项目 `.mcp.json`。
+保存到候选目录只表示“可安装”，不表示已经启用。Desktop / App Server 受控安装和启停默认写入用户全局 `~/.ccr/mcp.json`；项目 `.mcp.json` 只作为项目共享声明和运行时发现来源，不作为普通管理页写入目标。
 
 更多真实配置和 manifest 示例见 [MCP 配置示例](../../mcp/config-examples.md)。
 

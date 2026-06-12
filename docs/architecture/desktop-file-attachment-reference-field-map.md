@@ -112,6 +112,30 @@ Core tool / query()
 | MCP / 浏览器结果缺结构化资源字段 | 无法稳定生成网页引用、截图、文件引用 | MCP adapter 补 `resourceUri`、`mimeType`、`title`、`path` 等字段 |
 | 工作区相对路径和安全分级未统一 | 工作区外路径风险展示不稳定 | P21-2 引入 `workspaceRelativePath`、`absolutePath`、`safety` |
 
+## 当前附件投影边界
+
+当前 ThreadDisplay 协议路径下，附件投影由 App Server 负责，Desktop Renderer 只消费 `ThreadDisplaySnapshot` / `ThreadDisplayPatch` 中已经生成的 projection。
+
+### 可以生成附件卡的来源
+
+- 顶层 `image` / `file` / `audio` / `video` 内容块。
+- 顶层 `attachment` 包装块。
+- 模型生成物已经物化后的图片 / 文件 / 音频 / 视频块。
+- 工具结果中的媒体块，必须同时带有明确附件身份、路径、名称或生成物字段，例如 `attachmentId`、`outputId`、`displayName`、`filename`、`file.path`、`path`、`savedPath`、`url` 或 `generatedArtifact`。
+
+### 不应生成附件卡的来源
+
+- Playwright 截图工具返回的 Markdown 图片描述或工具内联代码片段。
+- Read 读取图片后已经由 Read 工具卡展示的文件路径。
+- MCP string result 中看起来像路径、URL 或 Markdown 图片的文本。
+- `tool_result` / `tool_use.result` 中缺少附件身份的裸 `image` / `file` / `audio` / `video` 块。
+
+这些内容仍保留在工具卡执行结果里；只有当 adapter 明确给出可操作的附件身份或路径时，才进入附件卡。这样可以避免同一张截图或图片文件同时以“工具结果”和“附件信息不完整”两种形式重复出现。
+
+### Renderer 兼容边界
+
+Renderer 侧只保留本地预发送、顶层输出或非 ThreadDisplay legacy 输入的附件归一化能力；它不再递归扫描 `tool_result` 或 `tool_use.result` 来推断附件。ThreadDisplay 协议上下文中如果缺少 projection，应显示协议诊断，而不是在前端再造一套附件推断逻辑。
+
 ## P21-2 设计建议
 
 P21-2 已按“先补展示模型，不直接做 UI”的顺序落地：

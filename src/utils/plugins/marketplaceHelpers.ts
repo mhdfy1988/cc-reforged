@@ -460,9 +460,14 @@ function areSourcesEquivalentForBlocklist(
  */
 export function isSourceInBlocklist(source: MarketplaceSource): boolean {
   const blocklist = getBlockedMarketplaces()
-  if (blocklist === null) {
-    return false
-  }
+  return isSourceInConfiguredBlocklist(source, blocklist)
+}
+
+export function isSourceInConfiguredBlocklist(
+  source: MarketplaceSource,
+  blocklist: readonly MarketplaceSource[] | null,
+): boolean {
+  if (blocklist === null) return false
   return blocklist.some(blocked =>
     areSourcesEquivalentForBlocklist(source, blocked),
   )
@@ -478,28 +483,27 @@ export function isSourceInBlocklist(source: MarketplaceSource): boolean {
  * 2. strictKnownMarketplaces (allowlist) - if set, source must be in the list
  */
 export function isSourceAllowedByPolicy(source: MarketplaceSource): boolean {
-  // Check blocklist first (takes precedence)
-  if (isSourceInBlocklist(source)) {
-    return false
-  }
+  return isSourceAllowedByPolicyConfiguration(
+    source,
+    getStrictKnownMarketplaces(),
+    getBlockedMarketplaces(),
+  )
+}
 
-  // Then check allowlist
-  const allowlist = getStrictKnownMarketplaces()
-  if (allowlist === null) {
-    return true // No restrictions
-  }
-
-  // Check each entry in the allowlist
+export function isSourceAllowedByPolicyConfiguration(
+  source: MarketplaceSource,
+  allowlist: readonly MarketplaceSource[] | null,
+  blocklist: readonly MarketplaceSource[] | null,
+): boolean {
+  if (isSourceInConfiguredBlocklist(source, blocklist)) return false
+  if (allowlist === null) return true
   return allowlist.some(allowed => {
-    // Handle hostPattern entries - match by extracted host
     if (allowed.source === 'hostPattern') {
       return doesSourceMatchHostPattern(source, allowed)
     }
-    // Handle pathPattern entries - match file/directory .path by regex
     if (allowed.source === 'pathPattern') {
       return doesSourceMatchPathPattern(source, allowed)
     }
-    // Handle regular source entries - exact match
     return areSourcesEqual(source, allowed)
   })
 }

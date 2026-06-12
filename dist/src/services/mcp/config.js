@@ -7,7 +7,7 @@ import { dirname, join, parse } from 'path';
 import { getPlatform } from 'src/utils/platform.js';
 import { getPluginErrorMessage } from '../../types/plugin.js';
 import { isClaudeInChromeMCPServer } from '../../utils/claudeInChrome/common.js';
-import { getCurrentProjectConfig, getGlobalConfig, saveCurrentProjectConfig, saveGlobalConfig, } from '../../utils/config.js';
+import { getGlobalConfig, saveGlobalConfig, } from '../../utils/config.js';
 import { getCwd } from '../../utils/cwd.js';
 import { logForDebugging } from '../../utils/debug.js';
 import { getClaudeConfigHomeDir } from '../../utils/envUtils.js';
@@ -616,11 +616,7 @@ export async function addMcpConfig(name, config, scope) {
             break;
         }
         case 'local': {
-            const projectConfig = getCurrentProjectConfig();
-            if (projectConfig.mcpServers?.[name]) {
-                throw new Error(`MCP server ${name} already exists in local config`);
-            }
-            break;
+            throw new Error('Project-local MCP config is no longer writable. Use user scope.');
         }
         case 'dynamic':
             throw new Error('Cannot add MCP server to scope: dynamic');
@@ -653,16 +649,6 @@ export async function addMcpConfig(name, config, scope) {
                     [name]: validatedConfig,
                 },
             });
-            break;
-        }
-        case 'local': {
-            saveCurrentProjectConfig(current => ({
-                ...current,
-                mcpServers: {
-                    ...current.mcpServers,
-                    [name]: validatedConfig,
-                },
-            }));
             break;
         }
         default:
@@ -743,18 +729,7 @@ export async function updateMcpConfig(name, config, scope) {
             break;
         }
         case 'local': {
-            const currentConfig = getCurrentProjectConfig();
-            if (!currentConfig.mcpServers?.[name]) {
-                throw new Error(`No project-local MCP server found with name: ${name}`);
-            }
-            saveCurrentProjectConfig(current => ({
-                ...current,
-                mcpServers: {
-                    ...current.mcpServers,
-                    [name]: validatedConfig,
-                },
-            }));
-            break;
+            throw new Error('Project-local MCP config is no longer writable. Use user scope.');
         }
         default:
             throw new Error(`Cannot update MCP server in scope: ${scope}`);
@@ -814,19 +789,7 @@ export async function removeMcpConfig(name, scope) {
             break;
         }
         case 'local': {
-            // Check if server exists before updating
-            const config = getCurrentProjectConfig();
-            if (!config.mcpServers?.[name]) {
-                throw new Error(`No project-local MCP server found with name: ${name}`);
-            }
-            saveCurrentProjectConfig(current => {
-                const { [name]: _, ...restMcpServers } = current.mcpServers ?? {};
-                return {
-                    ...current,
-                    mcpServers: restMcpServers,
-                };
-            });
-            break;
+            throw new Error('Project-local MCP config is no longer writable. Use user scope.');
         }
         default:
             throw new Error(`Cannot remove MCP server from scope: ${scope}`);
@@ -968,18 +931,9 @@ export function getMcpConfigsByScope(scope) {
             };
         }
         case 'local': {
-            const mcpServers = getCurrentProjectConfig().mcpServers;
-            if (!mcpServers) {
-                return { servers: {}, errors: [] };
-            }
-            const { config, errors } = parseMcpConfig({
-                configObject: { mcpServers },
-                expandVars: true,
-                scope: 'local',
-            });
             return {
-                servers: addScopeToServers(config?.mcpServers, scope),
-                errors,
+                servers: {},
+                errors: [],
             };
         }
         case 'enterprise': {
@@ -1019,12 +973,8 @@ export function getMcpConfigByName(name) {
     }
     const { servers: userServers } = getMcpConfigsByScope('user');
     const { servers: projectServers } = getMcpConfigsByScope('project');
-    const { servers: localServers } = getMcpConfigsByScope('local');
     if (enterpriseServers[name]) {
         return enterpriseServers[name];
-    }
-    if (localServers[name]) {
-        return localServers[name];
     }
     if (projectServers[name]) {
         return projectServers[name];
@@ -1070,9 +1020,6 @@ export async function getClaudeCodeMcpConfigs(dynamicServers = {}, extraDedupTar
     const { servers: projectServers } = mcpLocked
         ? noServers
         : getMcpConfigsByScope('project');
-    const { servers: localServers } = mcpLocked
-        ? noServers
-        : getMcpConfigsByScope('local');
     // Load plugin MCP servers
     const pluginMcpServers = {};
     const pluginResult = await loadAllPluginsCacheOnly();
@@ -1131,7 +1078,6 @@ export async function getClaudeCodeMcpConfigs(dynamicServers = {}, extraDedupTar
     for (const [name, config] of Object.entries({
         ...userServers,
         ...approvedProjectServers,
-        ...localServers,
         ...dynamicServers,
         ...extraTargets,
     })) {
@@ -1172,8 +1118,10 @@ export async function getClaudeCodeMcpConfigs(dynamicServers = {}, extraDedupTar
             duplicateOf,
         });
     }
-    // Merge in order of precedence: plugin < user < project < local
-    const configs = Object.assign({}, dedupedPluginServers, userServers, approvedProjectServers, localServers);
+    // Merge in order of precedence: plugin < user < project. Project-local
+    // settings-backed MCP config is intentionally ignored; user-managed MCP
+    // config lives in the user-global MCP file.
+    const configs = Object.assign({}, dedupedPluginServers, userServers, approvedProjectServers);
     // Apply policy filtering to merged configs
     const filtered = {};
     for (const [name, serverConfig] of Object.entries(configs)) {
@@ -1396,12 +1344,12 @@ function isDefaultDisabledBuiltin(name) {
  * @returns true if the server is disabled
  */
 export function isMcpServerDisabled(name) {
-    const projectConfig = getCurrentProjectConfig();
+    const globalConfig = getGlobalConfig();
     if (isDefaultDisabledBuiltin(name)) {
-        const enabledServers = projectConfig.enabledMcpServers || [];
+        const enabledServers = globalConfig.enabledMcpServers || [];
         return !enabledServers.includes(name);
     }
-    const disabledServers = projectConfig.disabledMcpServers || [];
+    const disabledServers = globalConfig.disabledMcpServers || [];
     return disabledServers.includes(name);
 }
 function toggleMembership(list, name, shouldContain) {
@@ -1417,7 +1365,7 @@ function toggleMembership(list, name, shouldContain) {
  */
 export function setMcpServerEnabled(name, enabled) {
     const isBuiltinStateChange = isDefaultDisabledBuiltin(name) && isMcpServerDisabled(name) === enabled;
-    saveCurrentProjectConfig(current => {
+    saveGlobalConfig(current => {
         if (isDefaultDisabledBuiltin(name)) {
             const prev = current.enabledMcpServers || [];
             const next = toggleMembership(prev, name, enabled);

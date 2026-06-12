@@ -105,7 +105,21 @@ YYYY-MM-DD-p<阶段号>-<简短主题>.md
   - G2 统一 capability identity 与父子关系图（已完成）
   - G3 闭合 App / Connector 生命周期（已完成）
   - G4 反例驱动验收与发布收口（已完成）
-  - 后续转入 Plugin manifest、样例 Plugin、Plugin / App 管理页和发布拆分等产品化 goal。
+  - 后续已完成 [Plugin P0-P12 产品化路线](../architecture/plugin-system-product-design.md#16-plugin-产品化实施路线)：复用现有 Plugin 领域，补齐请求级上下文、管理读模型、动作、事务、激活、Desktop 和发布收口。
+- [2026-06-08 Plugin 产品化 P0-P12 Goal Series](./2026-06-08-plugin-productization-p0-p12-series.md)（已完成）
+  - P0 设计权威与兼容基线（已完成）
+  - P1 请求级 Plugin 会话、路径端口与缓存隔离（已完成）
+  - P2 无副作用 Inspector 与多实例管理读模型（已完成）
+  - P3 Plugin 独立协议与领域 plan / apply（已完成）
+  - P4 Journal、并发控制与安装事务（已完成）
+  - P5 PluginRuntimeActivator 与组件级刷新（已完成）
+  - P6 依赖、更新与回滚（已完成）
+  - P7 配置、密钥与数据治理（已完成）
+  - P8 App 关系语义、注册桥接与生命周期（已完成）
+  - P9 Desktop 已安装管理（已完成）
+  - P10 Desktop 本地包导入与安装（已完成）
+  - P11 样例 Plugin 与故障维度矩阵（已完成）
+  - P12 兼容迁移、发布与回滚（已完成）
 - [2026-05-31 ThreadDisplay 残留入口与文档收口](./2026-05-31-thread-display-closeout.md)
 - [2026-05-31 ThreadDisplay 全事件 Ordered Display Reducer 深化](./2026-05-31-thread-display-full-ordered-reducer-next.md)
   - [2-1 输入来源矩阵与 unsupported 边界](./2026-05-31-thread-display-full-ordered-reducer-01-input-source-matrix.md)（已完成）

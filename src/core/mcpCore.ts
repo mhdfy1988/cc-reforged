@@ -50,7 +50,13 @@ import { redactRecord, redactUrl } from './redaction.js'
 import { errorMessage } from '../utils/errors.js'
 import { getPluginMcpServers } from '../utils/plugins/mcpPluginIntegration.js'
 
-type WritableMcpScope = Extract<ConfigScope, 'user' | 'project' | 'local'>
+type WritableMcpScope = Extract<ConfigScope, 'user'>
+type InstalledMcpRecordRef = {
+  name: string
+  lockKey: string
+  scope?: string
+  summary: Record<string, unknown>
+}
 
 export async function listCoreMcpServers(options: {
   includeDisabled?: boolean
@@ -73,16 +79,26 @@ export async function listCoreMcpServers(options: {
       .filter(server => server.active)
       .map(server => [server.name, server.installKind]),
   )
+  const installedByName = await loadInstalledMcpRecordRefs()
   const summaries = Object.entries(servers)
     .map(([name, config]) =>
       summarizeMcpServer(name, config, installKindByName.get(name)),
     )
-    .filter(server => options.includeDisabled || server.enabled)
+    .map(server => attachInstalledMcpRecord(server, installedByName))
+  const configuredNames = new Set(summaries.map(server => server.name))
+  for (const record of installedByName.values()) {
+    if (!configuredNames.has(record.name)) {
+      summaries.push(createInstalledOnlyMcpServer(record))
+    }
+  }
+  const visibleSummaries = summaries.filter(
+    server => options.includeDisabled || server.enabled !== false || server.ccrInstalled,
+  )
 
   return {
     configPath: getUserMcpFilePath(),
     inventory: summarizeCcrMcpConfigInventory(inventory),
-    servers: summaries as CapabilityMcpConfigServer[],
+    servers: visibleSummaries,
     errors: errors.map(summarizePluginError),
   }
 }
@@ -116,6 +132,7 @@ async function listRequestScopedCoreMcpServers(options: {
       ...(server.url ? { url: server.url } : {}),
       ...(server.args ? { args: server.args } : {}),
     }))
+  const installedByName = await loadInstalledMcpRecordRefs()
 
   const pluginErrors: PluginError[] = []
   const pluginServers = await Promise.all(
@@ -133,13 +150,19 @@ async function listRequestScopedCoreMcpServers(options: {
       configuredNames.add(name)
     }
   }
+  for (const record of installedByName.values()) {
+    if (!configuredNames.has(record.name)) {
+      configuredServers.push(createInstalledOnlyMcpServer(record))
+      configuredNames.add(record.name)
+    }
+  }
 
   return {
     configPath: getUserMcpFilePath(inventory.configHomeDir),
     inventory: summarizeCcrMcpConfigInventory(inventory),
-    servers: configuredServers.filter(
-      server => options.includeDisabled || server.enabled !== false,
-    ),
+    servers: configuredServers
+      .map(server => attachInstalledMcpRecord(server, installedByName))
+      .filter(server => options.includeDisabled || server.enabled !== false),
     errors: [
       ...inventory.sources.flatMap(source =>
         source.errors.map(message => ({
@@ -151,6 +174,91 @@ async function listRequestScopedCoreMcpServers(options: {
       ...pluginErrors.map(summarizePluginError),
     ],
   }
+}
+
+async function loadInstalledMcpRecordRefs(): Promise<
+  Map<string, InstalledMcpRecordRef>
+> {
+  const result = await listCcrMcpInstalledServers()
+  const records = Array.isArray(result.installed) ? result.installed : []
+  const byName = new Map<string, InstalledMcpRecordRef>()
+  for (const value of records) {
+    if (!value || typeof value !== 'object') continue
+    const record = value as Record<string, unknown>
+    const name = typeof record.name === 'string' ? record.name : ''
+    if (!name) continue
+    const lockKey =
+      typeof record.lockKey === 'string' && record.lockKey
+        ? record.lockKey
+        : name
+    byName.set(name, {
+      name,
+      lockKey,
+      ...(typeof record.scope === 'string' ? { scope: record.scope } : {}),
+      summary: record,
+    })
+  }
+  return byName
+}
+
+function attachInstalledMcpRecord<T extends CapabilityMcpConfigServer>(
+  server: T,
+  installedByName: Map<string, InstalledMcpRecordRef>,
+): T {
+  const record = installedByName.get(server.name)
+  if (!record) return server
+  return {
+    ...server,
+    ccrInstalled: true,
+    installedRef: record.lockKey,
+    ...(record.scope ? { installedRecordScope: record.scope } : {}),
+  }
+}
+
+function createInstalledOnlyMcpServer(
+  record: InstalledMcpRecordRef,
+): CapabilityMcpConfigServer {
+  const manifest = asRecord(record.summary.manifest)
+  const preview = asRecord(record.summary.serverConfigPreview)
+  const transport =
+    readString(preview, 'type') ??
+    readString(preview, 'transport') ??
+    readString(manifest, 'transport') ??
+    'stdio'
+  return {
+    name: record.name,
+    enabled: false,
+    ...(record.scope ? { scope: record.scope } : {}),
+    type: transport,
+    transport,
+    source: 'mcp',
+    installKind: readString(manifest, 'kind') ?? 'installed-record',
+    configured: false,
+    ccrInstalled: true,
+    installedRef: record.lockKey,
+    ...(record.scope ? { installedRecordScope: record.scope } : {}),
+    ...(readString(preview, 'command')
+      ? { command: readString(preview, 'command') }
+      : {}),
+    ...(readString(preview, 'url') ? { url: readString(preview, 'url') } : {}),
+    ...(Array.isArray(preview.args)
+      ? { args: preview.args.filter(value => typeof value === 'string') }
+      : {}),
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function readString(
+  record: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = record[key]
+  return typeof value === 'string' && value ? value : undefined
 }
 
 export function inspectCoreMcpServer(input: {
@@ -206,6 +314,7 @@ export async function removeCoreMcpServer(input: {
 }): Promise<Record<string, unknown>> {
   const scope = assertWritableScope(input.scope)
   await removeMcpConfig(input.name, scope)
+  setMcpServerEnabled(input.name, true)
   return {
     name: input.name,
     scope,
@@ -400,10 +509,10 @@ function summarizeMcpServer(
   installKind = inferCcrMcpInstallKindFromConfig(config, {
     pluginSource: config.pluginSource,
   }),
-): Record<string, unknown> & { enabled: boolean } {
+): CapabilityMcpConfigServer & Record<string, unknown> {
   const type = getMcpServerType(config)
   const enabled = !isMcpServerDisabled(name)
-  const summary: Record<string, unknown> & { enabled: boolean } = {
+  const summary: CapabilityMcpConfigServer & Record<string, unknown> = {
     name,
     scope: config.scope,
     type,
@@ -530,12 +639,14 @@ function safeToolBoolean(read: () => boolean | undefined): boolean | undefined {
 }
 
 function assertWritableScope(scope: ConfigScope): WritableMcpScope {
-  if (scope === 'user' || scope === 'project' || scope === 'local') {
+  if (scope === 'user') {
     return scope
   }
-  throw new CoreError('invalid_params', `MCP scope is read-only: ${scope}`, {
-    scope,
-  })
+  throw new CoreError(
+    'invalid_params',
+    `MCP scope is read-only from Desktop management APIs: ${scope}`,
+    { scope },
+  )
 }
 
 function parseMcpServerConfig(config: unknown): McpServerConfig {

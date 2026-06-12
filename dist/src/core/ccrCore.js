@@ -8,6 +8,8 @@ import { CoreSessionService } from './sessionCore.js';
 import { applyCoreSkillImport, applyCoreSkillInstall, inspectCoreSkill, listCoreSkillInstalls, planCoreSkillImport, planCoreSkillInstall, repairCoreSkill, saveCoreSkillInstallManifest, searchCoreSkillInstallCandidates, setCoreSkillEnabled, setCoreSkillInvocation, uninstallCoreSkill, } from './skillCore.js';
 import { CoreWorkspaceService } from './workspaceCore.js';
 import { AppCapabilityRegistry } from '../services/capabilities/appCapabilityRegistry.js';
+import { CorePluginService } from './pluginCore.js';
+import { PluginAppRegistrationAdapter, projectPluginAppRelations, } from '../services/plugins/pluginAppRelations.js';
 export function createCcrCore(options = {}) {
     const emit = options.emit ?? (() => { });
     const workspace = new CoreWorkspaceService();
@@ -19,6 +21,17 @@ export function createCcrCore(options = {}) {
         createCanUseTool: input => permission.createCanUseTool(input),
     });
     const appCapabilityRegistry = new AppCapabilityRegistry();
+    const pluginAppRegistration = new PluginAppRegistrationAdapter(appCapabilityRegistry);
+    const plugins = new CorePluginService({
+        ...(options.pluginActionExecutor
+            ? { executor: options.pluginActionExecutor }
+            : {}),
+        ...(options.pluginRuntimeHostAdapterFactory
+            ? {
+                runtimeHostAdapterFactory: options.pluginRuntimeHostAdapterFactory,
+            }
+            : {}),
+    });
     const withRegisteredApps = (params = {}) => {
         if (params.apps !== undefined) {
             appCapabilityRegistry.replace(params.apps);
@@ -89,6 +102,40 @@ export function createCcrCore(options = {}) {
             setEnabled: setCoreSkillEnabled,
             setInvocation: setCoreSkillInvocation,
             uninstall: uninstallCoreSkill,
+        },
+        plugins: {
+            listCatalog: plugins.listCatalog.bind(plugins),
+            listMarketplaces: plugins.listMarketplaces.bind(plugins),
+            addMarketplace: plugins.addMarketplace.bind(plugins),
+            removeMarketplace: plugins.removeMarketplace.bind(plugins),
+            refreshMarketplace: plugins.refreshMarketplace.bind(plugins),
+            importLocal: plugins.importLocal.bind(plugins),
+            inspect: plugins.inspect.bind(plugins),
+            planAction: plugins.plan.bind(plugins),
+            applyAction: plugins.apply.bind(plugins),
+            getOperation: plugins.getOperation.bind(plugins),
+            cancelOperation: plugins.cancelOperation.bind(plugins),
+            activateRuntime: plugins.activateRuntime.bind(plugins),
+            getRuntimeSnapshot: plugins.getRuntimeSnapshot.bind(plugins),
+            inspectConfiguration: plugins.inspectConfiguration.bind(plugins),
+            saveConfiguration: plugins.saveConfiguration.bind(plugins),
+            deleteConfiguration: plugins.deleteConfiguration.bind(plugins),
+            registerProvidedApps: async (pluginId, apps, context) => {
+                const record = await plugins.inspect(pluginId, context);
+                if (!record) {
+                    throw Object.assign(new Error(`Plugin was not found: ${pluginId}.`), { code: 'plugin-not-found' });
+                }
+                return pluginAppRegistration.registerProvidedApps(record, apps);
+            },
+            unregisterProvidedApps: (pluginId) => pluginAppRegistration.unregisterProvidedApps(pluginId),
+            listAppRelations: async (pluginId, context) => {
+                const record = await plugins.inspect(pluginId, context);
+                if (!record) {
+                    throw Object.assign(new Error(`Plugin was not found: ${pluginId}.`), { code: 'plugin-not-found' });
+                }
+                return projectPluginAppRelations(record, appCapabilityRegistry.getSnapshot());
+            },
+            getActionServiceForTests: plugins.getActionServiceForTests.bind(plugins),
         },
         workspace,
         permission,

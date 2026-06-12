@@ -109,6 +109,13 @@ const groups = {
     'smoke:extension-capability-management-e2e',
     'smoke:external-extension-matrix',
   ],
+  plugin: [
+    'typecheck',
+    'typecheck:desktop',
+    'build',
+    'desktop:build',
+    'smoke:plugin-productization-matrix',
+  ],
   desktop: [
     'typecheck:desktop',
     'fixtures:desktop-management-acceptance',

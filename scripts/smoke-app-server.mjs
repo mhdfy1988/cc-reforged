@@ -195,7 +195,26 @@ try {
         manifest: createSmokeInstallManifest(),
       },
     },
-    { jsonrpc: '2.0', id: 32, method: 'shutdown', params: {} },
+    {
+      jsonrpc: '2.0',
+      id: 32,
+      method: 'mcp/add',
+      params: {
+        name: 'smoke_project_mcp',
+        scope: 'project',
+        config: { command: 'node', args: ['-e', 'process.exit(0)'] },
+      },
+    },
+    {
+      jsonrpc: '2.0',
+      id: 33,
+      method: 'mcp/install/plan',
+      params: {
+        scope: 'local',
+        manifest: createSmokeInstallManifest('install_local_smoke_mcp'),
+      },
+    },
+    { jsonrpc: '2.0', id: 34, method: 'shutdown', params: {} },
   ];
 
   const result = runAppServer(messages);
@@ -428,7 +447,13 @@ try {
   assertNoSecretKeys(responses[31].result);
 
   assert.equal(responses[32].id, 32);
-  assert.equal(responses[32].result.accepted, true);
+  assertJsonRpcError(responses[32], 32, -32602, 'invalid_params');
+
+  assert.equal(responses[33].id, 33);
+  assertJsonRpcError(responses[33], 33, -32602, 'invalid_params');
+
+  assert.equal(responses[34].id, 34);
+  assert.equal(responses[34].result.accepted, true);
 
   const unsupported = spawnSync(
     process.execPath,
@@ -843,6 +868,7 @@ try {
           'mcp/install/list',
           'mcp/install/plan',
           'mcp/install/security_contract',
+          'mcp/reject_non_user_write_scope',
           'workspace/open',
           'shutdown',
           'unsupported_transport',
@@ -1490,10 +1516,10 @@ function runAppServer(messages) {
   });
 }
 
-function createSmokeInstallManifest() {
+function createSmokeInstallManifest(name = 'install_smoke_mcp') {
   return {
     schemaVersion: 1,
-    name: 'install_smoke_mcp',
+    name,
     displayName: 'Install smoke MCP',
     version: '1.2.3',
     source: {

@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- 暂无。
+
+## [0.6.3] - 2026-06-12
+
 ### Added
 
 - 新增统一动态 Skill 发现闭环，turn-zero、inter-turn 和 `DiscoverSkills` 共用 stable capability identity、来源和可解释匹配结果。
@@ -17,6 +21,26 @@ All notable changes to this project will be documented in this file.
 - 新增请求级 `CapabilityRuntimeEnvironment`，统一能力查询使用的 workspace、config home、MCP、Plugin、App 和真实 Tool pool 快照。
 - 新增 Core 会话级 `AppCapabilityRegistry` 与 App Server `capabilities/apps/register`，支持 App / Connector 快照替换、更新和管理生命周期连续性。
 - 新增 capability identity / relation、App registry lifecycle 和跨 home runtime environment smoke；外部扩展反例矩阵扩展到 85 项。
+- 新增 Plugin 接入与产品化设计文档及源码证据索引；确认复用现有 `.claude-plugin/plugin.json`、Marketplace、多作用域安装记录和版本缓存，并把后续路线细化为 P0-P12。
+- 新增请求级 `PluginDomainSession` 与无副作用 `PluginInspector`，按 config home、workspace 和 runtime instance 隔离 settings、安装记录、Marketplace、包、配置、密钥和运行时快照，并输出多作用域、多版本 Plugin 管理读模型。
+- 新增独立 Plugin App Server 管理协议与不可变 plan/apply 契约，覆盖 catalog、inspect、action plan/apply、operation query/cancel，并绑定作用域、revision、过期和单次确认 token。
+- 新增 Plugin 可恢复安装事务：依赖闭包先全量 stage 和校验，再提交版本缓存、V2 安装记录与可选启用 intent；同时增加作用域锁、operation store、journal 和幂等 reconciliation。
+- 新增 Plugin 组件级运行时激活器和 runtime snapshot，覆盖 Command、Agent、Skill、Hook、MCP、LSP、Channel 与 Output Style，并提供 App Server `plugins/runtime/activate|get` 宿主适配协议。
+- 新增 Plugin 依赖影响分析、非原地更新、精确缓存回滚、旧版本 retention record 与引用感知 cache GC；安装、运行时、进行中 operation、未完成 journal 和回滚窗口引用的版本不会被误删。
+- 新增请求级 Plugin 配置治理与 App Server `plugins/config/get|save|delete`，支持 user/project/local 分层来源、作用域密钥 identity、schema 漂移诊断和 options/secrets/data 独立删除。
+- 新增 Plugin `ccr.apps` 关系 schema、App 关系投影和 `plugins/apps/register|unregister|list` 宿主桥接；只有 `provides` 可取得 ownership，其他关系只引用真实 App registry 状态。
+- 新增 Desktop Plugin 已安装管理工作台和独立 Plugin renderer client，提供搜索、筛选、七分区详情、启停、更新、修复、卸载、回滚、operation 进度与确认流程。
+- 新增 `fixtures:desktop-plugin` 临时验收数据集和 `smoke:desktop-plugin-workbench`，覆盖已安装、停用、缺包、部分激活、需重启、候选更新、配置、依赖、App relation 和窄屏滚动边界。
+- 新增 Desktop Plugin 本地包边界：插件页只展示已安装、内置、本地导入或运行时可见的 Plugin，官方 marketplace 远程候选不再作为插件市场列表进入主界面。
+- 新增请求级 Plugin 来源兼容 service 和 `smoke:plugin-marketplace-service`，覆盖来源兼容数据、依赖闭包、离线已安装管理、双 home 隔离、managed policy 和缓存路径校验。
+- 新增 Plugin 生命周期事务，默认 Core 可执行目标作用域 enable、disable 和 uninstall；卸载按 intent、安装记录、配置删除选项与引用感知 GC 分阶段 journal 提交。
+- 新增 Plugin 产品化本地样例和 70 项专项矩阵，覆盖 42 个异常场景、14 条最终不变式正反例、8 个事务故障边界与真实双进程锁冲突。
+- 新增 `smoke:plugin-release` 发布组，统一执行 Core/Desktop 类型检查、构建和 Plugin 产品化矩阵。
+- 新增 `PluginDomainAdapter` 和薄 CLI / Ink 兼容 facade，使终端、App Server 与 Desktop 复用同一 Plugin plan / confirmation / apply / operation 主链。
+- 新增 Plugin 安装记录兼容层，支持 V1 -> V2 事务写边界迁移、旧 V2 文件合并和未知版本显式拒绝。
+- 新增 Plugin adapter parity、registry compatibility、legacy write boundary 三组 smoke；最终产品化矩阵扩展为 76 项用例和 18 条证据脚本。
+- 新增 Plugin 兼容迁移、三类回滚和发布收口文档。
+- 新增本地 Plugin 包导入入口，支持文件夹和 zip archive；导入默认进入用户全局作用域，并兼容包根目录 `plugin.json` 与内部 `.claude-plugin/plugin.json` 两种清单入口。
 
 ### Changed
 
@@ -31,9 +55,34 @@ All notable changes to this project will be documented in this file.
 - `smoke:skill-release` 与 `smoke:skill-internal-refactor` 补入 R17-R24 的关键边界门禁。
 - Skill、MCP、Tool、Plugin 和 App capability 使用来源感知 canonical id，Catalog 统一传播 Plugin / App / MCP 父节点状态；真实调用名继续保留在 `runtimeRef`。
 - MCP、Skill、Plugin、Tool 和 App provider 改为只读统一环境快照，不再在投影阶段自行读取进程全局或触发完整 loader。
+- 深度复审 Plugin 设计：取消 `.ccr-plugin`、第二套安装数据库和虚构生命周期脚本方案，补齐请求级 Plugin 领域上下文、六层状态事实、安装事务、待激活版本、App registry 桥接、Desktop 已安装/内置管理、本地导入边界和发布迁移门禁。
+- 冻结 Plugin 产品化 P0 兼容基线：明确现有 schema、安装记录、CLI / Ink、loader、refresh、Capability 投影和 Desktop 入口的保留、适配与退出条件；后续按 P1-P12 依次实施。
+- Capability Plugin Provider 改为消费请求级 `PluginCatalogSnapshot`；缺包、漂移和加载失败附着到具体 Plugin / 安装实例，不再由新路径聚合成虚构 catalog error Plugin。
+- Capability 管理投影对 Plugin 只返回领域 action link，不再由通用 Capability action handler构造 Plugin 安装、更新或卸载 effects。
+- Plugin 安装与启用拆分；新 Desktop/Core 事务路径默认安装后保持 disabled，只有不可变 plan 显式选择时才继续写入启用 intent。
+- Plugin runtime refresh 改为显式 host adapter；部分组件失败、需要重启和旧快照保留不再被压成单一成功/失败状态，未注册宿主适配器时显式返回 unavailable。
+- Plugin action plan 现在展示直接依赖、反向依赖和跨 Marketplace 信任边，并明确当前版本约束只支持精确版本选择，不宣称完整 semver 求解。
+- Plugin 普通配置只写入用户选择的目标层；敏感字段只进入显式 config home 的凭据存储，空敏感字段保留旧值，查询结果不回显密钥。
+- App 状态细分为 connected、needs-auth、disabled、disconnected 和 unregistered；Plugin disabled 通过 App 向子能力传播时保留 `plugin-disabled` 根因。
+- Desktop Plugin 页面改为只消费 Plugin 领域协议，不再复用 Capability 管理投影或在 Renderer 推导 Plugin 状态与动作 effects。
+- Plugin 启停计划改为校验目标作用域 intent，不再用全局 effective state 阻止 project/local override；安装、启用和 runtime activation 继续保持独立。
+- CLI / Ink、推荐和启动检查不再各自编排 Plugin settings、cache 和安装记录写入；Marketplace-backed Plugin 生命周期统一委托 Plugin 领域事务。
+- built-in Plugin 的启停特化被隔离到显式 adapter；managed Plugin 生命周期保持只读，不再以兼容名义进入普通写路径。
+- Desktop Plugin 页从“市场浏览”收敛为“内置与已导入管理”，导入来源只作为输入边界，不把未安装远程候选伪装成可管理 Plugin。
+- Desktop Plugin 页交互收敛到 Skill / MCP 同类管理面：搜索放入左侧列表栏，启停开关放入 Plugin 列表卡，详情页只保留修复、卸载等图标动作；组件明细改为稳定图标列表，移除重复状态文案。
 
 ### Fixed
 
+- 修复 Plugin operation 内存终态先于持久化发布的竞态；成功操作现在不会在 Core/App Server 重启查询时短暂退回旧 `running` 状态。
+- 修复 Plugin operation 查询路由未等待异步 handler、导致首轮结果被序列化为 `{}`，继而轮询丢失 `operationId` 并终止 App Server 的问题；非法参数现在稳定返回协议错误。
+- 修复旧 CLI / Ink 安装路径先写 settings、后写 cache/registry 可能留下部分状态的问题；新路径失败不会静默回退到旧写实现。
+
+- 修复 Desktop 工具进度引用不到父工具调用时生成红色错误卡的问题；孤立工具进度现在保留为 warning 诊断，便于继续排查来源。
+- 修复 Playwright 截图、Read 图片等工具内联媒体结果被错误升格成附件卡的问题；只有带明确附件身份、路径、名称或生成物字段的工具媒体才会生成附件展示。
+- 修复 Renderer fallback 递归扫描 `tool_result` / `tool_use.result` 造成的重复附件推断；ThreadDisplay 协议路径下附件投影统一由 App Server 负责。
+- 修复 Skill / MCP 左侧列表卡只有标题区域可选中的交互问题；卡片整体可选中，启用开关继续只控制启停。
+- 调整 Desktop 外部扩展导航：能力目录从插件页拆成独立菜单，插件页只展示插件包及其子能力。
+- 修复 Desktop 使用统计“调用明细”列表和事实面板没有有效高度约束、长列表撑高页面的问题；明细区域现在在桌面和窄屏布局下都使用内部滚动。
 - 修复普通 MCP Prompt 可能因共用 `Command` 类型进入 Skill runtime catalog 的边界问题。
 - 修复手工 MCP 配置在统一管理投影中可能被误判为 installer-owned、进而错误开放卸载动作的问题。
 - 修复缺失父 Plugin 被当成 `plugin-disabled` 隐藏子能力的问题；缺失父 Plugin 现在只产生 diagnostic。
@@ -48,6 +97,8 @@ All notable changes to this project will be documented in this file.
 - 修复 App 只在 list 参数中短暂存在、导致 management plan / apply 重建投影后丢失的问题。
 - 修复多个 App 同时认领同一子能力时后写者静默覆盖的问题；现在会显式诊断并隐藏歧义能力。
 - 修复 Skill discovery smoke fixture 依赖全局 project root、掩盖 request-scoped `cwd/configHomeDir` 契约的问题。
+- 修复 Plugin 详情页图标因通用标题选择器命中过宽而视觉偏移的问题，头像和列表图标现在使用稳定居中样式。
+- 修复 Plugin 导入后需要切换页面才显示操作按钮的问题，导入完成后会重新拉取 catalog 与详情并保持当前选择。
 
 ## [0.6.2] - 2026-06-05
 

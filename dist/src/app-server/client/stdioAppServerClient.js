@@ -29,6 +29,51 @@ export class StdioAppServerClient {
     applyCapabilityManagementAction(params, options) {
         return this.rpc.request('capabilities/management/action/apply', params, options);
     }
+    listPlugins(params = {}, options) {
+        return this.rpc.request('plugins/catalog/list', params, options);
+    }
+    listPluginMarketplaces(params = {}, options) {
+        return this.rpc.request('plugins/marketplaces/list', params, options);
+    }
+    addPluginMarketplace(params, options) {
+        return this.rpc.request('plugins/marketplaces/add', params, options);
+    }
+    importLocalPlugin(params, options) {
+        return this.rpc.request('plugins/local/import', params, options);
+    }
+    removePluginMarketplace(params, options) {
+        return this.rpc.request('plugins/marketplaces/remove', params, options);
+    }
+    refreshPluginMarketplace(params, options) {
+        return this.rpc.request('plugins/marketplaces/refresh', params, options);
+    }
+    inspectPlugin(params, options) {
+        return this.rpc.request('plugins/inspect', params, options);
+    }
+    planPluginAction(params, options) {
+        return this.rpc.request('plugins/action/plan', params, options);
+    }
+    applyPluginAction(params, options) {
+        return this.rpc.request('plugins/action/apply', params, options);
+    }
+    getPluginOperation(params, options) {
+        return this.rpc.request('plugins/operation/get', params, options);
+    }
+    cancelPluginOperation(params, options) {
+        return this.rpc.request('plugins/operation/cancel', params, options);
+    }
+    getPluginRuntime(params = {}, options) {
+        return this.rpc.request('plugins/runtime/get', params, options);
+    }
+    activatePluginRuntime(params = {}, options) {
+        return this.rpc.request('plugins/runtime/activate', params, options);
+    }
+    getPluginConfiguration(params, options) {
+        return this.rpc.request('plugins/config/get', params, options);
+    }
+    listPluginApps(params, options) {
+        return this.rpc.request('plugins/apps/list', params, options);
+    }
     getAuthStatus(params = {}, options) {
         return this.rpc.request('auth/status', params, options);
     }

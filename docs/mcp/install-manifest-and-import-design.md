@@ -8,7 +8,7 @@ MCP 管理面必须区分三类对象：
 
 | 对象 | 含义 | 当前入口 | 管理能力 |
 | --- | --- | --- | --- |
-| 已配置 MCP | 当前 CCR 能从配置源读到的 MCP server | `~/.ccr/mcp.json`、项目 `.mcp.json`、旧 settings、插件、企业配置等 | 查看、检测、启用、禁用、重启 |
+| 已配置 MCP | 当前 CCR 能从配置源读到的 MCP server | `~/.ccr/mcp.json`、项目 `.mcp.json`、旧 settings、插件、企业配置等 | 查看、检测、重启；用户全局受控项可启用/禁用，项目/企业/插件来源按来源规则处理 |
 | 可安装 MCP | 可以由 CCR 安装器生成安装计划的候选 | 内置 preset registry、用户本地 manifest 目录；远端 registry 已暂停 | 安装计划、确认安装 |
 | CCR 受控安装记录 | 由 CCR 安装器写入并记录 owner 的 MCP | `~/.ccr/mcp/installed.json`、`~/.ccr/mcp/lock.json` | 状态校验、修复、卸载 |
 

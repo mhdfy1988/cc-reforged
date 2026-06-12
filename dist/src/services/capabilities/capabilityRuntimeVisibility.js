@@ -12,7 +12,9 @@ const AVAILABILITY_BLOCKING_REASONS = new Set([
     'unsupported-kind',
     'source-unavailable',
     'plugin-disabled',
+    'plugin-missing',
     'app-disabled',
+    'app-disconnected',
     'app-needs-auth',
     'app-missing',
     'app-ambiguous',
@@ -163,6 +165,7 @@ function hiddenReasonDiagnosticKind(reason) {
         case 'invalid':
             return 'integrity';
         case 'plugin-disabled':
+        case 'plugin-missing':
             return 'plugin';
         case 'app-disabled':
         case 'app-needs-auth':
@@ -183,6 +186,7 @@ function hiddenReasonDiagnosticSeverity(reason) {
         case 'invalid':
         case 'source-unavailable':
         case 'mcp-server-unavailable':
+        case 'plugin-missing':
         case 'app-missing':
         case 'app-ambiguous':
             return 'error';
@@ -227,6 +231,8 @@ function hiddenReasonMessage(reason) {
             return 'Capability source is unavailable.';
         case 'plugin-disabled':
             return 'Parent plugin is disabled.';
+        case 'plugin-missing':
+            return 'Parent plugin is missing from the capability snapshot.';
         case 'app-disabled':
             return 'Parent app connector is disabled.';
         case 'app-needs-auth':

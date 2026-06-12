@@ -57,11 +57,25 @@ function createHeadline(input) {
         return `安全扫描未发现风险：${input.report.skillName}`;
     }
     const actionText = formatAction(input.action, input.requiresOverride);
-    return `安全扫描最高风险 ${input.report.summary.highestSeverity}，共 ${input.report.summary.totalFindings} 项：${actionText}`;
+    return `安全扫描最高风险 ${formatSeverity(input.report.summary.highestSeverity)}，共 ${input.report.summary.totalFindings} 项：${actionText}`;
+}
+function formatSeverity(severity) {
+    switch (severity) {
+        case 'critical':
+            return '严重';
+        case 'high':
+            return '高';
+        case 'medium':
+            return '中';
+        case 'low':
+            return '低';
+        case 'info':
+            return '提示';
+    }
 }
 function formatAction(action, requiresOverride) {
     if (requiresOverride) {
-        return '需要显式 override';
+        return '需要确认高风险';
     }
     switch (action) {
         case 'allow':

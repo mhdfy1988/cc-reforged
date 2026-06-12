@@ -85,6 +85,36 @@ import type {
   PermissionSettingsGetResult,
   PermissionSettingsUpdateParams,
   PermissionSettingsUpdateResult,
+  PluginsActionApplyParams,
+  PluginsActionApplyResult,
+  PluginsActionPlanParams,
+  PluginsActionPlanResult,
+  PluginsAppsListParams,
+  PluginsAppsListResult,
+  PluginsCatalogListParams,
+  PluginsCatalogListResult,
+  PluginsConfigGetParams,
+  PluginsConfigGetResult,
+  PluginsInspectParams,
+  PluginsInspectResult,
+  PluginsLocalImportParams,
+  PluginsLocalImportResult,
+  PluginsMarketplaceAddParams,
+  PluginsMarketplaceAddResult,
+  PluginsMarketplaceRefreshParams,
+  PluginsMarketplaceRefreshResult,
+  PluginsMarketplaceRemoveParams,
+  PluginsMarketplaceRemoveResult,
+  PluginsMarketplacesListParams,
+  PluginsMarketplacesListResult,
+  PluginsOperationCancelParams,
+  PluginsOperationCancelResult,
+  PluginsOperationGetParams,
+  PluginsOperationGetResult,
+  PluginsRuntimeActivateParams,
+  PluginsRuntimeActivateResult,
+  PluginsRuntimeGetParams,
+  PluginsRuntimeGetResult,
   SessionHistoryListParams,
   SessionHistoryListResult,
   SessionHistoryRenameParams,
@@ -207,6 +237,111 @@ export class StdioAppServerClient {
       params,
       options,
     )
+  }
+
+  listPlugins(
+    params: PluginsCatalogListParams = {},
+    options?: RequestOptions,
+  ): Promise<PluginsCatalogListResult> {
+    return this.rpc.request('plugins/catalog/list', params, options)
+  }
+
+  listPluginMarketplaces(
+    params: PluginsMarketplacesListParams = {},
+    options?: RequestOptions,
+  ): Promise<PluginsMarketplacesListResult> {
+    return this.rpc.request('plugins/marketplaces/list', params, options)
+  }
+
+  addPluginMarketplace(
+    params: PluginsMarketplaceAddParams,
+    options?: RequestOptions,
+  ): Promise<PluginsMarketplaceAddResult> {
+    return this.rpc.request('plugins/marketplaces/add', params, options)
+  }
+
+  importLocalPlugin(
+    params: PluginsLocalImportParams,
+    options?: RequestOptions,
+  ): Promise<PluginsLocalImportResult> {
+    return this.rpc.request('plugins/local/import', params, options)
+  }
+
+  removePluginMarketplace(
+    params: PluginsMarketplaceRemoveParams,
+    options?: RequestOptions,
+  ): Promise<PluginsMarketplaceRemoveResult> {
+    return this.rpc.request('plugins/marketplaces/remove', params, options)
+  }
+
+  refreshPluginMarketplace(
+    params: PluginsMarketplaceRefreshParams,
+    options?: RequestOptions,
+  ): Promise<PluginsMarketplaceRefreshResult> {
+    return this.rpc.request('plugins/marketplaces/refresh', params, options)
+  }
+
+  inspectPlugin(
+    params: PluginsInspectParams,
+    options?: RequestOptions,
+  ): Promise<PluginsInspectResult> {
+    return this.rpc.request('plugins/inspect', params, options)
+  }
+
+  planPluginAction(
+    params: PluginsActionPlanParams,
+    options?: RequestOptions,
+  ): Promise<PluginsActionPlanResult> {
+    return this.rpc.request('plugins/action/plan', params, options)
+  }
+
+  applyPluginAction(
+    params: PluginsActionApplyParams,
+    options?: RequestOptions,
+  ): Promise<PluginsActionApplyResult> {
+    return this.rpc.request('plugins/action/apply', params, options)
+  }
+
+  getPluginOperation(
+    params: PluginsOperationGetParams,
+    options?: RequestOptions,
+  ): Promise<PluginsOperationGetResult> {
+    return this.rpc.request('plugins/operation/get', params, options)
+  }
+
+  cancelPluginOperation(
+    params: PluginsOperationCancelParams,
+    options?: RequestOptions,
+  ): Promise<PluginsOperationCancelResult> {
+    return this.rpc.request('plugins/operation/cancel', params, options)
+  }
+
+  getPluginRuntime(
+    params: PluginsRuntimeGetParams = {},
+    options?: RequestOptions,
+  ): Promise<PluginsRuntimeGetResult> {
+    return this.rpc.request('plugins/runtime/get', params, options)
+  }
+
+  activatePluginRuntime(
+    params: PluginsRuntimeActivateParams = {},
+    options?: RequestOptions,
+  ): Promise<PluginsRuntimeActivateResult> {
+    return this.rpc.request('plugins/runtime/activate', params, options)
+  }
+
+  getPluginConfiguration(
+    params: PluginsConfigGetParams,
+    options?: RequestOptions,
+  ): Promise<PluginsConfigGetResult> {
+    return this.rpc.request('plugins/config/get', params, options)
+  }
+
+  listPluginApps(
+    params: PluginsAppsListParams,
+    options?: RequestOptions,
+  ): Promise<PluginsAppsListResult> {
+    return this.rpc.request('plugins/apps/list', params, options)
   }
 
   getAuthStatus(

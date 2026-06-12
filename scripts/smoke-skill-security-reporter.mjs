@@ -79,7 +79,7 @@ assert.equal(blockedDigest.primaryFindings[0].severity, 'high')
 assert.equal(blockedDigest.primaryFindings[0].category, 'network-access')
 assert.equal(
   blockedDigest.headline,
-  '安全扫描最高风险 high，共 2 项：需要显式 override',
+  '安全扫描最高风险 高，共 2 项：需要确认高风险',
 )
 assert.equal(formatSkillSecurityHeadline(blockedDigest), blockedDigest.headline)
 
@@ -90,6 +90,6 @@ const overrideDigest = summarizeSkillSecurityDecision(overrideDecision)
 assert.equal(overrideDigest.installAllowed, true)
 assert.equal(overrideDigest.requiresOverride, false)
 assert.equal(overrideDigest.action, 'require-confirmation')
-assert.equal(overrideDigest.headline, '安全扫描最高风险 high，共 2 项：需要确认')
+assert.equal(overrideDigest.headline, '安全扫描最高风险 高，共 2 项：需要确认')
 
 console.log('smoke-skill-security-reporter: ok')

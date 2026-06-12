@@ -43,6 +43,12 @@ export type CapabilityManagementItem = {
   managementOwnership: CapabilityManagementOwnership
   actionRef?: string
   allowedActions: CapabilityManagementAction[]
+  domainActionLink?: {
+    domain: 'plugin'
+    pluginId: string
+    inspectMethod: 'plugins/inspect'
+    planMethod: 'plugins/action/plan'
+  }
   metadata?: Record<string, unknown>
 }
 
@@ -124,6 +130,17 @@ function toManagementItem(
     managementOwnership,
     ...(actionRef ? { actionRef } : {}),
     allowedActions: getAllowedActions(capability, managementOwnership),
+    ...(capability.kind === 'plugin'
+      ? {
+          domainActionLink: {
+            domain: 'plugin' as const,
+            pluginId:
+              capability.source.pluginId ?? capability.name,
+            inspectMethod: 'plugins/inspect' as const,
+            planMethod: 'plugins/action/plan' as const,
+          },
+        }
+      : {}),
     ...(capability.metadata ? { metadata: { ...capability.metadata } } : {}),
   }
 }
@@ -134,14 +151,15 @@ function getManagementOwnership(
   if (capability.kind !== 'plugin' && capability.relations.parentPluginId) {
     return 'plugin-owned'
   }
-  if (
-    capability.kind === 'mcp-server' &&
-    capability.metadata?.installKind === 'manual-config'
-  ) {
-    return 'manual-config'
-  }
   if (capability.state.installed || capability.relations.installedRef) {
     return 'installer-owned'
+  }
+  if (
+    capability.kind === 'mcp-server' &&
+    (capability.state.configured === true ||
+      capability.metadata?.configured === true)
+  ) {
+    return 'manual-config'
   }
   return 'runtime-only'
 }
@@ -163,9 +181,16 @@ function getAllowedActions(
   }
   if (capability.kind === 'mcp-server') {
     const actions: CapabilityManagementAction[] = ['inspect']
-    if (ownership === 'manual-config' || ownership === 'installer-owned') {
+    const hasConfig = capability.state.configured !== false
+    if (
+      ownership === 'manual-config' ||
+      (ownership === 'installer-owned' && hasConfig)
+    ) {
       actions.unshift(capability.state.enabled ? 'disable' : 'enable')
       actions.push('test', 'restart')
+    }
+    if (ownership === 'manual-config' && capability.metadata?.scope === 'user') {
+      actions.push('uninstall')
     }
     if (ownership === 'installer-owned') {
       actions.push('repair', 'uninstall')

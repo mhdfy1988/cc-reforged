@@ -1,14 +1,11 @@
-import { join } from 'path';
-import { getCwd } from '../cwd.js';
+import { installPluginOp } from '../../services/plugins/pluginOperations.js';
 import { logForDebugging } from '../debug.js';
 import { logError } from '../log.js';
-import { getInitialSettings, getSettingsForSource, updateSettingsForSource, } from '../settings/settings.js';
+import { getInitialSettings, getSettingsForSource, } from '../settings/settings.js';
 import { getAddDirEnabledPlugins } from './addDirPluginSettings.js';
 import { getInMemoryInstalledPlugins, migrateFromEnabledPlugins, } from './installedPluginsManager.js';
 import { getPluginById } from './marketplaceManager.js';
-import { SETTING_SOURCE_TO_SCOPE, scopeToSettingSource, } from './pluginIdentifier.js';
-import { cacheAndRegisterPlugin, registerPluginInstallation, } from './pluginInstallationHelpers.js';
-import { isLocalPluginSource } from './schemas.js';
+import { SETTING_SOURCE_TO_SCOPE, } from './pluginIdentifier.js';
 /**
  * Checks for enabled plugins across all settings sources, including --add-dir.
  *
@@ -204,12 +201,6 @@ export async function findMissingPlugins(enabledPlugins) {
  * @returns Installation results with succeeded and failed plugins
  */
 export async function installSelectedPlugins(pluginsToInstall, onProgress, scope = 'user') {
-    // Get projectPath for non-user scopes
-    const projectPath = scope !== 'user' ? getCwd() : undefined;
-    // Get the correct settings source for this scope
-    const settingSource = scopeToSettingSource(scope);
-    const settings = getSettingsForSource(settingSource);
-    const updatedEnabledPlugins = { ...settings?.enabledPlugins };
     const installed = [];
     const failed = [];
     for (let i = 0; i < pluginsToInstall.length; i++) {
@@ -220,31 +211,15 @@ export async function installSelectedPlugins(pluginsToInstall, onProgress, scope
             onProgress(pluginId, i + 1, pluginsToInstall.length);
         }
         try {
-            const pluginInfo = await getPluginById(pluginId);
-            if (!pluginInfo) {
+            const result = await installPluginOp(pluginId, scope);
+            if (!result.success) {
                 failed.push({
                     name: pluginId,
-                    error: 'Plugin not found in any marketplace',
+                    error: result.message,
                 });
                 continue;
             }
-            // Cache the plugin if it's from an external source
-            const { entry, marketplaceInstallLocation } = pluginInfo;
-            if (!isLocalPluginSource(entry.source)) {
-                // External plugin - cache and register it with scope
-                await cacheAndRegisterPlugin(pluginId, entry, scope, projectPath);
-            }
-            else {
-                // Local plugin - just register it with the install path and scope
-                registerPluginInstallation({
-                    pluginId,
-                    installPath: join(marketplaceInstallLocation, entry.source),
-                    version: entry.version,
-                }, scope, projectPath);
-            }
-            // Mark as enabled in settings
-            updatedEnabledPlugins[pluginId] = true;
-            installed.push(pluginId);
+            installed.push(result.pluginId ?? pluginId);
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -252,11 +227,6 @@ export async function installSelectedPlugins(pluginsToInstall, onProgress, scope
             logError(error);
         }
     }
-    // Update settings with newly enabled plugins using the correct settings source
-    updateSettingsForSource(settingSource, {
-        ...settings,
-        enabledPlugins: updatedEnabledPlugins,
-    });
     return { installed, failed };
 }
 //# sourceMappingURL=pluginStartupCheck.js.map

@@ -125,11 +125,18 @@ function applyParentRuntimeVisibility(
     if (parent.state.enabled && parent.state.available) {
       return capability
     }
+    if (
+      parent.state.hiddenReasons?.includes('plugin-disabled') === true
+    ) {
+      return addParentHiddenReason(capability, 'plugin-disabled')
+    }
     return addParentHiddenReason(
       capability,
       parent.state.status === 'needs-auth'
         ? 'app-needs-auth'
-        : 'app-disabled',
+        : parent.state.status === 'disabled'
+          ? 'app-disabled'
+          : 'app-disconnected',
     )
   })
 
@@ -273,27 +280,25 @@ function addMissingParentPluginDiagnostic(
   capability: ExtensionCapability,
   parentPluginId: string,
 ): ExtensionCapability {
-  if (
-    capability.diagnostics.some(
-      diagnostic =>
-        diagnostic.kind === 'plugin' &&
-        diagnostic.code === 'parent-plugin-missing',
-    )
-  ) {
-    return capability
-  }
-  return {
-    ...capability,
-    diagnostics: [
-      ...capability.diagnostics,
-      {
-        kind: 'plugin',
-        severity: 'warning',
-        code: 'parent-plugin-missing',
-        message: `Parent plugin '${parentPluginId}' was not present in the capability catalog snapshot.`,
-      },
-    ],
-  }
+  const withDiagnostic = capability.diagnostics.some(
+    diagnostic =>
+      diagnostic.kind === 'plugin' &&
+      diagnostic.code === 'parent-plugin-missing',
+  )
+    ? capability
+    : {
+        ...capability,
+        diagnostics: [
+          ...capability.diagnostics,
+          {
+            kind: 'plugin' as const,
+            severity: 'warning' as const,
+            code: 'parent-plugin-missing',
+            message: `Parent plugin '${parentPluginId}' was not present in the capability catalog snapshot.`,
+          },
+        ],
+      }
+  return addParentHiddenReason(withDiagnostic, 'plugin-missing')
 }
 
 function addMissingParentAppDiagnostic(
@@ -345,7 +350,9 @@ function addParentHiddenReason(
   reason: Extract<
     ExtensionCapabilityHiddenReason,
     | 'plugin-disabled'
+    | 'plugin-missing'
     | 'app-disabled'
+    | 'app-disconnected'
     | 'app-needs-auth'
     | 'app-missing'
     | 'app-ambiguous'

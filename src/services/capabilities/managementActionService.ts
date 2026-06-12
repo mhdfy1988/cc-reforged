@@ -40,6 +40,7 @@ export type CapabilityManagementActionPlan = {
     displayName: string
     managementOwnership: CapabilityManagementItem['managementOwnership']
     actionRef?: string
+    metadata?: Record<string, unknown>
   }
   requiresConfirmation: boolean
   confirmation?: {
@@ -273,6 +274,7 @@ function createBasePlan(
       displayName: item.displayName,
       managementOwnership: item.managementOwnership,
       ...(targetActionRef ? { actionRef: targetActionRef } : {}),
+      ...(item.metadata ? { metadata: { ...item.metadata } } : {}),
     },
     requiresConfirmation,
     effects: getActionEffects(item, request.action),

@@ -37,6 +37,8 @@ export class AppCapabilityRegistry {
     apps: readonly AppConnectorCapabilityInput[],
   ): AppCapabilityRegistrySnapshot {
     for (const [appId, app] of createUniqueAppMap(apps)) {
+      const existing = this.appsById.get(appId)
+      if (existing) assertCompatibleOwnership(existing, app)
       this.appsById.set(appId, app)
     }
     this.revision += 1
@@ -49,6 +51,17 @@ export class AppCapabilityRegistry {
     return this.getSnapshot()
   }
 
+  removeOwnedBy(pluginId: string): AppCapabilityRegistrySnapshot {
+    let changed = false
+    for (const [appId, app] of this.appsById) {
+      if (appOwner(app) !== pluginId) continue
+      this.appsById.delete(appId)
+      changed = true
+    }
+    if (changed) this.revision += 1
+    return this.getSnapshot()
+  }
+
   getSnapshot(): AppCapabilityRegistrySnapshot {
     return {
       schemaVersion: 1,
@@ -58,6 +71,27 @@ export class AppCapabilityRegistry {
         .map(cloneApp),
     }
   }
+}
+
+function assertCompatibleOwnership(
+  existing: AppConnectorCapabilityInput,
+  incoming: AppConnectorCapabilityInput,
+): void {
+  const existingOwner = appOwner(existing)
+  const incomingOwner = appOwner(incoming)
+  if (existingOwner === incomingOwner) return
+  throw Object.assign(
+    new Error(
+      `App connector ${incoming.id} is already registered with a different owner.`,
+    ),
+    { code: 'plugin-app-owner-conflict' },
+  )
+}
+
+function appOwner(
+  app: AppConnectorCapabilityInput,
+): string | undefined {
+  return app.parentPluginId ?? app.pluginId
 }
 
 function createUniqueAppMap(

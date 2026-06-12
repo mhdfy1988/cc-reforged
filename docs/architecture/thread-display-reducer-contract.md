@@ -145,7 +145,7 @@ ThreadDisplay reducer 可以调用 projector，但 projector 不能变成第二�
 | `threadDisplayProjection.ts` | 展示投影总分派、普通消息、系统类投影入口。 |
 | `threadDisplayToolProjector.ts` | 工具 snapshot、工具分类、状态、耗时、错误归因和主时间线隐藏策略。 |
 | `threadDisplayFileProjector.ts` | 文件 snapshot、搜索引用、路径安全、文本范围、diff 和文件动作。 |
-| `threadDisplayAttachmentProjector.ts` | 附件快照、模型输出路径清理、用户图片占位清理。 |
+| `threadDisplayAttachmentProjector.ts` | 附件快照、模型输出路径清理、用户图片占位清理；工具内联媒体只有带明确附件身份 / 路径 / 名称 / 生成物字段时才升格为附件。 |
 | `threadDisplayErrorProjector.ts` | 工具错误和 App Server 错误 snapshot。 |
 
 投影器只能把 reducer 已确定的展示事实转换成 `ThreadDisplayProjection`，不能自己维护跨事件生命周期。
@@ -185,6 +185,7 @@ Desktop Renderer：
 - projection 缺失或非法时显示协议错误卡。
 - 不按 raw `toolUseId` 合并协议项。
 - 不从 raw stdout / markdown / 本地路径中反推工具卡或附件卡。
+- 不递归扫描 raw `tool_result` / `tool_use.result` 来补附件卡；工具内联媒体的附件化必须来自 App Server projection。
 - 缺失 projection 的 `thinking_summary` 也不允许特殊 raw fallback。
 - 旧实时事件仍保留 Renderer 侧 legacy 工具生命周期合并入口，但该入口必须显式命名为 legacy，并且不得处理 `source=history/live` 的 ThreadDisplay 协议上下文。
 
@@ -228,6 +229,7 @@ npm.cmd run smoke:app-server
 - projector 不做 raw content 扫描 fallback。
 - assistant 生成图片路径先由 App Server 物化为图片块，再进入 attachment projection。
 - Desktop 直接接收未物化的普通文本路径时，不自行创建模型输出附件卡。
+- Playwright 截图、Read 图片等工具内联媒体如果没有明确附件身份，不生成“附件信息不完整”卡，仍保留在工具执行结果中。
 - 缺 projection 的 thinking summary 也渲染协议错误卡。
 - Renderer 旧工具 lifecycle 兼容入口必须显式命名为 legacy，且 ThreadDisplay 主路径不进入该入口。
 - `ThreadDisplayFact` 覆盖 tool / file / attachment / error / system / control / unsupported。
@@ -243,9 +245,10 @@ npm.cmd run smoke:app-server
 | compact / control | `smoke:thread-display-input-event`、`smoke:desktop-session-state` | 系统类展示由 system / control fact 驱动。 |
 | MCP 特殊错误 | `smoke:desktop-display-events`、`smoke:app-server` | MCP 工具错误归入工具错误分类，新增 raw shape 时补定向 fixture。 |
 | tool progress 多次更新 | `smoke:thread-display-input-event`、`smoke:desktop-session-state` | progress 进入 reducer lifecycle state，并在 realtime patch 与 snapshot 展示中收敛。 |
+| 孤立 tool progress | `smoke:thread-display-input-event`、`smoke:desktop-display-events`、`smoke:app-server` | 找不到父工具调用时保留 warning 诊断，不生成独立运行中工具卡。 |
 | failed / interrupted 工具生命周期 | `smoke:thread-display-input-event`、`smoke:desktop-session-state` | terminal 工具状态绑定原工具卡并保留错误快照。 |
 | 恢复中断态 | `smoke:desktop-session-state` | turn 终止时运行中工具显式标记 interrupted。 |
-| 多 attachment / 多 generated output | `smoke:thread-display-input-event`、`smoke:desktop-display-events`、`smoke:desktop-session-state` | 附件和生成物在 App Server 输入 / 投影前物化，Desktop 不猜 raw text。 |
+| 多 attachment / 多 generated output | `smoke:thread-display-input-event`、`smoke:desktop-display-events`、`smoke:desktop-session-state`、`smoke:app-server` | 附件和生成物在 App Server 输入 / 投影前物化；工具内联媒体必须带明确附件身份才会生成附件，Desktop 不猜 raw text。 |
 | unknown / unsupported input | `smoke:thread-display-input-event`、`smoke:desktop-session-state` | 未知输入显式诊断为 protocol error。 |
 | 缺 projection / invalid projection | `smoke:desktop-session-state` | Desktop 显示协议错误卡，不走 raw fallback。 |
 

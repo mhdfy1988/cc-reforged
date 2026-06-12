@@ -6,17 +6,18 @@
 
 ## 2. 当前发布版本
 
-当前公开版本：`0.6.1`。
+当前公开版本：`0.6.3`。
 
-发布时间：2026-06-05。
+发布时间：2026-06-12。
 
-发布入口：<https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.6.1>
+发布入口：<https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.6.3>
 
-`0.6.1` 的核心范围：
+`0.6.3` 的核心范围：
 
-- Skill / MCP 管理页状态语义继续收敛，整体启用状态从文字标签改为无文字切换开关。
-- Skill / MCP 详情页操作区改为 icon-only 按钮，保留 `title` / `aria-label` 与危险操作视觉区分。
-- Skill 安装检查修复 `modelInvocable=false` 被误判为 Skill 已禁用的问题，并补回归 smoke。
+- 外部扩展能力 G1-G4 根因重构完成：Skill、MCP、Tool、Plugin 和 App 使用请求级运行环境快照、来源感知 identity 和父子关系图。
+- Plugin 产品化 P0-P12 完成：本地 Plugin 文件夹 / zip 导入、根目录 `plugin.json` 兼容、用户全局默认安装、领域 plan/apply、journal 事务、运行时激活、配置与 App 关系、Desktop 管理页和 CLI / Ink 薄适配。
+- Desktop 外部扩展导航收敛：`插件` 只管理本地 Plugin bundle，`能力` 作为独立统一能力目录，Skill / MCP / Plugin 列表启停体验保持一致。
+- 发布门禁新增 `smoke:plugin-release`、`smoke:external-extension-matrix` 和 Desktop Plugin 工作台 smoke，Plugin 产品化矩阵覆盖 76 项用例、42 个异常场景、14 条最终不变式和 18 条证据脚本。
 
 ## 3. `0.5.x` 版本线
 
@@ -46,9 +47,9 @@
 - 不把 Skill / Plugin 扩展包治理提前塞进 `0.5.x`。
 - 不在 `0.5.x` 做完整插件市场、Skill / Plugin 安装启用和版本分发；MCP 只做工具治理与基础管理面闭环。
 
-## 4. `0.6.0` 主线
+## 4. `0.6.x` 外部扩展主线
 
-`0.6.0` 进入扩展能力阶段，主线是 Skill、Plugin 和外部能力包治理；MCP 的基础工具治理应已在 `0.5.x` 收住。
+`0.6.x` 进入扩展能力阶段，主线是 Skill、MCP、Plugin、Tool 和 App 的统一事实层、管理入口和运行时可见性治理；MCP 的基础工具治理已经在 `0.5.x` 进入管理面，在 `0.6.x` 继续接入统一能力目录。
 
 目标：
 
@@ -57,12 +58,19 @@
 - 将工具能力治理层前置到模型调用前，保证模型只看到当前真实可用的工具。
 - 在 Desktop 中展示能力来源、健康状态、数据边界和失败原因。
 
-第一版建议顺序：
+已完成顺序：
 
-1. Skill / Plugin 清单：明确安装目录、元数据、启用状态和版本。
-2. Plugin 命名空间：处理插件 skill、agent、hook、MCP 配置的冲突和隔离。
-3. Desktop 能力面板：展示当前会话真实可用工具，而不是只展示配置文件。
-4. 外部能力回归：把工具池、权限、错误快照和日志观测纳入 smoke。
+1. Skill / MCP 管理面：安装、导入、启停、检测、修复和卸载入口成型。
+2. 统一能力目录：Skill、MCP、Tool、Plugin、App 进入请求级只读目录和管理投影。
+3. Plugin 本地包管理：复用现有 manifest、安装记录、版本缓存和 runtime loader，补本地导入、事务和 Desktop 管理页。
+4. 外部能力回归：工具池、权限、错误快照、父子关系和发布矩阵进入 smoke。
+
+后续方向：
+
+- 远端 registry、签名、checksum 和供应链信任策略。
+- 更细粒度 Plugin / MCP / Skill 权限 enforcement。
+- 跨设备同步和企业 policy。
+- 音频、视频、文件生成等后续多模态能力。
 
 ## 5. 文档入口
 
@@ -73,3 +81,5 @@
 - Provider 接入文档：[provider-integrations/README.md](./provider-integrations/README.md)
 - 工具能力治理清单：[../stages/tool-capability-repair-list.md](../stages/tool-capability-repair-list.md)
 - MCP 文档入口：[../mcp/README.md](../mcp/README.md)
+- 扩展能力体系总览：[extension-capability-system.md](./extension-capability-system.md)
+- Plugin 产品化设计：[plugin-system-product-design.md](./plugin-system-product-design.md)

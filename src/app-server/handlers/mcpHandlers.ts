@@ -26,13 +26,13 @@ type McpNameParams = {
 
 type McpMutationParams = {
   name: string
-  scope: 'user' | 'project' | 'local'
+  scope: 'user'
   config: Record<string, unknown>
 }
 
 type McpRemoveParams = {
   name: string
-  scope: 'user' | 'project' | 'local'
+  scope: 'user'
 }
 
 type McpInstallSearchParams = {
@@ -41,7 +41,7 @@ type McpInstallSearchParams = {
 
 type McpInstallPlanParams = {
   name?: string
-  scope?: 'user' | 'project' | 'local'
+  scope?: 'user'
   manifest: Record<string, unknown>
   force?: boolean
 }
@@ -72,7 +72,7 @@ type McpInstallUninstallParams = {
 
 type McpInstallRepairParams = {
   name: string
-  scope?: 'user' | 'project' | 'local'
+  scope?: 'user'
   confirmed: boolean
 }
 

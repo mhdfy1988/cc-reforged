@@ -4,12 +4,14 @@ import { dirname, isAbsolute, join, relative, resolve } from 'path';
 import { z } from 'zod/v4';
 import { jsonStringify } from '../../utils/slowOperations.js';
 import { getPlatform } from '../../utils/platform.js';
-import { addMcpConfig, getMcpConfigByName, removeMcpConfig, updateMcpConfig, } from './config.js';
+import { addMcpConfig, getMcpConfigByName, isMcpServerDisabled, removeMcpConfig, setMcpServerEnabled, updateMcpConfig, } from './config.js';
 import { collectCcrMcpConfigInventory, getCcrMcpInstallPaths, summarizeCcrMcpConfigInventory, } from './configInventory.js';
 import { CcrMcpInstallManifestSchema, createCcrMcpInstallManifest, getCcrMcpInstallTransport, summarizeCcrMcpInstallManifest, } from './installManifest.js';
 import { getCcrMcpInstallPreset, searchCcrMcpInstallPresets, } from './installPresets.js';
 import { McpServerConfigSchema, } from './types.js';
-export const CcrMcpWritableScopeSchema = z.enum(['user', 'project', 'local']);
+// CCR-managed MCP installs are user-global. Project `.mcp.json` remains a
+// discovery/approval source, not a Desktop installer target.
+export const CcrMcpWritableScopeSchema = z.literal('user');
 export const CcrMcpInstallPlanInputSchema = z.object({
     name: z.string().min(1).optional(),
     scope: CcrMcpWritableScopeSchema.default('user'),
@@ -171,7 +173,10 @@ export async function applyCcrMcpInstallPlan(input) {
     }
     const serverConfig = resolveServerConfig(manifest);
     const replacedConfig = existing && plan.force ? stripScopedMcpConfig(existing) : null;
+    const wasEnabledBeforeApply = !isMcpServerDisabled(plan.name);
+    const shouldEnableAfterApply = !existing;
     let wroteConfig = false;
+    let updatedEnabledState = false;
     try {
         if (existing && plan.force) {
             await updateMcpConfig(plan.name, serverConfig, plan.scope);
@@ -180,6 +185,10 @@ export async function applyCcrMcpInstallPlan(input) {
             await addMcpConfig(plan.name, serverConfig, plan.scope);
         }
         wroteConfig = true;
+        if (shouldEnableAfterApply) {
+            setMcpServerEnabled(plan.name, true);
+            updatedEnabledState = !wasEnabledBeforeApply;
+        }
         const record = await recordInstalledMcp({
             plan,
             manifest,
@@ -206,6 +215,9 @@ export async function applyCcrMcpInstallPlan(input) {
             else {
                 await removeMcpConfig(plan.name, plan.scope).catch(() => { });
             }
+        }
+        if (updatedEnabledState) {
+            setMcpServerEnabled(plan.name, wasEnabledBeforeApply);
         }
         throw error;
     }
@@ -359,6 +371,7 @@ export async function uninstallCcrMcpInstalledServer(input) {
         schemaVersion: 1,
         locks: restLocks,
     });
+    setMcpServerEnabled(record.name, true);
     return {
         uninstalled: true,
         name: input.name,
@@ -485,7 +498,7 @@ function summarizeInstallSecurity(params) {
         dataBoundary: params.manifest.dataBoundary,
         scope: params.scope,
         scopeWritable,
-        projectTrustRequired: params.scope === 'project' || params.scope === 'local',
+        projectTrustRequired: false,
         enterpriseExclusive: inventory.enterpriseExclusive,
         pluginOnly: inventory.pluginOnly,
         packageCache: {

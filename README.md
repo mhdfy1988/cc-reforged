@@ -6,13 +6,13 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.6.2-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.6.3-orange?style=flat-square)
 
 CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留终端优先的工作方式，同时把配置、LLM 运行时、App Server 和 Desktop 客户端逐步收敛到 CCR 自己的边界内。
 
-当前 `0.6.2` 版本线聚焦 Skill / Plugin 和外部能力包治理，在 MCP 基础管理面之上补齐统一能力目录、Skill 内部分层、安装可靠性、运行时启用、审计和管理入口。
+当前 `0.6.3` 版本线聚焦外部扩展能力收口：在 MCP / Skill 基础管理面之上，补齐统一能力目录、Plugin 本地包管理、请求级运行时快照、安装可靠性、运行时启用、审计和管理入口。
 
-`0.6.2` 之后的主分支已完成外部扩展能力 G1-G4 根因重构：能力查询统一到请求级快照，Skill / MCP / Tool / Plugin / App 使用来源感知身份和关系图，App / Connector 拥有会话级注册表和管理生命周期，外部扩展反例矩阵扩展到 85 项。它表示底层 capability model 已达到本轮代码要求；真实 Plugin manifest / App 注册入口、样例包、管理页产品化和正式发布仍属于下一阶段。
+`0.6.3` 已收口外部扩展能力 G1-G4 根因重构和 Plugin 产品化 P0-P12：能力查询统一到请求级快照，Skill / MCP / Tool / Plugin / App 使用来源感知身份和关系图；Plugin 复用现有 manifest、安装记录、版本缓存与 runtime 加载器，补齐请求级领域会话、无副作用读模型、独立 plan/apply、可恢复事务、运行时激活、配置与 App 关系、Desktop 本地包管理，以及 CLI / Ink 兼容收口。Plugin 发布矩阵当前包含 76 项用例、42 个异常场景、14 条最终不变式和 18 条真实证据脚本。
 
 ![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
 
@@ -50,7 +50,7 @@ Provider Adapters
 | 项目 | 当前值 |
 | --- | --- |
 | npm 包名 | `cc-reforged` |
-| 当前版本 | `0.6.2` |
+| 当前版本 | `0.6.3` |
 | CLI 命令 | `ccr` |
 | 桌面应用 | `CCR` |
 | 运行时要求 | Node.js `>=24.0.0` |
@@ -81,26 +81,28 @@ CCR 当前更像一个本地 Agent 工作台，而不是单纯的 CLI 包：
 | 多模型调试 | Desktop 模型页 / `ccr model` | 适合比较 Codex OAuth、OpenAI、DeepSeek、MiniMax、Kimi、GLM 等供应商 |
 | 多模态 / 生图 | Desktop 会话 | 适合发送图片、生成图片、查看缩略图和预览生成物 |
 | MCP 浏览器工具 | Desktop MCP 页 / `ccr mcp add-playwright` | 适合安装 Playwright MCP，让模型在需要时调用真实浏览器工具 |
+| Plugin 本地包 | Desktop 插件页 | 适合导入已经下载或压缩好的 Plugin 文件夹 / zip 包，并按用户全局作用域启停和诊断 |
+| 能力目录审计 | Desktop 能力页 / `ccr capabilities list` | 适合查看 Skill、MCP、Tool、Plugin、App 的真实来源、父子关系、运行时可见性和诊断 |
 | Provider 接入开发 | `docs/architecture/provider-integrations/` | 适合继续补新模型、新协议、新能力矩阵 |
 
-## 0.5.2 重点
+## 0.6.3 重点
 
-- ThreadDisplay：历史恢复和实时展示统一到 `ThreadDisplaySnapshot` / `ThreadDisplayPatch` 与 Ordered Display Reducer，Desktop 不再靠旧 replay 或 raw fallback 展示主聊天流。
-- 会话恢复：compact 后当前模型上下文和 UI 可见历史改为同源双投影，减少恢复到旧上下文、工具结果错位和历史裁剪问题。
-- 使用统计：新增模型调用使用事件流和 Desktop 使用统计页面，可按 provider、profile、model、project 聚合 token、调用次数和单次调用事实。
-- 多模态展示：用户图片、模型生成图片、附件、工具结果和生成物进入统一内容块 / 附件展示路径，避免退化成本地路径正文或 `[图片]` 占位。
-- 发布链路：`v0.5.2` 已公开发布 npm 包和 Windows Desktop 安装器，GitHub Actions Desktop Release 会构建 `CCR-0.5.2-win-x64.exe`、`.blockmap` 和 `latest.yml` 并验证自动更新 feed。
+- 外部能力目录：Desktop `能力` 页面统一展示 Tool、Skill、MCP、Plugin 和 App 能力，区分运行时可见、需处理、来源和父子关系。
+- Plugin 本地包：Desktop `插件` 页面只管理已落地的本地 Plugin 包，支持文件夹和 zip 导入；包根目录 `plugin.json` 会规范化为内部 `.claude-plugin/plugin.json`。
+- 管理作用域：Plugin 导入、启停和诊断默认使用用户全局作用域；MCP 受控安装、启停和卸载也默认写入用户全局配置，项目 `.mcp.json` 只作为共享声明和运行时发现来源。
+- Skill / MCP 体验：列表侧保留启停切换，详情操作统一为图标按钮，高风险 Skill 安装需要用户明确确认，禁用状态不再误写成“安装被禁用”。
+- 展示收口：工具进度、截图 / 图片读取、上下文压缩恢复附件和调用明细继续按专门规则展示，避免重复附件卡、孤立错误卡和无限增长的详情区。
 
-`0.5.2` 更具体的变化可以按几条线看：
+`0.6.3` 更具体的变化可以按几条线看：
 
 | 方向 | 已完成 |
 | --- | --- |
-| 展示协议 | App Server 单一 ordered display state、DisplayFact 中间层、历史 snapshot 和实时 patch 同源输出 |
-| Desktop 消费 | Renderer 直接消费 App Server projection，缺失 / 非法 projection 展示协议错误卡，不静默回退 raw content |
-| 会话上下文 | compact 后 `currentContextMessages` 从 ordered transcript events 生成，UI 历史仍保留压缩前后可见记录 |
-| 工具与附件 | 并行工具、乱序 result、工具进度 / 失败 / 中断、用户图片和模型输出图片进入黄金回归覆盖 |
-| 使用统计 | `~/.ccr/usage-events/YYYY-MM.jsonl` 使用事件和 Desktop 使用统计页面 |
-| 发布 | `CCR-0.5.2-win-x64.exe`、`.blockmap`、`latest.yml` 和远端 auto-update feed 校验 |
+| 能力目录 | 统一能力读模型、类型图标、搜索筛选、运行时可见和需处理状态 |
+| Plugin | 本地文件夹 / zip 导入、根 `plugin.json` 兼容、用户全局启停、组件明细和运行态诊断 |
+| Skill | 安装 / 修复 / 卸载图标化、高风险确认、运行时发现和管理页状态语义收口 |
+| MCP | 用户全局受控配置、项目声明只读、安装记录与配置一致性、禁用后仍可修复 / 卸载 |
+| Desktop 展示 | 调用明细限高、列表切换热区、附件解析专门规则和上下文压缩展示收口 |
+| 发布 | README、CHANGELOG、架构文档、goal 文档和 release gate 对齐到 `0.6.3` |
 
 ## 安装
 
@@ -372,6 +374,28 @@ ccr skill uninstall ccr-skill-starter --yes
 
 导入和安装默认只生成 dry-run plan；只有带 `--yes` 时才会使用 plan 里的确认 token 写入 `~/.ccr/skills/`。更完整的 Skill 设计、Manifest 和兼容说明见 [Skill 文档入口](docs/skills/README.md)。
 
+## Plugin 本地包管理
+
+Plugin 是能力合集，不等同于 Skill、MCP server 或 Tool。一个 Plugin 可以携带 Skill、MCP、Command、Hook、LSP、配置、运行时贡献和 App 关系；各子能力仍由自己的运行时执行，Plugin 负责打包、安装、启停、版本和来源治理。
+
+当前 Desktop `插件` 页面只管理本地已经落地的 Plugin：
+
+- 内置或受管理 Plugin。
+- 用户导入的本地 Plugin 文件夹。
+- 用户导入的本地 Plugin zip archive。
+- 当前运行时已经可见或已有启用意图的 Plugin。
+
+第一阶段不提供远程插件市场浏览；官方 marketplace 或其他远端来源只作为后续导入 / 更新的数据来源，不会把未安装候选显示成可管理 Plugin。
+
+本地 Plugin 包支持两种清单入口：
+
+```text
+plugin.json
+.claude-plugin/plugin.json
+```
+
+推荐面向用户分发时使用包根目录 `plugin.json`；导入事务会规范化到内部 `.claude-plugin/plugin.json`，继续复用同一份 manifest schema、安装记录、版本缓存和运行时加载器。Desktop 导入默认写入用户全局作用域，启停开关放在左侧 Plugin 列表卡，详情页只保留修复、卸载、诊断等图标操作。
+
 ## Desktop 能力
 
 - 本地 App Server 生命周期管理。
@@ -379,7 +403,9 @@ ccr skill uninstall ccr-skill-starter --yes
 - 按工作区分组的历史会话、搜索和恢复。
 - 一级“模型”页面，支持供应商 Profile、凭据、模型和测试连接管理。
 - 一级“MCP”页面，支持 MCP server 查看、安装、检测、启用 / 禁用、重启和卸载。
-- 一级“Skill”页面，支持 Skill 查看、导入外部 Skill、安装、启用 / 禁用、修复和卸载；新建 Skill 由会话中的 `Skill 包助手` 生成完整包后再登记为安装候选，Plugin 页面保留为后续扩展入口。
+- 一级“Skill”页面，支持 Skill 查看、导入外部 Skill、安装、启用 / 禁用、修复和卸载；新建 Skill 由会话中的 `Skill 包助手` 生成完整包后再登记为安装候选。
+- 一级“插件”页面，支持本地 Plugin 文件夹 / zip 导入、启用 / 禁用、修复、卸载、运行时状态、组件明细、配置、依赖更新、安全来源和诊断。
+- 一级“能力”页面，作为统一能力目录展示 Skill、MCP、Tool、Plugin、App 的来源、父子关系、运行时可见性和需处理项。
 - 顶部当前模型和连接配置快速切换。
 - 多模态输入卡片、模型生成图片卡片、本地缩略图 / 预览和生成物持久化。
 - 本地 / 项目 / 用户级权限设置页面。
@@ -409,6 +435,8 @@ Desktop 当前围绕一个“本地工作区 + 会话流”展开：
 | `~/.ccr/mcp.json` | 用户全局 MCP 配置 |
 | `~/.ccr/mcp/installed.json` | CCR 受控 MCP 安装记录 |
 | `~/.ccr/mcp/lock.json` | CCR 受控 MCP 安装锁定记录 |
+| `~/.ccr/skills/` | CCR 管理的用户 Skill 包、安装记录和锁定记录 |
+| `~/.ccr/plugins/` | CCR 管理的 Plugin 安装记录、版本缓存、配置和持久数据 |
 | `~/.ccr/generated_outputs/` | 模型生成图片等本地持久化产物 |
 | `.ccr/settings*.json` | 项目级 CCR 设置 |
 | `%APPDATA%/CCR/` | Windows Desktop 的窗口状态、日志、UI 本地状态 |
@@ -498,6 +526,7 @@ npm.cmd run smoke:desktop-release-artifacts
 | README / 文档 | `git diff --check` |
 | LLM 配置 / provider | `npm.cmd run smoke:llm-config`、`npm.cmd run smoke:llm-runtime-status` |
 | 图片生成 | `npm.cmd run smoke:generate-image-tool`、`npm.cmd run smoke:session-generated-image-flow` |
+| 外部扩展 / Plugin | `npm.cmd run smoke:plugin-release`、`npm.cmd run smoke:external-extension-matrix` |
 | Desktop 展示 | `npm.cmd run smoke:desktop-display-events`、`npm.cmd run desktop:build` |
 | 发布资产 | `npm.cmd run desktop:dist`、`npm.cmd run smoke:desktop-release-artifacts` |
 | npm 包内容 | `npm.cmd pack --dry-run --json` |
@@ -526,9 +555,10 @@ npm.cmd run smoke:desktop-release-artifacts
 | --- | --- |
 | `0.5.x` | 多模态、多模型、工具调用、MCP 管理面、错误诊断、历史会话、发布质量继续稳定化 |
 | `0.6.0` | Skill / Plugin 和外部能力包治理，补齐 Skill 安装管理、运行时启用、审计和管理入口 |
-| `0.6.2` | 统一能力目录、Skill 内部分层与安装可靠性收口 |
 | `0.6.1` | Skill / MCP 管理页状态语义与详情操作区体验优化 |
-| 后续 | 远端 registry、跨供应商能力路由、音频 / 视频 / 文件生成、更多 provider conformance matrix |
+| `0.6.2` | 统一能力目录、Skill 内部分层与安装可靠性收口 |
+| `0.6.3` | 外部扩展能力根因重构、Plugin 本地包管理、能力目录独立页和发布矩阵收口 |
+| 后续 | 远端 registry、签名与供应链策略、跨供应商能力路由、音频 / 视频 / 文件生成、更多 provider conformance matrix |
 
 `0.5.x` 期间不会把没有能力声明的模型伪装成全能模型，也不会默认跨供应商发送用户数据。所有 provider 能力都应进入模型目录、Profile 覆盖或显式工具配置。
 
@@ -540,6 +570,8 @@ npm.cmd run smoke:desktop-release-artifacts
 - [阶段目标目录](docs/goals/README.md)
 - [MCP 文档入口](docs/mcp/README.md)
 - [Skill 文档入口](docs/skills/README.md)
+- [扩展能力体系总览](docs/architecture/extension-capability-system.md)
+- [Plugin 接入与产品化设计](docs/architecture/plugin-system-product-design.md)
 - [修复与恢复资料索引](docs/recovery/README.md)
 
 如果你是第一次看这个仓库，建议按这个顺序读：

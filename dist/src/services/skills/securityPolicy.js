@@ -30,7 +30,7 @@ export function evaluateSkillSecurityPolicy(report, options = {}) {
                 installAllowed: true,
                 action: 'require-confirmation',
                 requiresOverride: false,
-                reasons: [...reasons, 'High risk override token accepted.'],
+                reasons: [...reasons, '已确认高风险安装。'],
                 report,
             });
         }

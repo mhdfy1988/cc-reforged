@@ -40,8 +40,6 @@ import { jsonParse, jsonStringify } from './slowOperations.js';
 let insideGetConfig = false;
 const DEFAULT_PROJECT_CONFIG = {
     allowedTools: [],
-    mcpContextUris: [],
-    mcpServers: {},
     enabledMcpjsonServers: [],
     disabledMcpjsonServers: [],
     hasTrustDialogAccepted: false,
@@ -262,7 +260,7 @@ export function saveGlobalConfig(updater) {
             }
             written = {
                 ...config,
-                projects: removeProjectHistory(current.projects),
+                projects: removeLegacyProjectConfigFields(config.projects),
             };
             return written;
         });
@@ -294,7 +292,7 @@ export function saveGlobalConfig(updater) {
         }
         written = {
             ...config,
-            projects: removeProjectHistory(currentConfig.projects),
+            projects: removeLegacyProjectConfigFields(config.projects),
         };
         saveConfig(getGlobalClaudeFile(), written, DEFAULT_GLOBAL_CONFIG);
         writeThroughGlobalConfigCache(written);
@@ -339,15 +337,17 @@ registerCleanup(async () => {
  * @internal
  */
 function migrateConfigFields(config) {
+    const projects = removeLegacyProjectConfigFields(config.projects);
+    const normalizedConfig = projects === config.projects ? config : { ...config, projects };
     // Already migrated
-    if (config.installMethod !== undefined) {
-        return config;
+    if (normalizedConfig.installMethod !== undefined) {
+        return normalizedConfig;
     }
     // autoUpdaterStatus is removed from the type but may exist in old configs
     const legacy = config;
     // Determine install method and auto-update preference from old field
     let installMethod = 'unknown';
-    let autoUpdates = config.autoUpdates ?? true; // Default to enabled unless explicitly disabled
+    let autoUpdates = normalizedConfig.autoUpdates ?? true; // Default to enabled unless explicitly disabled
     switch (legacy.autoUpdaterStatus) {
         case 'migrated':
             installMethod = 'local';
@@ -370,27 +370,29 @@ function migrateConfigFields(config) {
             break;
     }
     return {
-        ...config,
+        ...normalizedConfig,
         installMethod,
         autoUpdates,
     };
 }
 /**
- * Removes history field from projects (migrated to history.jsonl)
+ * Removes legacy fields from projects after those domains moved elsewhere.
  * @internal
  */
-function removeProjectHistory(projects) {
+function removeLegacyProjectConfigFields(projects) {
     if (!projects) {
         return projects;
     }
     const cleanedProjects = {};
     let needsCleaning = false;
     for (const [path, projectConfig] of Object.entries(projects)) {
-        // history is removed from the type but may exist in old configs
+        // These fields are removed from the type but may exist in old configs.
         const legacy = projectConfig;
-        if (legacy.history !== undefined) {
+        if (legacy.history !== undefined ||
+            legacy.mcpServers !== undefined ||
+            legacy.mcpContextUris !== undefined) {
             needsCleaning = true;
-            const { history, ...cleanedConfig } = legacy;
+            const { history: _history, mcpServers: _mcpServers, mcpContextUris: _mcpContextUris, ...cleanedConfig } = legacy;
             cleanedProjects[path] = cleanedConfig;
         }
         else {

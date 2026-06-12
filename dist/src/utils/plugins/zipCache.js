@@ -314,8 +314,8 @@ export async function extractZipToDirectory(zipPath, targetDir) {
 }
 /**
  * Convert a plugin directory to a ZIP in-place: zip → atomic write → delete dir.
- * Both call sites (cacheAndRegisterPlugin, copyPluginToVersionedCache) need the
- * same sequence; getting it wrong (non-atomic write, forgetting rm) corrupts cache.
+ * Installation transactions and version-cache copies need the same sequence;
+ * getting it wrong (non-atomic write, forgetting rm) corrupts cache.
  */
 export async function convertDirectoryToZipInPlace(dirPath, zipPath) {
     const zipData = await createZipFromDirectory(dirPath);

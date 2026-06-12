@@ -1069,9 +1069,9 @@ async function parseFileWithSchema(filePath, schema) {
  * @returns Object containing the validated marketplace and its cache path
  * @throws If marketplace file not found or validation fails
  */
-async function loadAndCacheMarketplace(source, onProgress) {
+async function loadAndCacheMarketplace(source, onProgress, explicitCacheDir) {
     const fs = getFsImplementation();
-    const cacheDir = getMarketplacesCacheDir();
+    const cacheDir = explicitCacheDir ?? getMarketplacesCacheDir();
     // Ensure cache directory exists
     await fs.mkdir(cacheDir);
     let temporaryCachePath;
@@ -1289,6 +1289,9 @@ async function loadAndCacheMarketplace(source, onProgress) {
         }
         throw error;
     }
+}
+export async function materializeMarketplaceSource(source, options = {}) {
+    return loadAndCacheMarketplace(source, options.onProgress, options.cacheDir);
 }
 /**
  * Add a marketplace source to the known marketplaces

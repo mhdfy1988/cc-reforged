@@ -13,7 +13,7 @@ export type CapabilityManagementState = CapabilitiesManagementListResult
 export type CapabilityManagementItem =
   CapabilitiesManagementListResult['capabilities'][number]
 
-export type McpWritableScope = 'user' | 'project' | 'local'
+export type McpWritableScope = 'user'
 
 export type McpServerSummary = {
   name: string
@@ -1114,6 +1114,7 @@ export type PageId =
   | 'mcp'
   | 'usage'
   | 'skills'
+  | 'capabilities'
   | 'plugins'
   | 'settings'
   | 'logs'

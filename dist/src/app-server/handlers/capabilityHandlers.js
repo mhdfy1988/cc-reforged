@@ -29,8 +29,9 @@ export async function handleCapabilityManagementActionPlan(context, params) {
 export async function handleCapabilityManagementActionApply(context, params) {
     const parsedParams = CapabilitiesManagementActionApplyParamsSchema.parse(params);
     const management = await loadCapabilityManagementProjection(context, parsedParams);
+    const planRequest = toCapabilityActionRequest(context, parsedParams);
     const request = toCapabilityActionApplyRequest(context, parsedParams);
-    const plan = createCapabilityManagementActionPlan(management, request, {
+    const plan = createCapabilityManagementActionPlan(management, planRequest, {
         issueConfirmationToken: false,
     });
     const guard = canApplyCapabilityManagementAction(plan, request);
@@ -159,6 +160,16 @@ async function applyMcpServerCapabilityAction(context, request, name, plan) {
                 confirmed: true,
             });
         case 'uninstall':
+            if (plan.target?.managementOwnership === 'manual-config') {
+                const scope = plan.target.metadata?.scope;
+                if (!isMcpWritableScope(scope)) {
+                    throw new AppServerError('invalid_params', 'Manual MCP config removal requires a writable scope.', { plan });
+                }
+                return context.core.mcp.removeServer({
+                    name,
+                    scope,
+                });
+            }
             return context.core.mcp.uninstallInstalledServer({
                 name,
                 confirmed: true,
@@ -168,6 +179,6 @@ async function applyMcpServerCapabilityAction(context, request, name, plan) {
     }
 }
 function isMcpWritableScope(value) {
-    return value === 'user' || value === 'project' || value === 'local';
+    return value === 'user';
 }
 //# sourceMappingURL=capabilityHandlers.js.map

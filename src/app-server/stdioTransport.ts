@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline'
 import { AppServerError, errorResponse } from './errors.js'
 import { createAppServerContext, handleJsonRpcMessage } from './router.js'
 import type { JsonRpcNotification, JsonRpcResponse } from './protocol.js'
+import { createAppServerPluginRuntimeHostAdapter } from './pluginRuntimeHost.js'
 
 type ReadableWithEncoding = NodeJS.ReadableStream & {
   setEncoding?: (encoding: BufferEncoding) => void
@@ -21,6 +22,7 @@ export async function runStdioAppServer(
   const errorOutput = options.errorOutput ?? process.stderr
   const context = createAppServerContext({
     emit: notification => writeProtocolMessage(output, notification),
+    pluginRuntimeHostAdapterFactory: createAppServerPluginRuntimeHostAdapter,
   })
 
   input.setEncoding?.('utf8')

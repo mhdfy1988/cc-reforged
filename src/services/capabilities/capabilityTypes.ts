@@ -71,6 +71,7 @@ export type ExtensionCapabilityHiddenReason =
   | 'plugin-disabled'
   | 'plugin-missing'
   | 'app-disabled'
+  | 'app-disconnected'
   | 'app-needs-auth'
   | 'app-missing'
   | 'app-ambiguous'

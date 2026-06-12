@@ -20,7 +20,13 @@ function toExtensionCapability(app) {
     const connected = app.authStatus === 'connected' ? true : app.connected === true;
     const available = enabled && connected;
     const pluginId = normalizePluginId(app.parentPluginId ?? app.pluginId);
-    const status = enabled ? (connected ? 'enabled' : 'needs-auth') : 'disabled';
+    const status = enabled
+        ? connected
+            ? 'enabled'
+            : app.authStatus === 'needs-auth'
+                ? 'needs-auth'
+                : 'unavailable'
+        : 'disabled';
     return {
         schemaVersion: 1,
         id: createExtensionCapabilityId({
@@ -63,9 +69,15 @@ function toExtensionCapability(app) {
                 {
                     kind: 'availability',
                     severity: enabled ? 'warning' : 'info',
-                    code: enabled ? 'app-needs-auth' : 'app-disabled',
+                    code: !enabled
+                        ? 'app-disabled'
+                        : app.authStatus === 'needs-auth'
+                            ? 'app-needs-auth'
+                            : 'app-disconnected',
                     message: enabled
-                        ? `App connector ${app.id} needs authentication.`
+                        ? app.authStatus === 'needs-auth'
+                            ? `App connector ${app.id} needs authentication.`
+                            : `App connector ${app.id} is disconnected.`
                         : `App connector ${app.id} is disabled.`,
                 },
             ],

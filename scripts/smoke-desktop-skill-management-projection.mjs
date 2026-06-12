@@ -17,6 +17,11 @@ const installed = [
     name: 'missing-installed',
     status: 'missing-package',
   }),
+  inspection({
+    lockKey: 'skill:user:disabled',
+    name: 'disabled-installed',
+    status: 'disabled',
+  }),
 ]
 
 const management = {
@@ -107,6 +112,29 @@ const management = {
         },
       ],
     }),
+    skillCapability({
+      capabilityId: 'skill:managed:disabled',
+      name: 'disabled-installed',
+      source: { kind: 'managed-skill', label: 'ccr' },
+      relations: { installedRef: 'skill:user:disabled' },
+      actionRef: 'skill:user:disabled',
+      managementOwnership: 'installer-owned',
+      allowedActions: [
+        'enable',
+        'set-model-invocation',
+        'set-user-invocation',
+        'inspect',
+        'repair',
+        'uninstall',
+      ],
+      state: {
+        installed: true,
+        enabled: false,
+        runtimeVisible: false,
+        status: 'disabled',
+        hiddenReasons: ['disabled'],
+      },
+    }),
   ],
 }
 
@@ -115,17 +143,26 @@ const byId = new Map(
   viewItems.map(item => [item.capability.capabilityId, item]),
 )
 
-assert.equal(viewItems.length, 6)
+assert.equal(viewItems.length, 7)
 assert.deepEqual(
   Array.from(byId.keys()).sort(),
   [
     'skill:dynamic:hint',
+    'skill:managed:disabled',
     'skill:managed:missing',
     'skill:managed:shared',
     'skill:mcp:browser',
     'skill:plugin:review',
     'skill:user:shared',
   ],
+)
+assert.ok(
+  viewItems.findIndex(
+    item => item.capability.capabilityId === 'skill:managed:shared',
+  ) <
+    viewItems.findIndex(
+      item => item.capability.capabilityId === 'skill:managed:disabled',
+    ),
 )
 
 const managedShared = byId.get('skill:managed:shared')

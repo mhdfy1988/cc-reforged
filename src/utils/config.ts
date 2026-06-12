@@ -78,8 +78,6 @@ export type ReleaseChannel = 'stable' | 'latest'
 
 export type ProjectConfig = {
   allowedTools: string[]
-  mcpContextUris: string[]
-  mcpServers?: Record<string, McpServerConfig>
   lastAPIDuration?: number
   lastAPIDurationWithoutRetries?: number
   lastToolDuration?: number
@@ -123,10 +121,6 @@ export type ProjectConfig = {
   enabledMcpjsonServers?: string[]
   disabledMcpjsonServers?: string[]
   enableAllProjectMcpServers?: boolean
-  // List of disabled MCP servers (all scopes) - used for enable/disable toggle
-  disabledMcpServers?: string[]
-  // Opt-in list for built-in MCP servers that default to disabled
-  enabledMcpServers?: string[]
   // Worktree session management
   activeWorktreeSession?: {
     originalCwd: string
@@ -142,8 +136,6 @@ export type ProjectConfig = {
 
 const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   allowedTools: [],
-  mcpContextUris: [],
-  mcpServers: {},
   enabledMcpjsonServers: [],
   disabledMcpjsonServers: [],
   hasTrustDialogAccepted: false,
@@ -210,6 +202,11 @@ export type GlobalConfig = {
   // @deprecated - Migrated to ~/.ccr/cache/changelog.md by default. Keep for migration support.
   cachedChangelog?: string
   mcpServers?: Record<string, McpServerConfig>
+  // User-global MCP enable/disable state. MCP config is user-global in CCR
+  // Desktop, so the toggle must not vary by workspace/project.
+  disabledMcpServers?: string[]
+  // Opt-in list for built-in MCP servers that default to disabled.
+  enabledMcpServers?: string[]
   // claude.ai MCP connectors that have successfully connected at least once.
   // Used to gate "connector unavailable" / "needs auth" startup notifications:
   // a connector the user has actually used is worth flagging when it breaks,
@@ -825,7 +822,7 @@ export function saveGlobalConfig(
         }
         written = {
           ...config,
-          projects: removeProjectHistory(current.projects),
+          projects: removeLegacyProjectConfigFields(config.projects),
         }
         return written
       },
@@ -863,7 +860,7 @@ export function saveGlobalConfig(
     }
     written = {
       ...config,
-      projects: removeProjectHistory(currentConfig.projects),
+      projects: removeLegacyProjectConfigFields(config.projects),
     }
     saveConfig(getGlobalClaudeFile(), written, DEFAULT_GLOBAL_CONFIG)
     writeThroughGlobalConfigCache(written)
@@ -915,9 +912,13 @@ registerCleanup(async () => {
  * @internal
  */
 function migrateConfigFields(config: GlobalConfig): GlobalConfig {
+  const projects = removeLegacyProjectConfigFields(config.projects)
+  const normalizedConfig =
+    projects === config.projects ? config : { ...config, projects }
+
   // Already migrated
-  if (config.installMethod !== undefined) {
-    return config
+  if (normalizedConfig.installMethod !== undefined) {
+    return normalizedConfig
   }
 
   // autoUpdaterStatus is removed from the type but may exist in old configs
@@ -933,7 +934,7 @@ function migrateConfigFields(config: GlobalConfig): GlobalConfig {
 
   // Determine install method and auto-update preference from old field
   let installMethod: InstallMethod = 'unknown'
-  let autoUpdates = config.autoUpdates ?? true // Default to enabled unless explicitly disabled
+  let autoUpdates = normalizedConfig.autoUpdates ?? true // Default to enabled unless explicitly disabled
 
   switch (legacy.autoUpdaterStatus) {
     case 'migrated':
@@ -958,17 +959,17 @@ function migrateConfigFields(config: GlobalConfig): GlobalConfig {
   }
 
   return {
-    ...config,
+    ...normalizedConfig,
     installMethod,
     autoUpdates,
   }
 }
 
 /**
- * Removes history field from projects (migrated to history.jsonl)
+ * Removes legacy fields from projects after those domains moved elsewhere.
  * @internal
  */
-function removeProjectHistory(
+function removeLegacyProjectConfigFields(
   projects: Record<string, ProjectConfig> | undefined,
 ): Record<string, ProjectConfig> | undefined {
   if (!projects) {
@@ -979,11 +980,24 @@ function removeProjectHistory(
   let needsCleaning = false
 
   for (const [path, projectConfig] of Object.entries(projects)) {
-    // history is removed from the type but may exist in old configs
-    const legacy = projectConfig as ProjectConfig & { history?: unknown }
-    if (legacy.history !== undefined) {
+    // These fields are removed from the type but may exist in old configs.
+    const legacy = projectConfig as ProjectConfig & {
+      history?: unknown
+      mcpServers?: unknown
+      mcpContextUris?: unknown
+    }
+    if (
+      legacy.history !== undefined ||
+      legacy.mcpServers !== undefined ||
+      legacy.mcpContextUris !== undefined
+    ) {
       needsCleaning = true
-      const { history, ...cleanedConfig } = legacy
+      const {
+        history: _history,
+        mcpServers: _mcpServers,
+        mcpContextUris: _mcpContextUris,
+        ...cleanedConfig
+      } = legacy
       cleanedProjects[path] = cleanedConfig
     } else {
       cleanedProjects[path] = projectConfig

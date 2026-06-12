@@ -261,20 +261,23 @@ G1-G4 已于 2026-06-07 完成根因重构与发布收口：
 
 ### 3.7.1 当前完成度与下一层
 
-当前代码层已经达标的是“统一能力事实层”：
+当前代码层已经达标的是“统一能力事实层 + Plugin 本地包管理层”：
 
 - 请求边界内的 `cwd`、`configHomeDir`、MCP、Plugin、App 和 Tool pool 来自同一份 `CapabilityRuntimeEnvironment`。
 - Skill、MCP、Tool、Plugin 和 App 使用来源感知 canonical id；真实调用入口保留在 `runtimeRef`。
 - Plugin、App、MCP server 与子能力关系进入可遍历关系图，父节点缺失、禁用、鉴权缺失或多方认领会显式诊断。
 - `capabilities/list`、`capabilities/management/list`、管理动作 plan / apply 和 `capabilities/apps/register` 使用同一会话级 App registry。
 - 85 项外部扩展矩阵、G1-G3 专项 smoke 和 release group 已覆盖跨 home、同名来源、父状态传播和生命周期连续性。
+- Plugin 产品化 P0-P12 已完成请求级 `PluginDomainSession`、无副作用 `PluginInspector`、独立 Plugin plan/apply 协议、可恢复事务、runtime activation、配置治理、App 关系、Desktop 本地包管理、CLI / Ink 薄适配和发布矩阵。
+- Desktop `插件` 页面管理本地 Plugin 包，支持文件夹 / zip 导入、启停、修复、卸载、运行时、配置、依赖更新、安全来源和诊断；`能力` 页面是独立只读能力目录。
 
-当前还不能宣称完成的是“完整 Plugin 产品形态”：
+当前还不能宣称完成的是“远端插件生态与强供应链治理”：
 
-- Plugin manifest 声明 App / Skill / MCP / Tool 的真实安装和注册入口。
-- 一个可随包安装、启用、禁用、卸载并能驱动 App registry 的样例 Plugin。
-- Desktop Plugin / App 管理页的完整产品化交互。
-- 对外发布包、release note 和安装升级链路。
+- 远端 registry / marketplace 浏览、签名、checksum、source fingerprint、package tree digest 和供应链信任策略仍是后续独立设计。
+- 当前产品入口优先本地 Plugin 文件夹 / zip 导入；远程来源只作为后续下载后导入或更新的输入边界，不作为主界面插件市场。
+- 完整权限 enforcement、文件系统沙箱、网络域白名单和进程级隔离还未落地，不能在 UI 或文档中宣称已经具备。
+
+Plugin 产品化的领域边界、生命周期、Desktop 页面和 P0-P12 完成记录见 [CCR Plugin 接入与产品化设计](./plugin-system-product-design.md)。现有 `.claude-plugin/plugin.json`、安装记录和版本缓存继续作为唯一 Plugin 写侧权威；本地导入支持包根目录 `plugin.json`，导入事务会规范化为内部 `.claude-plugin/plugin.json`，不再新建第二套 `.ccr-plugin` 系统。
 
 每个能力统一表达为 `ExtensionCapability`：
 
@@ -335,7 +338,7 @@ App Server 原始目录方法为 `capabilities/list`，面向 Desktop 管理页�
 | --- | --- | --- | --- | --- |
 | CCR installed Skill | `installed.json` / `lock.json` / package | prompt `Command` / SkillTool 可见项 | 是 | [Skill 系统整体架构](./skill-system-architecture.md) |
 | 用户 / 项目 Skill | `.claude/skills` / `~/.claude/skills` | prompt `Command` | 是 | [Skill 文档入口](../skills/README.md) |
-| Plugin Skill | plugin manifest / plugin cache | prompt `Command` | 是 | 本文 |
+| Plugin Skill | `.claude-plugin/plugin.json` / Plugin versioned cache | prompt `Command` | 是 | [Plugin 接入与产品化设计](./plugin-system-product-design.md) |
 | Bundled Skill | 内置包 | prompt `Command` | 是 | [Skill 文档入口](../skills/README.md) |
 | Dynamic Skill | 会话内文件发现 | prompt `Command` | 是 | [Skill 系统整体架构](./skill-system-architecture.md) |
 | MCP Server | `mcp.json` / `.mcp.json` / installed record | `mcp__server__tool` | 是 | [MCP 文档入口](../mcp/README.md) |
@@ -352,7 +355,8 @@ App Server 原始目录方法为 `capabilities/list`，面向 Desktop 管理页�
 ```text
 统一管理投影
   -> 列所有 capability，显示来源、归属、诊断、运行时可见性和允许动作
-  -> 通过统一 action plan / apply 分发到领域服务
+  -> 对 Skill / MCP 使用现有管理动作
+  -> 对 Plugin 导航或引用独立 Plugin plan / apply
 
 Skill 管理
   -> 重点管理 Skill 安装包、导入、修复、启用、卸载
@@ -361,7 +365,7 @@ MCP 管理
   -> 重点管理 MCP server、连接、检测、重启、安装、卸载
 
 Plugin 管理
-  -> 展示能力合集，展开其贡献的 Skill / MCP / Tool / Command / App 和影响面
+  -> 管理本地 Plugin bundle，展示其贡献的 Skill / MCP / Tool / Command / App 和影响面
 ```
 
 如果用户安装了一个 Plugin，而这个 Plugin 携带 Skill 和 MCP：
@@ -376,7 +380,7 @@ Plugin 管理
 
 不同能力的安装记录不能混在一起，但展示时可以统一。
 
-建议归属：
+当前归属：
 
 ```text
 ~/.ccr/skills/
@@ -386,16 +390,18 @@ Plugin 管理
   -> MCP 安装记录、lock、package/cache、manifest
 
 ~/.ccr/plugins/
-  -> Plugin 安装记录、lock、plugin bundle/cache
+  -> Plugin 安装记录、versioned cache、持久 data、来源缓存和本地导入缓存
 ```
 
-共同规则：
+领域规则：
 
-- installer-owned 目录必须有 owner marker。
-- uninstall / repair 只能操作确认归属的目录。
+- Skill / MCP 继续使用各自 installer-owned、owner marker 和 lock 契约。
+- Plugin 复用现有 `installed_plugins.json`、版本缓存引用和 orphan GC；本地导入支持文件夹和 zip，默认用户全局作用域，后续完整性字段应扩展现有安装记录，不新增平行 lock 数据库。
+- Plugin 面向用户的本地包推荐根目录 `plugin.json`；内部缓存和运行时加载继续使用 `.claude-plugin/plugin.json`。
+- Plugin uninstall / update 只能操作安装记录引用且位于受控缓存范围内的路径。
 - 高风险能力安装必须用户确认。
 - 模型可以建议安装，但真实写配置、下载、启动服务必须由宿主执行。
-- lock 应记录 checksum、来源、版本和 data boundary。
+- Plugin 后续应补 source fingerprint、manifest digest 和 package tree digest，但不能在尚未落地时把它们写成当前已具备能力。
 
 ## 7. 运行时优先级
 
@@ -436,6 +442,9 @@ disabled
 available
 unavailable
 needs-auth
+pending-activation
+update-available
+blocked-by-policy
 failed
 drifted
 missing
@@ -444,6 +453,8 @@ hidden-by-conflict
 ```
 
 不同能力可以有自己的细分状态，但管理面和能力目录至少要能归一到这些上层状态。
+
+App / Connector 的 `needs-auth` 与 `disconnected` 不能互相推断。生产注册和测试 fixture 都必须显式提供 `authStatus`；`connected: false` 只表示当前未连接，不自动表示需要认证。
 
 ## 9. 文档入口
 
@@ -454,6 +465,8 @@ hidden-by-conflict
 专题入口：
 
 - Skill：[CCR Skill 系统整体架构](./skill-system-architecture.md)
+- Plugin：[CCR Plugin 接入产品设计](./plugin-system-product-design.md)
+- Plugin 源码证据：[Plugin 系统源码证据索引](../references/plugin-system-source-evidence.md)
 - 运行时与上下文重构：[CCR 扩展能力运行时与上下文重构路线](./extension-runtime-context-refactor-roadmap.md)
 - 运行时与上下文源码证据：[扩展能力运行时与上下文源码证据索引](../references/extension-runtime-context-source-evidence.md)
 - Skill 标准与管理：[Skill 文档入口](../skills/README.md)
@@ -473,6 +486,7 @@ hidden-by-conflict
 - 扩展能力 R13-R16 动作、连接器、工具搜索与验收闭环：[R13-R16 Goal Series](../goals/2026-06-06-extension-runtime-r13-r16-management-action-connector-toolsearch-closeout-series.md)
 - 扩展能力 R17-R24 审查问题修复与统一能力目录深化：[R17-R24 Goal Series](../goals/2026-06-07-extension-runtime-r17-r24-audit-followup-refactor-series.md)
 - 扩展能力 R25-R27 上下文同源、发现去重与确认令牌收口：[R25-R27 Goal Series](../goals/2026-06-07-extension-runtime-r25-r27-context-discovery-confirmation-closeout-series.md)
+- Plugin 产品化 P0-P12：[CCR Plugin 接入与产品化设计](./plugin-system-product-design.md#16-后续-goal-路线)
 
 ## 10. 后续设计判定
 

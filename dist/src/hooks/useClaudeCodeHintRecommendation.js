@@ -14,7 +14,7 @@ import { logEvent } from '../services/analytics/index.js';
 import { clearPendingHint, getPendingHintSnapshot, markShownThisSession, subscribeToPendingHint } from '../utils/claudeCodeHints.js';
 import { logForDebugging } from '../utils/debug.js';
 import { disableHintRecommendations, markHintPluginShown, resolvePluginHint } from '../utils/plugins/hintRecommendation.js';
-import { installPluginFromMarketplace } from '../utils/plugins/pluginInstallationHelpers.js';
+import { installPluginFromMarketplace } from '../services/plugins/pluginDomainAdapter.js';
 import { installPluginAndNotify, usePluginRecommendationBase } from './usePluginRecommendationBase.js';
 export function useClaudeCodeHintRecommendation() {
     const $ = _c(11);

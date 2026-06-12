@@ -1,7 +1,6 @@
 import { existsSync } from 'fs'
 import { dirname, join, parse, resolve } from 'path'
 import {
-  getCurrentProjectConfig,
   getGlobalConfig,
 } from '../../utils/config.js'
 import { getCwd } from '../../utils/cwd.js'
@@ -272,25 +271,15 @@ export function collectCcrMcpConfigInventory(
     },
     {
       id: 'local',
-      label: '本项目本地 MCP 配置',
+      label: '历史本地项目 MCP 配置',
       scope: 'local',
       mode: 'settings',
       precedence: SOURCE_PRECEDENCE.local,
-      enabled:
-        isSettingSourceEnabled('localSettings') &&
-        !enterpriseExclusive &&
-        !pluginOnly,
-      writable:
-        isSettingSourceEnabled('localSettings') &&
-        !enterpriseExclusive &&
-        !pluginOnly,
+      enabled: false,
+      writable: false,
       readPaths: [globalConfigPath],
-      writePath: globalConfigPath,
-      readOnlyReason: pluginOnly
-        ? 'plugin_only_policy'
-        : enterpriseExclusive
-          ? 'enterprise_exclusive'
-          : undefined,
+      writePath: null,
+      readOnlyReason: 'deprecated_user_global_only',
     },
     {
       id: 'dynamic',
@@ -355,18 +344,6 @@ export function collectCcrMcpConfigInventory(
       readOnly: enterpriseExclusive || pluginOnly,
       sourceEnabled:
         isSettingSourceEnabled('projectSettings') &&
-        !enterpriseExclusive &&
-        !pluginOnly,
-      candidates,
-      sourceErrors,
-    })
-  }
-
-  if (usesProcessProjectState) {
-    collectLocalCandidates({
-      globalConfigPath,
-      sourceEnabled:
-        isSettingSourceEnabled('localSettings') &&
         !enterpriseExclusive &&
         !pluginOnly,
       candidates,
@@ -518,39 +495,6 @@ function collectUserLegacyCandidates(params: {
   }
 }
 
-function collectLocalCandidates(params: {
-  globalConfigPath: string
-  sourceEnabled: boolean
-  candidates: ServerCandidate[]
-  sourceErrors: Map<CcrMcpConfigSourceId, string[]>
-}): void {
-  const localMcpServers = getCurrentProjectConfig().mcpServers
-  if (!localMcpServers) {
-    return
-  }
-
-  const { config, errors } = parseMcpConfig({
-    configObject: { mcpServers: localMcpServers },
-    expandVars: true,
-    scope: 'local',
-  })
-  pushErrors(params.sourceErrors, 'local', errors)
-
-  for (const [name, serverConfig] of Object.entries(config?.mcpServers ?? {})) {
-    params.candidates.push({
-      name,
-      config: { ...serverConfig, scope: 'local' },
-      sourceId: 'local',
-      scope: 'local',
-      precedence: SOURCE_PRECEDENCE.local,
-      configPath: params.globalConfigPath,
-      writePath: params.globalConfigPath,
-      readOnly: false,
-      sourceEnabled: params.sourceEnabled,
-    })
-  }
-}
-
 function buildServerInventory(
   candidates: ServerCandidate[],
   enterpriseExclusive: boolean,
@@ -629,10 +573,6 @@ function getSuppressionReason(
 
   if (!candidate.sourceEnabled) {
     return 'source_disabled'
-  }
-
-  if (options.useProcessState && isMcpServerDisabled(candidate.name)) {
-    return 'disabled'
   }
 
   if (options.useProcessState) {

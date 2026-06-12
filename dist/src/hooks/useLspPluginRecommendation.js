@@ -10,7 +10,7 @@ import { c as _c } from "react/compiler-runtime";
  *
  * Only shows one recommendation per session.
  */
-import { extname, join } from 'path';
+import { extname } from 'path';
 import * as React from 'react';
 import { hasShownLspRecommendationThisSession, setLspRecommendationShownThisSession } from '../bootstrap/state.js';
 import { useNotifications } from '../context/notifications.js';
@@ -19,8 +19,7 @@ import { saveGlobalConfig } from '../utils/config.js';
 import { logForDebugging } from '../utils/debug.js';
 import { logError } from '../utils/log.js';
 import { addToNeverSuggest, getMatchingLspPlugins, incrementIgnoredCount } from '../utils/plugins/lspRecommendation.js';
-import { cacheAndRegisterPlugin } from '../utils/plugins/pluginInstallationHelpers.js';
-import { getSettingsForSource, updateSettingsForSource } from '../utils/settings/settings.js';
+import { installPluginFromMarketplace } from '../services/plugins/pluginDomainAdapter.js';
 import { installPluginAndNotify, usePluginRecommendationBase } from './usePluginRecommendationBase.js';
 // Threshold for detecting timeout vs explicit dismiss (ms)
 // Menu auto-dismisses at 30s, so anything over 28s is likely timeout
@@ -106,15 +105,16 @@ export function useLspPluginRecommendation() {
                     {
                         installPluginAndNotify(pluginId, pluginName, "lsp-plugin", addNotification, async (pluginData) => {
                             logForDebugging(`[useLspPluginRecommendation] Installing plugin: ${pluginId}`);
-                            const localSourcePath = typeof pluginData.entry.source === "string" ? join(pluginData.marketplaceInstallLocation, pluginData.entry.source) : undefined;
-                            await cacheAndRegisterPlugin(pluginId, pluginData.entry, "user", undefined, localSourcePath);
-                            const settings = getSettingsForSource("userSettings");
-                            updateSettingsForSource("userSettings", {
-                                enabledPlugins: {
-                                    ...settings?.enabledPlugins,
-                                    [pluginId]: true
-                                }
+                            const marketplaceName = pluginId.includes("@") ? pluginId.slice(pluginId.lastIndexOf("@") + 1) : "";
+                            const result = await installPluginFromMarketplace({
+                                pluginId,
+                                entry: pluginData.entry,
+                                marketplaceName,
+                                scope: "user",
+                                trigger: "hint"
                             });
+                            if (result.success === false)
+                                throw new Error(result.error);
                             logForDebugging(`[useLspPluginRecommendation] Plugin installed: ${pluginId}`);
                         });
                         break bb60;

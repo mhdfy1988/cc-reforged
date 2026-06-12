@@ -17,6 +17,9 @@ export class AppCapabilityRegistry {
     }
     upsert(apps) {
         for (const [appId, app] of createUniqueAppMap(apps)) {
+            const existing = this.appsById.get(appId);
+            if (existing)
+                assertCompatibleOwnership(existing, app);
             this.appsById.set(appId, app);
         }
         this.revision += 1;
@@ -25,6 +28,18 @@ export class AppCapabilityRegistry {
     clear() {
         this.appsById.clear();
         this.revision += 1;
+        return this.getSnapshot();
+    }
+    removeOwnedBy(pluginId) {
+        let changed = false;
+        for (const [appId, app] of this.appsById) {
+            if (appOwner(app) !== pluginId)
+                continue;
+            this.appsById.delete(appId);
+            changed = true;
+        }
+        if (changed)
+            this.revision += 1;
         return this.getSnapshot();
     }
     getSnapshot() {
@@ -36,6 +51,16 @@ export class AppCapabilityRegistry {
                 .map(cloneApp),
         };
     }
+}
+function assertCompatibleOwnership(existing, incoming) {
+    const existingOwner = appOwner(existing);
+    const incomingOwner = appOwner(incoming);
+    if (existingOwner === incomingOwner)
+        return;
+    throw Object.assign(new Error(`App connector ${incoming.id} is already registered with a different owner.`), { code: 'plugin-app-owner-conflict' });
+}
+function appOwner(app) {
+    return app.parentPluginId ?? app.pluginId;
 }
 function createUniqueAppMap(apps) {
     const result = new Map();

@@ -116,7 +116,7 @@ ccr mcp add --scope user playwright -- npx.cmd -y @playwright/mcp@latest
 ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
 ```
 
-也可以手写 `~/.ccr/mcp.json` 或项目 `.mcp.json`：
+也可以手写用户全局 `~/.ccr/mcp.json`：
 
 ```json
 {
@@ -130,7 +130,7 @@ ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
 }
 ```
 
-手写配置不会自动进入 `installed.json`，因此不会被当成 CCR installer-owned 项；但 Server 列表仍会展示它，并允许检测、启用、禁用和重启。后续如需支持安全卸载，应先走“接管已有配置”的显式确认流程。
+手写用户全局配置不会自动进入 `installed.json`，因此不会被当成 CCR installer-owned 项；但 Server 列表仍会展示它，并允许检测、启用、禁用和重启。项目 `.mcp.json` 适合团队共享声明，会作为运行时发现来源进入列表，但普通 Desktop / App Server 管理动作不写回项目文件。后续如需支持安全卸载，应先走“接管已有配置”的显式确认流程。
 
 更多配置格式示例见 [MCP 配置示例](./config-examples.md)。
 

@@ -21,13 +21,21 @@ export async function listCoreMcpServers(options = {}) {
     const installKindByName = new Map(inventory.servers
         .filter(server => server.active)
         .map(server => [server.name, server.installKind]));
+    const installedByName = await loadInstalledMcpRecordRefs();
     const summaries = Object.entries(servers)
         .map(([name, config]) => summarizeMcpServer(name, config, installKindByName.get(name)))
-        .filter(server => options.includeDisabled || server.enabled);
+        .map(server => attachInstalledMcpRecord(server, installedByName));
+    const configuredNames = new Set(summaries.map(server => server.name));
+    for (const record of installedByName.values()) {
+        if (!configuredNames.has(record.name)) {
+            summaries.push(createInstalledOnlyMcpServer(record));
+        }
+    }
+    const visibleSummaries = summaries.filter(server => options.includeDisabled || server.enabled !== false || server.ccrInstalled);
     return {
         configPath: getUserMcpFilePath(),
         inventory: summarizeCcrMcpConfigInventory(inventory),
-        servers: summaries,
+        servers: visibleSummaries,
         errors: errors.map(summarizePluginError),
     };
 }
@@ -55,6 +63,7 @@ async function listRequestScopedCoreMcpServers(options) {
         ...(server.url ? { url: server.url } : {}),
         ...(server.args ? { args: server.args } : {}),
     }));
+    const installedByName = await loadInstalledMcpRecordRefs();
     const pluginErrors = [];
     const pluginServers = await Promise.all((options.pluginSnapshot?.plugins ?? [])
         .filter(plugin => plugin.enabled !== false)
@@ -68,10 +77,18 @@ async function listRequestScopedCoreMcpServers(options) {
             configuredNames.add(name);
         }
     }
+    for (const record of installedByName.values()) {
+        if (!configuredNames.has(record.name)) {
+            configuredServers.push(createInstalledOnlyMcpServer(record));
+            configuredNames.add(record.name);
+        }
+    }
     return {
         configPath: getUserMcpFilePath(inventory.configHomeDir),
         inventory: summarizeCcrMcpConfigInventory(inventory),
-        servers: configuredServers.filter(server => options.includeDisabled || server.enabled !== false),
+        servers: configuredServers
+            .map(server => attachInstalledMcpRecord(server, installedByName))
+            .filter(server => options.includeDisabled || server.enabled !== false),
         errors: [
             ...inventory.sources.flatMap(source => source.errors.map(message => ({
                 type: 'config-error',
@@ -81,6 +98,77 @@ async function listRequestScopedCoreMcpServers(options) {
             ...pluginErrors.map(summarizePluginError),
         ],
     };
+}
+async function loadInstalledMcpRecordRefs() {
+    const result = await listCcrMcpInstalledServers();
+    const records = Array.isArray(result.installed) ? result.installed : [];
+    const byName = new Map();
+    for (const value of records) {
+        if (!value || typeof value !== 'object')
+            continue;
+        const record = value;
+        const name = typeof record.name === 'string' ? record.name : '';
+        if (!name)
+            continue;
+        const lockKey = typeof record.lockKey === 'string' && record.lockKey
+            ? record.lockKey
+            : name;
+        byName.set(name, {
+            name,
+            lockKey,
+            ...(typeof record.scope === 'string' ? { scope: record.scope } : {}),
+            summary: record,
+        });
+    }
+    return byName;
+}
+function attachInstalledMcpRecord(server, installedByName) {
+    const record = installedByName.get(server.name);
+    if (!record)
+        return server;
+    return {
+        ...server,
+        ccrInstalled: true,
+        installedRef: record.lockKey,
+        ...(record.scope ? { installedRecordScope: record.scope } : {}),
+    };
+}
+function createInstalledOnlyMcpServer(record) {
+    const manifest = asRecord(record.summary.manifest);
+    const preview = asRecord(record.summary.serverConfigPreview);
+    const transport = readString(preview, 'type') ??
+        readString(preview, 'transport') ??
+        readString(manifest, 'transport') ??
+        'stdio';
+    return {
+        name: record.name,
+        enabled: false,
+        ...(record.scope ? { scope: record.scope } : {}),
+        type: transport,
+        transport,
+        source: 'mcp',
+        installKind: readString(manifest, 'kind') ?? 'installed-record',
+        configured: false,
+        ccrInstalled: true,
+        installedRef: record.lockKey,
+        ...(record.scope ? { installedRecordScope: record.scope } : {}),
+        ...(readString(preview, 'command')
+            ? { command: readString(preview, 'command') }
+            : {}),
+        ...(readString(preview, 'url') ? { url: readString(preview, 'url') } : {}),
+        ...(Array.isArray(preview.args)
+            ? { args: preview.args.filter(value => typeof value === 'string') }
+            : {}),
+    };
+}
+function asRecord(value) {
+    return value && typeof value === 'object'
+        ? value
+        : {};
+}
+function readString(record, key) {
+    const value = record[key];
+    return typeof value === 'string' && value ? value : undefined;
 }
 export function inspectCoreMcpServer(input) {
     const inventory = collectCcrMcpConfigInventory();
@@ -114,6 +202,7 @@ export async function updateCoreMcpServer(input) {
 export async function removeCoreMcpServer(input) {
     const scope = assertWritableScope(input.scope);
     await removeMcpConfig(input.name, scope);
+    setMcpServerEnabled(input.name, true);
     return {
         name: input.name,
         scope,
@@ -346,12 +435,10 @@ function safeToolBoolean(read) {
     }
 }
 function assertWritableScope(scope) {
-    if (scope === 'user' || scope === 'project' || scope === 'local') {
+    if (scope === 'user') {
         return scope;
     }
-    throw new CoreError('invalid_params', `MCP scope is read-only: ${scope}`, {
-        scope,
-    });
+    throw new CoreError('invalid_params', `MCP scope is read-only from Desktop management APIs: ${scope}`, { scope });
 }
 function parseMcpServerConfig(config) {
     const result = McpServerConfigSchema().safeParse(config);

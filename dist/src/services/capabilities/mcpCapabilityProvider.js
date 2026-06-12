@@ -87,12 +87,12 @@ export function listMcpRuntimeSurfaceCapabilities(context = {}) {
     ].sort((a, b) => a.id.localeCompare(b.id));
 }
 function toExtensionCapability(server, runtimeClient, options = { configured: true }) {
-    const configured = options.configured !== false;
+    const configured = options.configured !== false && server.configured !== false;
     const availability = getMcpServerAvailability(server, runtimeClient);
     const sourceKind = server.source === 'plugin' ? 'plugin' : 'mcp';
     const pluginId = normalizePluginId(server.pluginSource);
     const diagnostics = createMcpServerDiagnostics(server.name, availability);
-    const installed = configured && server.installKind !== 'manual-config';
+    const installed = Boolean(server.installedRef ?? server.ccrInstalled);
     return {
         schemaVersion: 1,
         id: createExtensionCapabilityId({
@@ -130,6 +130,7 @@ function toExtensionCapability(server, runtimeClient, options = { configured: tr
         },
         relations: {
             ...(pluginId ? { parentPluginId: pluginId } : {}),
+            ...(server.installedRef ? { installedRef: server.installedRef } : {}),
             runtimeRef: `mcp:${server.name}`,
         },
         diagnostics,
@@ -138,6 +139,9 @@ function toExtensionCapability(server, runtimeClient, options = { configured: tr
             type: server.type,
             transport: server.transport,
             installKind: server.installKind,
+            ccrInstalled: installed,
+            installedRef: server.installedRef,
+            installedRecordScope: server.installedRecordScope,
             configured,
             pluginSource: server.pluginSource,
             command: server.command,

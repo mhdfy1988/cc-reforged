@@ -20,6 +20,11 @@ import type {
   SkillInstallSearchState,
   SkillSecurityDigest,
 } from '../../domain/displayTypes.js'
+import {
+  canOverrideSkillInstallSecurityBlock,
+  isSkillInstallPlanHardBlocked,
+  isSkillInstallSecurityOverrideRequired,
+} from '../../domain/skillInstallViewPolicy.js'
 
 type SkillImportDraft = {
   kind:
@@ -674,7 +679,7 @@ function SkillSecuritySection(props: { digest?: SkillSecurityDigest | null }) {
       <div className="skill-install-security-tags">
         <small className={getSeverityTone(digest)}>{formatSeverity(digest)}</small>
         <small>{digest?.totalFindings ?? 0} 项发现</small>
-        <small>{digest?.requiresOverride ? '需要 override' : '无需 override'}</small>
+        <small>{digest?.requiresOverride ? '需要确认' : '无需确认'}</small>
       </div>
       {digest?.primaryFindings?.length ? (
         <div className="skill-install-findings">
@@ -838,9 +843,9 @@ function SkillInstallConfirmDialog(props: {
   const titleId = useId()
   const cancelRef = useRef<HTMLButtonElement | null>(null)
   const plan = props.planView.plan
-  const blocked = plan.installable === false
-  const requiresOverride =
-    Boolean(plan.overrideRequired || plan.securityDecision?.requiresOverride)
+  const hardBlocked = isSkillInstallPlanHardBlocked(plan)
+  const requiresOverride = isSkillInstallSecurityOverrideRequired(plan)
+  const canOverrideSecurityBlock = canOverrideSkillInstallSecurityBlock(plan)
   const overrideAccepted = Boolean(props.planView.securityOverrideAccepted)
   const title = getSkillInstallPlanTitle(plan)
   const description = getSkillInstallPlanDescription(plan)
@@ -869,7 +874,11 @@ function SkillInstallConfirmDialog(props: {
           </header>
           <div className="mcp-install-dialog-title">
             <strong>{title}</strong>
-            <span>{blocked ? getSkillPlanBlockedMessage(plan) : formatSkillInstallTarget(plan)}</span>
+            <span>
+              {hardBlocked
+                ? getSkillPlanBlockedMessage(plan)
+                : formatSkillInstallTarget(plan)}
+            </span>
           </div>
           {description ? (
             <p className="install-description-card">{description}</p>
@@ -889,7 +898,7 @@ function SkillInstallConfirmDialog(props: {
             <label className="mcp-install-save-option">
               <input
                 checked={overrideAccepted}
-                disabled={props.busy || blocked}
+                disabled={props.busy || hardBlocked || !canOverrideSecurityBlock}
                 type="checkbox"
                 onChange={event =>
                   props.onChange({
@@ -899,8 +908,8 @@ function SkillInstallConfirmDialog(props: {
                 }
               />
               <span>
-                <strong>确认高风险 override</strong>
-                <em>确认后会使用本次计划生成的 override token。</em>
+                <strong>我已了解高风险，继续安装</strong>
+                <em>确认后仅对本次安装放行高风险安全阻断。</em>
               </span>
             </label>
           ) : null}
@@ -908,7 +917,7 @@ function SkillInstallConfirmDialog(props: {
             <label className="mcp-install-save-option">
               <input
                 checked={Boolean(props.planView.saveToCandidates)}
-                disabled={props.busy || blocked}
+                disabled={props.busy || hardBlocked}
                 type="checkbox"
                 onChange={event =>
                   props.onChange({
@@ -946,14 +955,14 @@ function SkillInstallConfirmDialog(props: {
               className="primary-action"
               disabled={
                 props.busy ||
-                blocked ||
+                hardBlocked ||
                 !plan.confirmation?.token ||
                 (requiresOverride && !overrideAccepted)
               }
               type="button"
               onClick={() => props.onApply(props.planView)}
             >
-              {props.busy ? '安装中' : blocked ? '不可安装' : '确认安装'}
+              {props.busy ? '安装中' : hardBlocked ? '不可安装' : '确认安装'}
             </button>
           </footer>
         </div>

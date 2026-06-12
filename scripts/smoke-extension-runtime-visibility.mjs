@@ -142,8 +142,9 @@ const orphanCatalog = buildExtensionCapabilityCatalog([
 const orphan = orphanCatalog.capabilities.find(
   item => item.id === 'skill:plugin:orphan',
 )
-assert.equal(orphan.state.runtimeVisible, true)
+assert.equal(orphan.state.runtimeVisible, false)
 assert.equal(orphan.state.hiddenReasons.includes('plugin-disabled'), false)
+assert.equal(orphan.state.hiddenReasons.includes('plugin-missing'), true)
 assert.equal(
   orphan.diagnostics.some(
     item => item.kind === 'plugin' && item.code === 'parent-plugin-missing',

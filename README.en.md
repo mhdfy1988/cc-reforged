@@ -6,7 +6,7 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.6.2-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.6.3-orange?style=flat-square)
 
 CCR is a recovery and evolution build of a terminal coding agent. It keeps the original terminal-first workflow, adds a CCR-owned configuration/runtime boundary, and is growing a Desktop client around a stable App Server protocol.
 
@@ -17,7 +17,7 @@ The current main line focuses on:
 - Built-in LLM runtime abstractions for multiple providers, profiles, protocols, multimodal content blocks, generated artifacts, and per-turn model metadata.
 - Codex OAuth, OpenAI, DeepSeek official API, MiniMax International / China, Kimi, GLM API / Coding Plan, and shared OpenAI Chat Completions plus Anthropic Messages protocol adapters.
 - Provider-neutral image generation through `GenerateImage`, with generated images persisted before Desktop thumbnail / preview rendering.
-- MCP and Skill management baseline, including user-level MCP config, Desktop MCP / Skill pages, install flows, enable/disable, diagnostics, and managed records.
+- External capability management, including user-level MCP config, Desktop MCP / Skill / Plugin pages, a standalone capability catalog, install/import flows, enable/disable, diagnostics, and managed records.
 - Project-local `.ccr` settings isolation, avoiding conflicts with Claude Code, Codex, or OpenClaw on the same machine.
 
 ![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
@@ -25,7 +25,7 @@ The current main line focuses on:
 ## Current Status
 
 - Package: `cc-reforged`
-- Version: `0.6.2`
+- Version: `0.6.3`
 - CLI command: `ccr`
 - Desktop app: `CCR`
 - Runtime requirement: Node.js `>=24.0.0`
@@ -36,9 +36,9 @@ The current main line focuses on:
 
 The repository may contain unreleased work after the latest tagged version. See [CHANGELOG.md](CHANGELOG.md) for user-facing changes.
 
-The `0.6.2` line focuses on Skill / Plugin and external capability package governance, building on the MCP management baseline with a unified capability catalog, Skill internal layering, installation reliability, runtime activation, audit, and management flows.
+The `0.6.3` line focuses on external capability governance, building on the MCP / Skill management baseline with a unified capability catalog, local Plugin package management, request-scoped runtime snapshots, installation reliability, runtime activation, audit, and management flows.
 
-After `0.6.2`, `main` has completed the G1-G4 external capability root refactor: capability queries now use a request-scoped runtime snapshot, Skill / MCP / Tool / Plugin / App entries use source-aware identities and relation graphs, App / Connector snapshots have a session-level registry plus management lifecycle, and the external extension counterexample matrix has 85 cases. This means the underlying capability model has reached the current code target; real Plugin manifest / App registration entrypoints, sample packages, management UI productization, and release packaging remain next-stage work.
+`0.6.3` completes the G1-G4 external capability root refactor and Plugin productization P0-P12. Capability queries use request-scoped snapshots and source-aware identities; the existing Plugin manifest, installation registry, version cache, and runtime loader now sit behind a request-scoped domain session, side-effect-free inspection, immutable plan/apply actions, recoverable transactions, explicit runtime activation, configuration and App relations, Desktop local package management, and thin CLI / Ink adapters. The Plugin release matrix currently contains 76 cases, 42 failure scenarios, 14 final invariants, and 18 executable evidence scripts.
 
 ## Install
 
@@ -129,13 +129,34 @@ Built-in providers:
 | GLM API | OpenAI Chat compatible + Images | API Key | Text, vision models, `glm-image` generation |
 | GLM Coding Plan | OpenAI Chat compatible | API Key | Coding Plan endpoint |
 
+## Skill, MCP, Plugin, And Capability Catalog
+
+Skill is a local instruction/workflow package whose primary entry is `SKILL.md`. The Desktop **Skill** page manages installed and imported skills, enable/disable state, repair, uninstall, runtime visibility, and high-risk install confirmation.
+
+MCP remains the protocol and server layer for external tools, resources, prompts, and experimental skill resources. The Desktop **MCP** page manages user-global MCP servers by default, while project `.mcp.json` stays a runtime declaration source rather than the normal Desktop write target.
+
+Plugin is a bundle, not a synonym for Skill, MCP server, or Tool. A Plugin can package Skills, MCP servers, Commands, Hooks, LSP servers, configuration, runtime contributions, and App relations. The Desktop **Plugin** page currently manages local Plugin packages only: built-in/managed plugins, imported folders, imported zip archives, and runtime-visible plugins. It does not present a remote marketplace browser as the main product surface.
+
+Local Plugin packages may expose either of these manifest entries:
+
+```text
+plugin.json
+.claude-plugin/plugin.json
+```
+
+The root `plugin.json` form is the recommended user-facing package entry. Import normalizes it to the internal `.claude-plugin/plugin.json` cache layout while reusing the same manifest schema, registry, version cache, and runtime loader. Desktop imports default to user-global scope; the enable switch lives in the left Plugin list card, and the detail pane keeps icon-only management actions.
+
+The standalone **Capability** page is the read-side directory for Skill, MCP, Tool, Plugin, and App facts. It shows source, parent/child relations, runtime visibility, diagnostics, and pending items; it is not an installation registry and does not execute Plugin lifecycle actions.
+
 ## Desktop Features
 
 - Local App Server lifecycle management.
 - Workspace switching and project-local settings isolation.
 - Session history grouped by workspace.
 - First-level Models page for provider profiles, credentials, models, and connection testing.
-- First-level MCP and Skill pages for install, enable/disable, diagnostics, repair, and uninstall flows.
+- First-level MCP and Skill pages for install/import, enable/disable, diagnostics, repair, and uninstall flows.
+- First-level Plugin page for local folder/zip imports, enable/disable, repair, uninstall, runtime state, component details, configuration, dependency/update facts, security/source details, and diagnostics.
+- First-level Capability page for source-aware Skill, MCP, Tool, Plugin, and App facts.
 - Current model and profile quick switching in the top bar.
 - Multimodal input cards, generated image cards, local thumbnail / preview flow, and persisted generated outputs.
 - Permission settings UI for local / project / user settings.
@@ -161,6 +182,8 @@ npm.cmd run smoke:generate-image-tool
 npm.cmd run smoke:session-generated-image-flow
 npm.cmd run smoke:app-server
 npm.cmd run smoke:app-server-client
+npm.cmd run smoke:plugin-release
+npm.cmd run smoke:external-extension-matrix
 npm.cmd run smoke:cli-model
 npm.cmd run desktop:build
 ```

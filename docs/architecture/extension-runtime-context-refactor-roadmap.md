@@ -982,9 +982,22 @@ R0-R30 完成后再次复审发现，剩余问题已不适合继续按单个 Pro
 - 外部扩展矩阵已扩展到 85 项，G1-G3 专项 smoke 已接入 release smoke group。
 - G4 发布门禁已通过 MCP 19/19、Skill 50/50、Skill internal 33/33、Desktop 15/15；真实 `ccr -p` 和 Windows TTY 启动回归也已通过。
 
-阶段结论：G1-G4 已经把外部扩展的底层 capability model 收到可维护边界，后续不应继续把所有问题塞进“根因重构”。下一批目标应转向产品化和真实扩展包链路：
+阶段结论：G1-G4 已经把外部扩展的底层 capability model 收到可维护边界，后续不应继续把所有问题塞进“根因重构”。深度复审现有 Plugin 源码后，产品化路线修正为“复用现有 Plugin 领域，补请求级适配、管理读模型、事务、运行时激活和 Desktop”，不再新建 `.ccr-plugin`、第二套安装数据库或平行 Marketplace。
 
-- P1：Plugin manifest 与 App 注册入口，明确插件包如何声明 App、Skill、MCP 和 Tool。
-- P2：样例 Plugin 端到端，覆盖安装、启用、禁用、卸载、App registry 注册和能力目录展示。
-- P3：Desktop Plugin / App 管理页产品化，把当前统一管理投影变成可用的用户入口。
-- P4：发布拆分与升级链路，明确哪些能力随 `cc-reforged` 发布，哪些随 Plugin 包发布。
+后续 Goal：
+
+- P0：冻结设计权威和兼容基线，清理错误的第二套 Plugin 系统表述。
+- P1：建立请求级 `PluginDomainSession`、路径端口与缓存隔离。
+- P2：建立无副作用 Inspector，以及合并候选、作用域 intent、安装实例、缓存、加载和 runtime activation 的多实例读模型。
+- P3：建立 Plugin 独立 plan / apply 协议；Capability 管理层只引用领域计划。
+- P4：将 settings-first 安装改为全量 stage、journal commit、revision 冲突检测和幂等 reconciliation。
+- P5：抽出 `PluginRuntimeActivator`，显式建模 installed version、active version、部分激活和 pending activation。
+- P6：收口依赖、更新、回滚、旧版本引用和 GC。
+- P7：收口普通配置、敏感配置和持久数据治理。
+- P8：先冻结 App 的 provides/requires/suggests/configures 关系和注册 ownership，再在现有 manifest 上增加最小关系桥接；真实状态仍来自 registry。
+- P9：产品化 Desktop 已安装 Plugin 工作台。
+- P10：补本地 Plugin 文件夹 / zip 导入、安装确认和目录刷新；远程 Marketplace 浏览继续作为后续来源扩展。
+- P11：建立样例 Plugin 和故障维度矩阵；用例不少于 50，但以不变式和反例覆盖率为完成标准。
+- P12：完成兼容迁移、发布门禁和旧入口收口。
+
+P0-P12 的权威设计入口见 [CCR Plugin 接入与产品化设计](./plugin-system-product-design.md)，执行记录见 [Plugin 产品化 P0-P12 Goal Series](../goals/2026-06-08-plugin-productization-p0-p12-series.md)，源码依据见 [Plugin 系统源码证据索引](../references/plugin-system-source-evidence.md)。后续应按顺序执行单个 Goal，不允许 UI、事务和运行时刷新一次性混改。

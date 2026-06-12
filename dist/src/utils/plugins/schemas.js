@@ -259,6 +259,38 @@ const PluginManifestMetadataSchema = lazySchema(() => z.object({
         .optional()
         .describe('Plugins that must be enabled for this plugin to function. Bare names (no "@marketplace") are resolved against the declaring plugin\'s own marketplace.'),
 }));
+const PluginManifestCcrSchema = lazySchema(() => z.object({
+    ccr: z
+        .object({
+        apps: z
+            .array(z
+            .object({
+            id: z.string().min(1),
+            displayName: z.string().min(1).optional(),
+            description: z.string().optional(),
+            relation: z.enum([
+                'provides',
+                'requires',
+                'suggests',
+                'configures',
+            ]),
+            skillIds: z.array(z.string().min(1)).optional(),
+            mcpServerNames: z.array(z.string().min(1)).optional(),
+            toolIds: z.array(z.string().min(1)).optional(),
+        })
+            .strict())
+            .optional(),
+        ui: z
+            .object({
+            icon: z.string().min(1).optional(),
+            category: z.string().min(1).optional(),
+        })
+            .strict()
+            .optional(),
+    })
+        .strict()
+        .optional(),
+}));
 /**
  * Schema for plugin hooks configuration (hooks.json)
  *
@@ -676,6 +708,7 @@ const PluginManifestSettingsSchema = lazySchema(() => z.object({
  */
 export const PluginManifestSchema = lazySchema(() => z.object({
     ...PluginManifestMetadataSchema().shape,
+    ...PluginManifestCcrSchema().partial().shape,
     ...PluginManifestHooksSchema().partial().shape,
     ...PluginManifestCommandsSchema().partial().shape,
     ...PluginManifestAgentsSchema().partial().shape,

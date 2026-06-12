@@ -48,16 +48,18 @@ CCR 的用户级默认目录是 `~/.ccr`，也就是 Windows 当前用户下的 
 | `~/.ccr/data/llm.config.local.json` | LLM provider/model 本地配置 | 否 |
 | `~/.ccr/data/codex-oauth.json` | Codex OAuth 登录态 | 否 |
 
-项目级共享 MCP 配置仍放项目根目录 `.mcp.json`。项目级 settings 已迁到项目 `.ccr/` 下：
+项目级共享 MCP 配置仍放项目根目录 `.mcp.json`，但它只作为项目声明和运行时发现来源，不作为 Desktop / App Server 普通管理页的写入目标。项目级 settings 已迁到项目 `.ccr/` 下：
 
 | 路径 | 用途 | 是否可提交 |
 | --- | --- | --- |
-| `<project>/.ccr/settings.json` | 项目共享 settings，例如团队权限、hooks、插件启用状态 | 是 |
+| `<project>/.ccr/settings.json` | 项目共享 settings，例如团队权限、hooks 等项目声明；普通 Desktop MCP / Plugin 管理状态不写这里 | 是 |
 | `<project>/.ccr/settings.local.json` | 项目个人私有 settings，例如个人权限覆盖 | 否 |
 
 `<project>/.claude/settings.json` 和 `<project>/.claude/settings.local.json` 不再作为 CCR settings 读取来源。CCR 新写入、运行时读取、Desktop 展示、App Server 快照和 settings sync 都以 `.ccr/settings*.json` 为唯一项目级 settings 路径。
 
-当前 MCP 实现已经把 `user` scope 的主读写文件切到 `~/.ccr/mcp.json`。旧全局 settings 里的 `mcpServers` 只做迁移期只读兼容；同名 server 同时存在时，`~/.ccr/mcp.json` 优先。
+当前 MCP 实现已经把 `user` scope 的主读写文件切到 `~/.ccr/mcp.json`。Desktop / App Server 受控安装、导入、修复、卸载、启用和禁用只写用户全局 MCP 配置。旧全局 settings 里的 `mcpServers` 只做迁移期只读兼容；同名 server 同时存在时，`~/.ccr/mcp.json` 优先。
+
+历史项目 settings 中的 `projects[...].mcpServers` / `mcpContextUris` 已废弃，保存全局配置时会被清理；项目私有 local MCP 不再进入 MCP inventory，也不能通过 Desktop / App Server 管理 API 写回。需要项目共享 MCP 时使用项目根目录 `.mcp.json`，并按运行时审批流程处理。
 
 ## 3. 安装类
 
@@ -69,9 +71,11 @@ CCR 的用户级默认目录是 `~/.ccr`，也就是 Windows 当前用户下的 
 | `~/.ccr/mcp/packages/` | CCR installer-owned 包缓存 | 通过 owner marker 保护，卸载时只清理确认归属的目录 |
 | `~/.ccr/mcp/presets/` | 用户自定义 MCP 预设 | 例如自定义 browser/db/search preset |
 | `~/.ccr/skills/` | 用户安装的 skill | 类似 Codex skill，但归 CCR 管理 |
-| `~/.ccr/plugins/` | 用户安装的 plugin | 插件包、manifest、版本目录 |
+| `~/.ccr/plugins/` | 现有 Plugin 领域目录 | 安装记录、versioned cache、持久 data、来源兼容缓存和本地导入 cache；不要再建平行 Plugin 安装库 |
 
 Skill 第一版以 `SKILL.md` 为核心标准。CCR 自己的安装信息不写进 `SKILL.md`，而是通过 `~/.ccr/skills/installed.json`、`~/.ccr/skills/lock.json` 和 `~/.ccr/skills/manifests/` 管理。外部 Claude / Codex / OpenClaw 风格 skill 进入 CCR 后应先归一成统一 skill package，再适配到现有 `Command` / `SkillTool` 运行链路。详细设计见 [Skill 标准兼容与安装管理设计](../skills/skill-standard-and-install-management-design.md)。
+
+Plugin 与 Skill / MCP 的安装器结构不同。Plugin 已有 `.claude-plugin/plugin.json`、Marketplace 兼容数据、四作用域安装记录、版本缓存和 orphan GC，后续产品化应扩展现有领域，不应按 Skill / MCP 的 owner marker + lock 模型重新实现一套。Desktop 当前只做本地 Plugin 包导入，支持文件夹和压缩包；用户可直接在包根目录放 `plugin.json`，导入后由 CCR 规范化为内部 `.claude-plugin/plugin.json`。导入和启停默认使用用户全局作用域，项目/本地作用域只作为领域兼容能力和后续扩展边界。详细设计见 [CCR Plugin 接入与产品化设计](./plugin-system-product-design.md)。
 
 第三方 MCP 如果通过 npm 临时执行，例如 `npx.cmd -y @playwright/mcp@latest`，不复制到 `~/.ccr/mcp/servers/`。它只是配置引用的外部执行源。
 
@@ -117,16 +121,16 @@ Playwright MCP 管理式安装目录结构：
 
 ## 5. 优先级
 
-MCP 配置建议按这个顺序合并：
+MCP 配置按这个顺序合并。后面的同名 server 覆盖前面的同名 server；普通 Desktop / App Server 管理动作只允许写第 4 层用户全局配置：
 
 1. CLI `--mcp-config`
-2. 项目本地私有 local 配置
-3. 项目共享 `.mcp.json`
-4. 用户级 `~/.ccr/mcp.json`
+2. 企业托管 MCP
+3. 项目共享 `.mcp.json`，只读声明，需要审批
+4. 用户级 `~/.ccr/mcp.json`，Desktop / App Server 受控管理写入目标
 5. 旧全局 settings 中的 user MCP 兼容配置
 6. CCR 内置预设 / plugin MCP
 
-更靠前的配置只应覆盖同名 server，不应无条件清空后续全部配置，除非用户显式使用 strict 模式。
+项目 settings 里的 legacy local MCP 不再参与合并，避免切换工作区时把“用户全局安装记录”和“项目私有配置”混成一套状态。
 
 ## 6. 不变式
 

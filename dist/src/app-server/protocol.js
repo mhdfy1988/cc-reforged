@@ -79,7 +79,13 @@ export const AppConnectorCapabilityInputSchema = z
     connected: z.boolean().optional(),
     enabled: z.boolean().optional(),
     authStatus: z
-        .enum(['connected', 'needs-auth', 'disabled', 'unknown'])
+        .enum([
+        'connected',
+        'needs-auth',
+        'disabled',
+        'disconnected',
+        'unknown',
+    ])
         .optional(),
     sourceLabel: z.string().optional(),
     pluginId: z.string().optional(),
@@ -277,7 +283,10 @@ export const McpListParamsSchema = z
 })
     .strict()
     .default({});
-const McpWritableScopeSchema = z.enum(['user', 'project', 'local']);
+// Desktop/App Server managed MCP writes are user-global. Project `.mcp.json`
+// may still be discovered as an external declaration, but it is not a normal
+// writable install target from the Desktop management APIs.
+const McpWritableScopeSchema = z.literal('user');
 export const McpInspectParamsSchema = z
     .object({
     name: z.string().min(1),
@@ -408,6 +417,114 @@ export const SkillInstallSaveManifestParamsSchema = z
     overwrite: z.boolean().optional(),
 })
     .strict();
+const PluginRequestContextParamsSchema = z.object({
+    cwd: z.string().min(1).optional(),
+    workspaceRoot: z.string().min(1).optional(),
+    configHomeDir: z.string().min(1).optional(),
+    runtimeInstanceId: z.string().min(1).optional(),
+});
+export const PluginsCatalogListParamsSchema = PluginRequestContextParamsSchema.strict().default({});
+export const PluginsMarketplacesListParamsSchema = PluginRequestContextParamsSchema.strict().default({});
+export const PluginsMarketplaceAddParamsSchema = PluginRequestContextParamsSchema.extend({
+    source: JsonRpcParamsSchema,
+    scope: z.enum(['user', 'project', 'local']),
+}).strict();
+export const PluginsLocalImportParamsSchema = PluginRequestContextParamsSchema.extend({
+    path: z.string().min(1),
+    kind: z.enum(['directory', 'archive']),
+    enableAfterInstall: z.boolean().optional(),
+}).strict();
+export const PluginsMarketplaceRemoveParamsSchema = PluginRequestContextParamsSchema.extend({
+    name: z.string().min(1),
+    confirmed: z.literal(true),
+}).strict();
+export const PluginsMarketplaceRefreshParamsSchema = PluginRequestContextParamsSchema.extend({
+    name: z.string().min(1),
+}).strict();
+export const PluginsInspectParamsSchema = PluginRequestContextParamsSchema.extend({
+    pluginId: z.string().min(1),
+}).strict();
+export const PluginActionTargetSchema = z
+    .object({
+    pluginId: z.string().min(1),
+    scope: z.enum(['managed', 'user', 'project', 'local']),
+    workspaceRoot: z.string().min(1).optional(),
+    sourceId: z.string().min(1).optional(),
+    version: z.string().min(1).optional(),
+})
+    .strict();
+export const PluginsActionPlanParamsSchema = PluginRequestContextParamsSchema.extend({
+    action: z.enum([
+        'install',
+        'enable',
+        'disable',
+        'uninstall',
+        'update',
+        'rollback',
+        'repair',
+    ]),
+    target: PluginActionTargetSchema,
+    deleteOptions: z
+        .object({
+        removeData: z.boolean().optional(),
+        removeOptions: z.boolean().optional(),
+        removeSecrets: z.boolean().optional(),
+    })
+        .strict()
+        .optional(),
+    installOptions: z
+        .object({
+        enableAfterInstall: z.boolean().optional(),
+    })
+        .strict()
+        .optional(),
+}).strict();
+export const PluginsActionApplyParamsSchema = z
+    .object({
+    planId: z.string().min(1),
+    confirmed: z.boolean().optional(),
+    confirmationToken: z.string().min(1).optional(),
+})
+    .strict();
+export const PluginsOperationGetParamsSchema = PluginRequestContextParamsSchema.extend({
+    operationId: z.string().min(1),
+})
+    .strict();
+export const PluginsOperationCancelParamsSchema = PluginsOperationGetParamsSchema;
+export const PluginsRuntimeActivateParamsSchema = PluginRequestContextParamsSchema.strict().default({});
+export const PluginsRuntimeGetParamsSchema = PluginRequestContextParamsSchema.strict().default({});
+const PluginConfigurationIdentityParamsSchema = z
+    .object({
+    pluginId: z.string().min(1),
+    scope: z.enum(['user', 'project', 'local']),
+    workspaceRoot: z.string().min(1).optional(),
+})
+    .strict();
+export const PluginsConfigGetParamsSchema = PluginRequestContextParamsSchema.extend({
+    identity: PluginConfigurationIdentityParamsSchema,
+}).strict();
+export const PluginsConfigSaveParamsSchema = PluginRequestContextParamsSchema.extend({
+    identity: PluginConfigurationIdentityParamsSchema,
+    values: z.record(z.string(), z.unknown()),
+}).strict();
+export const PluginsConfigDeleteParamsSchema = PluginRequestContextParamsSchema.extend({
+    identity: PluginConfigurationIdentityParamsSchema,
+    removeOptions: z.boolean().optional(),
+    removeSecrets: z.boolean().optional(),
+    removeData: z.boolean().optional(),
+}).strict();
+export const PluginsAppsRegisterParamsSchema = PluginRequestContextParamsSchema.extend({
+    pluginId: z.string().min(1),
+    apps: z.array(AppConnectorCapabilityInputSchema),
+}).strict();
+export const PluginsAppsUnregisterParamsSchema = z
+    .object({
+    pluginId: z.string().min(1),
+})
+    .strict();
+export const PluginsAppsListParamsSchema = PluginRequestContextParamsSchema.extend({
+    pluginId: z.string().min(1),
+}).strict();
 export const WorkspaceOpenParamsSchema = z
     .object({
     path: z.string().min(1),
@@ -619,6 +736,7 @@ export const DEFAULT_SERVER_CAPABILITIES = {
     models: true,
     mcp: true,
     skills: true,
+    plugins: true,
     workspace: true,
     threads: true,
     turns: true,

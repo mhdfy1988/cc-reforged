@@ -148,6 +148,7 @@ function createBasePlan(item, request, targetActionRef, options) {
             displayName: item.displayName,
             managementOwnership: item.managementOwnership,
             ...(targetActionRef ? { actionRef: targetActionRef } : {}),
+            ...(item.metadata ? { metadata: { ...item.metadata } } : {}),
         },
         requiresConfirmation,
         effects: getActionEffects(item, request.action),

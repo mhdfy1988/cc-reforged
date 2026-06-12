@@ -26,10 +26,10 @@ T18-T20 只解决“连接后的 MCP 工具如何进入 registry、availability�
 
 | 问题 | 当前状态 | 后续落点 |
 | --- | --- | --- |
-| MCP 装在哪里 | T21 已固定配置和安装基线：用户级 `~/.ccr/mcp.json`、项目级 `.mcp.json`、企业 `managed-mcp.json`，自动下载目录 `~/.ccr/mcp/packages`，安装清单 `~/.ccr/mcp/installed.json`，锁文件 `~/.ccr/mcp/lock.json`，日志 `~/.ccr/logs/mcp`。 | T22 继续补安装包 manifest |
+| MCP 装在哪里 | T21 已固定配置和安装基线：用户级 `~/.ccr/mcp.json` 是 Desktop / App Server 受控安装、导入、启停、卸载的唯一写入目标；项目级 `.mcp.json` 是只读项目声明和运行时发现来源；企业 `managed-mcp.json` 是只读托管来源；自动下载目录 `~/.ccr/mcp/packages`，安装清单 `~/.ccr/mcp/installed.json`，锁文件 `~/.ccr/mcp/lock.json`，日志 `~/.ccr/logs/mcp`。 | T22 继续补安装包 manifest |
 | 手动安装还是 Agent 自下载安装 | T22 已建立安装包 manifest，能区分手动配置、远程 URL、stdio npm 包、本地目录、内置 preset 和 plugin-provided MCP；T24 已提供宿主受控 search / plan / apply 入口。 | 已完成基础入口 |
 | 是否有 MCP install 工具 | T24 已完成受控入口：`mcp/install/search`、`mcp/install/plan`、`mcp/install/apply`、`mcp/install/list`、`mcp/install/uninstall`。T25/T26 已接入 Desktop 管理页和安装安全边界。 | 已完成 |
-| 是否有 MCP 管理 API | T23 已完成 Core / App Server / SDK 客户端 API：`mcp/list`、`mcp/inspect`、`mcp/add`、`mcp/update`、`mcp/remove`、`mcp/enable`、`mcp/disable`、`mcp/restart`、`mcp/test`。 | 已完成 |
+| 是否有 MCP 管理 API | T23 已完成 Core / App Server / SDK 客户端 API：`mcp/list`、`mcp/inspect`、`mcp/add`、`mcp/update`、`mcp/remove`、`mcp/enable`、`mcp/disable`、`mcp/restart`、`mcp/test`。写操作只接受 `user` scope；项目 `.mcp.json` 和企业来源只能被读取、展示、检测或审批，不允许从普通管理 API 写回。 | 已完成 |
 | 是否有 Desktop MCP 管理界面 | T25 已新增 MCP 管理页：server 列表、配置来源、安装来源、启用状态、检测 / 重启、安装候选、安装计划、写入目标、安装记录和卸载入口；T27 已补数据合并和格式化契约 smoke。 | 已完成 |
 | 启用 / 禁用 | T25 已接入 Desktop 管理页按钮，底层走 T23 的 `mcp/enable` / `mcp/disable`；T27 已补 App Server / SDK smoke。 | 已完成 |
 | 安装 / 卸载 | T25 已接入 Desktop 安装搜索、安装计划、确认安装、安装记录和 installer-owned 卸载。T26 新增包目录归属校验和 owner marker 验证后删除，T27 补安装清单、lockfile 和包目录残留清理 smoke。 | 已完成 |
@@ -59,9 +59,9 @@ registry / availability 确认当前缺少能力
 - `src/services/tools/appServerToolFilters.ts`：抽出 App Server 平台过滤，供运行时和检查脚本复用。
 - `src/services/tools/appServerToolPool.ts`：抽出 App Server 最终工具池 builder，供 turn runner 和 Capability Catalog 共用，确保工具目录和模型实际工具集合一致。
 - `src/services/llm/providerCapabilityTools.ts`：新增 provider 能力工具快照，当前覆盖 `GenerateImage` 生图能力来源、同供应商边界和不可用提示。
-- `src/services/mcp/configInventory.ts`：新增 MCP 配置与安装位置 inventory，输出 enterprise、claude.ai、plugin、user legacy、user file、project、local、dynamic 来源的优先级、读写路径、可写性、安装目录、lockfile、日志目录和 server active/suppressed 状态。
+- `src/services/mcp/configInventory.ts`：新增 MCP 配置与安装位置 inventory，输出 enterprise、claude.ai、plugin、user legacy、user file、project、dynamic 来源的优先级、读写路径、可写性、安装目录、lockfile、日志目录和 server active/suppressed 状态；历史 settings-backed local MCP 已废弃，不再进入 inventory。
 - `src/services/mcp/installManifest.ts`：新增 `CcrMcpInstallManifest` 运行时 schema 和安装来源分类，覆盖手动配置、远程 URL、stdio npm 包、本地目录、内置 preset、plugin-provided MCP，并记录 entry、envSchema、permissions、homepage、checksum 和 dataBoundary。
-- `src/services/mcp/config.ts#updateMcpConfig()`：新增 MCP 配置层更新入口，按 user / project / local scope 原子写回，避免管理 API 用“先删后加”模拟更新。
+- `src/services/mcp/config.ts#updateMcpConfig()`：新增 MCP 配置层更新入口，当前只允许 user scope 原子写回，避免管理 API 用“先删后加”模拟更新；project/local 写入被显式拒绝，项目 `.mcp.json` 继续作为只读声明来源。
 - `src/services/mcp/installManager.ts`：新增 MCP install 受控入口，覆盖候选搜索、安装计划、确认 token、受控 apply、安装清单、锁文件和 installer-owned uninstall。
 - `apps/desktop/src/main/index.ts` / `apps/desktop/src/preload/index.ts`：Desktop 暴露 MCP inspect、启用、禁用、重启、检测、安装搜索、安装计划、确认安装、安装列表和卸载 IPC。
 - `apps/desktop/src/renderer/src/components/pages/McpPage.tsx`：新增 MCP 管理页，展示 server 列表、详情、配置来源、运行状态、工具/资源区、诊断结果、安装候选、安装计划、写入目标和 CCR 安装记录。

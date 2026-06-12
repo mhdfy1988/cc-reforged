@@ -95,6 +95,13 @@ type LoadedPluginMarketplace = {
   cachePath: string
 }
 
+export type MarketplaceMaterializationResult = LoadedPluginMarketplace
+
+export type MarketplaceMaterializationOptions = {
+  cacheDir?: string
+  onProgress?: MarketplaceProgressCallback
+}
+
 /**
  * Get the path to the known marketplaces configuration file
  * Using a function instead of a constant allows proper mocking in tests
@@ -1451,9 +1458,10 @@ async function parseFileWithSchema<T>(
 async function loadAndCacheMarketplace(
   source: MarketplaceSource,
   onProgress?: MarketplaceProgressCallback,
+  explicitCacheDir?: string,
 ): Promise<LoadedPluginMarketplace> {
   const fs = getFsImplementation()
-  const cacheDir = getMarketplacesCacheDir()
+  const cacheDir = explicitCacheDir ?? getMarketplacesCacheDir()
 
   // Ensure cache directory exists
   await fs.mkdir(cacheDir)
@@ -1783,6 +1791,17 @@ async function loadAndCacheMarketplace(
     }
     throw error
   }
+}
+
+export async function materializeMarketplaceSource(
+  source: MarketplaceSource,
+  options: MarketplaceMaterializationOptions = {},
+): Promise<MarketplaceMaterializationResult> {
+  return loadAndCacheMarketplace(
+    source,
+    options.onProgress,
+    options.cacheDir,
+  )
 }
 
 /**

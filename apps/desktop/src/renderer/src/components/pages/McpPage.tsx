@@ -442,6 +442,10 @@ function McpServerDetail(props: {
   const canRepair =
     hasMcpManagementAction(props.capability, 'repair') && Boolean(server.installed)
   const canUninstall = hasMcpManagementAction(props.capability, 'uninstall')
+  const uninstallLabel =
+    props.capability?.managementOwnership === 'manual-config'
+      ? '删除配置'
+      : '卸载'
   const [activeTab, setActiveTab] = useState<McpDetailTab>('overview')
 
   useEffect(() => {
@@ -501,7 +505,7 @@ function McpServerDetail(props: {
                 danger
                 disabled={props.busy}
                 icon="trash"
-                label="卸载"
+                label={uninstallLabel}
                 onClick={() => props.onUninstall(server.name)}
               />
             ) : null}
@@ -1062,7 +1066,17 @@ export function mergeMcpServers(
     })
   }
 
-  return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name))
+  return Array.from(byName.values()).sort(compareMcpServerViews)
+}
+
+function compareMcpServerViews(a: McpServerView, b: McpServerView): number {
+  const enabledDiff = getMcpServerEnabledRank(a) - getMcpServerEnabledRank(b)
+  if (enabledDiff !== 0) return enabledDiff
+  return a.name.localeCompare(b.name)
+}
+
+function getMcpServerEnabledRank(server: McpServerView): number {
+  return server.enabled === false ? 1 : 0
 }
 
 export function formatServerSubtitle(server: McpServerView): string {

@@ -411,7 +411,7 @@ S-5 完成时：
 - 用户能从 Desktop 导入本地 Skill。
 - 用户能从候选生成安装计划。
 - 用户能看到安全摘要和阻断原因。
-- high 风险安装需要显式 override。
+- high 风险安装需要用户明确确认“我已了解高风险，继续安装”。
 - 用户能写入启用 / 禁用 / modelInvocable / userInvocable 状态。
 - 用户能对 installer-owned package 做修复和卸载。
 - 所有写操作都有确认或明确按钮，不静默写入。

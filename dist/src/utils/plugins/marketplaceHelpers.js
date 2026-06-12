@@ -368,9 +368,11 @@ function areSourcesEquivalentForBlocklist(source, blocked) {
  */
 export function isSourceInBlocklist(source) {
     const blocklist = getBlockedMarketplaces();
-    if (blocklist === null) {
+    return isSourceInConfiguredBlocklist(source, blocklist);
+}
+export function isSourceInConfiguredBlocklist(source, blocklist) {
+    if (blocklist === null)
         return false;
-    }
     return blocklist.some(blocked => areSourcesEquivalentForBlocklist(source, blocked));
 }
 /**
@@ -383,26 +385,20 @@ export function isSourceInBlocklist(source) {
  * 2. strictKnownMarketplaces (allowlist) - if set, source must be in the list
  */
 export function isSourceAllowedByPolicy(source) {
-    // Check blocklist first (takes precedence)
-    if (isSourceInBlocklist(source)) {
+    return isSourceAllowedByPolicyConfiguration(source, getStrictKnownMarketplaces(), getBlockedMarketplaces());
+}
+export function isSourceAllowedByPolicyConfiguration(source, allowlist, blocklist) {
+    if (isSourceInConfiguredBlocklist(source, blocklist))
         return false;
-    }
-    // Then check allowlist
-    const allowlist = getStrictKnownMarketplaces();
-    if (allowlist === null) {
-        return true; // No restrictions
-    }
-    // Check each entry in the allowlist
+    if (allowlist === null)
+        return true;
     return allowlist.some(allowed => {
-        // Handle hostPattern entries - match by extracted host
         if (allowed.source === 'hostPattern') {
             return doesSourceMatchHostPattern(source, allowed);
         }
-        // Handle pathPattern entries - match file/directory .path by regex
         if (allowed.source === 'pathPattern') {
             return doesSourceMatchPathPattern(source, allowed);
         }
-        // Handle regular source entries - exact match
         return areSourcesEqual(source, allowed);
     });
 }

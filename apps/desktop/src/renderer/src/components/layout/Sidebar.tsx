@@ -6,6 +6,7 @@ type NavIconName =
   | 'mcp'
   | 'usage'
   | 'skills'
+  | 'capabilities'
   | 'plugins'
   | 'logs'
   | 'settings'
@@ -56,6 +57,14 @@ export function Sidebar(props: {
         >
           <NavIcon name="plugins" />
           <span className="nav-label">插件</span>
+        </button>
+        <button
+          className={`nav-item ${props.page === 'capabilities' ? 'active' : ''}`}
+          title="能力目录"
+          onClick={() => props.onChangePage('capabilities')}
+        >
+          <NavIcon name="capabilities" />
+          <span className="nav-label">能力</span>
         </button>
         <button
           className={`nav-item ${props.page === 'usage' ? 'active' : ''}`}
@@ -137,6 +146,19 @@ function NavIcon(props: { name: NavIconName }) {
           <path d="M12 3.5 13.9 8l4.6 1.9-4.6 1.9L12 16.3l-1.9-4.5-4.6-1.9L10.1 8Z" />
           <path d="M18.5 14.5 19.4 17l2.1.9-2.1.9-.9 2.2-.9-2.2-2.1-.9 2.1-.9Z" />
           <path d="M5.3 15.2 6 17l1.7.7-1.7.7-.7 1.8-.7-1.8-1.7-.7 1.7-.7Z" />
+        </>
+      ) : null}
+      {props.name === 'capabilities' ? (
+        <>
+          <path d="m12 2 4 2.2v4.6L12 11 8 8.8V4.2Z" />
+          <path d="m8 4.2 4 2.2 4-2.2" />
+          <path d="M12 6.4V11" />
+          <path d="m6 11 4 2.2v4.6L6 20l-4-2.2v-4.6Z" />
+          <path d="m2 13.2 4 2.2 4-2.2" />
+          <path d="M6 15.4V20" />
+          <path d="m18 11 4 2.2v4.6L18 20l-4-2.2v-4.6Z" />
+          <path d="m14 13.2 4 2.2 4-2.2" />
+          <path d="M18 15.4V20" />
         </>
       ) : null}
       {props.name === 'plugins' ? (

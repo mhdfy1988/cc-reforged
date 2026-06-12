@@ -1,4 +1,30 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type {
+  PluginsActionApplyParams,
+  PluginsActionApplyResult,
+  PluginsActionPlanParams,
+  PluginsActionPlanResult,
+  PluginsAppsListParams,
+  PluginsAppsListResult,
+  PluginsCatalogListResult,
+  PluginsConfigGetParams,
+  PluginsConfigGetResult,
+  PluginsInspectParams,
+  PluginsInspectResult,
+  PluginsLocalImportParams,
+  PluginsLocalImportResult,
+  PluginsMarketplaceAddParams,
+  PluginsMarketplaceAddResult,
+  PluginsMarketplaceRefreshParams,
+  PluginsMarketplaceRefreshResult,
+  PluginsMarketplaceRemoveParams,
+  PluginsMarketplaceRemoveResult,
+  PluginsOperationCancelParams,
+  PluginsOperationCancelResult,
+  PluginsOperationGetParams,
+  PluginsOperationGetResult,
+  PluginsRuntimeGetResult,
+} from '../../../../src/app-server/protocol.js'
 
 type CcrDesktopEvent = {
   type: string
@@ -479,6 +505,54 @@ const api = {
   listMcpInstalls: () => ipcRenderer.invoke('ccr:mcp-install-list'),
   listCapabilityManagement: () =>
     ipcRenderer.invoke('ccr:capabilities-management-list'),
+  listPlugins: (): Promise<PluginsCatalogListResult> =>
+    ipcRenderer.invoke('ccr:plugins-list'),
+  inspectPlugin: (
+    input: PluginsInspectParams,
+  ): Promise<PluginsInspectResult> =>
+    ipcRenderer.invoke('ccr:plugin-inspect', input),
+  addPluginMarketplace: (
+    input: PluginsMarketplaceAddParams,
+  ): Promise<PluginsMarketplaceAddResult> =>
+    ipcRenderer.invoke('ccr:plugin-marketplace-add', input),
+  importLocalPlugin: (
+    input: PluginsLocalImportParams,
+  ): Promise<PluginsLocalImportResult> =>
+    ipcRenderer.invoke('ccr:plugin-local-import', input),
+  removePluginMarketplace: (
+    input: PluginsMarketplaceRemoveParams,
+  ): Promise<PluginsMarketplaceRemoveResult> =>
+    ipcRenderer.invoke('ccr:plugin-marketplace-remove', input),
+  refreshPluginMarketplace: (
+    input: PluginsMarketplaceRefreshParams,
+  ): Promise<PluginsMarketplaceRefreshResult> =>
+    ipcRenderer.invoke('ccr:plugin-marketplace-refresh', input),
+  planPluginAction: (
+    input: PluginsActionPlanParams,
+  ): Promise<PluginsActionPlanResult> =>
+    ipcRenderer.invoke('ccr:plugin-action-plan', input),
+  applyPluginAction: (
+    input: PluginsActionApplyParams,
+  ): Promise<PluginsActionApplyResult> =>
+    ipcRenderer.invoke('ccr:plugin-action-apply', input),
+  getPluginOperation: (
+    input: PluginsOperationGetParams,
+  ): Promise<PluginsOperationGetResult> =>
+    ipcRenderer.invoke('ccr:plugin-operation-get', input),
+  cancelPluginOperation: (
+    input: PluginsOperationCancelParams,
+  ): Promise<PluginsOperationCancelResult> =>
+    ipcRenderer.invoke('ccr:plugin-operation-cancel', input),
+  getPluginRuntime: (): Promise<PluginsRuntimeGetResult> =>
+    ipcRenderer.invoke('ccr:plugin-runtime-get'),
+  getPluginConfiguration: (
+    input: PluginsConfigGetParams,
+  ): Promise<PluginsConfigGetResult> =>
+    ipcRenderer.invoke('ccr:plugin-config-get', input),
+  listPluginApps: (
+    input: PluginsAppsListParams,
+  ): Promise<PluginsAppsListResult> =>
+    ipcRenderer.invoke('ccr:plugin-apps-list', input),
   planCapabilityManagementAction: (
     input: CapabilityManagementActionPlanInput,
   ) => ipcRenderer.invoke('ccr:capabilities-management-action-plan', input),

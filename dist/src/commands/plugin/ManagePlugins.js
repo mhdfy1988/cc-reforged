@@ -37,7 +37,7 @@ import { loadAllPlugins } from '../../utils/plugins/pluginLoader.js';
 import { loadPluginOptions, savePluginOptions } from '../../utils/plugins/pluginOptionsStorage.js';
 import { isPluginBlockedByPolicy } from '../../utils/plugins/pluginPolicy.js';
 import { getPluginEditableScopes } from '../../utils/plugins/pluginStartupCheck.js';
-import { getSettings_DEPRECATED, getSettingsForSource, updateSettingsForSource } from '../../utils/settings/settings.js';
+import { getSettings_DEPRECATED } from '../../utils/settings/settings.js';
 import { jsonParse } from '../../utils/slowOperations.js';
 import { plural } from '../../utils/stringUtils.js';
 import { formatErrorMessage, getErrorGuidance } from './PluginErrors.js';
@@ -927,9 +927,9 @@ export function ManagePlugins({ setViewState: setParentViewState, setResult, onM
             setProcessError('Built-in plugins cannot be updated or uninstalled.');
             return;
         }
-        // Managed scope plugins can only be updated, not enabled/disabled/uninstalled
-        if (!isBuiltin && !isInstallableScope(pluginScope) && operation !== 'update') {
-            setProcessError('This plugin is managed by your organization. Contact your admin to disable it.');
+        // Managed scope is read-only for every lifecycle action.
+        if (!isBuiltin && !isInstallableScope(pluginScope)) {
+            setProcessError('This plugin is managed by your organization. Contact your admin to change it.');
             return;
         }
         setIsProcessing(true);
@@ -1389,27 +1389,7 @@ export function ManagePlugins({ setViewState: setParentViewState, setResult, onM
                     // be reinstallable, so don't nuke ${CLAUDE_PLUGIN_DATA} silently.
                     // The normal uninstall path prompts; this one preserves.
                     const result_2 = isInstallableScope(pluginScope_1) ? await uninstallPluginOp(pluginId_7, pluginScope_1, false) : await uninstallPluginOp(pluginId_7, 'user', false);
-                    let success = result_2.success;
-                    if (!success) {
-                        // Plugin was never installed (only in enabledPlugins settings).
-                        // Remove directly from all editable settings sources.
-                        const editableSources = ['userSettings', 'projectSettings', 'localSettings'];
-                        for (const source of editableSources) {
-                            const settings = getSettingsForSource(source);
-                            if (settings?.enabledPlugins?.[pluginId_7] !== undefined) {
-                                updateSettingsForSource(source, {
-                                    enabledPlugins: {
-                                        ...settings.enabledPlugins,
-                                        [pluginId_7]: undefined
-                                    }
-                                });
-                                success = true;
-                            }
-                        }
-                        // Clear memoized caches so next loadAllPlugins() picks up settings changes
-                        clearAllCaches();
-                    }
-                    if (success) {
+                    if (result_2.success) {
                         if (onManageComplete) {
                             await onManageComplete();
                         }
@@ -1436,25 +1416,18 @@ export function ManagePlugins({ setViewState: setParentViewState, setResult, onM
             setIsProcessing(true);
             setProcessError(null);
             const pluginId_8 = `${selectedPlugin.plugin.name}@${selectedPlugin.marketplace}`;
-            // Write `false` directly — disablePluginOp's cross-scope guard would
-            // reject this (plugin isn't in localSettings yet; the override IS the
-            // point).
-            const { error: error_2 } = updateSettingsForSource('localSettings', {
-                enabledPlugins: {
-                    ...getSettingsForSource('localSettings')?.enabledPlugins,
-                    [pluginId_8]: false
+            void (async () => {
+                const result = await disablePluginOp(pluginId_8, 'local');
+                if (!result.success) {
+                    setIsProcessing(false);
+                    setProcessError(result.message);
+                    return;
                 }
-            });
-            if (error_2) {
-                setIsProcessing(false);
-                setProcessError(`Failed to write settings: ${error_2.message}`);
-                return;
-            }
-            clearAllCaches();
-            setResult(`✓ Disabled ${selectedPlugin.plugin.name} in .ccr/settings.local.json. Run /reload-plugins to apply.`);
-            if (onManageComplete)
-                void onManageComplete();
-            setParentViewState('menu');
+                setResult(`✓ Disabled ${selectedPlugin.plugin.name} in .ccr/settings.local.json. Run /reload-plugins to apply.`);
+                if (onManageComplete)
+                    await onManageComplete();
+                setParentViewState('menu');
+            })();
         },
         'confirm:no': () => {
             setViewState('plugin-details');

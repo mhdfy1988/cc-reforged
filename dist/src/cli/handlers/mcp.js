@@ -29,10 +29,10 @@ function isScopedMcpStdioServerConfig(server) {
 }
 function ensureWritableMcpScope(scope) {
     const normalized = ensureConfigScope(scope ?? 'user');
-    if (normalized === 'user' || normalized === 'project' || normalized === 'local') {
+    if (normalized === 'user') {
         return normalized;
     }
-    return cliError(`MCP install scope must be local, user, or project. Got "${normalized}".`);
+    return cliError(`MCP install scope must be user. Got "${normalized}".`);
 }
 function formatInstallSummary(value) {
     return JSON.stringify(value, null, 2);
@@ -106,15 +106,13 @@ export async function mcpRemoveHandler(name, options) {
             cliOk(`File modified: ${describeMcpConfigFilePath(scope)}`);
         }
         // If no scope specified, check where the server exists
-        const projectConfig = getCurrentProjectConfig();
-        // Check if server exists in project scope (.mcp.json)
+        // Project-local settings-backed MCP config is no longer a writable scope.
+        // Project `.mcp.json` remains removable through the explicit project path.
         const { servers: projectServers } = getMcpConfigsByScope('project');
         const { servers: userServers } = getMcpConfigsByScope('user');
         const mcpJsonExists = !!projectServers[name];
         // Count how many scopes contain this server
         const scopes = [];
-        if (projectConfig.mcpServers?.[name])
-            scopes.push('local');
         if (mcpJsonExists)
             scopes.push('project');
         if (userServers[name])

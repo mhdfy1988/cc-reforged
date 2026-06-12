@@ -4,7 +4,7 @@
 
 这份 Runbook 用来把 Desktop 从“能打包”推进到“可以被人工验收、公开发布和后续回归”的状态。
 
-当前公开版本是 `0.5.2`，已通过 GitHub Actions `Desktop Release` workflow 发布 unsigned Windows x64 安装器。真正执行安装器前，仍需要明确告知会影响当前机器的开始菜单、安装目录和 Desktop `userData`。
+当前发布目标是 `0.6.3`。历史 `0.5.2` 已通过 GitHub Actions `Desktop Release` workflow 发布 unsigned Windows x64 安装器；后续版本继续沿用同一验收思路。真正执行安装器前，仍需要明确告知会影响当前机器的开始菜单、安装目录和 Desktop `userData`。
 
 ## 2. 当前产物
 
@@ -350,7 +350,7 @@ skillInstallManifest=<Skill 安装清单>
 
 - 安装候选卡片只展示名称、短说明、来源和风险等级，不堆满路径和 finding。
 - 详情页能看到来源、状态、安全摘要、资源和 `SKILL.md` 预览。
-- high 风险需要显式 override；critical 风险不能安装。
+- high 风险需要用户勾选“我已了解高风险，继续安装”；critical 风险不能安装。
 - 禁用状态与 runtime 可见性语义一致：页面不直接承诺“已注入上下文”，只展示管理状态和诊断。
 - 修复 / 卸载都需要用户明确动作，不自动写入。
 

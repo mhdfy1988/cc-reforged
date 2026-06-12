@@ -48,6 +48,16 @@ function toManagementItem(capability) {
         managementOwnership,
         ...(actionRef ? { actionRef } : {}),
         allowedActions: getAllowedActions(capability, managementOwnership),
+        ...(capability.kind === 'plugin'
+            ? {
+                domainActionLink: {
+                    domain: 'plugin',
+                    pluginId: capability.source.pluginId ?? capability.name,
+                    inspectMethod: 'plugins/inspect',
+                    planMethod: 'plugins/action/plan',
+                },
+            }
+            : {}),
         ...(capability.metadata ? { metadata: { ...capability.metadata } } : {}),
     };
 }
@@ -55,12 +65,13 @@ function getManagementOwnership(capability) {
     if (capability.kind !== 'plugin' && capability.relations.parentPluginId) {
         return 'plugin-owned';
     }
-    if (capability.kind === 'mcp-server' &&
-        capability.metadata?.installKind === 'manual-config') {
-        return 'manual-config';
-    }
     if (capability.state.installed || capability.relations.installedRef) {
         return 'installer-owned';
+    }
+    if (capability.kind === 'mcp-server' &&
+        (capability.state.configured === true ||
+            capability.metadata?.configured === true)) {
+        return 'manual-config';
     }
     return 'runtime-only';
 }
@@ -79,9 +90,14 @@ function getAllowedActions(capability, ownership) {
     }
     if (capability.kind === 'mcp-server') {
         const actions = ['inspect'];
-        if (ownership === 'manual-config' || ownership === 'installer-owned') {
+        const hasConfig = capability.state.configured !== false;
+        if (ownership === 'manual-config' ||
+            (ownership === 'installer-owned' && hasConfig)) {
             actions.unshift(capability.state.enabled ? 'disable' : 'enable');
             actions.push('test', 'restart');
+        }
+        if (ownership === 'manual-config' && capability.metadata?.scope === 'user') {
+            actions.push('uninstall');
         }
         if (ownership === 'installer-owned') {
             actions.push('repair', 'uninstall');

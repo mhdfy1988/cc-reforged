@@ -224,7 +224,7 @@ Desktop 的 `创建 MCP 安装配置` 会按模板生成 manifest，然后进入
 
 ## 手工配置和接管
 
-手工写入 `~/.ccr/mcp.json` 或项目 `.mcp.json` 的 MCP 会出现在 Server 列表中，可以检测、启用、禁用和重启。
+手工写入 `~/.ccr/mcp.json` 的 MCP 会出现在 Server 列表中，可以检测、启用、禁用和重启。项目 `.mcp.json` 也会作为项目共享声明进入发现结果，但普通 Desktop / App Server 管理动作不写回项目文件；需要修改项目声明时应直接维护 `.mcp.json`，并按项目协作和审批规则处理。
 
 手工配置默认不会：
 

@@ -96,7 +96,7 @@ flowchart TD
 - 多 workspace 同时运行。
 - 多 thread 并发运行。
 - 完整 IDE 级 diff 编辑器。
-- 插件市场 UI。
+- 远程插件市场 UI。
 - 远程云端会话同步。
 - 账号体系和云同步。
 - App Server websocket 模式。

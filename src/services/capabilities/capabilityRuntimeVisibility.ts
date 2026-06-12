@@ -18,7 +18,9 @@ const AVAILABILITY_BLOCKING_REASONS = new Set<ExtensionCapabilityHiddenReason>([
   'unsupported-kind',
   'source-unavailable',
   'plugin-disabled',
+  'plugin-missing',
   'app-disabled',
+  'app-disconnected',
   'app-needs-auth',
   'app-missing',
   'app-ambiguous',
@@ -215,6 +217,7 @@ function hiddenReasonDiagnosticKind(
     case 'invalid':
       return 'integrity'
     case 'plugin-disabled':
+    case 'plugin-missing':
       return 'plugin'
     case 'app-disabled':
     case 'app-needs-auth':
@@ -238,6 +241,7 @@ function hiddenReasonDiagnosticSeverity(
     case 'invalid':
     case 'source-unavailable':
     case 'mcp-server-unavailable':
+    case 'plugin-missing':
     case 'app-missing':
     case 'app-ambiguous':
       return 'error'
@@ -283,6 +287,8 @@ function hiddenReasonMessage(reason: ExtensionCapabilityHiddenReason): string {
       return 'Capability source is unavailable.'
     case 'plugin-disabled':
       return 'Parent plugin is disabled.'
+    case 'plugin-missing':
+      return 'Parent plugin is missing from the capability snapshot.'
     case 'app-disabled':
       return 'Parent app connector is disabled.'
     case 'app-needs-auth':

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -92,7 +92,6 @@ try {
         CLAUDE_CONFIG_DIR: configHome,
         DISABLE_TELEMETRY: '1',
         DISABLE_ERROR_REPORTING: '1',
-        NODE_ENV: 'test',
         NO_COLOR: '1',
       },
     },
@@ -108,6 +107,46 @@ try {
         mcpManagement: true,
       },
     })
+
+    const workspaceA = join(root, 'workspace-a')
+    const workspaceB = join(root, 'workspace-b')
+    await mkdir(workspaceA, { recursive: true })
+    await mkdir(workspaceB, { recursive: true })
+    await managed.client.openWorkspace({ path: workspaceA, trust: 'trusted' })
+    await managed.client.addMcp({
+      name: 'e2e_global_toggle',
+      scope: 'user',
+      config: {
+        type: 'http',
+        url: 'http://127.0.0.1:3217/mcp',
+      },
+    })
+    await managed.client.disableMcp({ name: 'e2e_global_toggle' })
+    assert.equal(
+      (await managed.client.listMcp({ includeDisabled: true })).servers.find(
+        server => server.name === 'e2e_global_toggle',
+      )?.enabled,
+      false,
+      'disabled user MCP should be disabled in the current workspace',
+    )
+    await managed.client.openWorkspace({ path: workspaceB, trust: 'trusted' })
+    assert.equal(
+      (await managed.client.listMcp({ includeDisabled: true })).servers.find(
+        server => server.name === 'e2e_global_toggle',
+      )?.enabled,
+      false,
+      'disabled user MCP state must remain global after switching workspace',
+    )
+    await managed.client.enableMcp({ name: 'e2e_global_toggle' })
+    await managed.client.openWorkspace({ path: workspaceA, trust: 'trusted' })
+    assert.equal(
+      (await managed.client.listMcp({ includeDisabled: true })).servers.find(
+        server => server.name === 'e2e_global_toggle',
+      )?.enabled,
+      true,
+      'enabled user MCP state must remain global after switching back',
+    )
+    await managed.client.removeMcp({ name: 'e2e_global_toggle', scope: 'user' })
 
     const fixtures = makeManifestFixtures()
     for (const fixture of fixtures) {
@@ -147,6 +186,8 @@ try {
       /already exists|已存在|MCP install candidate manifest already exists/,
     )
 
+    await managed.client.disableMcp({ name: 'e2e_local_http' })
+
     const localPlan = await managed.client.planMcpInstall({
       manifest: savedCandidate.manifestInput,
       scope: 'user',
@@ -157,6 +198,15 @@ try {
       confirmed: true,
       confirmationToken: localPlan.confirmation.token,
     })
+    const localMcpAfterInstall = await managed.client.listMcp({
+      includeDisabled: true,
+    })
+    assert.equal(
+      localMcpAfterInstall.servers.find(server => server.name === 'e2e_local_http')
+        ?.enabled,
+      true,
+      'fresh install must clear stale disabled state for the same MCP name',
+    )
 
     const localInstalled = await managed.client.listMcpInstalls()
     const localRecord = localInstalled.installed.find(
@@ -169,6 +219,7 @@ try {
     })
     assert.equal(findCandidate(installedSearch, 'e2e_local_http')?.state, 'installed')
 
+    await managed.client.disableMcp({ name: 'e2e_local_http' })
     await managed.client.uninstallMcp({
       name: 'e2e_local_http',
       confirmed: true,
@@ -178,6 +229,25 @@ try {
       afterLocalUninstall.installed.some(record => record.name === 'e2e_local_http'),
       false,
     )
+    await managed.client.addMcp({
+      name: 'e2e_local_http',
+      scope: 'user',
+      config: {
+        type: 'http',
+        url: 'http://127.0.0.1:3217/mcp',
+      },
+    })
+    const localMcpAfterManualReadd = await managed.client.listMcp({
+      includeDisabled: true,
+    })
+    assert.equal(
+      localMcpAfterManualReadd.servers.find(
+        server => server.name === 'e2e_local_http',
+      )?.enabled,
+      true,
+      'uninstall must clear disabled state so same-name manual config is enabled',
+    )
+    await managed.client.removeMcp({ name: 'e2e_local_http', scope: 'user' })
 
     const presetSearch = await managed.client.searchMcpInstalls({ query: 'sentry' })
     const sentryCandidate = findCandidate(presetSearch, 'sentry')

@@ -85,6 +85,30 @@ import type {
   PermissionRespondParams,
   PermissionSettingsGetResult,
   PermissionSettingsUpdateParams,
+  PluginsActionApplyParams,
+  PluginsActionApplyResult,
+  PluginsActionPlanParams,
+  PluginsActionPlanResult,
+  PluginsAppsListParams,
+  PluginsAppsListResult,
+  PluginsCatalogListResult,
+  PluginsConfigGetParams,
+  PluginsConfigGetResult,
+  PluginsInspectParams,
+  PluginsInspectResult,
+  PluginsLocalImportParams,
+  PluginsLocalImportResult,
+  PluginsMarketplaceAddParams,
+  PluginsMarketplaceAddResult,
+  PluginsMarketplaceRefreshParams,
+  PluginsMarketplaceRefreshResult,
+  PluginsMarketplaceRemoveParams,
+  PluginsMarketplaceRemoveResult,
+  PluginsOperationCancelParams,
+  PluginsOperationCancelResult,
+  PluginsOperationGetParams,
+  PluginsOperationGetResult,
+  PluginsRuntimeGetResult,
   SessionHistoryListParams,
   SessionHistoryListResult,
   SkillImportApplyParams,
@@ -890,6 +914,7 @@ async function bootstrapAppServer(): Promise<void> {
     status.auth = await launchedClient.client.getAuthStatus()
     status.mcp = await launchedClient.client.listMcp({ includeDisabled: true })
     await refreshRuntimeSnapshots()
+    await activatePluginRuntimeSnapshot('app-server-bootstrap')
     if (managedClient !== launchedClient) {
       throw new Error('App Server process exited during initialization.')
     }
@@ -1211,6 +1236,41 @@ async function refreshRuntimeSnapshots(): Promise<void> {
   status.context = contextStatus
   status.compact = compactStatus
   status.memory = memoryStatus
+}
+
+async function activatePluginRuntimeSnapshot(reason: string): Promise<void> {
+  const client = managedClient
+  if (!client) {
+    return
+  }
+  const cwd = status.workspacePath ?? defaultWorkspacePath
+  try {
+    const result = await client.client.activatePluginRuntime({ cwd })
+    await appendDesktopLog('main.log', {
+      type: 'plugin-runtime-activated',
+      reason,
+      state: result.state,
+      diagnostics: result.diagnostics,
+    })
+    broadcast('state', {
+      message: 'plugin runtime activated',
+      reason,
+      state: result.state,
+      diagnostics: result.diagnostics,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    await appendDesktopLog('client-error.log', {
+      kind: 'plugin_runtime_activation_failed',
+      reason,
+      message,
+    })
+    broadcast('state', {
+      message: 'plugin runtime activation failed',
+      reason,
+      error: message,
+    })
+  }
 }
 
 async function refreshPermissionSettingsSnapshot(): Promise<void> {
@@ -1715,6 +1775,138 @@ async function listCapabilityManagement(): Promise<CapabilitiesManagementListRes
   const client = await getAppServerClient()
   return client.listCapabilityManagement({
     cwd: status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function listPlugins(): Promise<PluginsCatalogListResult> {
+  const client = await getAppServerClient()
+  return client.listPlugins({
+    cwd: status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function inspectPlugin(
+  params: PluginsInspectParams,
+): Promise<PluginsInspectResult> {
+  const client = await getAppServerClient()
+  return client.inspectPlugin({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function addPluginMarketplace(
+  params: PluginsMarketplaceAddParams,
+): Promise<PluginsMarketplaceAddResult> {
+  const client = await getAppServerClient()
+  return client.addPluginMarketplace({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function importLocalPlugin(
+  params: PluginsLocalImportParams,
+): Promise<PluginsLocalImportResult> {
+  const client = await getAppServerClient()
+  const result = await client.importLocalPlugin({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+    enableAfterInstall: params.enableAfterInstall ?? true,
+  })
+  await activatePluginRuntimeSnapshot('plugin-local-import')
+  return result
+}
+
+async function removePluginMarketplace(
+  params: PluginsMarketplaceRemoveParams,
+): Promise<PluginsMarketplaceRemoveResult> {
+  const client = await getAppServerClient()
+  return client.removePluginMarketplace({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function refreshPluginMarketplace(
+  params: PluginsMarketplaceRefreshParams,
+): Promise<PluginsMarketplaceRefreshResult> {
+  const client = await getAppServerClient()
+  return client.refreshPluginMarketplace({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function planPluginAction(
+  params: PluginsActionPlanParams,
+): Promise<PluginsActionPlanResult> {
+  const client = await getAppServerClient()
+  return client.planPluginAction({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function applyPluginAction(
+  params: PluginsActionApplyParams,
+): Promise<PluginsActionApplyResult> {
+  const client = await getAppServerClient()
+  const operation = await client.applyPluginAction(params)
+  if (operation.status === 'succeeded') {
+    await activatePluginRuntimeSnapshot(`plugin-action:${operation.action}`)
+  }
+  broadcast('state', {
+    message: 'plugin action applied',
+    operation,
+  })
+  return operation
+}
+
+async function getPluginOperation(
+  params: PluginsOperationGetParams,
+): Promise<PluginsOperationGetResult> {
+  const client = await getAppServerClient()
+  return client.getPluginOperation({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function cancelPluginOperation(
+  params: PluginsOperationCancelParams,
+): Promise<PluginsOperationCancelResult> {
+  const client = await getAppServerClient()
+  return client.cancelPluginOperation({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function getPluginRuntime(): Promise<PluginsRuntimeGetResult> {
+  const client = await getAppServerClient()
+  return client.getPluginRuntime({
+    cwd: status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function getPluginConfiguration(
+  params: PluginsConfigGetParams,
+): Promise<PluginsConfigGetResult> {
+  const client = await getAppServerClient()
+  return client.getPluginConfiguration({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
+  })
+}
+
+async function listPluginApps(
+  params: PluginsAppsListParams,
+): Promise<PluginsAppsListResult> {
+  const client = await getAppServerClient()
+  return client.listPluginApps({
+    ...params,
+    cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
   })
 }
 
@@ -3387,6 +3579,91 @@ ipcMain.handle('ccr:capabilities-management-list', async () => {
   return listCapabilityManagement()
 })
 
+ipcMain.handle('ccr:plugins-list', async () => {
+  return listPlugins()
+})
+
+ipcMain.handle(
+  'ccr:plugin-inspect',
+  async (_event, params: PluginsInspectParams) => {
+    return inspectPlugin(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:plugin-marketplace-add',
+  async (_event, params: PluginsMarketplaceAddParams) => {
+    return addPluginMarketplace(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:plugin-local-import',
+  async (_event, params: PluginsLocalImportParams) => {
+    return importLocalPlugin(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:plugin-marketplace-remove',
+  async (_event, params: PluginsMarketplaceRemoveParams) => {
+    return removePluginMarketplace(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:plugin-marketplace-refresh',
+  async (_event, params: PluginsMarketplaceRefreshParams) => {
+    return refreshPluginMarketplace(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:plugin-action-plan',
+  async (_event, params: PluginsActionPlanParams) => {
+    return planPluginAction(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:plugin-action-apply',
+  async (_event, params: PluginsActionApplyParams) => {
+    return applyPluginAction(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:plugin-operation-get',
+  async (_event, params: PluginsOperationGetParams) => {
+    return getPluginOperation(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:plugin-operation-cancel',
+  async (_event, params: PluginsOperationCancelParams) => {
+    return cancelPluginOperation(params)
+  },
+)
+
+ipcMain.handle('ccr:plugin-runtime-get', async () => {
+  return getPluginRuntime()
+})
+
+ipcMain.handle(
+  'ccr:plugin-config-get',
+  async (_event, params: PluginsConfigGetParams) => {
+    return getPluginConfiguration(params)
+  },
+)
+
+ipcMain.handle(
+  'ccr:plugin-apps-list',
+  async (_event, params: PluginsAppsListParams) => {
+    return listPluginApps(params)
+  },
+)
+
 ipcMain.handle(
   'ccr:capabilities-management-action-plan',
   async (_event, params: CapabilitiesManagementActionPlanParams) => {
@@ -3498,6 +3775,7 @@ ipcMain.handle(
 
 ipcMain.handle('ccr:refresh-runtime', async () => {
   await ensureAppServer()
+  await activatePluginRuntimeSnapshot('manual-refresh-runtime')
   await refreshRuntimeSnapshots()
   broadcast('state', {
     message: 'runtime snapshots refreshed',

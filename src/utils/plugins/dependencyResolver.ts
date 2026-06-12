@@ -109,10 +109,11 @@ export async function resolveDependencyClosure(
   ): Promise<ResolutionResult | null> {
     // Skip already-enabled DEPENDENCIES (avoids surprise settings writes),
     // but NEVER skip the root: installing an already-enabled plugin must
-    // still cache/register it. Without this guard, re-installing a plugin
+    // still enter the installation transaction. Without this guard,
+    // re-installing a plugin
     // that's in settings but missing from disk (e.g., cache cleared,
     // installed_plugins.json stale) would return an empty closure and
-    // `cacheAndRegisterPlugin` would never fire — user sees
+    // would produce an empty closure — the user could see
     // "✔ Successfully installed" but nothing materializes.
     if (id !== rootId && alreadyEnabled.has(id)) return null
     // Security: block auto-install across marketplace boundaries. Runs AFTER

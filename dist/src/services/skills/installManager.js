@@ -48,7 +48,7 @@ export async function applySkillInstallPlan(plan, options) {
     const lockKey = `${plan.scope}:${plan.name}`;
     const warnings = [
         ...plan.risks,
-        ...(securityOverrideAccepted ? ['Security override token accepted.'] : []),
+        ...(securityOverrideAccepted ? ['已确认高风险安装。'] : []),
     ];
     const skillFilePath = join(packageDir, 'SKILL.md');
     const checksum = await hashFileSha256(liveSourcePackage.bodyPath);

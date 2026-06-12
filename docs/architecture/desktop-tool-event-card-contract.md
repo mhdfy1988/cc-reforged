@@ -33,7 +33,7 @@ Reducer 必须遵守的合并顺序：
 1. 先用 `toolUseId` / `tool_use_id` / `toolCallId` / `sourceToolAssistantUUID` 识别同一次工具调用。
 2. `tool_use` 创建或更新主工具卡。
 3. `tool_result` 回填同一张主工具卡，成功 / 失败 / 拒绝 / 超时都更新原卡状态。
-4. `progress` 只允许更新已存在的工具卡；找不到父工具卡时不得残留为独立“工具进度 · 正在执行”卡。
+4. `progress` 只允许更新已存在的工具卡；找不到父工具卡时展示为 warning 诊断，不得残留为独立“工具进度 · 正在执行”卡，也不得升级成普通红色错误卡。
 5. 控制型工具结果，例如 TodoWrite 或内部 reminder，不进入普通工具主时间线。
 
 Desktop Renderer 必须遵守的消费顺序：
@@ -42,6 +42,16 @@ Desktop Renderer 必须遵守的消费顺序：
 2. 不按 raw `toolUseId` 在 Renderer 侧重新合并工具生命周期。
 3. 不把缺失父工具的 `progress` 或控制型结果展示成独立卡。
 4. 协议缺口显示诊断或错误卡，不走静默 legacy fallback。
+
+### 孤立工具进度诊断
+
+工具进度引用的是已经存在的工具调用，不是独立工具结果。当前规则：
+
+- `tool_progress` 必须带有可绑定到父工具调用的 `toolUseId` / `parentToolUseId` 等来源字段。
+- 找不到来源字段时，App Server 生成 `missing_tool_progress_source_id` 诊断。
+- 找到来源字段但 reducer state 中不存在父工具调用时，App Server 生成 `orphan_tool_progress` 诊断。
+- 这两类诊断在 Desktop 中作为 warning 系统提示展示，保留排查线索；不再生成红色错误卡，也不静默丢弃。
+- 真正缺失父工具的 `tool_result` 仍属于工具结果诊断，继续按错误 / diagnostic 展示。
 
 注意：`isThreadDisplayProtocolContext` 只能说明事件来自标准展示协议，不能说明该事件应该独立展示。独立展示与否由 reducer 输出的 projection 决定。
 
@@ -114,5 +124,5 @@ P20 第一版只解决展示和错误解释，不直接重写 Core 工具池。�
 
 - `typecheck:desktop`：前端类型正确。
 - `desktop:build`：Desktop 构建正确。
-- `smoke:desktop-display-events`：fixture 中工具成功、shell 失败、AskUserQuestion 隐藏、TodoWrite 浮层、权限关联可回归。
-- 后续真实链路需要继续补 allow、deny、cancel、timeout 的 App Server 工具流 smoke。
+- `smoke:desktop-display-events`：fixture 中工具成功、shell 失败、AskUserQuestion 隐藏、TodoWrite 浮层、权限关联、孤立工具进度 warning 和工具内联媒体不误生成附件可回归。
+- `smoke:app-server` / `smoke:thread-display-input-event`：App Server reducer 对 progress、result、permission、compact、attachment 和 generated output 的状态绑定可回归。
