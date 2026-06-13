@@ -5,6 +5,8 @@ import {
   type SkillRuntimeCapability,
 } from '../../skills/skillRuntimeCatalog.js'
 import { listInstalledSkillPackageInspections } from '../skills/installedPackageInspection.js'
+import { scanSkillPackage } from '../skills/securityScanner.js'
+import { summarizeSkillSecurityReport } from '../skills/securityReporter.js'
 import type {
   ExtensionCapability,
   ExtensionCapabilityDiagnostic,
@@ -63,15 +65,23 @@ export async function listSkillCapabilities(
     installed: installedInspections.installed,
   })
 
-  return catalog.capabilities.map(toExtensionCapability)
+  return Promise.all(catalog.capabilities.map(toExtensionCapability))
 }
 
-function toExtensionCapability(
+async function toExtensionCapability(
   capability: SkillRuntimeCapability,
-): ExtensionCapability {
+): Promise<ExtensionCapability> {
   const sourceKind = mapSkillSourceKind(capability.sourceKind)
   const status = mapSkillStatus(capability)
   const pluginId = getPluginId(capability)
+  const runtimeSkillSecurityDigest = capability.skillPackage
+    ? summarizeSkillSecurityReport(
+        await scanSkillPackage(capability.skillPackage, {
+          source: 'installed',
+          packageId: capability.skillPackage.id,
+        }),
+      )
+    : null
   return {
     schemaVersion: 1,
     id: createSkillCapabilityId({
@@ -121,6 +131,14 @@ function toExtensionCapability(
       sourceKind: capability.sourceKind,
       parentPluginId: capability.parentPluginId,
       parentMcpServerName: capability.parentMcpServerName,
+      ...(capability.skillPackage
+        ? {
+            skillPackage: capability.skillPackage,
+            packageDir: capability.skillPackage.baseDir,
+            skillFilePath: capability.skillPackage.bodyPath,
+            skillSecurityDigest: runtimeSkillSecurityDigest,
+          }
+        : {}),
     },
   }
 }

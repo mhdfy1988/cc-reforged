@@ -1083,6 +1083,16 @@ git diff --check
 - `smoke:mcp-release`、`smoke:skill-release` 和 `smoke:desktop-release-gate` 全部通过。
 - MCP 发布组首次回归暴露旧 App fixture 把 `connected: false` 当成 `needs-auth`；补充显式 `authStatus` 后定向 smoke 与完整发布组均通过，运行时代码无需修改。
 
+### 2026-06-13 后续收口记录
+
+P0-P12 完成后，Desktop 继续按用户交互反馈补了一轮产品和父子可见性收口：
+
+- Plugin 页面只管理本地 Plugin 包，导入支持文件夹和 zip；远程 marketplace 不作为当前主入口。
+- Plugin 导入、启停和诊断默认用户全局；启停开关放在左侧列表卡，详情页只保留图标化管理操作和稳定分区事实。
+- Plugin 禁用后，Plugin 自身、Plugin Skill、Plugin MCP 和子 Tool 都必须 fail closed；Skill / MCP / 能力目录展示隐藏原因，不继续当作运行时可用能力。
+- Plugin Skill 在 Skill 管理页展示 `SKILL.md` 正文、资源、安全扫描和包路径；Plugin MCP 在 MCP 管理页展示只读运行时事实和父 Plugin 隐藏原因。
+- Plugin 组件明细使用语义名称：Skill 使用 Skill 名称，MCP server 使用 manifest server key，不用启动命令名。
+
 ## 6. 每个 Goal 的完成门禁
 
 每个 Goal 标记完成前必须回答：

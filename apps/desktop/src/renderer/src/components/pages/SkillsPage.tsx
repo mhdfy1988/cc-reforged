@@ -18,6 +18,7 @@ import type {
   SkillInstallListState,
   SkillInstallPlanViewState,
   SkillInstallSearchState,
+  SkillPackageSummary,
   SkillSecurityDigest,
 } from '../../domain/displayTypes.js'
 import {
@@ -382,6 +383,8 @@ function SkillManagementListItem(props: {
   const skill = props.skill
   const capability = skill.capability
   const toggle = getSkillManagementToggleEnabledTarget(skill)
+  const securityDigest =
+    skill.inspection?.securityDigest ?? getSkillCapabilitySecurityDigest(capability)
   return (
     <div
       className={props.active ? 'mcp-server-item active' : 'mcp-server-item'}
@@ -398,9 +401,9 @@ function SkillManagementListItem(props: {
       </button>
       <div className="mcp-server-item-foot">
         <div className="mcp-tags">
-          {skill.inspection?.securityDigest ? (
-            <small className={getSeverityTone(skill.inspection.securityDigest)}>
-              {formatSeverity(skill.inspection.securityDigest)}
+          {securityDigest ? (
+            <small className={getSeverityTone(securityDigest)}>
+              {formatSeverity(securityDigest)}
             </small>
           ) : null}
           <small className={getSkillRuntimeVisibilityTone(capability)}>
@@ -466,8 +469,21 @@ function SkillDetail(props: {
   const enabled = capability.state.enabled
   const modelInvocable = capability.invocation.modelInvocable
   const userInvocable = capability.invocation.userInvocable
-  const skillPackage = inspection?.package
+  const metadataPackage = getSkillCapabilityPackage(capability)
+  const skillPackage = inspection?.package ?? metadataPackage
   const resources = skillPackage?.resources ?? {}
+  const securityDigest =
+    inspection?.securityDigest ?? getSkillCapabilitySecurityDigest(capability)
+  const packageDir =
+    record?.packageDir ??
+    getSkillCapabilityMetadataString(capability, 'packageDir') ??
+    skillPackage?.baseDir ??
+    '无'
+  const skillFilePath =
+    record?.skillFilePath ??
+    getSkillCapabilityMetadataString(capability, 'skillFilePath') ??
+    skillPackage?.bodyPath ??
+    '无'
   const repairRef = getSkillManagementActionRef(props.skill, 'repair')
   const uninstallRef = getSkillManagementActionRef(props.skill, 'uninstall')
   const canSetModelInvocation =
@@ -550,7 +566,7 @@ function SkillDetail(props: {
               <SkillFact label="归属" value={formatSkillManagementOwnership(capability.managementOwnership)} />
               <SkillFact label="可见性" value={formatSkillRuntimeVisibility(capability)} />
               <SkillFact label="调用" value={formatSkillInvocation(modelInvocable, userInvocable)} />
-              <SkillFact label="风险" value={formatSeverity(inspection?.securityDigest)} />
+              <SkillFact label="风险" value={formatSeverity(securityDigest)} />
               <SkillFact label="校验" value={inspection?.checksum?.drifted ? '已漂移' : '一致'} />
             </dl>
             {canSetModelInvocation || canSetUserInvocation ? (
@@ -619,7 +635,7 @@ function SkillDetail(props: {
         ) : null}
 
         {activeTab === 'security' ? (
-          <SkillSecuritySection digest={inspection?.securityDigest} />
+          <SkillSecuritySection digest={securityDigest} />
         ) : null}
 
         {activeTab === 'resources' ? (
@@ -631,8 +647,8 @@ function SkillDetail(props: {
               </div>
             </div>
             <dl className="models-facts compact">
-              <SkillFact label="安装目录" value={record?.packageDir ?? '无'} />
-              <SkillFact label="SKILL.md" value={record?.skillFilePath ?? '无'} />
+              <SkillFact label="安装目录" value={packageDir} />
+              <SkillFact label="SKILL.md" value={skillFilePath} />
             </dl>
             <div className="mcp-tool-list">
               {formatResourceItems(resources).length > 0 ? (
@@ -665,6 +681,32 @@ function SkillDetail(props: {
       </div>
     </>
   )
+}
+
+function getSkillCapabilityPackage(
+  capability: SkillManagementViewItem<SkillInstalledInspection>['capability'],
+): SkillPackageSummary | null {
+  const value = capability.metadata?.skillPackage
+  return value != null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as SkillPackageSummary)
+    : null
+}
+
+function getSkillCapabilitySecurityDigest(
+  capability: SkillManagementViewItem<SkillInstalledInspection>['capability'],
+): SkillSecurityDigest | null {
+  const value = capability.metadata?.skillSecurityDigest
+  return value != null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as SkillSecurityDigest)
+    : null
+}
+
+function getSkillCapabilityMetadataString(
+  capability: SkillManagementViewItem<SkillInstalledInspection>['capability'],
+  key: 'packageDir' | 'skillFilePath',
+): string | null {
+  const value = capability.metadata?.[key]
+  return typeof value === 'string' && value.trim() ? value : null
 }
 
 

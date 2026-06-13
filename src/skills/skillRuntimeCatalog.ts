@@ -1,5 +1,6 @@
 import type { Command } from '../types/command.js'
 import { resolveCommandPluginId } from '../services/capabilities/pluginIdentityResolver.js'
+import type { CcrSkillPackage } from './model.js'
 import {
   getSkillCommandAdapterKind,
   isUserInvocableSkillCommandCandidate,
@@ -54,6 +55,7 @@ export type SkillRuntimeCapability = {
   runtimeVisible: boolean
   hiddenReason: string | null
   diagnostics: string[]
+  skillPackage: CcrSkillPackage | null
 }
 
 export type SkillRuntimeCapabilityCatalog = {
@@ -220,6 +222,7 @@ export function createSkillRuntimeCapabilityCatalog(input: {
         inspection.status === 'installed' ? null : `inspection:${inspection.status}`,
       diagnostics:
         inspection.status === 'installed' ? [] : [inspection.statusMessage],
+      skillPackage: null,
     })
     seenCapabilityIds.add(id)
   }
@@ -306,6 +309,7 @@ function commandToCapability(input: {
         : (runtimeCapability.state.hiddenReasons?.[0] ?? 'disabled')
       : 'duplicate-name',
     diagnostics: input.diagnostics,
+    skillPackage: command.skillPackage ?? null,
   }
 }
 

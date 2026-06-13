@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { normalizeSkillPackage } from '../../skills/normalizeSkillPackage.js';
+import { collectSkillResourceDirsFromFs, } from '../../skills/skillResourceScanner.js';
 import { parseFrontmatter } from '../../utils/frontmatterParser.js';
 import { parseSkillFrontmatterFields } from '../../skills/skillFrontmatter.js';
 import { parseYaml } from '../../utils/yaml.js';
@@ -241,39 +242,9 @@ async function discoverClaudeCommandCandidate(source) {
     }
 }
 export async function collectSkillResourceDirs(skillDir, warnings) {
-    const result = {
-        scripts: [],
-        references: [],
-        assets: [],
-    };
-    await Promise.all(['scripts', 'references', 'assets'].map(async (key) => {
-        const dir = join(skillDir, key);
-        try {
-            result[key] = (await collectRelativeFiles(dir, key)).sort();
-        }
-        catch (error) {
-            const code = getErrorCode(error);
-            if (code !== 'ENOENT') {
-                warnings.push(`无法枚举 ${key} 资源目录：${formatErrorMessage(error)}`);
-            }
-        }
-    }));
-    return result;
-}
-async function collectRelativeFiles(absoluteDir, relativeDir) {
-    const entries = await readdir(absoluteDir, { withFileTypes: true });
-    const files = await Promise.all(entries.map(async (entry) => {
-        const absolutePath = join(absoluteDir, entry.name);
-        const relativePath = join(relativeDir, entry.name).replace(/\\/g, '/');
-        if (entry.isDirectory()) {
-            return collectRelativeFiles(absolutePath, relativePath);
-        }
-        if (entry.isFile()) {
-            return [relativePath];
-        }
-        return [];
-    }));
-    return files.flat();
+    return collectSkillResourceDirsFromFs(skillDir, dir => readdir(dir, { withFileTypes: true }), warning => {
+        warnings.push(`无法枚举 ${warning.key} 资源目录：${formatErrorMessage(warning.error)}`);
+    });
 }
 function getErrorCode(error) {
     return typeof error === 'object' && error != null && 'code' in error

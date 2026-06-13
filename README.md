@@ -90,6 +90,7 @@ CCR 当前更像一个本地 Agent 工作台，而不是单纯的 CLI 包：
 - 外部能力目录：Desktop `能力` 页面统一展示 Tool、Skill、MCP、Plugin 和 App 能力，区分运行时可见、需处理、来源和父子关系。
 - Plugin 本地包：Desktop `插件` 页面只管理已落地的本地 Plugin 包，支持文件夹和 zip 导入；包根目录 `plugin.json` 会规范化为内部 `.claude-plugin/plugin.json`。
 - 管理作用域：Plugin 导入、启停和诊断默认使用用户全局作用域；MCP 受控安装、启停和卸载也默认写入用户全局配置，项目 `.mcp.json` 只作为共享声明和运行时发现来源。
+- 父子可见性：Plugin 禁用后，它贡献的 Skill、MCP 和子工具会 fail closed；Skill / MCP / 能力目录只展示隐藏原因，不继续当成可运行能力。
 - Skill / MCP 体验：列表侧保留启停切换，详情操作统一为图标按钮，高风险 Skill 安装需要用户明确确认，禁用状态不再误写成“安装被禁用”。
 - 展示收口：工具进度、截图 / 图片读取、上下文压缩恢复附件和调用明细继续按专门规则展示，避免重复附件卡、孤立错误卡和无限增长的详情区。
 
@@ -395,6 +396,8 @@ plugin.json
 ```
 
 推荐面向用户分发时使用包根目录 `plugin.json`；导入事务会规范化到内部 `.claude-plugin/plugin.json`，继续复用同一份 manifest schema、安装记录、版本缓存和运行时加载器。Desktop 导入默认写入用户全局作用域，启停开关放在左侧 Plugin 列表卡，详情页只保留修复、卸载、诊断等图标操作。
+
+Plugin 贡献的子能力会进入各自管理页和能力目录，但仍受父 Plugin 状态约束。父 Plugin 禁用时，Plugin Skill 在 Skill 页显示为“隐藏：插件已禁用”，Plugin MCP 在 MCP 页显示为“隐藏：插件已禁用”；这些子能力不会继续注入运行时或暴露给模型。
 
 ## Desktop 能力
 

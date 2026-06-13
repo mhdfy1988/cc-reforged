@@ -23,11 +23,14 @@ type PluginComponentKind =
   | 'lsp'
   | 'channel'
   | 'output-style'
-type PluginComponentSummary = {
+type PluginComponentDetail = {
+  id: string
   kind: PluginComponentKind
-  label: string
-  count: number
-  detail: string
+  kindLabel: string
+  name: string
+  summary: string
+  source?: string
+  raw: string
 }
 type PluginDetailTab =
   | 'overview'
@@ -161,13 +164,17 @@ export function PluginsPage() {
         .getOperation(operation.operationId)
         .then(nextOperation => {
           if (!cancelled && nextOperation) {
-            setOperation(nextOperation)
             if (
               nextOperation.status === 'succeeded' ||
               nextOperation.status === 'failed' ||
               nextOperation.status === 'cancelled'
             ) {
+              const feedback = getTerminalOperationFeedback(nextOperation)
+              if (feedback) setError(feedback)
+              setOperation(null)
               void refreshCatalog({ preserveError: true })
+            } else {
+              setOperation(nextOperation)
             }
           }
         })
@@ -245,20 +252,16 @@ export function PluginsPage() {
           : {}),
       })
       setPlan(null)
-      setOperation(nextOperation)
+      if (isTerminalOperation(nextOperation)) {
+        const feedback = getTerminalOperationFeedback(nextOperation)
+        if (feedback) setError(feedback)
+        setOperation(null)
+        void refreshCatalog({ preserveError: true })
+      } else {
+        setOperation(nextOperation)
+      }
     } catch (applyError) {
       setError(toErrorMessage(applyError))
-    }
-  }
-
-  async function cancelOperation() {
-    if (!operation) return
-    try {
-      setOperation(
-        await pluginManagementClient.cancelOperation(operation.operationId),
-      )
-    } catch (cancelError) {
-      setError(toErrorMessage(cancelError))
     }
   }
 
@@ -410,30 +413,19 @@ export function PluginsPage() {
                   </button>
                 ))}
               </nav>
-              {detailLoading && !detail ? (
-                <div className="models-empty compact">正在读取详情。</div>
-              ) : detail ? (
-                <PluginDetailContent
-                  activeTab={activeTab}
-                  detail={detail}
-                  onAction={requestAction}
-                />
-              ) : (
-                <div className="models-empty compact">Plugin 详情不可用。</div>
-              )}
-              {plan ? (
-                <PluginPlanPanel
-                  plan={plan}
-                  onCancel={() => setPlan(null)}
-                  onConfirm={() => void applyPlan(plan)}
-                />
-              ) : null}
-              {operation ? (
-                <PluginOperationPanel
-                  operation={operation}
-                  onCancel={() => void cancelOperation()}
-                />
-              ) : null}
+              <div className="plugin-detail-scroll">
+                {detailLoading && !detail ? (
+                  <div className="models-empty compact">正在读取详情。</div>
+                ) : detail ? (
+                  <PluginDetailContent
+                    activeTab={activeTab}
+                    detail={detail}
+                    onAction={requestAction}
+                  />
+                ) : (
+                  <div className="models-empty compact">Plugin 详情不可用。</div>
+                )}
+              </div>
             </>
           ) : (
             <div className="plugin-empty-state">
@@ -456,6 +448,13 @@ export function PluginsPage() {
           }}
           onSourceTypeChange={setSourceType}
           onValueChange={setSourceValue}
+        />
+      ) : null}
+      {plan ? (
+        <PluginPlanDialog
+          plan={plan}
+          onCancel={() => setPlan(null)}
+          onConfirm={() => void applyPlan(plan)}
         />
       ) : null}
     </section>
@@ -602,7 +601,7 @@ function PluginDetailHeader(props: {
     isPluginOperationBusy(props.operation)
 
   return (
-    <>
+    <div className="plugin-detail-fixed-head">
       <nav className="plugin-breadcrumb" aria-label="插件位置">
         <span>插件</span>
         <i />
@@ -647,7 +646,7 @@ function PluginDetailHeader(props: {
           ) : null}
         </div>
       </header>
-    </>
+    </div>
   )
 }
 
@@ -711,32 +710,36 @@ function PluginOverview(props: { detail: PluginDetailState }) {
         </div>
       ) : null}
       <section className="plugin-detail-section">
-        <div className="plugin-directory-head">
+        <div className="plugin-section-head">
           <h3>安装实例</h3>
           <span>{plugin.installations.length}</span>
         </div>
-        <div className="plugin-record-list">
-          {plugin.installations.map(installation => (
-            <div className="plugin-record-row" key={installation.key}>
-              <span>
-                <strong>
-                  {formatScope(installation.target.scope)} ·{' '}
-                  {installation.installedVersion ?? '版本未知'}
-                </strong>
-                <em>{installation.packagePath}</em>
-              </span>
-              <small
-                className={
-                  installation.materialization === 'present'
-                    ? 'success'
-                    : 'warning'
-                }
-              >
-                {formatMaterialization(installation.materialization)}
-              </small>
-            </div>
-          ))}
-        </div>
+        {plugin.installations.length ? (
+          <div className="plugin-installation-list">
+            {plugin.installations.map(installation => (
+              <div className="plugin-installation-card" key={installation.key}>
+                <span className="plugin-installation-main">
+                  <strong>
+                    {formatScope(installation.target.scope)} ·{' '}
+                    {installation.installedVersion ?? '版本未知'}
+                  </strong>
+                  <em>{installation.packagePath}</em>
+                </span>
+                <small
+                  className={
+                    installation.materialization === 'present'
+                      ? 'success'
+                      : 'warning'
+                  }
+                >
+                  {formatMaterialization(installation.materialization)}
+                </small>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="models-empty compact">没有安装实例。</div>
+        )}
       </section>
     </div>
   )
@@ -755,16 +758,40 @@ function PluginCapabilities({ detail }: { detail: PluginDetailState }) {
         {components.length ? (
           <div className="plugin-component-list">
             {components.map(component => (
-              <div className="plugin-component-row" key={component.kind}>
-                <span className="plugin-component-avatar">
-                  <ComponentGlyph kind={component.kind} />
-                </span>
-                <span className="plugin-component-body">
-                  <strong>{component.label}</strong>
-                  <em>{component.detail}</em>
-                </span>
-                <small>{component.count} 项</small>
-              </div>
+              <details className="plugin-component-row" key={component.id}>
+                <summary>
+                  <span className="plugin-component-avatar">
+                    <ComponentGlyph kind={component.kind} />
+                  </span>
+                  <span className="plugin-component-body">
+                    <strong>{component.name}</strong>
+                    <em>
+                      {component.kindLabel}
+                      {component.summary ? ` · ${component.summary}` : ''}
+                    </em>
+                  </span>
+                  <small>{component.kindLabel}</small>
+                </summary>
+                <div className="plugin-component-detail">
+                  <dl>
+                    <div>
+                      <dt>类型</dt>
+                      <dd>{component.kindLabel}</dd>
+                    </div>
+                    <div>
+                      <dt>名称</dt>
+                      <dd>{component.name}</dd>
+                    </div>
+                    {component.source ? (
+                      <div>
+                        <dt>入口</dt>
+                        <dd>{component.source}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                  <pre className="plugin-code-block">{component.raw}</pre>
+                </div>
+              </details>
             ))}
           </div>
         ) : (
@@ -804,57 +831,76 @@ function PluginCapabilities({ detail }: { detail: PluginDetailState }) {
 }
 
 function PluginRuntime({ detail }: { detail: PluginDetailState }) {
-  const activations = detail.record.runtimeActivations
+  const runtimeActive = detail.record.effectiveSelection?.active === true
+  const activations = runtimeActive ? detail.record.runtimeActivations : []
+  const activeVersion = getActiveVersion(detail.record) ?? '未激活'
+  const pendingActivation = detail.record.effectiveSelection?.pendingActivation
+  const manifestComponents = listManifestComponents(
+    getSelectedManifest(detail.record),
+  )
   return (
-    <div className="plugin-tab-content">
-      <div className="plugin-fact-grid">
-        <PluginFact
-          label="运行时实例"
-          value={detail.runtime.activations[0]?.runtimeInstanceId ?? '当前实例'}
-        />
-        <PluginFact
-          label="运行状态"
-          value={formatPluginStatus(detail.record.derivedState.status)}
-        />
-        <PluginFact
-          label="运行版本"
-          value={getActiveVersion(detail.record) ?? '未激活'}
-        />
-        <PluginFact
-          label="待刷新"
-          value={detail.record.effectiveSelection?.pendingActivation ? '是' : '否'}
-        />
-      </div>
+    <div className="plugin-tab-content plugin-runtime-content">
       {activations.length ? (
         activations.map(activation => (
           <section
-            className="plugin-detail-section"
+            className="plugin-runtime-card"
             key={`${activation.runtimeInstanceId}:${activation.activationRevision}`}
           >
-            <div className="plugin-directory-head">
-              <h3>{activation.runtimeInstanceId}</h3>
-              <span>{activation.state}</span>
+            <div className="plugin-runtime-card-head">
+              <span className="plugin-runtime-title">
+                <strong>{activation.runtimeInstanceId}</strong>
+                <em>
+                  运行时实例 · {activeVersion} · {activation.components.length} 项组件
+                </em>
+              </span>
+              <span className="plugin-runtime-status-group">
+                <small
+                  className={
+                    activation.state === 'active' ? 'success' : 'warning'
+                  }
+                >
+                  {formatRuntimeActivationState(activation.state)}
+                </small>
+                {pendingActivation ? (
+                  <small className="warning">待刷新</small>
+                ) : null}
+              </span>
             </div>
-            <div className="plugin-record-list">
+            <div className="plugin-runtime-component-list">
               {activation.components.length ? (
-                activation.components.map(component => (
-                  <div
-                    className="plugin-record-row"
-                    key={`${activation.activationRevision}:${component.component}`}
-                  >
-                    <span>
-                      <strong>{formatComponentName(component.component)}</strong>
-                      <em>{component.diagnostic ?? '组件状态已记录'}</em>
-                    </span>
-                    <small
-                      className={
-                        component.state === 'active' ? 'success' : 'warning'
-                      }
+                activation.components.map(component => {
+                  const componentKind = runtimeComponentKind(component.component)
+                  const details = manifestComponents.filter(
+                    item => item.kind === componentKind,
+                  )
+                  const componentTitle = formatRuntimeComponentTitle(
+                    component.component,
+                    details,
+                  )
+                  const componentSummary =
+                    component.diagnostic ?? formatRuntimeComponentSummary(details)
+                  return (
+                    <div
+                      className="plugin-runtime-component-row"
+                      key={`${activation.activationRevision}:${component.component}`}
                     >
-                      {formatComponentState(component.state)}
-                    </small>
-                  </div>
-                ))
+                      <span className="plugin-component-avatar">
+                        <ComponentGlyph kind={componentKind} />
+                      </span>
+                      <span className="plugin-runtime-component-body">
+                        <strong>{componentTitle}</strong>
+                        {componentSummary ? <em>{componentSummary}</em> : null}
+                      </span>
+                      <small
+                        className={
+                          component.state === 'active' ? 'success' : 'warning'
+                        }
+                      >
+                        {formatComponentState(component.state)}
+                      </small>
+                    </div>
+                  )
+                })
               ) : (
                 <div className="models-empty compact">没有组件级运行快照。</div>
               )}
@@ -862,7 +908,11 @@ function PluginRuntime({ detail }: { detail: PluginDetailState }) {
           </section>
         ))
       ) : (
-        <div className="models-empty compact">当前 runtime 尚未激活此 Plugin。</div>
+        <div className="models-empty compact">
+          {detail.record.effectiveSelection?.enabled
+            ? '当前运行时尚未激活此 Plugin。'
+            : 'Plugin 已停用，子组件不会进入运行时。'}
+        </div>
       )}
     </div>
   )
@@ -878,8 +928,8 @@ function PluginConfiguration({ detail }: { detail: PluginDetailState }) {
     )
   }
   return (
-    <div className="plugin-tab-content">
-      <div className="plugin-fact-grid">
+    <div className="plugin-tab-content plugin-configuration-content">
+      <div className="plugin-fact-grid plugin-configuration-grid">
         <PluginFact
           label="配置作用域"
           value={formatScope(configuration.identity.scope)}
@@ -898,22 +948,26 @@ function PluginConfiguration({ detail }: { detail: PluginDetailState }) {
         />
       </div>
       <section className="plugin-detail-section">
-        <div className="plugin-directory-head">
+        <div className="plugin-section-head">
           <h3>有效配置</h3>
           <span>{Object.keys(configuration.effectiveOptions).length} 项</span>
         </div>
-        <pre className="plugin-code-block">
-          {JSON.stringify(configuration.effectiveOptions, null, 2)}
-        </pre>
+        {Object.keys(configuration.effectiveOptions).length ? (
+          <pre className="plugin-code-block">
+            {JSON.stringify(configuration.effectiveOptions, null, 2)}
+          </pre>
+        ) : (
+          <div className="models-empty compact">没有有效配置。</div>
+        )}
       </section>
       <section className="plugin-detail-section">
-        <div className="plugin-directory-head">
+        <div className="plugin-section-head">
           <h3>配置来源</h3>
           <span>{configuration.layers.length}</span>
         </div>
-        <div className="plugin-record-list">
+        <div className="plugin-config-layer-list">
           {configuration.layers.map(layer => (
-            <div className="plugin-record-row" key={layer.path}>
+            <div className="plugin-config-layer-row" key={layer.path}>
               <span>
                 <strong>{formatScope(layer.scope)}</strong>
                 <em>{layer.path}</em>
@@ -1095,6 +1149,29 @@ function PluginDiagnostics({ detail }: { detail: PluginDetailState }) {
   )
 }
 
+function PluginPlanDialog(props: {
+  plan: PluginActionPlanState
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="plugin-modal-backdrop" role="presentation">
+      <div
+        aria-label="Plugin 操作确认"
+        aria-modal="true"
+        className="plugin-action-dialog"
+        role="dialog"
+      >
+        <PluginPlanPanel
+          plan={props.plan}
+          onCancel={props.onCancel}
+          onConfirm={props.onConfirm}
+        />
+      </div>
+    </div>
+  )
+}
+
 function PluginPlanPanel(props: {
   plan: PluginActionPlanState
   onConfirm: () => void
@@ -1204,52 +1281,6 @@ function PluginPlanPanel(props: {
           </button>
         ) : null}
       </div>
-    </section>
-  )
-}
-
-function PluginOperationPanel(props: {
-  operation: PluginOperationState
-  onCancel: () => void
-}) {
-  const operation = props.operation
-  const terminal =
-    operation.status === 'succeeded' ||
-    operation.status === 'failed' ||
-    operation.status === 'cancelled'
-  return (
-    <section
-      className={`plugin-operation-card ${
-        operation.status === 'failed' ? 'danger' : ''
-      }`}
-    >
-      <div className="plugin-operation-head">
-        <span>
-          <strong>{formatAction(operation.action)}</strong>
-          <em>{operation.operationId}</em>
-        </span>
-        <small>{formatOperationStatus(operation.status)}</small>
-      </div>
-      <div className="plugin-operation-progress">
-        <span>{operation.phase}</span>
-        <i className={terminal ? 'complete' : ''} />
-      </div>
-      {operation.error ? (
-        <div className="plugin-callout danger">
-          {operation.error.code} · {operation.error.message}
-        </div>
-      ) : null}
-      {!terminal && !operation.commitBoundaryReached ? (
-        <div className="plugin-operation-actions">
-          <button
-            className="ghost-action danger"
-            type="button"
-            onClick={props.onCancel}
-          >
-            取消操作
-          </button>
-        </div>
-      ) : null}
     </section>
   )
 }
@@ -1390,6 +1421,7 @@ function getInstalledVersion(plugin: PluginManagementItem): string | undefined {
 }
 
 function getActiveVersion(plugin: PluginManagementItem): string | undefined {
+  if (plugin.effectiveSelection?.active !== true) return undefined
   return plugin.runtimeActivations.find(
     activation =>
       activation.state === 'active' || activation.state === 'partial',
@@ -1454,68 +1486,80 @@ function getSelectedManifest(plugin: PluginManagementItem) {
 
 function listManifestComponents(
   manifest: ReturnType<typeof getSelectedManifest>,
-): PluginComponentSummary[] {
+): PluginComponentDetail[] {
   if (!manifest) return []
   return [
-    componentSummary('command', 'Command', manifest.commands),
-    componentSummary('agent', 'Agent', manifest.agents),
-    componentSummary('skill', 'Skill', manifest.skills),
-    componentSummary('hook', 'Hook', manifest.hooks),
-    componentSummary('mcp', 'MCP Server', manifest.mcpServers),
-    componentSummary('lsp', 'LSP Server', manifest.lspServers),
-    componentSummary('channel', 'Channel', manifest.channels),
-    componentSummary('output-style', '输出样式', manifest.outputStyles),
-  ].filter(
-    (
-      item,
-    ): item is PluginComponentSummary => Boolean(item),
-  )
+    ...componentDetails('command', 'Command', manifest.commands),
+    ...componentDetails('agent', 'Agent', manifest.agents),
+    ...componentDetails('skill', 'Skill', manifest.skills),
+    ...componentDetails('hook', 'Hook', manifest.hooks),
+    ...componentDetails('mcp', 'MCP Server', manifest.mcpServers),
+    ...componentDetails('lsp', 'LSP Server', manifest.lspServers),
+    ...componentDetails('channel', 'Channel', manifest.channels),
+    ...componentDetails('output-style', '输出样式', manifest.outputStyles),
+  ]
 }
 
-function componentSummary(
+function componentDetails(
   kind: PluginComponentKind,
-  label: string,
+  kindLabel: string,
   value: unknown,
-): PluginComponentSummary | null {
-  const summary = summarizeComponentValue(value)
-  if (!summary || summary.count <= 0) return null
-  return {
-    kind,
-    label,
-    count: summary.count,
-    detail: summary.preview ?? 'manifest 已声明',
+): PluginComponentDetail[] {
+  if (value === undefined || value === null) return []
+  if (typeof value === 'string') {
+    return [createComponentDetail(kind, kindLabel, value, value, 0)]
   }
-}
-
-function summarizeComponentValue(
-  value: unknown,
-): { count: number; preview?: string } | null {
-  if (value === undefined || value === null) return null
-  if (typeof value === 'string') return { count: 1, preview: value }
   if (Array.isArray(value)) {
-    return {
-      count: value.length,
-      preview: formatComponentPreview(
-        value.map((item, index) => getComponentDisplayName(item) ?? `${index + 1}`),
-      ),
-    }
+    return value.map((item, index) =>
+      createComponentDetail(kind, kindLabel, item, undefined, index),
+    )
   }
   if (typeof value === 'object') {
-    const entries = Object.entries(value)
-    return {
-      count: entries.length,
-      preview: formatComponentPreview(
-        entries.map(([key, item]) => getComponentDisplayName(item) ?? key),
-      ),
-    }
+    return Object.entries(value).map(([key, item], index) =>
+      createComponentDetail(kind, kindLabel, item, key, index),
+    )
   }
-  return { count: 1, preview: String(value) }
+  return [createComponentDetail(kind, kindLabel, value, undefined, 0)]
 }
 
-function getComponentDisplayName(value: unknown): string | undefined {
+function createComponentDetail(
+  kind: PluginComponentKind,
+  kindLabel: string,
+  value: unknown,
+  source: string | undefined,
+  index: number,
+): PluginComponentDetail {
+  const explicitName =
+    typeof value === 'string' ? undefined : getComponentExplicitName(value)
+  const fallbackSource =
+    source ?? (typeof value === 'string' ? value : undefined)
+  const sourceName = deriveComponentName(fallbackSource)
+  const derivedName =
+    typeof value === 'string' ? undefined : getComponentDisplayName(value)
+  const preferSourceName =
+    kind === 'mcp' || kind === 'lsp' ? sourceName : undefined
+  const name =
+    explicitName ??
+    preferSourceName ??
+    derivedName ??
+    sourceName ??
+    `${kindLabel} ${index + 1}`
+  const summary = fallbackSource ?? getComponentSummary(value) ?? 'manifest 已声明'
+  return {
+    id: `${kind}:${source ?? name}:${index}`,
+    kind,
+    kindLabel,
+    name,
+    summary,
+    source: fallbackSource,
+    raw: formatComponentRaw(value),
+  }
+}
+
+function getComponentSummary(value: unknown): string | undefined {
   if (typeof value === 'string') return value
   if (!value || typeof value !== 'object') return undefined
-  for (const key of ['name', 'id', 'title', 'command', 'path']) {
+  for (const key of ['description', 'path', 'command', 'entry', 'source']) {
     if (key in value) {
       const nextValue = (value as Record<string, unknown>)[key]
       if (typeof nextValue === 'string' && nextValue.trim()) {
@@ -1526,13 +1570,58 @@ function getComponentDisplayName(value: unknown): string | undefined {
   return undefined
 }
 
-function formatComponentPreview(items: Array<string | undefined>): string | undefined {
-  const names = items
-    .map(item => item?.trim())
-    .filter((item): item is string => Boolean(item))
-  if (!names.length) return undefined
-  const preview = names.slice(0, 3).join('、')
-  return names.length > 3 ? `${preview} 等` : preview
+function deriveComponentName(value: string | undefined): string | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed) return undefined
+  const normalized = trimmed.replace(/\\/g, '/').replace(/\/+$/, '')
+  const lastSegment = normalized.split('/').filter(Boolean).pop()
+  if (lastSegment) {
+    return lastSegment.replace(/\.(md|json|js|mjs|ts|tsx)$/i, '')
+  }
+  return trimmed
+}
+
+function formatComponentRaw(value: unknown): string {
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2) ?? ''
+  } catch {
+    return String(value)
+  }
+}
+
+function getComponentExplicitName(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  for (const key of ['name', 'id', 'title']) {
+    if (key in value) {
+      const nextValue = (value as Record<string, unknown>)[key]
+      if (typeof nextValue === 'string' && nextValue.trim()) {
+        return nextValue.trim()
+      }
+    }
+  }
+  return undefined
+}
+
+function getComponentDisplayName(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const explicitName = getComponentExplicitName(value)
+  if (explicitName) return explicitName
+  for (const key of ['path', 'source', 'entry']) {
+    if (key in value) {
+      const nextValue = (value as Record<string, unknown>)[key]
+      if (typeof nextValue === 'string' && nextValue.trim()) {
+        return deriveComponentName(nextValue.trim())
+      }
+    }
+  }
+  if ('command' in value) {
+    const command = (value as Record<string, unknown>).command
+    if (typeof command === 'string' && command.trim()) {
+      return command.trim()
+    }
+  }
+  return undefined
 }
 
 function formatPluginStatus(
@@ -1616,15 +1705,26 @@ function formatPlanEffect(kind: string, fallback: string): string {
   return labels[kind] ?? fallback
 }
 
-function formatOperationStatus(status: PluginOperationState['status']): string {
-  const labels: Record<PluginOperationState['status'], string> = {
-    pending: '排队中',
-    running: '执行中',
-    succeeded: '已完成',
-    failed: '失败',
-    cancelled: '已取消',
+function isTerminalOperation(operation: PluginOperationState): boolean {
+  return (
+    operation.status === 'succeeded' ||
+    operation.status === 'failed' ||
+    operation.status === 'cancelled'
+  )
+}
+
+function getTerminalOperationFeedback(
+  operation: PluginOperationState,
+): string | null {
+  if (operation.status === 'failed') {
+    return `${formatAction(operation.action)}失败：${
+      operation.error?.message ?? operation.phase
+    }`
   }
-  return labels[status]
+  if (operation.status === 'cancelled') {
+    return `${formatAction(operation.action)}已取消。`
+  }
+  return null
 }
 
 function formatSourceKind(value: string): string {
@@ -1673,12 +1773,62 @@ function formatComponentName(value: string): string {
   return labels[value] ?? value
 }
 
+function formatRuntimeComponentTitle(
+  component: string,
+  details: PluginComponentDetail[],
+): string {
+  if (details.length === 1) {
+    return details[0].name
+  }
+  return formatComponentName(component)
+}
+
+function formatRuntimeComponentSummary(
+  details: PluginComponentDetail[],
+): string | undefined {
+  if (details.length === 0) return undefined
+  if (details.length === 1) {
+    const detail = details[0]
+    return detail.summary && detail.summary !== detail.name
+      ? `${detail.kindLabel} · ${detail.summary}`
+      : detail.kindLabel
+  }
+  return `${details[0].kindLabel} · ${details.length} 项`
+}
+
+function runtimeComponentKind(value: string): PluginComponentKind {
+  const kinds: PluginComponentKind[] = [
+    'command',
+    'agent',
+    'skill',
+    'hook',
+    'mcp',
+    'lsp',
+    'channel',
+    'output-style',
+  ]
+  return kinds.includes(value as PluginComponentKind)
+    ? (value as PluginComponentKind)
+    : 'command'
+}
+
 function formatComponentState(value: string): string {
   const labels: Record<string, string> = {
     inactive: '未激活',
     active: '已激活',
     failed: '失败',
     'restart-required': '需重启',
+  }
+  return labels[value] ?? value
+}
+
+function formatRuntimeActivationState(value: string): string {
+  const labels: Record<string, string> = {
+    inactive: '未激活',
+    activating: '激活中',
+    active: '运行中',
+    partial: '部分运行',
+    failed: '失败',
   }
   return labels[value] ?? value
 }

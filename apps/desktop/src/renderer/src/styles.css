@@ -3456,9 +3456,9 @@ h1 {
 
 .plugin-detail-panel {
   display: grid;
-  align-content: start;
-  gap: 18px;
-  overflow: auto;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
   padding: 18px;
 }
 
@@ -3711,6 +3711,31 @@ h1 {
   min-width: 0;
 }
 
+.plugin-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plugin-section-head h3 {
+  margin: 0;
+  color: #21170d;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.plugin-section-head span {
+  border-radius: 999px;
+  color: #79510f;
+  background: rgba(245, 232, 210, 0.86);
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 .plugin-empty-state {
   display: grid;
   align-content: center;
@@ -3740,6 +3765,12 @@ h1 {
 
 .plugin-management-detail {
   gap: 14px;
+}
+
+.plugin-detail-fixed-head {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
 }
 
 .plugin-management-heading {
@@ -3792,7 +3823,24 @@ h1 {
   gap: 2px;
   min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   border-bottom: 1px solid rgba(216, 190, 162, 0.56);
+  scrollbar-width: none;
+}
+
+.plugin-detail-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.plugin-detail-scroll {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 12px;
+  scrollbar-gutter: stable;
 }
 
 .plugin-detail-tabs button {
@@ -3833,10 +3881,229 @@ h1 {
   min-width: 0;
 }
 
+.plugin-runtime-content,
+.plugin-configuration-content {
+  gap: 18px;
+}
+
 .plugin-fact-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.plugin-runtime-grid,
+.plugin-configuration-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.plugin-runtime-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(230, 210, 183, 0.58);
+  border-radius: 8px;
+  background: rgba(255, 253, 249, 0.9);
+  padding: 12px;
+}
+
+.plugin-runtime-card-head {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  min-width: 0;
+  border-radius: 8px;
+  background: rgba(255, 248, 234, 0.42);
+  padding: 10px 12px;
+}
+
+.plugin-runtime-title,
+.plugin-runtime-component-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.plugin-runtime-title strong,
+.plugin-runtime-component-body strong {
+  overflow: hidden;
+  color: #2c2015;
+  font-size: 13px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-runtime-title em,
+.plugin-runtime-component-body em {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-runtime-status-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.plugin-runtime-status-group > small,
+.plugin-runtime-component-row > small {
+  border-radius: 999px;
+  color: #6b5845;
+  background: rgba(242, 232, 216, 0.72);
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.plugin-runtime-status-group > small.success,
+.plugin-runtime-component-row > small.success {
+  color: #08715b;
+  background: rgba(218, 248, 238, 0.86);
+}
+
+.plugin-runtime-status-group > small.warning,
+.plugin-runtime-component-row > small.warning {
+  color: #87570b;
+  background: #fff2db;
+}
+
+.plugin-runtime-component-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plugin-runtime-component-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(230, 210, 183, 0.5);
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.76);
+  padding: 10px;
+}
+
+.plugin-config-layer-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plugin-config-layer-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid rgba(230, 210, 183, 0.5);
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.76);
+  padding: 10px;
+}
+
+.plugin-config-layer-row > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.plugin-config-layer-row strong {
+  color: #2c2015;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.plugin-config-layer-row em {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.plugin-config-layer-row small {
+  border-radius: 999px;
+  color: #79510f;
+  background: rgba(245, 232, 210, 0.86);
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.plugin-installation-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.plugin-installation-card {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(230, 210, 183, 0.56);
+  border-radius: 8px;
+  background: rgba(255, 252, 247, 0.82);
+  padding: 12px;
+}
+
+.plugin-installation-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.plugin-installation-main strong {
+  overflow: hidden;
+  color: #21170d;
+  font-size: 12px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-installation-main em {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.plugin-installation-card small {
+  align-self: center;
+  border-radius: 999px;
+  color: #6b5845;
+  background: rgba(242, 232, 216, 0.72);
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.plugin-installation-card small.success {
+  color: #08715b;
+  background: rgba(218, 248, 238, 0.86);
+}
+
+.plugin-installation-card small.warning {
+  color: #87570b;
+  background: #fff2db;
 }
 
 .plugin-fact {
@@ -3965,15 +4232,30 @@ h1 {
 }
 
 .plugin-component-row {
-  display: grid;
-  align-items: center;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
+  display: block;
   min-width: 0;
   border: 1px solid rgba(230, 210, 183, 0.56);
   border-radius: 8px;
   background: rgba(255, 252, 247, 0.82);
   padding: 10px;
+}
+
+.plugin-component-row > summary {
+  display: grid;
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.plugin-component-row > summary::-webkit-details-marker {
+  display: none;
+}
+
+.plugin-component-row[open] {
+  background: rgba(255, 250, 242, 0.94);
 }
 
 .plugin-component-avatar {
@@ -4026,6 +4308,44 @@ h1 {
   font-size: 10px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.plugin-component-detail {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(230, 210, 183, 0.54);
+  padding-top: 10px;
+}
+
+.plugin-component-detail dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.plugin-component-detail dl > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border-radius: 8px;
+  background: rgba(255, 248, 234, 0.72);
+  padding: 8px 10px;
+}
+
+.plugin-component-detail dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.plugin-component-detail dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #2c2015;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .plugin-install-options {
@@ -4194,6 +4514,12 @@ h1 {
   color: var(--muted);
   font-size: 11px;
   font-weight: 850;
+}
+
+.plugin-action-dialog {
+  width: min(820px, 92vw);
+  max-height: min(760px, 88vh);
+  overflow: auto;
 }
 
 .plugin-source-form {
@@ -6181,6 +6507,14 @@ h1 {
   }
 
   .plugin-fact-grid.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .plugin-runtime-card-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .plugin-component-detail dl {
     grid-template-columns: 1fr;
   }
 

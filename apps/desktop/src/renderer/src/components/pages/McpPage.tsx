@@ -243,6 +243,14 @@ export function McpPage(props: {
                             server.inventory?.installKind ??
                             'manual'}
                         </small>
+                        <small
+                          className={getMcpCapabilityVisibilityTone(
+                            capability,
+                            server,
+                          )}
+                        >
+                          {formatMcpCapabilityVisibility(capability, server)}
+                        </small>
                       </div>
                       {canToggle ? (
                         <label
@@ -460,6 +468,14 @@ function McpServerDetail(props: {
             <h3>{server.name}</h3>
             <span>{formatServerSubtitle(server)}</span>
             <div className="mcp-tags detail-status-tags">
+              <small
+                className={getMcpCapabilityVisibilityTone(
+                  props.capability,
+                  server,
+                )}
+              >
+                {formatMcpCapabilityVisibility(props.capability, server)}
+              </small>
               <small className={getMcpTestTone(props.test)}>
                 检测：{formatMcpTestStatusLabel(props.test)}
               </small>
@@ -526,7 +542,7 @@ function McpServerDetail(props: {
             <div className="models-section-head">
               <div>
                 <h3>概览</h3>
-                <span>{getServerStatusLabel(server)}</span>
+                <span>{getMcpServerOverviewStatus(server, props.capability)}</span>
               </div>
             </div>
             <dl className="models-facts">
@@ -534,6 +550,7 @@ function McpServerDetail(props: {
               <McpFactItem label="transport" value={server.transport ?? server.type ?? 'stdio'} />
               <McpFactItem label="来源" value={server.source ?? server.inventory?.sourceId ?? 'config'} />
               <McpFactItem label="安装类型" value={server.installKind ?? server.inventory?.installKind ?? 'manual-config'} />
+              <McpFactItem label="可用性" value={formatMcpCapabilityVisibility(props.capability, server)} />
               <McpFactItem label="安装状态" value={formatInstallRecordStatus(server.installed)} />
               <McpFactItem label="检测状态" value={formatMcpTestStatusLabel(props.test)} />
               <McpFactItem label="配置文件" value={server.inventory?.configPath ?? server.installed?.configPath ?? '无'} />
@@ -650,8 +667,109 @@ function formatCapabilityHiddenReason(
   capability: CapabilityManagementItem,
 ): string {
   return capability.hiddenReasons.length > 0
-    ? capability.hiddenReasons.join('、')
+    ? capability.hiddenReasons.map(formatMcpHiddenReason).join('、')
     : capability.state.status
+}
+
+function formatMcpCapabilityVisibility(
+  capability: CapabilityManagementItem | null,
+  server: McpServerView,
+): string {
+  if (capability?.hiddenReasons.length) {
+    return `隐藏：${capability.hiddenReasons.map(formatMcpHiddenReason).join('、')}`
+  }
+  if (capability && !capability.state.available) {
+    return formatMcpCapabilityStatus(capability.state.status)
+  }
+  if (server.enabled === false) {
+    return '已禁用'
+  }
+  if (server.inventory?.suppressed) {
+    return '被覆盖'
+  }
+  if (server.inventory?.active === false) {
+    return '未激活'
+  }
+  return '可用'
+}
+
+function getMcpCapabilityVisibilityTone(
+  capability: CapabilityManagementItem | null,
+  server: McpServerView,
+): string {
+  if (
+    capability?.diagnostics.some(diagnostic => diagnostic.severity === 'error')
+  ) {
+    return 'danger'
+  }
+  if (capability?.hiddenReasons.length) {
+    return 'warning'
+  }
+  if (capability && !capability.state.available) {
+    return capability.state.status === 'failed' ? 'danger' : 'warning'
+  }
+  return getServerTone(server)
+}
+
+function getMcpServerOverviewStatus(
+  server: McpServerView,
+  capability: CapabilityManagementItem | null,
+): string {
+  if (capability?.hiddenReasons.length || capability?.state.available === false) {
+    return formatMcpCapabilityVisibility(capability, server)
+  }
+  return getServerStatusLabel(server)
+}
+
+function formatMcpCapabilityStatus(status?: string): string {
+  switch (status) {
+    case 'available':
+    case 'enabled':
+      return '可用'
+    case 'disabled':
+      return '已禁用'
+    case 'unavailable':
+      return '不可用'
+    case 'needs-auth':
+      return '需要认证'
+    case 'failed':
+      return '失败'
+    case 'missing':
+      return '缺失'
+    case 'drifted':
+      return '已漂移'
+    case 'invalid':
+      return '无效'
+    case 'hidden-by-conflict':
+      return '被覆盖'
+    default:
+      return status ?? '未知'
+  }
+}
+
+function formatMcpHiddenReason(reason: string): string {
+  switch (reason) {
+    case 'disabled':
+      return '已禁用'
+    case 'plugin-disabled':
+      return '插件已禁用'
+    case 'plugin-missing':
+      return '插件缺失'
+    case 'mcp-server-unavailable':
+      return 'MCP 不可用'
+    case 'source-unavailable':
+      return '来源不可用'
+    case 'conflict-loser':
+      return '被同名能力覆盖'
+    case 'missing-package':
+      return '缺少目录'
+    case 'invalid':
+      return '无效'
+    case 'failed':
+      return '失败'
+    default:
+      return reason
+  }
 }
 
 function McpCreateManifestDialog(props: {

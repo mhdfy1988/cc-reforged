@@ -150,9 +150,14 @@ function createManagementRecord(input) {
     const applicableInstallations = input.installations.filter(installation => installation.applicableToRequest);
     const intent = resolveIntentFromFacts(input.intents);
     const selectedInstallation = selectInstallation(applicableInstallations);
-    const active = input.runtimeActivations.some(activation => activation.runtimeInstanceId ===
+    const runtimeActive = input.runtimeActivations.some(activation => activation.runtimeInstanceId ===
         input.session.context.runtimeInstanceId &&
         (activation.state === 'active' || activation.state === 'partial'));
+    const active = runtimeActive &&
+        shouldHonorRuntimeActivation({
+            candidates: input.candidates,
+            intent,
+        });
     const effectiveSelection = {
         ...(selectedInstallation
             ? {
@@ -196,6 +201,13 @@ function createManagementRecord(input) {
         derivedState: deriveManagementState(input.candidates, applicableInstallations, effectiveSelection, diagnostics, input.runtimeActivations, input.session.context.runtimeInstanceId),
         diagnostics,
     };
+}
+function shouldHonorRuntimeActivation(input) {
+    if (input.intent === 'disabled' || input.intent === 'blocked')
+        return false;
+    if (input.intent === 'enabled')
+        return true;
+    return input.candidates.some(candidate => candidate.sourceKind === 'builtin' || candidate.sourceKind === 'inline');
 }
 function createAppRelations(pluginId, manifest) {
     return (manifest?.ccr?.apps ?? []).map(app => ({

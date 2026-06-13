@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { clearAllCaches } from '../../utils/plugins/cacheUtils.js';
 import { PluginInspector } from './pluginInspector.js';
 import { PluginPersistentOperationStore } from './pluginPersistence.js';
 import { analyzePluginDependencies, createRollbackPackagePlan, } from './pluginVersionLifecycle.js';
@@ -260,6 +261,9 @@ export class PluginActionService {
                 finalOperation.result = result;
             }
             finalOperation.updatedAt = this.now().toISOString();
+            if (finalOperation.status === 'succeeded') {
+                clearAllCaches();
+            }
             await this.operationStore(session).writeOperation(finalOperation);
             this.operations.set(operationId, finalOperation);
         }

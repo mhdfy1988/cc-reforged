@@ -2,7 +2,6 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, scre
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { appendFile, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -363,6 +362,7 @@ const defaultWorkspacePath =
 
 let mainWindow: BrowserWindow | null = null
 let managedClient: ManagedStdioAppServerClient | null = null
+const completedPluginRuntimeOperationIds = new Set<string>()
 let bootPromise: Promise<void> | null = null
 let updateService: DesktopUpdateService | null = null
 let updateInstallInProgress = false
@@ -1273,6 +1273,19 @@ async function activatePluginRuntimeSnapshot(reason: string): Promise<void> {
   }
 }
 
+async function activatePluginRuntimeForCompletedOperation(
+  operation: PluginsActionApplyResult | PluginsOperationGetResult,
+): Promise<void> {
+  if (!operation || operation.status !== 'succeeded') {
+    return
+  }
+  if (completedPluginRuntimeOperationIds.has(operation.operationId)) {
+    return
+  }
+  completedPluginRuntimeOperationIds.add(operation.operationId)
+  await activatePluginRuntimeSnapshot(`plugin-action:${operation.action}`)
+}
+
 async function refreshPermissionSettingsSnapshot(): Promise<void> {
   const client = managedClient
   if (!client) {
@@ -1853,9 +1866,7 @@ async function applyPluginAction(
 ): Promise<PluginsActionApplyResult> {
   const client = await getAppServerClient()
   const operation = await client.applyPluginAction(params)
-  if (operation.status === 'succeeded') {
-    await activatePluginRuntimeSnapshot(`plugin-action:${operation.action}`)
-  }
+  await activatePluginRuntimeForCompletedOperation(operation)
   broadcast('state', {
     message: 'plugin action applied',
     operation,
@@ -1867,10 +1878,12 @@ async function getPluginOperation(
   params: PluginsOperationGetParams,
 ): Promise<PluginsOperationGetResult> {
   const client = await getAppServerClient()
-  return client.getPluginOperation({
+  const operation = await client.getPluginOperation({
     ...params,
     cwd: params.cwd ?? status.workspacePath ?? defaultWorkspacePath,
   })
+  await activatePluginRuntimeForCompletedOperation(operation)
+  return operation
 }
 
 async function cancelPluginOperation(

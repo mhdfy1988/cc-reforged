@@ -1,6 +1,8 @@
 import { getSkillRuntimeCatalogForCwd } from '../../commands.js';
 import { createSkillRuntimeCapabilityCatalog, } from '../../skills/skillRuntimeCatalog.js';
 import { listInstalledSkillPackageInspections } from '../skills/installedPackageInspection.js';
+import { scanSkillPackage } from '../skills/securityScanner.js';
+import { summarizeSkillSecurityReport } from '../skills/securityReporter.js';
 import { createSkillCapabilityId } from './capabilityIdentity.js';
 export function createSkillCapabilityProvider() {
     return {
@@ -30,12 +32,18 @@ export async function listSkillCapabilities(context = {}) {
         commands: [...runtime.sourceCommands, ...getMcpSkillCommands(context)],
         installed: installedInspections.installed,
     });
-    return catalog.capabilities.map(toExtensionCapability);
+    return Promise.all(catalog.capabilities.map(toExtensionCapability));
 }
-function toExtensionCapability(capability) {
+async function toExtensionCapability(capability) {
     const sourceKind = mapSkillSourceKind(capability.sourceKind);
     const status = mapSkillStatus(capability);
     const pluginId = getPluginId(capability);
+    const runtimeSkillSecurityDigest = capability.skillPackage
+        ? summarizeSkillSecurityReport(await scanSkillPackage(capability.skillPackage, {
+            source: 'installed',
+            packageId: capability.skillPackage.id,
+        }))
+        : null;
     return {
         schemaVersion: 1,
         id: createSkillCapabilityId({
@@ -85,6 +93,14 @@ function toExtensionCapability(capability) {
             sourceKind: capability.sourceKind,
             parentPluginId: capability.parentPluginId,
             parentMcpServerName: capability.parentMcpServerName,
+            ...(capability.skillPackage
+                ? {
+                    skillPackage: capability.skillPackage,
+                    packageDir: capability.skillPackage.baseDir,
+                    skillFilePath: capability.skillPackage.bodyPath,
+                    skillSecurityDigest: runtimeSkillSecurityDigest,
+                }
+                : {}),
         },
     };
 }

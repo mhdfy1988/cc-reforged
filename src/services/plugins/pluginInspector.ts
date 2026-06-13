@@ -243,12 +243,18 @@ function createManagementRecord(input: {
   )
   const intent = resolveIntentFromFacts(input.intents)
   const selectedInstallation = selectInstallation(applicableInstallations)
-  const active = input.runtimeActivations.some(
+  const runtimeActive = input.runtimeActivations.some(
     activation =>
       activation.runtimeInstanceId ===
         input.session.context.runtimeInstanceId &&
       (activation.state === 'active' || activation.state === 'partial'),
   )
+  const active =
+    runtimeActive &&
+    shouldHonorRuntimeActivation({
+      candidates: input.candidates,
+      intent,
+    })
   const effectiveSelection: PluginEffectiveSelection = {
     ...(selectedInstallation
       ? {
@@ -310,6 +316,18 @@ function createManagementRecord(input: {
     ),
     diagnostics,
   }
+}
+
+function shouldHonorRuntimeActivation(input: {
+  candidates: readonly PluginCandidate[]
+  intent: PluginIntent
+}): boolean {
+  if (input.intent === 'disabled' || input.intent === 'blocked') return false
+  if (input.intent === 'enabled') return true
+  return input.candidates.some(
+    candidate =>
+      candidate.sourceKind === 'builtin' || candidate.sourceKind === 'inline',
+  )
 }
 
 function createAppRelations(

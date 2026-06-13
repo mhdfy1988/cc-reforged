@@ -331,6 +331,7 @@ App Server 原始目录方法为 `capabilities/list`，面向 Desktop 管理页�
 - 模型可调用不等于用户可调用。
 - Plugin 是能力合集，不是 Skill、Tool 或 MCP server 的别名。
 - 动态发现只能作为检索策略，不能替代用户明确安装并启用的 managed Skill 的基础可见性。
+- Plugin 父级禁用、阻断或缺失时，Plugin 贡献的 Skill、MCP 和子 Tool 必须 fail closed，并向管理页和能力目录传播结构化隐藏原因；父级明确禁用使用 `plugin-disabled`，父级记录缺失属于诊断问题，不能伪装成已启用能力。
 
 ## 4. 来源到运行时的映射
 
@@ -345,6 +346,12 @@ App Server 原始目录方法为 `capabilities/list`，面向 Desktop 管理页�
 | Provider capability | provider runtime capability | 内置或 provider 工具 | 是 | [Provider 能力工具化后续方向](./provider-capability-tools-future.md) |
 | Builtin Tool | `src/tools.ts` | Tool | 是 | [工具注册目录](./tool-registry-catalog.md) |
 | Legacy Command | `.claude/commands` | prompt `Command` | 是，但低优先级 | [Skill 系统整体架构](./skill-system-architecture.md) |
+
+Plugin 子能力的展示规则：
+
+- Skill 管理页可以展示 Plugin Skill 的 `SKILL.md`、资源、安全扫描和运行时可见性，但启停事实仍受父 Plugin 控制。
+- MCP 管理页可以展示 Plugin MCP server 的 manifest 名称、transport、命令和工具发现状态，但 Plugin 提供的 MCP 是只读运行时贡献，不获得用户全局 MCP 安装记录的修复 / 卸载语义。
+- 能力目录展示 Plugin 自身和它贡献的子能力时，必须保留 parent capability 关系；父 Plugin 禁用后，子能力不进入模型上下文和 Tool Registry。
 
 ## 5. 管理页关系
 

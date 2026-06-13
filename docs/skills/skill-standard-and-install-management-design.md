@@ -67,6 +67,7 @@ CCR 后续需要把 Skill 从“可以加载和调用的 prompt command”推进
 - runtime catalog 已覆盖 local、managed、plugin、bundled、dynamic、MCP 和 legacy command 的统一排序与 duplicate diagnostics。
 - 已有 `ccr skill search/import/install/status/inspect/repair/uninstall` CLI 管理入口，写入操作默认 dry-run，显式 `--yes` 后才执行。
 - 已有 installed managed skill 的 `hooks` / `shell` / `version` / `paths` 运行时等价透传，并已把 hook command / HTTP / env 风险纳入安全扫描。
+- Plugin 贡献的 Skill 已接入统一 runtime catalog 和管理页投影：通过 `CcrSkillPackage` 暴露 `SKILL.md` 正文、包目录、资源文件和安全扫描结果；父 Plugin 禁用时只保留诊断可见性，不再作为运行时可调用 Skill。
 - `src/services/skillSearch/` 仍是实验 / 占位状态，不能作为正式安装管理依据。
 
 截至 2026-06-03，S-1 到 S-10 已补齐第一版闭环能力：

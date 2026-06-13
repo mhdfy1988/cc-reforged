@@ -8,6 +8,19 @@ All notable changes to this project will be documented in this file.
 
 - 暂无。
 
+## [0.6.4] - 2026-06-13
+
+### Changed
+
+- Desktop Plugin 页面继续收敛为本地 Plugin 包管理：启停开关固定在左侧列表卡，详情页不再展示短暂 operation 流程卡，分区内容改为稳定滚动区域。
+- Plugin、Skill、MCP 的父子可见性语义进一步统一：父 Plugin 禁用后，Plugin 自身、Plugin Skill 和 Plugin MCP 均通过结构化隐藏原因展示，不再被误判为仍可运行。
+
+### Fixed
+
+- 修复 Plugin 贡献的 Skill 在 Skill 管理页缺少 `SKILL.md` 正文、资源、安全扫描和包路径信息的问题。
+- 修复 Plugin 贡献的 MCP 在组件明细中用启动命令名充当名称的问题；现在优先展示 manifest 中的 MCP server key。
+- 修复 Plugin 详情页标题、滚动条、组件明细和运行时分区的重复状态与布局噪音。
+
 ## [0.6.3] - 2026-06-12
 
 ### Added

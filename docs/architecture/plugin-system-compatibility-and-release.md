@@ -99,6 +99,14 @@ git diff --check
 - 能力目录继续作为独立页面，Plugin 页面只展示 Plugin bundle 及其贡献关系。
 - 发布前需继续执行 `smoke:plugin-release`、`smoke:external-extension-matrix`、`smoke:desktop-plugin-workbench` 和 `git diff --check`。
 
+2026-06-13 交互收口补充：
+
+- Plugin 页面继续保持本地包管理口径：导入入口只面向已经下载或压缩好的本地 Plugin 文件夹 / zip，不提供远程 marketplace 主浏览。
+- Plugin 启停开关固定在左侧列表卡，详情页不展示短暂 operation / queued / completed 流程卡；操作过程通过弹窗、toast、诊断或日志观察。
+- Plugin 子能力的父子可见性必须贯穿 Skill、MCP 和能力目录：父 Plugin 禁用后，Plugin Skill、Plugin MCP 和子 Tool 均 fail closed，并显示 `plugin-disabled` 隐藏原因。
+- Plugin 组件名称必须来自组件语义：Skill 使用 `SKILL.md` / command 名称，MCP server 使用 manifest 中的 server key，不使用 `node`、`npx.cmd` 这类启动命令作为名称。
+- Plugin Skill 在 Skill 管理页需要展示正文、资源和安全扫描；Plugin MCP 在 MCP 管理页只展示只读运行时事实，不获得用户全局 MCP 安装器的修复 / 卸载语义。
+
 ## 6. 兼容验证
 
 P12 增加三组专项证据：

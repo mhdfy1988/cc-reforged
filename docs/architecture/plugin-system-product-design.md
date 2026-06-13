@@ -565,6 +565,8 @@ plan scope override
 
 禁用前必须展示反向依赖影响。禁用后子能力 fail closed，但当前会话是否已完成停用必须由 active snapshot 确认。
 
+Desktop 展示必须把这个关系讲清楚：Plugin 禁用后，左侧 Plugin 列表显示停用状态；Skill、MCP 和能力目录里的子能力保留诊断可见性，但标记为“隐藏：插件已禁用”，不能继续展示成运行时可用或模型可调用。
+
 ### 8.4 运行时激活
 
 运行时激活由独立 `PluginRuntimeActivator` 负责，PluginDomainActions 不直接操作 Ink AppState：
@@ -898,6 +900,8 @@ Marketplace 或远程索引只属于后续来源扩展，不等于 Plugin 产品
 2. 能力
    - App、Skill、MCP、Tool、Command。
    - 显示 canonical capability、来源链和运行时状态。
+   - 组件名称使用 manifest 或标准包语义：Skill 优先用 `SKILL.md` / command 名称，MCP server 优先用 `mcpServers` key，不能用启动命令如 `node` 充当名称。
+   - 组件行可以点开查看详情；详情只展示该组件自己的 manifest、路径、运行状态和隐藏原因，不重复父 Plugin 的总状态。
 
 3. 运行时贡献
    - Agent、Hook、LSP、Output Style、Channel、Settings。
@@ -928,6 +932,8 @@ Marketplace 或远程索引只属于后续来源扩展，不等于 Plugin 产品
 | 确认弹窗 | 安装、更新、修复、回滚、卸载 | 写清作用域、版本、依赖、数据处理和运行时影响 |
 
 状态文案只保留一处主表达：列表展示主状态；运行时分区展示 active/runtime 事实；概览展示版本和作用域，不在标题区重复“运行中 / 已启用”。
+
+operation / plan / queued / completed 这类生命周期过程不属于概览内容。它们可以通过确认弹窗、toast、临时进度条、诊断分区或操作历史查看；完成后不应长期留在概览页，避免用户把一次操作记录误解成 Plugin 的结构事实。
 
 ### 12.6 空状态和错误状态
 

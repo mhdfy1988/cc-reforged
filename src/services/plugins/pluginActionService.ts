@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { clearAllCaches } from '../../utils/plugins/cacheUtils.js'
 import type { ResolutionResult } from '../../utils/plugins/dependencyResolver.js'
 import type {
   PluginScope,
@@ -523,6 +524,9 @@ export class PluginActionService {
         finalOperation.result = result
       }
       finalOperation.updatedAt = this.now().toISOString()
+      if (finalOperation.status === 'succeeded') {
+        clearAllCaches()
+      }
       await this.operationStore(session).writeOperation(finalOperation)
       this.operations.set(operationId, finalOperation)
     } catch (error) {

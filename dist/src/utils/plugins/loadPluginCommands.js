@@ -1,6 +1,8 @@
 import memoize from 'lodash-es/memoize.js';
 import { basename, dirname, join } from 'path';
 import { getInlinePlugins, getSessionId } from '../../bootstrap/state.js';
+import { normalizeSkillPackage } from '../../skills/normalizeSkillPackage.js';
+import { collectSkillResourceDirsFromFs, } from '../../skills/skillResourceScanner.js';
 import { getPluginErrorMessage } from '../../types/plugin.js';
 import { parseArgumentNames, substituteArguments, } from '../argumentSubstitution.js';
 import { logForDebugging } from '../debug.js';
@@ -166,6 +168,33 @@ function createPluginCommand(commandName, file, sourceName, pluginManifest, plug
             ? true
             : parseBooleanFrontmatter(userInvocableValue);
         const shell = parseShellFrontmatter(frontmatter.shell, commandName);
+        const skillPackage = isSkill || config.isSkillMode
+            ? createPluginSkillPackage({
+                commandName,
+                file,
+                sourceName,
+                pluginPath,
+                resources: config.skillResources,
+                parsed: {
+                    displayName,
+                    description,
+                    hasUserSpecifiedDescription: validatedDescription !== null,
+                    allowedTools,
+                    argumentHint,
+                    argumentNames,
+                    whenToUse,
+                    version,
+                    model,
+                    disableModelInvocation,
+                    userInvocable,
+                    executionContext: frontmatter.context === 'fork' ? 'fork' : undefined,
+                    agent: typeof frontmatter.agent === 'string'
+                        ? frontmatter.agent
+                        : undefined,
+                    effort,
+                },
+            })
+            : undefined;
         return {
             type: 'prompt',
             name: commandName,
@@ -189,6 +218,7 @@ function createPluginCommand(commandName, file, sourceName, pluginManifest, plug
             },
             isHidden: !userInvocable,
             progressMessage: isSkill || config.isSkillMode ? 'loading' : 'running',
+            ...(skillPackage ? { skillPackage } : {}),
             userFacingName() {
                 return displayName || commandName;
             },
@@ -248,6 +278,34 @@ function createPluginCommand(commandName, file, sourceName, pluginManifest, plug
         });
         return null;
     }
+}
+function createPluginSkillPackage(input) {
+    const skillDir = input.file.baseDir || dirname(input.file.filePath);
+    return normalizeSkillPackage({
+        id: [
+            'plugin',
+            input.sourceName,
+            input.commandName,
+            input.file.filePath,
+        ].join(':'),
+        skillName: input.parsed.displayName || input.commandName,
+        markdownContent: input.file.content,
+        frontmatter: input.file.frontmatter,
+        parsed: input.parsed,
+        source: 'plugin',
+        filePath: input.file.filePath,
+        baseDir: skillDir,
+        resources: input.resources,
+        compatibilityHints: {
+            importedFrom: input.pluginPath,
+        },
+    });
+}
+async function collectPluginSkillResources(skillDir) {
+    const fs = getFsImplementation();
+    return collectSkillResourceDirsFromFs(skillDir, dir => fs.readdir(dir), warning => {
+        logForDebugging(`Failed to enumerate plugin skill ${warning.key} resources at ${warning.dir}: ${warning.error}`, { level: 'warn' });
+    });
 }
 export const getPluginCommands = memoize(async () => {
     // --bare: skip marketplace plugin auto-load. Explicit --plugin-dir still
@@ -459,14 +517,16 @@ async function loadSkillsFromDirectory(skillsPath, pluginName, sourceName, plugi
         try {
             const { frontmatter, content: markdownContent } = parseFrontmatter(directSkillContent, directSkillPath);
             const skillName = `${pluginName}:${basename(skillsPath)}`;
+            const skillDirPath = dirname(directSkillPath);
+            const skillResources = await collectPluginSkillResources(skillDirPath);
             const file = {
                 filePath: directSkillPath,
-                baseDir: dirname(directSkillPath),
+                baseDir: skillDirPath,
                 frontmatter,
                 content: markdownContent,
             };
             const skill = createPluginCommand(skillName, file, sourceName, pluginManifest, pluginPath, true, // isSkill
-            { isSkillMode: true });
+            { isSkillMode: true, skillResources });
             if (skill) {
                 skills.push(skill);
             }
@@ -515,6 +575,7 @@ async function loadSkillsFromDirectory(skillsPath, pluginName, sourceName, plugi
         try {
             const { frontmatter, content: markdownContent } = parseFrontmatter(content, skillFilePath);
             const skillName = `${pluginName}:${entry.name}`;
+            const skillResources = await collectPluginSkillResources(skillDirPath);
             const file = {
                 filePath: skillFilePath,
                 baseDir: dirname(skillFilePath),
@@ -522,7 +583,7 @@ async function loadSkillsFromDirectory(skillsPath, pluginName, sourceName, plugi
                 content: markdownContent,
             };
             const skill = createPluginCommand(skillName, file, sourceName, pluginManifest, pluginPath, true, // isSkill
-            { isSkillMode: true });
+            { isSkillMode: true, skillResources });
             if (skill) {
                 skills.push(skill);
             }

@@ -12,6 +12,7 @@ import type { ThemeName } from '../utils/theme.js'
 import type { LogOption } from './logs.js'
 import type { Message } from './message.js'
 import type { PluginManifest } from './plugin.js'
+import type { CcrSkillPackage } from '../skills/model.js'
 
 export type LocalCommandResult =
   | { type: 'text'; value: string }
@@ -39,6 +40,9 @@ export type PromptCommand = {
   hooks?: HooksSettings
   // Base directory for skill resources (used to set CLAUDE_PLUGIN_ROOT environment variable for skill hooks)
   skillRoot?: string
+  // Normalized package metadata for runtime-loaded skills such as Plugin skills.
+  // Installed Skill packages expose the same shape through their inspection record.
+  skillPackage?: CcrSkillPackage
   // Execution context: 'inline' (default) or 'fork' (run as sub-agent)
   // 'inline' = skill content expands into the current conversation
   // 'fork' = skill runs in a sub-agent with separate context and token budget

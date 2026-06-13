@@ -146,6 +146,8 @@ plugin.json
 
 The root `plugin.json` form is the recommended user-facing package entry. Import normalizes it to the internal `.claude-plugin/plugin.json` cache layout while reusing the same manifest schema, registry, version cache, and runtime loader. Desktop imports default to user-global scope; the enable switch lives in the left Plugin list card, and the detail pane keeps icon-only management actions.
 
+Plugin-provided child capabilities still appear in their own management pages and the Capability page for diagnosis, but they remain gated by the parent Plugin state. When the parent Plugin is disabled, Plugin Skills and Plugin MCP servers fail closed and are shown with a `plugin-disabled` hidden reason instead of being treated as runnable capabilities.
+
 The standalone **Capability** page is the read-side directory for Skill, MCP, Tool, Plugin, and App facts. It shows source, parent/child relations, runtime visibility, diagnostics, and pending items; it is not an installation registry and does not execute Plugin lifecycle actions.
 
 ## Desktop Features

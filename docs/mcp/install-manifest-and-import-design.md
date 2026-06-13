@@ -29,6 +29,8 @@ Desktop 的安装区调用 `mcp/install/search`，最终走 `searchCcrMcpInstall
 
 手工写入 MCP 配置不会自动进入安装列表，也不会自动写入 CCR 安装记录。它会出现在 Server 列表中，但默认不获得 installer-owned 的卸载和修复语义。
 
+Plugin 提供的 MCP server 也会进入 Server 列表和能力目录，但它不是用户全局 MCP 配置的一部分，也不是 `installed.json` 里的 installer-owned 记录。它的名称、transport、命令和工具发现状态来自 Plugin manifest 与运行时快照；启用 / 禁用由父 Plugin 控制，详情页只能展示只读事实和诊断，不能提供 MCP 安装器的修复 / 卸载按钮。父 Plugin 禁用后，该 MCP 必须显示 `plugin-disabled` 隐藏原因，并从运行时工具暴露中移除。
+
 ## 安装清单定位
 
 安装清单（install manifest）是 CCR 自己定义的安装描述，不是 MCP 官方协议的一部分。它用于让 CCR 在写配置前知道：

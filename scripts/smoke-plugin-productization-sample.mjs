@@ -112,7 +112,7 @@ try {
   )
   record = await core.plugins.inspect(pluginId, context)
   assert.equal(record.effectiveSelection.enabled, false)
-  assert.equal(record.effectiveSelection.active, true)
+  assert.equal(record.effectiveSelection.active, false)
 
   await apply(
     core,

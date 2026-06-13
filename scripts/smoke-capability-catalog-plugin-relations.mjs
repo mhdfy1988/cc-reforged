@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { CapabilitiesListParamsSchema } from '../dist/src/app-server/protocol.js'
+import { setInlinePlugins } from '../dist/src/bootstrap/state.js'
 import { createExtensionCapabilityCatalog } from '../dist/src/services/capabilities/capabilityCatalog.js'
 import {
   createAppCapabilityProvider,
@@ -15,6 +19,13 @@ import {
   resolveLoadedPluginId,
 } from '../dist/src/services/capabilities/pluginIdentityResolver.js'
 import { projectPluginImpact } from '../dist/src/services/capabilities/pluginImpactProjection.js'
+import { createPluginDomainSession } from '../dist/src/services/plugins/pluginDomainSession.js'
+import { PluginInspector } from '../dist/src/services/plugins/pluginInspector.js'
+import {
+  clearPluginSkillsCache,
+  getPluginSkills,
+} from '../dist/src/utils/plugins/loadPluginCommands.js'
+import { clearPluginCache } from '../dist/src/utils/plugins/pluginLoader.js'
 
 const pluginCapability = {
   schemaVersion: 1,
@@ -174,6 +185,41 @@ const pluginSkillCatalog = createSkillRuntimeCapabilityCatalog({
       },
       contentLength: 0,
       progressMessage: 'loading',
+      skillPackage: {
+        schemaVersion: 1,
+        id: 'plugin:bundle@openai:bundle:review-helper',
+        name: 'bundle:review-helper',
+        displayName: 'Review Helper',
+        description: 'Review helper skill.',
+        bodyPath: 'D:/plugins/bundle/skills/review-helper/SKILL.md',
+        body: 'Review helper body.',
+        baseDir: 'D:/plugins/bundle/skills/review-helper',
+        source: 'plugin',
+        origin: {
+          vendor: 'claude',
+          sourcePath: 'D:/plugins/bundle/skills/review-helper/SKILL.md',
+          importedFrom: 'D:/plugins/bundle',
+        },
+        resources: {
+          scripts: [],
+          references: ['references/review.md'],
+          assets: [],
+        },
+        invocation: {
+          modelInvocable: true,
+          userInvocable: true,
+          context: 'inline',
+          allowedTools: [],
+          argumentNames: [],
+        },
+        compatibility: {
+          rawFrontmatter: {
+            name: 'Review Helper',
+            description: 'Review helper skill.',
+          },
+          warnings: [],
+        },
+      },
       async getPromptForCommand() {
         return []
       },
@@ -183,6 +229,88 @@ const pluginSkillCatalog = createSkillRuntimeCapabilityCatalog({
 assert.equal(pluginSkillCatalog.capabilities.length, 1)
 assert.equal(pluginSkillCatalog.capabilities[0].parentPluginId, 'bundle@openai')
 assert.equal(pluginSkillCatalog.capabilities[0].sourceLabel, 'bundle@openai/plugin')
+assert.equal(pluginSkillCatalog.capabilities[0].skillPackage?.body, 'Review helper body.')
+assert.equal(
+  pluginSkillCatalog.capabilities[0].skillPackage?.resources.references[0],
+  'references/review.md',
+)
+
+const pluginSkillFixtureRoot = join(
+  tmpdir(),
+  `ccr-plugin-skill-metadata-${process.pid}-${Date.now()}`,
+)
+try {
+  await mkdir(join(pluginSkillFixtureRoot, '.claude-plugin'), {
+    recursive: true,
+  })
+  await mkdir(
+    join(pluginSkillFixtureRoot, 'skills', 'web-reading', 'references'),
+    { recursive: true },
+  )
+  await writeFile(
+    join(pluginSkillFixtureRoot, '.claude-plugin', 'plugin.json'),
+    JSON.stringify(
+      {
+        name: 'web-reader-toolkit',
+        version: '0.1.0',
+        description: 'Web reader plugin.',
+        skills: ['./skills/web-reading'],
+      },
+      null,
+      2,
+    ),
+  )
+  await writeFile(
+    join(pluginSkillFixtureRoot, 'skills', 'web-reading', 'SKILL.md'),
+    [
+      '---',
+      'name: web-reading',
+      'description: Read and summarize web pages.',
+      'allowed-tools: Read',
+      '---',
+      '# Web Reading',
+      '',
+      'Use this skill to read web pages.',
+    ].join('\n'),
+  )
+  await writeFile(
+    join(
+      pluginSkillFixtureRoot,
+      'skills',
+      'web-reading',
+      'references',
+      'guide.md',
+    ),
+    'Reference guide.',
+  )
+
+  setInlinePlugins([pluginSkillFixtureRoot])
+  clearPluginCache('smoke plugin skill package metadata')
+  clearPluginSkillsCache()
+  const loadedPluginSkills = await getPluginSkills()
+  const webReading = loadedPluginSkills.find(command =>
+    command.name.endsWith(':web-reading'),
+  )
+  assert.ok(webReading, 'expected plugin skill to load from fixture')
+  assert.equal(webReading.skillPackage?.displayName, 'web-reading')
+  assert.equal(webReading.skillPackage?.body.includes('# Web Reading'), true)
+  assert.equal(
+    webReading.skillPackage?.bodyPath.endsWith('skills/web-reading/SKILL.md') ||
+      webReading.skillPackage?.bodyPath.endsWith(
+        'skills\\web-reading\\SKILL.md',
+      ),
+    true,
+  )
+  assert.equal(
+    webReading.skillPackage?.resources.references[0],
+    'references/guide.md',
+  )
+} finally {
+  setInlinePlugins([])
+  clearPluginCache('smoke plugin skill package metadata cleanup')
+  clearPluginSkillsCache()
+  await rm(pluginSkillFixtureRoot, { recursive: true, force: true })
+}
 
 const mcpSurfaceCapabilities = listMcpRuntimeSurfaceCapabilities({
   mcp: {
@@ -311,6 +439,139 @@ const pluginMcpTool = graphById.get('mcp-tool:bundle-server:review')
 assert.equal(pluginMcpTool.relations.parentPluginId, 'bundle@openai')
 assert.ok(pluginMcpTool.state.hiddenReasons.includes('plugin-disabled'))
 assert.ok(pluginMcpTool.state.hiddenReasons.includes('mcp-server-unavailable'))
+
+const stalePluginId = 'web-reader-toolkit@local-import'
+const stalePluginManifest = {
+  name: 'web-reader-toolkit',
+  description: 'Web reader plugin.',
+  version: '0.1.0',
+}
+const staleRuntimeSession = createPluginDomainSession({
+  workspaceRoot: '/tmp/ccr-workspace',
+  configHomeDir: '/tmp/ccr-home',
+  runtimeInstanceId: 'app-server',
+  runtimeActivations: [
+    {
+      runtimeInstanceId: 'app-server',
+      pluginId: stalePluginId,
+      activeVersion: '0.1.0',
+      activationRevision: 'stale-active',
+      state: 'active',
+      components: [{ component: 'skill', state: 'active' }],
+    },
+  ],
+  runtimePlugins: [
+    {
+      name: 'web-reader-toolkit',
+      manifest: stalePluginManifest,
+      path: '/plugins/web-reader-toolkit',
+      source: stalePluginId,
+      repository: stalePluginId,
+      enabled: true,
+      skillsPath: 'skills',
+    },
+  ],
+  repositories: {
+    settings: {
+      async read() {
+        return {
+          entries: [
+            {
+              scope: 'user',
+              path: '/tmp/ccr-home/settings.json',
+              enabledPlugins: { [stalePluginId]: false },
+              diagnostics: [],
+            },
+          ],
+          diagnostics: [],
+        }
+      },
+    },
+    installations: {
+      async read() {
+        return {
+          schemaVersion: 2,
+          entries: [
+            {
+              pluginId: stalePluginId,
+              scope: 'user',
+              installPath: '/plugins/web-reader-toolkit',
+              version: '0.1.0',
+              installedAt: '2026-06-12T00:00:00.000Z',
+            },
+          ],
+          diagnostics: [],
+        }
+      },
+    },
+    marketplaces: {
+      async read() {
+        return { sources: [], candidates: [], diagnostics: [] }
+      },
+    },
+    packages: {
+      async inspect() {
+        return {
+          materialization: 'present',
+          manifest: stalePluginManifest,
+          diagnostics: [],
+        }
+      },
+    },
+    retention: {
+      async read() {
+        return { schemaVersion: 1, records: [] }
+      },
+    },
+  },
+})
+const stalePluginCatalog = await new PluginInspector().listCatalog(
+  staleRuntimeSession,
+)
+const stalePluginRecord = stalePluginCatalog.plugins.find(
+  plugin => plugin.pluginId === stalePluginId,
+)
+assert.equal(stalePluginRecord.effectiveSelection.intent, 'disabled')
+assert.equal(stalePluginRecord.effectiveSelection.active, false)
+assert.equal(stalePluginRecord.derivedState.active, false)
+assert.equal(stalePluginRecord.derivedState.status, 'installed-disabled')
+
+const staleCapabilityCatalog = await createExtensionCapabilityCatalog({
+  providers: [
+    createPluginCapabilityProvider(),
+    {
+      id: 'stale-plugin-child',
+      listCapabilities() {
+        return [
+          graphCapability({
+            id: 'skill:web-reading',
+            name: 'web-reading',
+            kind: 'skill',
+            relations: { parentPluginId: stalePluginId },
+          }),
+        ]
+      },
+    },
+  ],
+  context: {
+    capabilityEnvironment: {
+      pluginCatalog: stalePluginCatalog,
+      plugins: { plugins: stalePluginCatalog.loadedPlugins, errors: [] },
+    },
+  },
+})
+const stalePluginCapability = staleCapabilityCatalog.capabilities.find(
+  capability =>
+    capability.kind === 'plugin' &&
+    capability.source.pluginId === stalePluginId,
+)
+assert.equal(stalePluginCapability.state.runtimeVisible, false)
+assert.equal(stalePluginCapability.state.status, 'disabled')
+const stalePluginChild = staleCapabilityCatalog.capabilities.find(
+  capability => capability.id === 'skill:web-reading',
+)
+assert.equal(stalePluginChild.state.runtimeVisible, false)
+assert.ok(stalePluginChild.state.hiddenReasons.includes('plugin-disabled'))
 
 const impact = projectPluginImpact(
   disabledPluginGraph.capabilities,

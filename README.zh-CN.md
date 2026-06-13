@@ -90,6 +90,7 @@ CCR 当前更像一个本地 Agent 工作台，而不是单纯的 CLI 包：
 - 外部能力目录：Desktop `能力` 页面统一展示 Tool、Skill、MCP、Plugin 和 App 能力，区分运行时可见、需处理、来源和父子关系。
 - Plugin 本地包：Desktop `插件` 页面只管理已落地的本地 Plugin 包，支持文件夹和 zip 导入；包根目录 `plugin.json` 会规范化为内部 `.claude-plugin/plugin.json`。
 - 管理作用域：Plugin 导入、启停和诊断默认使用用户全局作用域；MCP 受控安装、启停和卸载也默认写入用户全局配置，项目 `.mcp.json` 只作为共享声明和运行时发现来源。
+- 父子可见性：Plugin 禁用后，它贡献的 Skill、MCP 和子工具会 fail closed；Skill / MCP / 能力目录只展示隐藏原因，不继续当成可运行能力。
 - Skill / MCP 体验：列表侧保留启停切换，详情操作统一为图标按钮，高风险 Skill 安装需要用户明确确认，禁用状态不再误写成“安装被禁用”。
 - 展示收口：工具进度、截图 / 图片读取、上下文压缩恢复附件和调用明细继续按专门规则展示，避免重复附件卡、孤立错误卡和无限增长的详情区。
 
@@ -293,21 +294,23 @@ Provider 原始响应
 
 ## MCP 安装与使用
 
-MCP 已提前进入 `0.5.x` 工具治理线。CCR 当前已经有用户级 MCP 配置、Desktop MCP 管理页、受控安装计划、安装记录、启用/禁用、检测、卸载和 MCP 工具卡展示。
+MCP 已提前进入 `0.5.x` 工具治理线。CCR 当前已经有用户级 MCP 配置、Desktop MCP 管理页、受控安装计划、安装记录、导入 / 创建安装配置、常用候选、启用/禁用、检测、卸载和 MCP 工具卡展示。
 
 ### Desktop 推荐流程
 
 日常使用优先走 Desktop：
 
 1. 打开 CCR Desktop，进入左侧 `MCP` 页面。
-2. 在安装区搜索 `playwright`。
+2. 在安装区搜索 `playwright`、`context7` 或 `sentry`。
 3. 点击 `安装`。
 4. 在确认弹窗里检查写入位置、启动方式、风险提示和数据边界。
 5. 点击 `确认安装`。
 6. 安装后点击 `检测`，确认工具能被发现。
 7. 会话里需要浏览器时，明确说“用浏览器打开/查询/操作”。成功时会看到 `MCP playwright / browser_*` 工具卡。
 
-如果已经安装，候选会显示“已安装”，不要重复安装；直接在 MCP 页面里使用 `检测`、`重启`、`禁用/启用` 或 `卸载`。
+如果已经安装，候选会显示“已安装”，不要重复安装；直接在 MCP 页面里使用 `检测`、`重启`、`禁用/启用`。由 CCR 安装器管理的 server 会在详情页提供 `卸载`，配置漂移或缺失时提供 `修复`。
+
+自写 MCP 优先使用 `导入 MCP 安装配置` 或 `创建 MCP 安装配置`。导入 / 创建后会先生成安装计划，用户确认后才写入真实 MCP 配置；确认弹窗可勾选 `保存到常用安装配置`，让它以后出现在安装候选里。
 
 ### CLI 安装
 
@@ -340,22 +343,34 @@ ccr mcp add --scope user --transport http sentry https://mcp.sentry.dev/mcp
 | 项目根目录 `.mcp.json` | 项目级共享 MCP 配置 |
 | `~/.ccr/mcp/installed.json` | CCR 受控安装记录 |
 | `~/.ccr/mcp/lock.json` | CCR 受控安装锁定记录 |
+| `~/.ccr/mcp/manifests/` | 用户保存的常用 MCP 安装配置 |
 | `~/.ccr/mcp/packages/` | CCR installer-owned 包缓存和 owner marker |
 | `~/.ccr/logs/mcp/` | MCP 安装、连接和诊断日志 |
 
-`npx` 快速模式不会把 `@playwright/mcp` 复制进 CCR 安装目录；首次启动时会由 npm/npx 获取并缓存。`managed` 模式会把指定版本安装到 `~/.ccr/mcp/servers/playwright/` 并把配置指向本地入口。
+`npx` 快速模式不会把 `@playwright/mcp` 复制进 CCR 安装目录；首次启动时会由 npm/npx 获取并缓存。`installed.json` 和 `lock.json` 记录的是 CCR installer-owned 的配置与卸载边界，不代表所有手工配置。
 
 模型可以建议需要某类 MCP 能力，但不能绕过用户确认自行下载安装、写配置、启动陌生 stdio server 或卸载删除文件。
 
-更完整的 MCP 文档见 [MCP 文档入口](docs/mcp/README.md)。
+自写 MCP 可以通过 `导入 MCP 安装配置`、`创建 MCP 安装配置` 或手写配置进入。手写配置只会进入 Server 列表；如需让 CCR 负责修复 / 卸载，需要在详情页显式 `接管`。
 
-## Skill 与 Plugin 管理
+更完整的 MCP 文档见 [MCP 文档入口](docs/mcp/README.md) 和 [MCP 配置示例](docs/mcp/config-examples.md)。
+
+## Skill 安装与使用
 
 Skill 是可被模型按需调用的本地指令包，入口文件是 `SKILL.md`。CCR Desktop `技能` 页面负责 Skill 查看、导入、安装、启用 / 禁用、修复和卸载；高风险 Skill 安装需要用户明确确认风险后才会继续执行。
 
+## Plugin 本地包管理
+
 Plugin 是能力合集，不等同于 Skill、MCP server 或 Tool。一个 Plugin 可以携带 Skill、MCP、Command、Hook、LSP、配置、运行时贡献和 App 关系；各子能力仍由自己的运行时执行，Plugin 负责打包、安装、启停、版本和来源治理。
 
-当前 Desktop `插件` 页面只管理本地已经落地的 Plugin：内置或受管理 Plugin、用户导入的本地 Plugin 文件夹、用户导入的本地 Plugin zip archive，以及当前运行时已经可见或已有启用意图的 Plugin。第一阶段不提供远程插件市场浏览；官方 marketplace 或其他远端来源只作为后续导入 / 更新的数据来源，不会把未安装候选显示成可管理 Plugin。
+当前 Desktop `插件` 页面只管理本地已经落地的 Plugin：
+
+- 内置或受管理 Plugin。
+- 用户导入的本地 Plugin 文件夹。
+- 用户导入的本地 Plugin zip archive。
+- 当前运行时已经可见或已有启用意图的 Plugin。
+
+第一阶段不提供远程插件市场浏览；官方 marketplace 或其他远端来源只作为后续导入 / 更新的数据来源，不会把未安装候选显示成可管理 Plugin。
 
 本地 Plugin 包支持两种清单入口：
 
@@ -365,6 +380,8 @@ plugin.json
 ```
 
 推荐面向用户分发时使用包根目录 `plugin.json`；导入事务会规范化到内部 `.claude-plugin/plugin.json`，继续复用同一份 manifest schema、安装记录、版本缓存和运行时加载器。Desktop 导入默认写入用户全局作用域，启停开关放在左侧 Plugin 列表卡，详情页只保留修复、卸载、诊断等图标操作。
+
+Plugin 贡献的子能力会进入各自管理页和能力目录，但仍受父 Plugin 状态约束。父 Plugin 禁用时，Plugin Skill 在 Skill 页显示为“隐藏：插件已禁用”，Plugin MCP 在 MCP 页显示为“隐藏：插件已禁用”；这些子能力不会继续注入运行时或暴露给模型。
 
 ## Desktop 能力
 

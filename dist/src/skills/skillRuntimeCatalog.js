@@ -107,6 +107,7 @@ export function createSkillRuntimeCapabilityCatalog(input) {
             runtimeVisible: inspection.status === 'installed',
             hiddenReason: inspection.status === 'installed' ? null : `inspection:${inspection.status}`,
             diagnostics: inspection.status === 'installed' ? [] : [inspection.statusMessage],
+            skillPackage: null,
         });
         seenCapabilityIds.add(id);
     }
@@ -182,6 +183,7 @@ function commandToCapability(input) {
                 : (runtimeCapability.state.hiddenReasons?.[0] ?? 'disabled')
             : 'duplicate-name',
         diagnostics: input.diagnostics,
+        skillPackage: command.skillPackage ?? null,
     };
 }
 function getCommandInstalledRef(command) {
