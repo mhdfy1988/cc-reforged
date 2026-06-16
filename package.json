@@ -59,6 +59,7 @@
     "release:desktop:dry-run": "node ./scripts/prepare-desktop-github-release.mjs",
     "release:desktop:draft": "node ./scripts/prepare-desktop-github-release.mjs --execute --draft",
     "release:desktop:public": "node ./scripts/prepare-desktop-github-release.mjs --execute --public",
+    "smoke:desktop-release-notes": "node ./scripts/prepare-desktop-github-release.mjs --check-changelog",
     "fixtures:desktop-management-acceptance": "node ./scripts/create-desktop-management-acceptance-fixtures.mjs",
     "smoke:mcp-release": "node ./scripts/run-release-smoke-group.mjs mcp",
     "smoke:skill-release": "node ./scripts/run-release-smoke-group.mjs skill",

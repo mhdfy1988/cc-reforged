@@ -43,6 +43,7 @@ runNpm(['run', 'smoke:generate-image-tool']);
 runNpm(['run', 'smoke:ripgrep-vendor']);
 runNpm(['run', 'smoke:file-search']);
 runNpm(['run', 'smoke:desktop-github-actions-release']);
+runNpm(['run', 'smoke:desktop-release-notes']);
 runNpm(['run', 'smoke:desktop-shell-cards']);
 runNpm(['run', 'smoke:desktop-signing-readiness']);
 run(process.execPath, ['cli.js', '--version']);

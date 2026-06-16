@@ -9,16 +9,17 @@ const repoRoot = process.cwd()
 const args = new Set(process.argv.slice(2))
 const checkOnly = args.has('--check')
 const execute = args.has('--execute')
+const checkChangelogOnly = args.has('--check-changelog')
 const draft = args.has('--draft') || !args.has('--public')
 
 for (const arg of args) {
-  if (!['--check', '--execute', '--draft', '--public'].includes(arg)) {
+  if (!['--check', '--execute', '--check-changelog', '--draft', '--public'].includes(arg)) {
     fail('unknown argument', { arg })
   }
 }
 
-if (checkOnly && execute) {
-  fail('--check cannot be combined with --execute')
+if ([checkOnly, execute, checkChangelogOnly].filter(Boolean).length > 1) {
+  fail('--check, --execute, and --check-changelog cannot be combined')
 }
 
 const packageJson = readJson(join(repoRoot, 'package.json'))
@@ -27,6 +28,30 @@ const tag = process.env.CCR_DESKTOP_RELEASE_TAG || `v${version}`
 const title = process.env.CCR_DESKTOP_RELEASE_TITLE || `CCR v${version}`
 const githubPublish = getGitHubPublishConfig(packageJson)
 const repo = `${githubPublish.owner}/${githubPublish.repo}`
+
+if (checkChangelogOnly) {
+  const changelogSection = readChangelogSection(version)
+  if (!changelogSection) {
+    failMissingChangelogSection(version)
+  }
+  console.log(
+    JSON.stringify(
+      {
+        ok: true,
+        version,
+        checked: [
+          'CHANGELOG.md exists',
+          'current version section exists',
+          'bracketed Keep a Changelog heading is supported',
+        ],
+        lineCount: changelogSection.length,
+      },
+      null,
+      2,
+    ),
+  )
+  process.exit(0)
+}
 
 const releaseDir = join(repoRoot, 'release', 'desktop')
 const latestPath = join(releaseDir, 'latest.yml')
@@ -260,11 +285,7 @@ function writeReleaseNotes({ assets, packageJson, repo, tag, title, version }) {
 function formatChangelogSection(version) {
   const changelogSection = readChangelogSection(version)
   if (!changelogSection) {
-    return [
-      '## 更新内容',
-      '',
-      '- 未在 `CHANGELOG.md` 中找到当前版本条目，请发布前补齐。',
-    ]
+    failMissingChangelogSection(version)
   }
 
   return [
@@ -281,7 +302,8 @@ function readChangelogSection(version) {
   }
 
   const lines = readFileSync(changelogPath, 'utf8').split(/\r?\n/)
-  const headingPattern = new RegExp(`^##\\s+${escapeRegExp(version)}(?:\\s|$)`)
+  const escapedVersion = escapeRegExp(version)
+  const headingPattern = new RegExp(`^##\\s+(?:\\[v?${escapedVersion}\\]|v?${escapedVersion})(?:\\s|$)`)
   const startIndex = lines.findIndex((line) => headingPattern.test(line.trim()))
   if (startIndex === -1) {
     return null
@@ -313,6 +335,17 @@ function trimBlankLines(lines) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function failMissingChangelogSection(version) {
+  fail('CHANGELOG.md is missing the current version section', {
+    version,
+    supportedHeadings: [
+      `## [${version}] - YYYY-MM-DD`,
+      `## ${version}`,
+      `## v${version}`,
+    ],
+  })
 }
 
 function publishReleaseWithRecovery({
