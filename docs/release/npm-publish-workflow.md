@@ -171,7 +171,7 @@ ERROR: Direct publishing is not allowed.
 
 | 日期 | 版本 | 触发方式 | 结果 |
 | --- | --- | --- | --- |
-| 2026-06-16 | `0.6.5` | push tag `v0.6.5` | 通过 npm Trusted Publishing / OIDC 发布；GitHub Actions run：`27591303943`；npm `latest=0.6.5` |
+| 2026-06-16 | `0.6.5` | push tag `v0.6.5` + Desktop Release workflow | npm Trusted Publishing / OIDC 发布成功，run：`27591303943`，npm `latest=0.6.5`；Desktop GitHub Release 发布成功，run：`27598180759`，包含 `CCR-0.6.5-win-x64.exe`、`.blockmap` 和 `latest.yml` |
 | 2026-05-31 | `0.5.2` | push tag `v0.5.2` | 通过 npm Trusted Publishing / OIDC 发布；GitHub Actions run：`26716738566`；npm `latest=0.5.2` |
 | 2026-05-22 | `0.5.1` | `workflow_dispatch`，输入 `tag=v0.5.1` | 首次通过 npm Trusted Publishing / OIDC 发布；GitHub Actions run：`26270002796`；npm `latest=0.5.1` |
 
