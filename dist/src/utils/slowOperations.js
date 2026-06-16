@@ -56,6 +56,7 @@ import { closeSync, writeFileSync as fsWriteFileSync, fsyncSync, openSync, } fro
 import lodashCloneDeep from 'lodash-es/cloneDeep.js';
 import { addSlowOperation } from '../bootstrap/state.js';
 import { logForDebugging } from './debug.js';
+import { stripBOM } from './jsonRead.js';
 // --- Slow operation logging infrastructure ---
 /**
  * Threshold in milliseconds for logging slow JSON/clone operations.
@@ -206,15 +207,13 @@ export function jsonStringify(value, replacer, space) {
 export const jsonParse = (text, reviver) => {
     const env_2 = { stack: [], error: void 0, hasError: false };
     try {
-        const _ = __addDisposableResource(env_2, slowLogging `JSON.parse(${text})`
-        // V8 de-opts JSON.parse when a second argument is passed, even if undefined.
-        // Branch explicitly so the common (no-reviver) path stays on the fast path.
-        , false);
+        const _ = __addDisposableResource(env_2, slowLogging `JSON.parse(${text})`, false);
+        const cleanText = stripBOM(text);
         // V8 de-opts JSON.parse when a second argument is passed, even if undefined.
         // Branch explicitly so the common (no-reviver) path stays on the fast path.
         return typeof reviver === 'undefined'
-            ? JSON.parse(text)
-            : JSON.parse(text, reviver);
+            ? JSON.parse(cleanText)
+            : JSON.parse(cleanText, reviver);
     }
     catch (e_2) {
         env_2.error = e_2;

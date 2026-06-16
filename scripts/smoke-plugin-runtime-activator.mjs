@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import {
   createPluginDomainSession,
 } from '../dist/src/services/plugins/pluginDomainSession.js'
@@ -13,7 +13,16 @@ import {
   createAppServerContext,
   handleJsonRpcMessage,
 } from '../dist/src/app-server/router.js'
+import {
+  createAppServerPluginRuntimeHostAdapter,
+} from '../dist/src/app-server/pluginRuntimeHost.js'
 import { enableConfigs } from '../dist/src/utils/config.js'
+import { getSettings_DEPRECATED } from '../dist/src/utils/settings/settings.js'
+import {
+  clearInstalledPluginsCache,
+  getInMemoryInstalledPlugins,
+  getInstalledPluginsFilePath,
+} from '../dist/src/utils/plugins/installedPluginsManager.js'
 
 const root = await mkdtemp(join(tmpdir(), 'ccr-plugin-runtime-'))
 const home = join(root, 'home')
@@ -152,6 +161,99 @@ assert.equal(
   '3.0.0',
 )
 
+const settingsPath = join(home, 'settings.json')
+await writeFile(
+  settingsPath,
+  JSON.stringify(
+    { enabledPlugins: { 'stale-plugin@local-import': true } },
+    null,
+    2,
+  ),
+)
+assert.equal(
+  getSettings_DEPRECATED().enabledPlugins?.['stale-plugin@local-import'],
+  true,
+)
+await writeFile(
+  settingsPath,
+  JSON.stringify(
+    { enabledPlugins: { 'fresh-plugin@local-import': true } },
+    null,
+    2,
+  ),
+)
+await createAppServerPluginRuntimeHostAdapter({
+  runtimeInstanceId: 'settings-cache-runtime',
+}).prepare()
+const refreshedSettings = getSettings_DEPRECATED()
+assert.equal(
+  refreshedSettings.enabledPlugins?.['fresh-plugin@local-import'],
+  true,
+)
+assert.equal(
+  refreshedSettings.enabledPlugins?.['stale-plugin@local-import'],
+  undefined,
+)
+
+const installedPluginId = 'runtime-refresh-cache@local-import'
+const installedPluginOldPath = join(
+  home,
+  'plugins',
+  'cache',
+  'local-import',
+  'runtime-refresh-cache',
+  '1.0.0',
+)
+const installedPluginFreshPath = join(
+  home,
+  'plugins',
+  'cache',
+  'local-import',
+  'runtime-refresh-cache',
+  '2.0.0',
+)
+await Promise.all([
+  writePluginPackage(installedPluginOldPath, 'runtime-refresh-cache', '1.0.0'),
+  writePluginPackage(installedPluginFreshPath, 'runtime-refresh-cache', '2.0.0'),
+])
+await writeFile(
+  settingsPath,
+  JSON.stringify({ enabledPlugins: { [installedPluginId]: true } }, null, 2),
+)
+const installedRegistryPath = getInstalledPluginsFilePath()
+await mkdir(dirname(installedRegistryPath), { recursive: true })
+await writeFile(
+  installedRegistryPath,
+  JSON.stringify(
+    installedRegistry(installedPluginId, installedPluginOldPath, '1.0.0'),
+    null,
+    2,
+  ),
+)
+clearInstalledPluginsCache()
+assert.equal(
+  getInMemoryInstalledPlugins().plugins[installedPluginId]?.[0]?.version,
+  '1.0.0',
+)
+await writeFile(
+  installedRegistryPath,
+  JSON.stringify(
+    installedRegistry(installedPluginId, installedPluginFreshPath, '2.0.0'),
+    null,
+    2,
+  ),
+)
+const preparedAfterInstalledRefresh =
+  await createAppServerPluginRuntimeHostAdapter({
+    runtimeInstanceId: 'installed-cache-runtime',
+  }).prepare()
+assert.equal(
+  preparedAfterInstalledRefresh.plugins.find(
+    plugin => plugin.pluginId === installedPluginId,
+  )?.version,
+  '2.0.0',
+)
+
 const unavailableAppServer = createAppServerContext()
 await rpc(unavailableAppServer, 1, 'initialize', {})
 const unavailable = await rpcError(
@@ -246,6 +348,64 @@ function createHostAdapter(runtimeInstanceId, version) {
     },
     async commit() {
       return []
+    },
+  }
+}
+
+async function writePluginPackage(pluginPath, name, version) {
+  const skillPath = join(pluginPath, 'skills', 'runtime-refresh-cache')
+  const manifestDir = join(pluginPath, '.claude-plugin')
+  await Promise.all([
+    mkdir(skillPath, { recursive: true }),
+    mkdir(manifestDir, { recursive: true }),
+  ])
+  await writeFile(
+    join(manifestDir, 'plugin.json'),
+    JSON.stringify(
+      {
+        name,
+        version,
+        description: 'Runtime refresh cache smoke plugin.',
+        skills: ['./skills/runtime-refresh-cache'],
+      },
+      null,
+      2,
+    ),
+  )
+  await writeFile(
+    join(skillPath, 'SKILL.md'),
+    [
+      '---',
+      'name: runtime-refresh-cache',
+      'description: Smoke skill for plugin runtime refresh cache coverage.',
+      '---',
+      '',
+      '# Runtime refresh cache',
+      '',
+      'Smoke fixture.',
+      '',
+    ].join('\n'),
+  )
+}
+
+function installedRegistry(pluginId, installPath, version) {
+  const now = new Date().toISOString()
+  return {
+    version: 2,
+    plugins: {
+      [pluginId]: [
+        {
+          scope: 'user',
+          installPath,
+          version,
+          installedAt: now,
+          updatedAt: now,
+          source: {
+            type: 'local',
+            value: installPath,
+          },
+        },
+      ],
     },
   }
 }

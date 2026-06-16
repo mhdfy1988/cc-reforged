@@ -121,6 +121,32 @@ export function PluginsPage() {
     }
   }
 
+  async function refreshPluginRuntimeAndCatalog() {
+    setLoading(true)
+    setError(null)
+    try {
+      await pluginManagementClient.refreshRuntime()
+      const nextCatalog = await pluginManagementClient.list()
+      setCatalog(nextCatalog)
+      setDetailRevision(current => current + 1)
+      setSelectedPluginId(current => {
+        if (
+          current &&
+          nextCatalog.plugins.some(plugin => plugin.pluginId === current)
+        ) {
+          return current
+        }
+        return (
+          nextCatalog.plugins.find(isLocallyManagedPlugin)?.pluginId ?? null
+        )
+      })
+    } catch (refreshError) {
+      setError(toErrorMessage(refreshError))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     void refreshCatalog()
   }, [])
@@ -331,7 +357,7 @@ export function PluginsPage() {
             className="ghost-action"
             disabled={loading}
             type="button"
-            onClick={() => void refreshCatalog()}
+            onClick={() => void refreshPluginRuntimeAndCatalog()}
           >
             刷新
           </button>
@@ -596,6 +622,7 @@ function PluginDetailHeader(props: {
   const plugin = props.plugin
   const target = getActionTarget(plugin)
   const candidate = getUpdateCandidate(plugin)
+  const canRepair = canRepairPlugin(plugin)
   const disabled =
     target?.scope === 'managed' ||
     isPluginOperationBusy(props.operation)
@@ -629,12 +656,14 @@ function PluginDetailHeader(props: {
           ) : null}
           {target?.scope !== 'managed' && plugin.derivedState.installed ? (
             <>
-              <IconAction
-                disabled={disabled}
-                icon={<RepairGlyph />}
-                label="修复插件"
-                onClick={() => props.onAction('repair')}
-              />
+              {canRepair ? (
+                <IconAction
+                  disabled={disabled}
+                  icon={<RepairGlyph />}
+                  label="修复插件"
+                  onClick={() => props.onAction('repair')}
+                />
+              ) : null}
               <IconAction
                 danger
                 disabled={disabled}
@@ -1434,6 +1463,14 @@ function getUpdateCandidate(plugin: PluginManagementItem) {
   return plugin.candidates.find(
     candidate =>
       candidate.version && candidate.version !== installedVersion,
+  )
+}
+
+function canRepairPlugin(plugin: PluginManagementItem): boolean {
+  return plugin.candidates.some(
+    candidate =>
+      candidate.sourceKind === 'marketplace' &&
+      candidate.source !== undefined,
   )
 }
 

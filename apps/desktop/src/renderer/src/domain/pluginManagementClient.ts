@@ -85,6 +85,10 @@ export const pluginManagementClient = {
     return window.ccr.getPluginOperation({ operationId })
   },
 
+  refreshRuntime(): Promise<unknown> {
+    return window.ccr.refreshRuntime()
+  },
+
   cancelOperation(operationId: string): Promise<PluginOperationState> {
     return window.ccr.cancelPluginOperation({ operationId })
   },

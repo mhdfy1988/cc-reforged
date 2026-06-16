@@ -14,6 +14,7 @@ import { createPluginFromPath } from '../../utils/plugins/pluginLoader.js'
 import { clearAllCaches } from '../../utils/plugins/cacheUtils.js'
 import type { PluginSource } from '../../utils/plugins/schemas.js'
 import { extractZipToDirectory } from '../../utils/plugins/zipCache.js'
+import { stripBOM } from '../../utils/jsonRead.js'
 import type { PluginDomainSession } from './pluginDomainSession.js'
 import {
   createPluginTransactionExecutor,
@@ -355,7 +356,11 @@ async function normalizeRootManifestPlugin(
   const standardManifestDir = join(normalizedRoot, '.claude-plugin')
   await mkdir(standardManifestDir, { recursive: true })
   const manifestContent = await readFile(rootManifestPath, 'utf8')
-  await writeFile(join(standardManifestDir, 'plugin.json'), manifestContent, 'utf8')
+  await writeFile(
+    join(standardManifestDir, 'plugin.json'),
+    stripBOM(manifestContent),
+    'utf8',
+  )
 
   return { pluginRoot: normalizedRoot, cleanupRoots: [cleanupRoot] }
 }

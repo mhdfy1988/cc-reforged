@@ -11,7 +11,7 @@
 
 本文是后续 Plugin 产品化的权威设计入口。实现前应先核对源码证据索引，不再从零设计第二套 Plugin 系统。
 
-> 状态：设计已收敛，P0-P12 已完成。请求级 Plugin 会话、无副作用多实例读模型、独立 plan/apply 协议、可恢复安装与生命周期事务、组件级运行时激活、依赖/更新/回滚/GC 生命周期、分层配置/密钥/数据治理、Plugin-App 关系注册边界、Desktop 本地 Plugin 包管理、本地导入边界、CLI / Ink 薄适配、安装记录兼容迁移和发布门禁均已落地；最终专项矩阵包含 76 项用例、42 个异常场景、14 条最终不变式和 18 条真实证据脚本。
+> 状态：设计已收敛，P0-P12 已完成。请求级 Plugin 会话、无副作用多实例读模型、独立 plan/apply 协议、可恢复安装与生命周期事务、组件级运行时激活、依赖/更新/回滚/GC 生命周期、分层配置/密钥/数据治理、Plugin-App 关系注册边界、Desktop 本地 Plugin 包管理、本地导入边界、CLI / Ink 薄适配、安装记录兼容迁移和发布门禁均已落地；最终专项矩阵包含 76 项用例、42 个异常场景、14 条最终不变式和 18 条真实证据脚本，并补充本地 archive 导入、Plugin MCP 相对路径和 runtime activator 专项 smoke。
 
 ## 0. 当前结论
 
@@ -21,6 +21,7 @@
 
 - `.claude-plugin/plugin.json` manifest 与运行时校验。
 - 本地包导入支持根目录 `plugin.json` 和内部 `.claude-plugin/plugin.json`，导入后统一规范化到内部结构。
+- 本地包导入支持文件夹和 zip archive，默认用户全局作用域；导入成功后必须重新读取 catalog/detail，并清理运行时安装记录缓存。
 - Marketplace 来源解析和本地缓存仍作为底层兼容能力存在，但不作为 Desktop 当前主产品入口。
 - `managed`、`user`、`project`、`local` 四种持久化作用域。
 - `plugin@marketplace` 稳定身份。
@@ -31,6 +32,7 @@
 - 普通配置与敏感配置分离存储。
 - Plugin Command、Agent、Skill、Hook、MCP、LSP、Output Style、Channel 和 Settings 加载。
 - 设置意图、磁盘物化、当前会话激活三层刷新模型。
+- 本地导入包没有可物化 marketplace candidate 时，不展示 repair 动作；更新应通过重新导入或后续显式本地更新入口完成。
 
 因此后续不是“新建 Plugin 系统”，而是：
 
@@ -65,7 +67,8 @@ P0-P12 已完成领域、Desktop、CLI / Ink 兼容收口和专项发布门禁�
 2. 安装记录支持 V1/V2 读取，并在首次事务写入时原子迁移到 V2；旧 V2 文件可显式合并，未知版本直接拒绝。
 3. CCR 应用回滚、Plugin 包回滚和 runtime activation 已分开定义。
 4. Desktop Plugin 页面当前管理本地 Plugin 包：已安装、内置、文件夹导入、压缩包导入、运行时可见和启用意图；导入默认用户全局。
-5. 远端 registry 新协议、签名与供应链策略、更细粒度权限 enforcement 属于后续独立设计，不在兼容层内预埋 fallback。
+5. Plugin 贡献的 Skill / MCP 必须保留组件语义、真实包路径、父 Plugin 可见性和运行时隐藏原因；不能把 MCP 启动命令名当作 server 名，也不能在父 Plugin 禁用后继续当成可运行能力。
+6. 远端 registry 新协议、签名与供应链策略、更细粒度权限 enforcement 属于后续独立设计，不在兼容层内预埋 fallback。
 
 ## 1. Plugin 的定义与边界
 

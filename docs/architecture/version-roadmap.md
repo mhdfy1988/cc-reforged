@@ -6,18 +6,19 @@
 
 ## 2. 当前发布版本
 
-当前公开版本：`0.6.3`。
+当前公开版本：`0.6.5`。
 
-发布时间：2026-06-12。
+发布时间：2026-06-16。
 
-发布入口：<https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.6.3>
+发布入口：<https://github.com/mhdfy1988/cc-reforged/releases/tag/v0.6.5>
 
-`0.6.3` 的核心范围：
+`0.6.5` 的核心范围：
 
 - 外部扩展能力 G1-G4 根因重构完成：Skill、MCP、Tool、Plugin 和 App 使用请求级运行环境快照、来源感知 identity 和父子关系图。
 - Plugin 产品化 P0-P12 完成：本地 Plugin 文件夹 / zip 导入、根目录 `plugin.json` 兼容、用户全局默认安装、领域 plan/apply、journal 事务、运行时激活、配置与 App 关系、Desktop 管理页和 CLI / Ink 薄适配。
 - Desktop 外部扩展导航收敛：`插件` 只管理本地 Plugin bundle，`能力` 作为独立统一能力目录，Skill / MCP / Plugin 列表启停体验保持一致。
-- 发布门禁新增 `smoke:plugin-release`、`smoke:external-extension-matrix` 和 Desktop Plugin 工作台 smoke，Plugin 产品化矩阵覆盖 76 项用例、42 个异常场景、14 条最终不变式和 18 条证据脚本。
+- 本轮补齐 Plugin 本地 archive 导入、Plugin runtime 缓存刷新、Plugin MCP 相对路径 / server key 命名和本地导入修复按钮边界。
+- 发布门禁包含 `smoke:plugin-release`、`smoke:external-extension-matrix`、Desktop Plugin 工作台 smoke，以及本地 archive、Plugin MCP 相对路径和 runtime activator 专项 smoke；Plugin 产品化矩阵覆盖 76 项用例、42 个异常场景、14 条最终不变式和 18 条证据脚本。
 
 ## 3. `0.5.x` 版本线
 

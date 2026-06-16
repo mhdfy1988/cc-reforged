@@ -8,6 +8,27 @@ All notable changes to this project will be documented in this file.
 
 - 暂无。
 
+## [0.6.5] - 2026-06-16
+
+### Added
+
+- 新增 `smoke:plugin-local-archive-import`，覆盖本地 Plugin zip archive 导入、根目录 `plugin.json` 规范化和坏包显式失败。
+- 新增 `smoke:plugin-mcp-relative-path`，覆盖 Plugin MCP server key 命名、相对路径解析和父 Plugin 禁用隐藏传播。
+- 扩展 `smoke:plugin-runtime-activator`，覆盖运行时刷新前清理 installed plugin registry 缓存，避免导入或启停后读取旧安装记录。
+
+### Changed
+
+- Desktop Plugin 本地导入继续收敛为文件夹 / zip 两种入口，默认用户全局；导入完成后刷新 catalog 与详情，并保持当前选中项。
+- Plugin 详情页只对可从 marketplace 权威候选重新物化的 Plugin 展示修复按钮；本地导入包不再显示会失败的 repair 操作。
+- Plugin 提供的 MCP 与 Skill 继续按父 Plugin 状态传播可见性；父 Plugin 禁用后，子能力在 Skill、MCP 和能力目录中 fail closed。
+
+### Fixed
+
+- 修复本地 zip Plugin 导入时错误按文本读取 archive、导致 manifest JSON 解析失败的问题。
+- 修复 Plugin runtime refresh 没有清理 installed registry 缓存，导致刷新后组件仍不可用或版本仍停留旧快照的问题。
+- 修复 Plugin MCP 组件可能用 `node` / `npx.cmd` 等启动命令当作名称，以及相对路径在运行时解析不稳定的问题。
+- 修复本地导入 Plugin 详情页显示不适用的修复按钮，点击后生成 blocked repair 计划的问题。
+
 ## [0.6.4] - 2026-06-13
 
 ### Changed

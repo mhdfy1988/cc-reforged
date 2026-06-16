@@ -6,13 +6,13 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.6.3-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.6.5-orange?style=flat-square)
 
 CCR 是一个终端编码 Agent 的恢复构建与持续演进版本。它保留终端优先的工作方式，同时把配置、LLM 运行时、App Server 和 Desktop 客户端逐步收敛到 CCR 自己的边界内。
 
-当前 `0.6.3` 版本线聚焦外部扩展能力收口：在 MCP / Skill 基础管理面之上，补齐统一能力目录、Plugin 本地包管理、请求级运行时快照、安装可靠性、运行时启用、审计和管理入口。
+当前 `0.6.5` 版本线继续收口外部扩展能力：在 MCP / Skill 基础管理面之上，补齐统一能力目录、Plugin 本地包管理、请求级运行时快照、安装可靠性、运行时启用、审计和管理入口。
 
-`0.6.3` 已收口外部扩展能力 G1-G4 根因重构和 Plugin 产品化 P0-P12：能力查询统一到请求级快照，Skill / MCP / Tool / Plugin / App 使用来源感知身份和关系图；Plugin 复用现有 manifest、安装记录、版本缓存与 runtime 加载器，补齐请求级领域会话、无副作用读模型、独立 plan/apply、可恢复事务、运行时激活、配置与 App 关系、Desktop 本地包管理，以及 CLI / Ink 兼容收口。Plugin 发布矩阵当前包含 76 项用例、42 个异常场景、14 条最终不变式和 18 条真实证据脚本。
+`0.6.5` 已在 G1-G4 与 Plugin 产品化 P0-P12 基础上继续补齐本地包导入和运行时刷新边界：能力查询统一到请求级快照，Skill / MCP / Tool / Plugin / App 使用来源感知身份和关系图；Plugin 复用现有 manifest、安装记录、版本缓存与 runtime 加载器，支持本地文件夹 / zip 导入、根目录 `plugin.json`、用户全局启停、显式运行时刷新、Plugin 子 Skill / MCP 可见性传播，以及 CLI / Ink 兼容收口。Plugin 发布矩阵当前包含 76 项用例、42 个异常场景、14 条最终不变式和 18 条真实证据脚本，并补充本地 archive 导入、Plugin MCP 相对路径和 runtime activator 专项 smoke。
 
 ![CCR](docs/architecture/assets/ccr-desktop-main-workbench-clean.png)
 
@@ -50,7 +50,7 @@ Provider Adapters
 | 项目 | 当前值 |
 | --- | --- |
 | npm 包名 | `cc-reforged` |
-| 当前版本 | `0.6.3` |
+| 当前版本 | `0.6.5` |
 | CLI 命令 | `ccr` |
 | 桌面应用 | `CCR` |
 | 运行时要求 | Node.js `>=24.0.0` |
@@ -85,25 +85,27 @@ CCR 当前更像一个本地 Agent 工作台，而不是单纯的 CLI 包：
 | 能力目录审计 | Desktop 能力页 / `ccr capabilities list` | 适合查看 Skill、MCP、Tool、Plugin、App 的真实来源、父子关系、运行时可见性和诊断 |
 | Provider 接入开发 | `docs/architecture/provider-integrations/` | 适合继续补新模型、新协议、新能力矩阵 |
 
-## 0.6.3 重点
+## 0.6.5 重点
 
 - 外部能力目录：Desktop `能力` 页面统一展示 Tool、Skill、MCP、Plugin 和 App 能力，区分运行时可见、需处理、来源和父子关系。
 - Plugin 本地包：Desktop `插件` 页面只管理已落地的本地 Plugin 包，支持文件夹和 zip 导入；包根目录 `plugin.json` 会规范化为内部 `.claude-plugin/plugin.json`。
+- Plugin 刷新：导入、启停和刷新会清理 installed registry 运行时缓存并重新拉取 catalog / detail，避免“已安装但组件不可用”或“刷新无效”的旧快照。
+- Plugin 子能力：Plugin 贡献的 Skill / MCP 使用组件语义名称、完整包路径和父 Plugin 可见性；父 Plugin 禁用后，子能力在 Skill / MCP / 能力目录中 fail closed。
+- Plugin 操作：本地导入的 Plugin 不再展示只适用于 marketplace materialization 的修复按钮；详情页保留稳定事实和图标操作，不展示短暂 operation 流程卡。
 - 管理作用域：Plugin 导入、启停和诊断默认使用用户全局作用域；MCP 受控安装、启停和卸载也默认写入用户全局配置，项目 `.mcp.json` 只作为共享声明和运行时发现来源。
-- 父子可见性：Plugin 禁用后，它贡献的 Skill、MCP 和子工具会 fail closed；Skill / MCP / 能力目录只展示隐藏原因，不继续当成可运行能力。
 - Skill / MCP 体验：列表侧保留启停切换，详情操作统一为图标按钮，高风险 Skill 安装需要用户明确确认，禁用状态不再误写成“安装被禁用”。
 - 展示收口：工具进度、截图 / 图片读取、上下文压缩恢复附件和调用明细继续按专门规则展示，避免重复附件卡、孤立错误卡和无限增长的详情区。
 
-`0.6.3` 更具体的变化可以按几条线看：
+`0.6.5` 更具体的变化可以按几条线看：
 
 | 方向 | 已完成 |
 | --- | --- |
 | 能力目录 | 统一能力读模型、类型图标、搜索筛选、运行时可见和需处理状态 |
-| Plugin | 本地文件夹 / zip 导入、根 `plugin.json` 兼容、用户全局启停、组件明细和运行态诊断 |
+| Plugin | 本地文件夹 / zip 导入、根 `plugin.json` 兼容、用户全局启停、runtime 刷新、组件明细和运行态诊断 |
 | Skill | 安装 / 修复 / 卸载图标化、高风险确认、运行时发现和管理页状态语义收口 |
 | MCP | 用户全局受控配置、项目声明只读、安装记录与配置一致性、禁用后仍可修复 / 卸载 |
 | Desktop 展示 | 调用明细限高、列表切换热区、附件解析专门规则和上下文压缩展示收口 |
-| 发布 | README、CHANGELOG、架构文档、goal 文档和 release gate 对齐到 `0.6.3` |
+| 发布 | README、CHANGELOG、架构文档、goal 文档和 release gate 对齐到 `0.6.5` |
 
 ## 安装
 
@@ -561,6 +563,8 @@ npm.cmd run smoke:desktop-release-artifacts
 | `0.6.1` | Skill / MCP 管理页状态语义与详情操作区体验优化 |
 | `0.6.2` | 统一能力目录、Skill 内部分层与安装可靠性收口 |
 | `0.6.3` | 外部扩展能力根因重构、Plugin 本地包管理、能力目录独立页和发布矩阵收口 |
+| `0.6.4` | Plugin / Skill / MCP 父子可见性、Plugin 详情页和组件信息补全 |
+| `0.6.5` | Plugin 本地 archive 导入、runtime 刷新、Plugin MCP 命名路径和详情操作边界收口 |
 | 后续 | 远端 registry、签名与供应链策略、跨供应商能力路由、音频 / 视频 / 文件生成、更多 provider conformance matrix |
 
 `0.5.x` 期间不会把没有能力声明的模型伪装成全能模型，也不会默认跨供应商发送用户数据。所有 provider 能力都应进入模型目录、Profile 覆盖或显式工具配置。

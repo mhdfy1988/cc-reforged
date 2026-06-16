@@ -1,6 +1,6 @@
 # Goal Series：Plugin 产品化 P0-P12
 
-状态：已完成（P0-P12，2026-06-08）。
+状态：已完成（P0-P12，2026-06-08；2026-06-16 补齐本地导入、运行时刷新和子能力展示回归）。
 
 权威设计：
 
@@ -10,6 +10,14 @@
 - [Plugin 兼容迁移、回滚与发布收口](../architecture/plugin-system-compatibility-and-release.md)
 
 本文把 Plugin 权威设计拆成可依次执行的阶段目标。P0-P12 已全部实现并完成阶段记录；长期架构和兼容发布口径仍以对应架构文档为权威。
+
+2026-06-16 补充收口：
+
+- 本地 Plugin 包导入支持文件夹和 zip archive，兼容根目录 `plugin.json` 与内部 `.claude-plugin/plugin.json`。
+- Plugin runtime refresh 会清理 installed registry 缓存，避免导入或启停后 catalog / detail 仍读旧快照。
+- Plugin 贡献的 Skill / MCP 在各自管理页补齐正文、资源、安全、包路径、server key、父 Plugin hidden reason 和只读动作边界。
+- 本地导入包不展示只适用于 marketplace 重新物化的 repair 动作。
+- 新增 `smoke:plugin-local-archive-import`、`smoke:plugin-mcp-relative-path`、`smoke:plugin-runtime-activator` 和 Desktop Plugin 工作台断言。
 
 ## 1. 背景
 

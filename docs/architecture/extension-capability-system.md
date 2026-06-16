@@ -269,7 +269,8 @@ G1-G4 已于 2026-06-07 完成根因重构与发布收口：
 - `capabilities/list`、`capabilities/management/list`、管理动作 plan / apply 和 `capabilities/apps/register` 使用同一会话级 App registry。
 - 85 项外部扩展矩阵、G1-G3 专项 smoke 和 release group 已覆盖跨 home、同名来源、父状态传播和生命周期连续性。
 - Plugin 产品化 P0-P12 已完成请求级 `PluginDomainSession`、无副作用 `PluginInspector`、独立 Plugin plan/apply 协议、可恢复事务、runtime activation、配置治理、App 关系、Desktop 本地包管理、CLI / Ink 薄适配和发布矩阵。
-- Desktop `插件` 页面管理本地 Plugin 包，支持文件夹 / zip 导入、启停、修复、卸载、运行时、配置、依赖更新、安全来源和诊断；`能力` 页面是独立只读能力目录。
+- Desktop `插件` 页面管理本地 Plugin 包，支持文件夹 / zip 导入、启停、卸载、运行时、配置、依赖更新、安全来源和诊断；只有可从 marketplace 权威候选重新物化的 Plugin 才展示修复动作，local import 包通过重新导入或后续本地更新入口更新。
+- Plugin runtime refresh 会清理 installed registry 缓存并重新读取 catalog / detail；Plugin 子 Skill / MCP 使用来源感知身份、server key / Skill 名称和父 Plugin hidden reason，父 Plugin 禁用后在 Skill、MCP 和能力目录中 fail closed。
 
 当前还不能宣称完成的是“远端插件生态与强供应链治理”：
 

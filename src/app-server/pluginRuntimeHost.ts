@@ -14,6 +14,8 @@ import { loadPluginLspServers } from '../utils/plugins/lspPluginIntegration.js'
 import { loadPluginMcpServers } from '../utils/plugins/mcpPluginIntegration.js'
 import { clearPluginCacheExclusions } from '../utils/plugins/orphanedPluginFilter.js'
 import { loadAllPlugins } from '../utils/plugins/pluginLoader.js'
+import { clearInstalledPluginsCache } from '../utils/plugins/installedPluginsManager.js'
+import { resetSettingsCache } from '../utils/settings/settingsCache.js'
 import type {
   PluginRuntimeComponentResult,
   PluginRuntimePreparedPlugin,
@@ -23,6 +25,8 @@ export const createAppServerPluginRuntimeHostAdapter: PluginRuntimeHostAdapterFa
   (context: CorePluginRequestContext) => ({
     runtimeInstanceId: context.runtimeInstanceId,
     async prepare() {
+      resetSettingsCache()
+      clearInstalledPluginsCache()
       clearAllCaches()
       clearPluginCacheExclusions()
 

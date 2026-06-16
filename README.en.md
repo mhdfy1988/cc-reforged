@@ -6,7 +6,7 @@
 
 ![](https://img.shields.io/badge/Node.js-24%2B-brightgreen?style=flat-square)
 ![](https://img.shields.io/badge/Desktop-Windows-blue?style=flat-square)
-![](https://img.shields.io/badge/current-0.6.3-orange?style=flat-square)
+![](https://img.shields.io/badge/current-0.6.5-orange?style=flat-square)
 
 CCR is a recovery and evolution build of a terminal coding agent. It keeps the original terminal-first workflow, adds a CCR-owned configuration/runtime boundary, and is growing a Desktop client around a stable App Server protocol.
 
@@ -25,7 +25,7 @@ The current main line focuses on:
 ## Current Status
 
 - Package: `cc-reforged`
-- Version: `0.6.3`
+- Version: `0.6.5`
 - CLI command: `ccr`
 - Desktop app: `CCR`
 - Runtime requirement: Node.js `>=24.0.0`
@@ -36,9 +36,9 @@ The current main line focuses on:
 
 The repository may contain unreleased work after the latest tagged version. See [CHANGELOG.md](CHANGELOG.md) for user-facing changes.
 
-The `0.6.3` line focuses on external capability governance, building on the MCP / Skill management baseline with a unified capability catalog, local Plugin package management, request-scoped runtime snapshots, installation reliability, runtime activation, audit, and management flows.
+The `0.6.5` line continues the external capability governance work, building on the MCP / Skill management baseline with a unified capability catalog, local Plugin package management, request-scoped runtime snapshots, installation reliability, runtime activation, audit, and management flows.
 
-`0.6.3` completes the G1-G4 external capability root refactor and Plugin productization P0-P12. Capability queries use request-scoped snapshots and source-aware identities; the existing Plugin manifest, installation registry, version cache, and runtime loader now sit behind a request-scoped domain session, side-effect-free inspection, immutable plan/apply actions, recoverable transactions, explicit runtime activation, configuration and App relations, Desktop local package management, and thin CLI / Ink adapters. The Plugin release matrix currently contains 76 cases, 42 failure scenarios, 14 final invariants, and 18 executable evidence scripts.
+`0.6.5` builds on the G1-G4 external capability root refactor and Plugin productization P0-P12. Capability queries use request-scoped snapshots and source-aware identities; the existing Plugin manifest, installation registry, version cache, and runtime loader now support local folder / zip imports, root `plugin.json`, user-global enablement, explicit runtime refresh, Plugin child Skill / MCP visibility propagation, and thin CLI / Ink adapters. The Plugin release matrix currently contains 76 cases, 42 failure scenarios, 14 final invariants, and 18 executable evidence scripts, with additional smoke coverage for local archive imports, Plugin MCP relative paths, and runtime activator refresh.
 
 ## Install
 
@@ -146,7 +146,7 @@ plugin.json
 
 The root `plugin.json` form is the recommended user-facing package entry. Import normalizes it to the internal `.claude-plugin/plugin.json` cache layout while reusing the same manifest schema, registry, version cache, and runtime loader. Desktop imports default to user-global scope; the enable switch lives in the left Plugin list card, and the detail pane keeps icon-only management actions.
 
-Plugin-provided child capabilities still appear in their own management pages and the Capability page for diagnosis, but they remain gated by the parent Plugin state. When the parent Plugin is disabled, Plugin Skills and Plugin MCP servers fail closed and are shown with a `plugin-disabled` hidden reason instead of being treated as runnable capabilities.
+Plugin-provided child capabilities still appear in their own management pages and the Capability page for diagnosis, but they remain gated by the parent Plugin state. When the parent Plugin is disabled, Plugin Skills and Plugin MCP servers fail closed and are shown with a `plugin-disabled` hidden reason instead of being treated as runnable capabilities. Local-import Plugins do not show repair actions that only apply to materializable marketplace candidates; refresh clears the installed-plugin runtime cache before reloading catalog and details.
 
 The standalone **Capability** page is the read-side directory for Skill, MCP, Tool, Plugin, and App facts. It shows source, parent/child relations, runtime visibility, diagnostics, and pending items; it is not an installation registry and does not execute Plugin lifecycle actions.
 

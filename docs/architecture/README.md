@@ -30,6 +30,7 @@
 - `插件` 是本地 Plugin 包管理页，不作为远程插件市场浏览页。
 - `能力` 是独立能力目录页，读取 Skill、MCP、Tool、Plugin、App 的统一事实，不负责安装动作。
 - Plugin 本地导入支持文件夹和 zip，默认用户全局作用域；用户分发包推荐根目录 `plugin.json`，内部缓存继续使用 `.claude-plugin/plugin.json`。
+- Plugin 刷新是显式 runtime 动作：导入、启停和刷新会重新读取安装记录与运行时快照；本地导入包不展示只适用于 marketplace 候选的修复按钮。
 
 ## 工程兼容与迁移
 

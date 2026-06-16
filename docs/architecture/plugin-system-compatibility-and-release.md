@@ -107,6 +107,14 @@ git diff --check
 - Plugin 组件名称必须来自组件语义：Skill 使用 `SKILL.md` / command 名称，MCP server 使用 manifest 中的 server key，不使用 `node`、`npx.cmd` 这类启动命令作为名称。
 - Plugin Skill 在 Skill 管理页需要展示正文、资源和安全扫描；Plugin MCP 在 MCP 管理页只展示只读运行时事实，不获得用户全局 MCP 安装器的修复 / 卸载语义。
 
+2026-06-16 发布前补充：
+
+- 本地 Plugin 包导入继续限定为文件夹和 zip archive；导入器支持包根目录 `plugin.json` 与内部 `.claude-plugin/plugin.json`，坏压缩包或坏 manifest 显式报错，不污染已安装记录。
+- Plugin runtime refresh 必须先清理 installed plugin registry 缓存，再刷新 loader / catalog / detail；刷新按钮不是远端更新按钮，也不应继续显示“刷新无效”的旧运行时快照。
+- Plugin 提供的 MCP server 使用 manifest server key 与相对路径解析，MCP 管理页展示 plugin-provided 只读事实；父 Plugin 禁用时与 Plugin Skill 一样显示隐藏原因。
+- 本地导入的 Plugin 没有 materializable marketplace candidate 时，不展示 repair 图标；repair 只用于能从权威候选重新物化的包。
+- 发布前需额外执行 `smoke:plugin-local-archive-import`、`smoke:plugin-mcp-relative-path`、`smoke:plugin-runtime-activator` 和 `smoke:desktop-plugin-workbench`。
+
 ## 6. 兼容验证
 
 P12 增加三组专项证据：
@@ -114,6 +122,9 @@ P12 增加三组专项证据：
 - `smoke:plugin-adapter-parity`：验证 Core 与 CLI / Ink adapter 对同一目标生成等价计划，并覆盖真实 install、enable、disable、update、uninstall。
 - `smoke:plugin-registry-compatibility`：验证 V1 到 V2 迁移、旧 V2 文件合并和未知版本拒绝。
 - `smoke:plugin-legacy-write-boundary`：验证生产入口不再调用旧 settings/cache/registry 直接写路径。
+- `smoke:plugin-local-archive-import`：验证本地 zip archive 导入、根 `plugin.json` 规范化和坏包显式失败。
+- `smoke:plugin-mcp-relative-path`：验证 Plugin MCP server key 命名、相对路径解析和父 Plugin disabled 隐藏传播。
+- `smoke:plugin-runtime-activator`：验证运行时刷新会清理 installed registry 缓存，并使用最新安装记录。
 
 ## 7. 后续边界
 

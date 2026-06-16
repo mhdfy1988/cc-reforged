@@ -1,6 +1,6 @@
 {
   "name": "cc-reforged",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "main": "out/main/index.js",
   "bin": {
     "ccr": "cli.js"
@@ -115,6 +115,8 @@
     "smoke:plugin-adapter-parity": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-plugin-adapter-parity.mjs",
     "smoke:plugin-registry-compatibility": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-plugin-registry-compatibility.mjs",
     "smoke:plugin-legacy-write-boundary": "node ./scripts/smoke-plugin-legacy-write-boundary.mjs",
+    "smoke:plugin-local-archive-import": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-plugin-local-archive-import.mjs",
+    "smoke:plugin-mcp-relative-path": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-plugin-mcp-relative-path.mjs",
     "smoke:plugin-runtime-activator": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-plugin-runtime-activator.mjs",
     "smoke:plugin-version-lifecycle": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-plugin-version-lifecycle.mjs",
     "smoke:plugin-configuration-governance": "node --no-warnings --experimental-loader ./bun-bundle-loader.mjs ./scripts/smoke-plugin-configuration-governance.mjs",

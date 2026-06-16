@@ -1,4 +1,4 @@
-import { join } from 'path'
+import { isAbsolute, join } from 'path'
 import { expandEnvVarsInString } from '../../services/mcp/envExpansion.js'
 import {
   type McpServerConfig,
@@ -499,12 +499,17 @@ export function resolvePluginMcpEnvironment(
 
       // Resolve command path
       if (stdioConfig.command) {
-        stdioConfig.command = resolveValue(stdioConfig.command)
+        stdioConfig.command = resolvePluginRelativePath(
+          resolveValue(stdioConfig.command),
+          plugin.path,
+        )
       }
 
       // Resolve args
       if (stdioConfig.args) {
-        stdioConfig.args = stdioConfig.args.map(arg => resolveValue(arg))
+        stdioConfig.args = stdioConfig.args.map(arg =>
+          resolvePluginRelativePath(resolveValue(arg), plugin.path),
+        )
       }
 
       // Resolve environment variables and add CLAUDE_PLUGIN_ROOT / CLAUDE_PLUGIN_DATA
@@ -579,6 +584,18 @@ export function resolvePluginMcpEnvironment(
   }
 
   return resolved
+}
+
+function resolvePluginRelativePath(value: string, pluginPath: string): string {
+  const normalized = value.replace(/\\/g, '/')
+  const isRelativeFilePath =
+    normalized.startsWith('./') || normalized.startsWith('../')
+
+  if (!isRelativeFilePath || isAbsolute(value) || normalized.startsWith('/')) {
+    return value
+  }
+
+  return join(pluginPath, value)
 }
 
 /**

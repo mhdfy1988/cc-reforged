@@ -10,6 +10,7 @@ import {
 import lodashCloneDeep from 'lodash-es/cloneDeep.js'
 import { addSlowOperation } from '../bootstrap/state.js'
 import { logForDebugging } from './debug.js'
+import { stripBOM } from './jsonRead.js'
 
 // Extended WriteFileOptions to include 'flush' which is available in Node.js 20.1.0+
 // but not yet in @types/node
@@ -203,11 +204,12 @@ export function jsonStringify(
  */
 export const jsonParse: typeof JSON.parse = (text, reviver) => {
   using _ = slowLogging`JSON.parse(${text})`
+  const cleanText = stripBOM(text)
   // V8 de-opts JSON.parse when a second argument is passed, even if undefined.
   // Branch explicitly so the common (no-reviver) path stays on the fast path.
   return typeof reviver === 'undefined'
-    ? JSON.parse(text)
-    : JSON.parse(text, reviver)
+    ? JSON.parse(cleanText)
+    : JSON.parse(cleanText, reviver)
 }
 
 /**

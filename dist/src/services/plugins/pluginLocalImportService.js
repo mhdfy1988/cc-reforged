@@ -4,6 +4,7 @@ import { basename, dirname, extname, join, resolve } from 'node:path';
 import { createPluginFromPath } from '../../utils/plugins/pluginLoader.js';
 import { clearAllCaches } from '../../utils/plugins/cacheUtils.js';
 import { extractZipToDirectory } from '../../utils/plugins/zipCache.js';
+import { stripBOM } from '../../utils/jsonRead.js';
 import { createPluginTransactionExecutor, } from './pluginInstallTransaction.js';
 export class PluginLocalImportService {
     executor = createPluginTransactionExecutor();
@@ -244,7 +245,7 @@ async function normalizeRootManifestPlugin(session, pluginRoot) {
     const standardManifestDir = join(normalizedRoot, '.claude-plugin');
     await mkdir(standardManifestDir, { recursive: true });
     const manifestContent = await readFile(rootManifestPath, 'utf8');
-    await writeFile(join(standardManifestDir, 'plugin.json'), manifestContent, 'utf8');
+    await writeFile(join(standardManifestDir, 'plugin.json'), stripBOM(manifestContent), 'utf8');
     return { pluginRoot: normalizedRoot, cleanupRoots: [cleanupRoot] };
 }
 async function hasStandardPluginManifest(path) {
